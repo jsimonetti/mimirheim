@@ -306,22 +306,17 @@ class Target:
 def _build_targets(root: Path) -> list[Target]:
     """Return the list of all known extraction targets.
 
-    All generated pages land at the wiki repository root with ``%2F``-encoded
-    names (e.g. ``Reference%2FConfig-Mimirheim.md``).  This is required by Forgejo:
-    the wiki does not support real filesystem subdirectories for page files.
-    Pages whose logical paths contain ``/`` must be stored with ``%2F`` as a
-    literal character in the filename so that Forgejo's ``WebPathToGitPath``
-    function can find them.
+    All generated pages are written to the ``wiki/Reference/`` subdirectory.
     """
     wiki = root / "wiki"
-    ref = wiki  # all Reference pages land at the wiki root with %2F names
+    ref = wiki / "Reference"
     helpers = root / "mimirheim_helpers"
 
     return [
         Target(
             key="mimirheim",
             source_path=root / "mimirheim" / "config" / "schema.py",
-            output_path=ref / "Reference%2FConfig-Mimirheim.md",
+            output_path=ref / "Config-Mimirheim.md",
             title="Mimirheim — Full Configuration Reference",
             intro=(
                 "This page is auto-generated from `mimirheim/config/schema.py` by "
@@ -335,7 +330,7 @@ def _build_targets(root: Path) -> list[Target]:
         Target(
             key="common",
             source_path=helpers / "common" / "helper_common" / "config.py",
-            output_path=ref / "Reference%2FConfig-Common.md",
+            output_path=ref / "Config-Common.md",
             title="Shared Helper Configuration — Reference",
             intro=(
                 "Auto-generated from `helper_common/config.py`. "
@@ -346,7 +341,7 @@ def _build_targets(root: Path) -> list[Target]:
         Target(
             key="baseload-static",
             source_path=helpers / "baseload" / "static" / "baseload_static" / "config.py",
-            output_path=ref / "Reference%2FConfig-Baseload-Static.md",
+            output_path=ref / "Config-Baseload-Static.md",
             title="baseload_static — Configuration Reference",
             intro=(
                 "Auto-generated from `baseload_static/config.py`. "
@@ -356,7 +351,7 @@ def _build_targets(root: Path) -> list[Target]:
         Target(
             key="baseload-ha",
             source_path=helpers / "baseload" / "homeassistant" / "baseload_ha" / "config.py",
-            output_path=ref / "Reference%2FConfig-Baseload-HA.md",
+            output_path=ref / "Config-Baseload-HA.md",
             title="baseload_ha — Configuration Reference",
             intro=(
                 "Auto-generated from `baseload_ha/config.py`. "
@@ -366,7 +361,7 @@ def _build_targets(root: Path) -> list[Target]:
         Target(
             key="baseload-ha-db",
             source_path=helpers / "baseload" / "homeassistant_db" / "baseload_ha_db" / "config.py",
-            output_path=ref / "Reference%2FConfig-Baseload-HA-DB.md",
+            output_path=ref / "Config-Baseload-HA-DB.md",
             title="baseload_ha_db — Configuration Reference",
             intro=(
                 "Auto-generated from `baseload_ha_db/config.py`. "
@@ -376,7 +371,7 @@ def _build_targets(root: Path) -> list[Target]:
         Target(
             key="nordpool",
             source_path=helpers / "prices" / "nordpool" / "nordpool" / "config.py",
-            output_path=ref / "Reference%2FConfig-Nordpool.md",
+            output_path=ref / "Config-Nordpool.md",
             title="nordpool — Configuration Reference",
             intro=(
                 "Auto-generated from `nordpool/config.py`. "
@@ -386,7 +381,7 @@ def _build_targets(root: Path) -> list[Target]:
         Target(
             key="pv-fetcher",
             source_path=helpers / "pv" / "forecast.solar" / "pv_fetcher" / "config.py",
-            output_path=ref / "Reference%2FConfig-PV-Fetcher.md",
+            output_path=ref / "Config-PV-Fetcher.md",
             title="pv_fetcher (forecast.solar) — Configuration Reference",
             intro=(
                 "Auto-generated from `pv_fetcher/config.py`. "
@@ -396,7 +391,7 @@ def _build_targets(root: Path) -> list[Target]:
         Target(
             key="pv-ml-learner",
             source_path=helpers / "pv" / "pv_ml_learner" / "pv_ml_learner" / "config.py",
-            output_path=ref / "Reference%2FConfig-PV-ML-Learner.md",
+            output_path=ref / "Config-PV-ML-Learner.md",
             title="pv_ml_learner — Configuration Reference",
             intro=(
                 "Auto-generated from `pv_ml_learner/config.py`. "
@@ -406,7 +401,7 @@ def _build_targets(root: Path) -> list[Target]:
         Target(
             key="reporter",
             source_path=helpers / "reporter" / "reporter" / "config.py",
-            output_path=ref / "Reference%2FConfig-Reporter.md",
+            output_path=ref / "Config-Reporter.md",
             title="reporter — Configuration Reference",
             intro=(
                 "Auto-generated from `reporter/config.py`. "
@@ -416,7 +411,7 @@ def _build_targets(root: Path) -> list[Target]:
         Target(
             key="scheduler",
             source_path=helpers / "scheduler" / "scheduler" / "config.py",
-            output_path=ref / "Reference%2FConfig-Scheduler.md",
+            output_path=ref / "Config-Scheduler.md",
             title="scheduler — Configuration Reference",
             intro=(
                 "Auto-generated from `scheduler/config.py`. "
