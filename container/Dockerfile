@@ -63,8 +63,9 @@ RUN uv venv /app/.venv --python python${PYTHON_VERSION} && \
 COPY mimirheim/ ./mimirheim/
 COPY mimirheim_helpers/ ./mimirheim_helpers/
 
-RUN UV_PROJECT_ENVIRONMENT=/app/.venv uv sync --all-extras --frozen --no-editable
-
+RUN UV_PROJECT_ENVIRONMENT=/app/.venv uv sync --all-extras --frozen --no-editable && \
+    find /app/.venv -type d \( -name "tests" -o -name "test" \) -prune -exec rm -rf '{}' + && \
+    /app/.venv/bin/python -m compileall -q /app/.venv
 # ---------------------------------------------------------------------------
 # Stage 2: final image
 # ---------------------------------------------------------------------------
@@ -94,8 +95,8 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* /tmp/s6-overlay-*.tar.xz
 
 # Create a non-root user for all services.
-RUN groupadd -r -g 1000 app && \
-    useradd -r -u 1000 -g app -d /app -s /sbin/nologin app
+RUN groupadd -g 1000 app && \
+    useradd -u 1000 -g app -d /app -s /sbin/nologin app
 
 # Copy the venv from the builder stage.
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
