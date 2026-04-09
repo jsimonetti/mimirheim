@@ -1,0 +1,138 @@
+mqtt:
+  host: localhost
+  client_id: mimir-bench-3
+  topic_prefix: mimir
+
+outputs:
+  schedule: mimir/schedule
+  current: mimir/current
+  last_solve: mimir/status/last_solve
+  availability: mimir/status/availability
+
+grid:
+  import_limit_kw: 11.0
+  export_limit_kw: 11.0
+
+batteries:
+  standalone_bat:
+    capacity_kwh: 14.0
+    charge_segments:
+      - {power_max_kw: 3.6, efficiency: 0.95}
+      - {power_max_kw: 3.6, efficiency: 0.92}
+    discharge_segments:
+      - {power_max_kw: 4.0, efficiency: 0.95}
+      - {power_max_kw: 3.2, efficiency: 0.91}
+    wear_cost_eur_per_kwh: 0.02
+    inputs:
+      soc:
+        topic: mimir/input/standalone_bat/soc
+        unit: kwh
+
+hybrid_inverters:
+  hybrid_south:
+    capacity_kwh: 10.0
+    min_soc_kwh: 0.5
+    max_charge_kw: 5.0
+    max_discharge_kw: 5.0
+    battery_charge_efficiency: 0.95
+    battery_discharge_efficiency: 0.95
+    inverter_efficiency: 0.97
+    max_pv_kw: 9.0
+    topic_pv_forecast: mimir/input/hybrid_south/pv
+    wear_cost_eur_per_kwh: 0.02
+    inputs:
+      soc:
+        topic: mimir/input/hybrid_south/soc
+        unit: kwh
+
+  hybrid_se:
+    capacity_kwh: 8.0
+    min_soc_kwh: 0.5
+    max_charge_kw: 4.0
+    max_discharge_kw: 4.0
+    battery_charge_efficiency: 0.95
+    battery_discharge_efficiency: 0.95
+    inverter_efficiency: 0.97
+    max_pv_kw: 7.0
+    topic_pv_forecast: mimir/input/hybrid_se/pv
+    wear_cost_eur_per_kwh: 0.02
+    inputs:
+      soc:
+        topic: mimir/input/hybrid_se/soc
+        unit: kwh
+
+pv_arrays:
+  roof_east:
+    max_power_kw: 4.5
+    topic_forecast: mimir/input/pv/east
+
+  roof_west:
+    max_power_kw: 4.5
+    topic_forecast: mimir/input/pv/west
+
+ev_chargers:
+  ev_commuter:
+    capacity_kwh: 65.0
+    min_soc_kwh: 10.0
+    charge_segments:
+      - {power_max_kw: 11.0, efficiency: 0.92}
+    discharge_segments: []
+    wear_cost_eur_per_kwh: 0.03
+    inputs:
+      soc:
+        topic: mimir/input/ev_commuter/soc
+        unit: kwh
+      plugged_in_topic: mimir/input/ev_commuter/available
+
+  ev_secondary:
+    capacity_kwh: 40.0
+    min_soc_kwh: 8.0
+    charge_segments:
+      - {power_max_kw: 7.4, efficiency: 0.93}
+    discharge_segments: []
+    wear_cost_eur_per_kwh: 0.03
+    inputs:
+      soc:
+        topic: mimir/input/ev_secondary/soc
+        unit: kwh
+      plugged_in_topic: mimir/input/ev_secondary/available
+
+thermal_boilers:
+  dhw_boiler:
+    volume_liters: 200.0
+    elec_power_kw: 3.0
+    cop: 1.0
+    setpoint_c: 60.0
+    min_temp_c: 45.0
+    cooling_rate_k_per_hour: 1.5
+    inputs:
+      topic_current_temp: mimir/input/dhw_boiler/temp
+
+space_heating_hps:
+  sh_hp:
+    elec_power_kw: 8.0
+    cop: 3.5
+    min_run_steps: 4
+    wear_cost_eur_per_kwh: 0.01
+    inputs:
+      topic_heat_needed_kwh: mimir/input/sh_hp/heat_needed
+
+deferrable_loads:
+  washing_machine:
+    power_profile: [2.0, 2.0, 0.5, 0.5, 0.5, 0.5, 2.2, 2.2]
+    topic_window_earliest: mimir/input/washing_machine/earliest
+    topic_window_latest: mimir/input/washing_machine/latest
+
+  tumble_dryer:
+    power_profile: [2.5, 2.5, 2.5, 2.5]
+    topic_window_earliest: mimir/input/tumble_dryer/earliest
+    topic_window_latest: mimir/input/tumble_dryer/latest
+
+  dishwasher:
+    power_profile: [1.8, 0.3, 0.3, 0.3, 1.5, 1.5]
+    topic_window_earliest: mimir/input/dishwasher/earliest
+    topic_window_latest: mimir/input/dishwasher/latest
+
+static_loads:
+  household:
+    topic_forecast: mimir/input/baseload

@@ -1,0 +1,48 @@
+configuration:
+  enable_nordpool:
+    name: Enable Nordpool
+    description: >-
+      Start the Nordpool day-ahead price fetcher. Requires nordpool.yaml in
+      the add-on config directory.
+  enable_pv_fetcher:
+    name: Enable PV Fetcher
+    description: >-
+      Start the forecast.solar PV forecast fetcher. Requires pv-fetcher.yaml
+      in the add-on config directory.
+  enable_pv_ml_learner:
+    name: Enable PV ML Learner
+    description: >-
+      Start the machine-learning PV forecast learner. Requires
+      pv-ml-learner.yaml in the add-on config directory.
+  enable_baseload_ha:
+    name: Enable Baseload (Home Assistant REST)
+    description: >-
+      Start the Home Assistant baseload fetcher (REST API). Requires
+      baseload-ha.yaml in the add-on config directory.
+  enable_baseload_ha_db:
+    name: Enable Baseload (Home Assistant database)
+    description: >-
+      Start the Home Assistant baseload fetcher (SQLite). Requires
+      baseload-ha-db.yaml in the add-on config directory. The Home Assistant
+      database is read from /homeassistant/home-assistant_v2.db.
+  enable_baseload_static:
+    name: Enable Baseload (static profile)
+    description: >-
+      Start the static baseload profile publisher. Requires baseload-static.yaml
+      in the add-on config directory.
+  enable_scheduler:
+    name: Enable Scheduler
+    description: >-
+      Start the cron-based MQTT scheduler. Requires scheduler.yaml in the
+      add-on config directory.
+  enable_reporter:
+    name: Enable Reporter
+    description: >-
+      Start the HTML report generator. Reports are written to
+      /share/mimirheim/reports. Requires reporter.yaml in the add-on config
+      directory.
+  enable_config_editor:
+    name: Enable Config Editor
+    description: >-
+      Start the web-based configuration editor. Accessible via the HA
+      sidebar. Requires config-editor.yaml in the add-on config directory.

@@ -1,0 +1,20 @@
+mqtt:
+  host: localhost
+  client_id: mimir-test
+
+outputs:
+  schedule: mimir/schedule
+  current: mimir/current
+  last_solve: mimir/status
+  availability: mimir/status/availability
+
+grid:
+  import_limit_kw: 10.0
+  export_limit_kw: 5.0
+
+ev_chargers:
+  ev1:
+    capacity_kwh: 60.0
+    charge_segments:
+      - power_max_kw: 7.4
+        efficiency: 0.92

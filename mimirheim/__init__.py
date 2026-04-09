@@ -1,0 +1,1 @@
+"""Mimirheim — Home Energy Optimiser."""

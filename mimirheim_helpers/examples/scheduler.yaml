@@ -1,0 +1,67 @@
+# Example scheduler configuration for a home with rooftop PV, a battery,
+# and Nordpool day-ahead pricing.
+#
+# All times are UTC. Adjust cron expressions for your local market's
+# day-ahead publication time if it differs from Nordpool (~11:42 UTC).
+#
+# Each tool must have its trigger_topic set to match the topic used here:
+#
+#   pv_fetcher       trigger_topic: mimir/input/tools/pv/trigger
+#   nordpool         trigger_topic: mimir/input/tools/prices/trigger
+#   baseload_ha      trigger_topic: mimir/input/tools/baseload/trigger
+#   mimirheim             listens on:    mimir/input/trigger
+#
+# This file is for a single-prefix deployment. If you use a custom
+# mqtt.topic_prefix in mimirheim config, update the mimir/input/trigger entry.
+
+mqtt:
+  host: localhost
+  port: 1883
+  client_id: mimir-scheduler
+  # username: your-username
+  # password: your-password
+
+schedules:
+  # ---------------------------------------------------------------------------
+  # Electricity prices (nordpool)
+  #
+  # Nordpool publishes day-ahead prices for the next day at approximately
+  # 12:42 CET (11:42 UTC). Fetching at 12:00 UTC picks up today's prices on
+  # startup; fetching at 12:00 UTC catches the new day-ahead prices reliably.
+  #
+  # A second fetch at 00:05 UTC rolls the horizon forward at midnight so mimirheim
+  # always has prices covering the next 24 hours.
+  # ---------------------------------------------------------------------------
+  - "5 0 * * *":   mimir/input/tools/prices/trigger   # midnight horizon rollover
+  - "0 12 * * *":  mimir/input/tools/prices/trigger   # day-ahead prices published ~11:42 UTC
+
+  # ---------------------------------------------------------------------------
+  # PV forecast (forecast.solar)
+  #
+  # The free forecast.solar tier allows 60 requests per hour. With two arrays
+  # that is 2 requests per fetch cycle, so an update every 30 minutes is well
+  # within the limit (4 requests/hour).
+  #
+  # Fetching every 30 minutes keeps the forecast fresh as cloud cover changes
+  # during the day. Fetches still occur at night, but forecast.solar returns
+  # zero power for night-time steps — these publishes are cheap and keep the
+  # readiness state current.
+  # ---------------------------------------------------------------------------
+  - "* */4 * * *": mimir/input/tools/pv/trigger
+
+  # ---------------------------------------------------------------------------
+  # Base load forecast (homeassistant baseload)
+  #
+  # Historical averages change slowly (day-to-day appliance usage patterns).
+  # One fetch per day, just before midnight, gives mimirheim a fresh 48-hour
+  # profile at the start of each new day.
+  # ---------------------------------------------------------------------------
+  - "50 23 * * *": mimir/input/tools/baseload/trigger
+
+  # ---------------------------------------------------------------------------
+  # mimirheim solve cycle
+  #
+  # Publishing to the trigger topic every 15 minutes matches the quarter-hourly
+  # horizon grid and ensures the schedule is refreshed at every step boundary.
+  # ---------------------------------------------------------------------------
+  - "*/15 * * * *": mimir/input/trigger

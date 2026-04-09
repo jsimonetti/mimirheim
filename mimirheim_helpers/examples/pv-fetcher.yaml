@@ -1,0 +1,72 @@
+# Example configuration for mimirheim_helpers/pv/forecast.solar/pv_fetcher
+
+mqtt:
+  host: "localhost"
+  port: 1883
+  client_id: "forecast-solar-pv"
+  # username: "mqtt-user"
+  # password: "mqtt-password"
+
+# Any message on this topic triggers one fetch-and-publish cycle.
+trigger_topic: "mimir/input/tools/pv/trigger"
+
+# Must match mqtt.topic_prefix in the mimirheim configuration.
+# Determines derived output_topic for each array and the default mimir_trigger_topic.
+# Change only when mimirheim uses a non-default topic prefix.
+# mimir_topic_prefix: mimir  # default
+
+forecast_solar:
+  # Null uses the free anonymous tier.
+  # Set to a string API key for paid forecast.solar tiers.
+  api_key: null
+
+# The map key must match the corresponding mimirheim pv_arrays device name so that
+# the derived output_topic aligns with mimirheim's derived topic_forecast:
+#   output_topic derived to '{mimir_topic_prefix}/input/pv/{key}/forecast'
+# Override output_topic for any array to publish to a non-default path.
+arrays:
+  pv_roof:
+    # output_topic derived to mimir/input/pv/pv_roof/forecast
+    # Must match mimirheim pv_arrays.pv_roof.topic_forecast.
+    # Override: output_topic: "homeassistant/sensor/pv_roof_forecast/state"
+    latitude: 52.3676
+    longitude: 4.9041
+    # Degrees from horizontal: 0 = flat, 90 = vertical.
+    declination: 35
+    # Degrees from south: 0 = south, -90 = east, 90 = west.
+    azimuth: 0
+    peak_power_kwp: 6.2
+
+  garage_pv:
+    # output_topic derived to mimir/input/pv/garage_pv/forecast
+    latitude: 52.3676
+    longitude: 4.9041
+    declination: 15
+    azimuth: -45
+    peak_power_kwp: 2.4
+
+# Optional. If omitted, schema defaults are used.
+confidence_decay:
+  hours_0_to_6: 0.90
+  hours_6_to_24: 0.75
+  hours_24_to_48: 0.55
+  hours_48_plus: 0.35
+
+# Publish an empty trigger to mimir_trigger_topic after successful publish.
+signal_mimir: false
+
+# Required only when signal_mimir is true.
+# mimir_trigger_topic: mimir/input/trigger
+
+# HA MQTT discovery. When enabled, the daemon publishes a retained discovery
+# payload that creates a button entity in Home Assistant. Pressing the button
+# sends a message to trigger_topic, firing one fetch cycle.
+# ha_discovery:
+#   enabled: true
+#   discovery_prefix: homeassistant
+#   device_name: PV Forecast Solar
+
+# Optional. When set, the daemon publishes a JSON stats payload to this MQTT
+# topic after every fetch cycle (success or failure). See nordpool.yaml for
+# the full payload description.
+# stats_topic: mimir/input/tools/pv/stats

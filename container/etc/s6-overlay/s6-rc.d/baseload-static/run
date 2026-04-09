@@ -1,0 +1,12 @@
+#!/usr/bin/with-contenv sh
+exec 2>&1
+if [ "${ENABLE_BASELOAD_STATIC:-true}" != "true" ]; then
+    echo "baseload-static: disabled via add-on options"
+    exec sleep infinity
+fi
+CONFIG=/config/baseload-static.yaml
+if [ ! -f "$CONFIG" ]; then
+    echo "baseload-static: $CONFIG not found — service disabled"
+    exec sleep infinity
+fi
+exec /app/.venv/bin/python -m baseload_static --config "$CONFIG"

@@ -1,0 +1,94 @@
+# Example configuration for the homeassistant baseload daemon.
+#
+# This tool fetches power consumption history from Home Assistant entities,
+# computes a 24-hour average profile, and publishes a forecast to MQTT.
+# The forecast can optionally trigger a solve cycle in mimirheim.
+
+mqtt:
+  # MQTT broker connection settings.
+  host: localhost
+  port: 1883
+  client_id: baseload-ha-daemon
+  username: mqtt_user
+  password: mqtt_password
+
+# MQTT topic that triggers a fetch cycle when a message is published to it.
+# The message content is ignored; the presence of a message fires one poll.
+trigger_topic: mimir/input/tools/baseload/trigger
+
+# Must match mqtt.topic_prefix in the mimirheim configuration.
+# Determines the derived output_topic and mimir_trigger_topic when not set explicitly.
+# Change only when mimirheim uses a non-default topic prefix.
+# mimir_topic_prefix: mimir  # default
+
+# MQTT topic to which the hourly forecast is published (retained).
+# Derived from mimir_topic_prefix and mimir_static_load_name when not set:
+#   mimir/input/baseload/base_load/forecast
+# Override only when using a non-default static_loads device name:
+# output_topic: mimir/input/baseload/my_load/forecast
+
+homeassistant:
+  # Base URL of the Home Assistant instance (including scheme and port).
+  url: http://homeassistant.local:8123
+  
+  # Long-lived access token generated in HA settings.
+  # Settings → Devices & Services → Developer Tools → Create Long-Lived Token.
+  token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+  
+  # Entities whose power consumption is summed.
+  # Each entry has an entity_id and the unit that entity reports in.
+  # Entities in sum_entities and subtract_entities may use different units.
+  sum_entities:
+    - entity_id: sensor.kitchen_power
+      unit: W
+    - entity_id: sensor.laundry_power
+      unit: W
+    - entity_id: sensor.heating_power
+      unit: kW
+  
+  # Entities to subtract from the sum (optional).
+  # Typically used to exclude loads that mimirheim already controls (battery, PV inverter,
+  # EV charger, deferred appliances) so they are not counted twice.
+  # Defaults to empty list if omitted.
+  subtract_entities:
+    - entity_id: sensor.battery_power_out
+      unit: W
+    - entity_id: sensor.pv_power_in
+      unit: kW
+  
+  # Number of historical days to average for the 24-hour profile.
+  # Range: 1-30 (inclusive). Defaults to 7.
+  lookback_days: 7
+
+  # Recency weight ratio: how much more the newest day counts compared to the
+  # oldest day. Intermediate days are weighted by exponential interpolation.
+  # 1.0 = uniform average (no decay). 2.0 = newest day counts twice as much
+  # as the oldest. Must be >= 1.0. Defaults to 1.0.
+  lookback_decay: 1.0
+
+  # Number of hours of forecast to publish, starting from the current hour.
+  # If greater than 24, the 24-hour profile is tiled (repeated) to fill the window.
+  # Range: 1-168 hours (one week). Defaults to 48.
+  horizon_hours: 48
+
+# If true, publish a message to mimir_trigger_topic after publishing the forecast.
+# This signals mimirheim to run a new solver cycle.
+# Defaults to false.
+signal_mimir: true
+
+# MQTT topic on which to signal mimirheim (required if signal_mimir is true).
+# A message is published here to trigger a solve in mimirheim.
+mimir_trigger_topic: mimir/input/trigger
+
+# HA MQTT discovery. When enabled, the daemon publishes a retained discovery
+# payload that creates a button entity in Home Assistant. Pressing the button
+# sends a message to trigger_topic, firing one fetch cycle.
+# ha_discovery:
+#   enabled: true
+#   discovery_prefix: homeassistant
+#   device_name: Baseload Home Assistant
+
+# Optional. When set, the daemon publishes a JSON stats payload to this MQTT
+# topic after every fetch cycle (success or failure). See nordpool.yaml for
+# the full payload description.
+# stats_topic: mimir/input/tools/baseload/stats

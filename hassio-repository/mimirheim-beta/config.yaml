@@ -1,0 +1,53 @@
+name: Mimirheim (Beta)
+version: "edge"
+slug: mimirheim-beta
+description: >-
+  MILP energy optimiser for home battery, PV, and EV scheduling against dynamic
+  electricity prices. Edge channel — rebuilt on every commit to main.
+url: https://github.com/jsimonetti/mimirheim
+arch:
+  - aarch64
+  - amd64
+startup: application
+boot: auto
+init: false
+image: ghcr.io/jsimonetti/mimirheim
+stage: experimental
+
+map:
+  - type: addon_config
+    read_only: false
+  - type: homeassistant_config
+    read_only: true
+    path: /homeassistant
+  - type: share
+    read_only: false
+
+ingress: true
+ingress_port: 8099
+ingress_entry: /
+
+services:
+  - mqtt:need
+
+options:
+  enable_nordpool: false
+  enable_pv_fetcher: false
+  enable_pv_ml_learner: false
+  enable_baseload_ha: false
+  enable_baseload_ha_db: false
+  enable_baseload_static: false
+  enable_scheduler: false
+  enable_reporter: false
+  enable_config_editor: false
+
+schema:
+  enable_nordpool: bool
+  enable_pv_fetcher: bool
+  enable_pv_ml_learner: bool
+  enable_baseload_ha: bool
+  enable_baseload_ha_db: bool
+  enable_baseload_static: bool
+  enable_scheduler: bool
+  enable_reporter: bool
+  enable_config_editor: bool

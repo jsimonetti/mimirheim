@@ -1,0 +1,16 @@
+# Enable the mimirheim config editor web UI.
+# Access at: http://<host>:8099
+#
+# The editor is activated by the existence of this file. An empty file
+# (or a file containing only comments and whitespace) enables the editor
+# on the default port with all settings at their defaults.
+#
+# In host networking mode, change the port if 8099 conflicts with another service:
+# port: 8321
+#
+# All fields are optional. A 'touch config-editor.yaml' is sufficient to
+# enable the editor on the default port.
+
+# port: 8099
+# config_dir: /config
+# log_level: INFO

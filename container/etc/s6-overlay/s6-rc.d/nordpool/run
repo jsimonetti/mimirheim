@@ -1,0 +1,15 @@
+#!/usr/bin/with-contenv sh
+exec 2>&1
+# ENABLE_NORDPOOL is set by cont-init.d/00-options-env.sh when running as a
+# HA add-on. When unset (plain Docker), default to true so that the existing
+# config-file-presence gate remains the only control.
+if [ "${ENABLE_NORDPOOL:-true}" != "true" ]; then
+    echo "nordpool: disabled via add-on options"
+    exec sleep infinity
+fi
+CONFIG=/config/nordpool.yaml
+if [ ! -f "$CONFIG" ]; then
+    echo "nordpool: $CONFIG not found — service disabled"
+    exec sleep infinity
+fi
+exec /app/.venv/bin/python -m nordpool --config "$CONFIG"

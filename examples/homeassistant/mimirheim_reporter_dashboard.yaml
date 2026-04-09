@@ -1,0 +1,207 @@
+# mimirheim reporter — ApexCharts dashboard example
+#
+# Requirements:
+#   - apexcharts-card custom component (https://github.com/RomRider/apexcharts-card)
+#   - mimirheim-reporter configured with chart_publishing.chart_topic and
+#     ha_discovery.enabled: true
+#   - The sensor entity_id below should match the unique_id generated from
+#     your reporter's mqtt.client_id (e.g. client_id "mimirheim-reporter" produces
+#     sensor.hioo_reporter_chart_series and sensor.hioo_reporter_summary).
+#
+# Adjust "hioo_reporter" in every entity ID below to match your client_id.
+#
+# Example reporter config.yaml excerpt:
+#
+#   mqtt:
+#     host: mosquitto
+#     client_id: mimir-reporter
+#
+#   chart_publishing:
+#     chart_topic: mimir/reporter/chart
+#     summary_topic: mimir/reporter/summary
+#
+#   ha_discovery:
+#     enabled: true
+#     device_name: mimirheim Reporter
+
+# ---------------------------------------------------------------------------
+# Card 1 — Schedule time-series chart (requires apexcharts-card)
+# ---------------------------------------------------------------------------
+
+type: custom:apexcharts-card
+graph_span: 36h
+span:
+  # The mimirheim schedule is a forward-looking horizon. Start the window at
+  # the beginning of the current hour so the data fills the chart rather
+  # than piling up at the right edge.
+  start: hour
+header:
+  title: Schedule — Next 36 hours
+  show: true
+now:
+  show: true
+  label: now
+# Left axis: power in kW (grid, PV, baseload). Right axis: battery SOC in kWh.
+# The two axes prevent the SOC fill from dwarfing the power columns and vice versa.
+yaxis:
+  - id: power
+    min: auto
+    apex_config:
+      title:
+        text: Power (kW)
+  - id: soc
+    opposite: true
+    min: 0
+    apex_config:
+      title:
+        text: SOC (kWh)
+series:
+  - entity: sensor.hioo_reporter_chart_series
+    name: Battery SOC (kWh)
+    color: '#0066cc'
+    type: area
+    opacity: 0.3
+    extend_to: false
+    yaxis_id: soc
+    data_generator: |
+      // Replace 'home_battery' with your battery name as configured in mimirheim.
+      const key = 'battery__home_battery__soc_kwh';
+      return entity.attributes[key]
+        ? entity.attributes[key].map(([ts, v]) => [new Date(ts).getTime(), +v.toFixed(2)])
+        : [];
+  - entity: sensor.hioo_reporter_chart_series
+    name: Grid import (kW)
+    color: '#cc0000'
+    type: column
+    extend_to: false
+    yaxis_id: power
+    data_generator: |
+      return entity.attributes.grid_import_kw
+        ? entity.attributes.grid_import_kw.map(([ts, v]) => [new Date(ts).getTime(), +v.toFixed(2)])
+        : [];
+  - entity: sensor.hioo_reporter_chart_series
+    name: Grid export (kW)
+    color: '#00aa00'
+    type: column
+    extend_to: false
+    yaxis_id: power
+    data_generator: |
+      return entity.attributes.grid_export_kw
+        ? entity.attributes.grid_export_kw.map(([ts, v]) => [new Date(ts).getTime(), +v.toFixed(2)])
+        : [];
+  - entity: sensor.hioo_reporter_chart_series
+    name: PV forecast (kW)
+    color: '#ffcc00'
+    type: area
+    opacity: 0.4
+    extend_to: false
+    yaxis_id: power
+    data_generator: |
+      return entity.attributes.pv_kw
+        ? entity.attributes.pv_kw.map(([ts, v]) => [new Date(ts).getTime(), +v.toFixed(2)])
+        : [];
+  - entity: sensor.hioo_reporter_chart_series
+    name: Baseload (kW)
+    color: '#888888'
+    type: area
+    opacity: 0.2
+    extend_to: false
+    yaxis_id: power
+    data_generator: |
+      return entity.attributes.baseload_kw
+        ? entity.attributes.baseload_kw.map(([ts, v]) => [new Date(ts).getTime(), +v.toFixed(2)])
+        : [];
+
+---
+
+# ---------------------------------------------------------------------------
+# Card 2 — Battery SOC vs Prices (dual Y-axis, requires apexcharts-card)
+#
+# Left axis (yaxis_id: soc): battery SOC in kWh, filled area.
+# Right axis (yaxis_id: price): import and export prices in ct/kWh, lines.
+#
+# This chart makes the charging / discharging decisions legible: the battery
+# charges (SOC rises) during low-price steps and discharges (SOC falls) when
+# prices are high or when self-consumption is optimal.
+# ---------------------------------------------------------------------------
+
+type: custom:apexcharts-card
+graph_span: 32h
+header:
+  title: Battery SOC vs Energy Prices
+  show: true
+span:
+  start: hour
+# yaxis must be a top-level key, NOT nested inside apex_config. When nested,
+# apexcharts-card passes it raw to ApexCharts.js which ignores the yaxis_id
+# series bindings, causing both series to share one scale.
+yaxis:
+  - id: soc
+    min: 0
+    apex_config:
+      title:
+        text: SOC (kWh)
+  - id: price
+    opposite: true
+    apex_config:
+      title:
+        text: Price (ct/kWh)
+series:
+  - entity: sensor.hioo_reporter_hioo_chart_series
+    name: SOC (kWh)
+    color: "#0066cc"
+    type: area
+    opacity: 0.25
+    extend_to: false
+    yaxis_id: soc
+    stroke_width: 2
+    data_generator: |
+      // Replace 'home_battery' with your battery name as configured in mimirheim.
+      const key = 'battery__home_battery__soc_kwh';
+      return entity.attributes[key]
+        ? entity.attributes[key].map(([ts, v]) => [new Date(ts).getTime(), +v.toFixed(2)])
+        : [];
+  - entity: sensor.hioo_reporter_hioo_chart_series
+    name: Import (ct/kWh)
+    color: "#ff6600"
+    type: line
+    extend_to: false
+    yaxis_id: price
+    stroke_width: 1
+    data_generator: |
+      return entity.attributes.import_price
+        ? entity.attributes.import_price.map(([ts, v]) => [new Date(ts).getTime(), +(v * 100).toFixed(1)])
+        : [];
+  - entity: sensor.hioo_reporter_hioo_chart_series
+    name: Export (ct/kWh)
+    color: "#009900"
+    type: line
+    extend_to: false
+    yaxis_id: price
+    stroke_width: 1
+    data_generator: |
+      return entity.attributes.export_price
+        ? entity.attributes.export_price.map(([ts, v]) => [new Date(ts).getTime(), +(v * 100).toFixed(1)])
+        : [];
+
+---
+
+# ---------------------------------------------------------------------------
+# Card 3 — Economic summary (standard Markdown card, no custom component needed)
+# ---------------------------------------------------------------------------
+
+type: markdown
+title: mimirheim Last Solve Summary
+content: >
+  **Strategy:** {{ state_attr('sensor.hioo_reporter_summary', 'strategy') }}
+  | **Status:** {{ state_attr('sensor.hioo_reporter_summary', 'solve_status') }}
+
+  | Metric | Value |
+  |---|---|
+  | Naive cost | {{ state_attr('sensor.hioo_reporter_summary', 'naive_cost_eur') | round(4) }} EUR |
+  | Effective cost | {{ state_attr('sensor.hioo_reporter_summary', 'effective_cost_eur') | round(4) }} EUR |
+  | Saving | {{ state_attr('sensor.hioo_reporter_summary', 'saving_eur') | round(4) }} EUR
+    ({{ state_attr('sensor.hioo_reporter_summary', 'saving_pct') }}%) |
+  | Self-sufficiency | {{ state_attr('sensor.hioo_reporter_summary', 'self_sufficiency_pct') }}% |
+  | Grid import | {{ state_attr('sensor.hioo_reporter_summary', 'grid_import_kwh') | round(3) }} kWh |
+  | Grid export | {{ state_attr('sensor.hioo_reporter_summary', 'grid_export_kwh') | round(3) }} kWh |

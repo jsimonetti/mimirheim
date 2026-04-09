@@ -1,0 +1,105 @@
+# Example configuration for the homeassistant_db baseload daemon.
+#
+# This tool reads power consumption history directly from the Home Assistant
+# recorder database, computes a 24-hour average profile, and publishes a
+# forecast to MQTT. Any database backend supported by HA (SQLite, PostgreSQL,
+# MariaDB) is supported via a SQLAlchemy connection URL.
+
+mqtt:
+  # MQTT broker connection settings.
+  host: localhost
+  port: 1883
+  client_id: baseload-ha-db-daemon
+  username: mqtt_user
+  password: mqtt_password
+
+# MQTT topic that triggers a fetch cycle when a message is published to it.
+# The message content is ignored; the presence of a message fires one poll.
+trigger_topic: mimir/input/tools/baseload/trigger
+
+# Must match mqtt.topic_prefix in the mimirheim configuration.
+# Determines the derived output_topic and mimir_trigger_topic when not set explicitly.
+# Change only when mimirheim uses a non-default topic prefix.
+# mimir_topic_prefix: mimir  # default
+
+# MQTT topic to which the hourly forecast is published (retained).
+# Derived from mimir_topic_prefix and mimir_static_load_name when not set:
+#   mimir/input/baseload/base_load/forecast
+# Override only when using a non-default static_loads device name:
+# output_topic: mimir/input/baseload/my_load/forecast
+
+homeassistant:
+  # SQLAlchemy URL for the Home Assistant recorder database.
+  #
+  # SQLite (Home Assistant OS default — mount /config from the HA host):
+  #   db_url: sqlite:////config/home-assistant_v2.db
+  #
+  # PostgreSQL (if you have configured HA to use an external database):
+  #   db_url: postgresql+psycopg2://ha_user:secret@db-host/homeassistant
+  #
+  # MariaDB / MySQL:
+  #   db_url: mysql+pymysql://ha_user:secret@db-host/homeassistant
+  #
+  # For PostgreSQL and MariaDB, install the matching driver extra:
+  #   uv pip install mimirheim-baseload-homeassistant-db[postgres]
+  #   uv pip install mimirheim-baseload-homeassistant-db[mysql]
+  db_url: sqlite:////config/home-assistant_v2.db
+
+  # Entities whose power consumption is summed.
+  # The tool auto-detects each entity's sensor type (power or energy) from
+  # statistics_meta.unit_of_measurement. An optional unit override and
+  # outlier_factor can be set per entity.
+  sum_entities:
+    # Energy counter (kWh) — preferred: HA integrates the counter over any gaps.
+    - entity_id: sensor.energy_consumption_tarif_1
+    - entity_id: sensor.energy_consumption_tarif_2
+    # Power sensor (W, auto-detected). Use these when no energy counter is available.
+    # - entity_id: sensor.kitchen_power
+    # - entity_id: sensor.laundry_power
+    #   unit: W               # override when the DB unit is incorrect
+    #   outlier_factor: 5.0   # tighter threshold for sensors with a known maximum
+  
+  # Entities to subtract from the sum (optional).
+  # Typically used to exclude loads that mimirheim already controls (battery, PV inverter,
+  # EV charger, deferred appliances) so they are not counted twice.
+  # Defaults to empty list if omitted.
+  subtract_entities:
+    - entity_id: sensor.energy_production_tarif_1
+    - entity_id: sensor.energy_production_tarif_2
+  
+  # Number of historical days to average for the 24-hour profile.
+  # Range: 1–112 (16 weeks). Defaults to 7.
+  lookback_days: 7
+
+  # Recency weight ratio: how much more the newest day counts compared to the
+  # oldest day. Intermediate days are weighted by exponential interpolation.
+  # 1.0 = uniform average (no decay). 2.0 = newest day counts twice as much
+  # as the oldest. Must be >= 1.0. Defaults to 1.0.
+  lookback_decay: 1.0
+
+  # Number of hours of forecast to publish, starting from the current hour.
+  # If greater than 24, the 24-hour profile is tiled (repeated) to fill the window.
+  # Range: 1-168 hours (one week). Defaults to 48.
+  horizon_hours: 48
+
+# If true, publish a message to mimir_trigger_topic after publishing the forecast.
+# This signals mimirheim to run a new solver cycle.
+# Defaults to false.
+signal_mimir: true
+
+# MQTT topic on which to signal mimirheim (required if signal_mimir is true).
+# A message is published here to trigger a solve in mimirheim.
+mimir_trigger_topic: mimir/input/trigger
+
+# HA MQTT discovery. When enabled, the daemon publishes a retained discovery
+# payload that creates a button entity in Home Assistant. Pressing the button
+# sends a message to trigger_topic, firing one fetch cycle.
+# ha_discovery:
+#   enabled: true
+#   discovery_prefix: homeassistant
+#   device_name: Baseload Home Assistant DB
+
+# Optional. When set, the daemon publishes a JSON stats payload to this MQTT
+# topic after every fetch cycle (success or failure). See nordpool.yaml for
+# the full payload description.
+# stats_topic: mimir/input/tools/baseload/stats

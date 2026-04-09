@@ -1,0 +1,720 @@
+# Mimirheim — example configuration
+#
+# This file documents every available configuration option.
+# Copy it, remove the sections you do not need, and adjust values for your setup.
+#
+# MQTT topics: all topic fields default to None and are derived automatically
+# from mqtt.topic_prefix at startup (see IMPLEMENTATION_DETAILS §14). You only
+# need to specify a topic explicitly when you want to override the derived default,
+# for example to read a sensor directly from Home Assistant rather than via the
+# mimirheim namespace.
+
+# ---------------------------------------------------------------------------
+# Grid connection
+# ---------------------------------------------------------------------------
+# Physical limits of your connection to the public grid.
+# Set these to the values in your DNO agreement or main fuse rating.
+
+grid:
+  import_limit_kw: 17.0    # maximum power you can draw from the grid
+  export_limit_kw: 17.0    # maximum power you can feed into the grid; set 0.0 to forbid export
+
+# ---------------------------------------------------------------------------
+# Batteries
+# ---------------------------------------------------------------------------
+# Named map. You may configure zero or more batteries.
+# Each name must be unique across all device sections.
+#
+# Two efficiency models are available; provide exactly one pair:
+#
+#   Stacked-segment model (charge_segments / discharge_segments):
+#     Each segment is an independent LP variable with a flat efficiency.
+#     Use for simple two- or three-segment approximations.
+#
+#   SOS2 piecewise-linear model (charge_efficiency_curve / discharge_efficiency_curve):
+#     The solver interpolates efficiency continuously between breakpoints.
+#     Use when you have manufacturer-measured efficiency at several power levels.
+#
+# The two models are mutually exclusive per direction. Mixing them raises an error.
+
+batteries:
+  # --- Example 1: stacked-segment model (original model) ---
+  battery_main:
+    capacity_kwh: 5.4      # usable capacity between min_soc and full charge
+    min_soc_kwh: 0.5       # never discharge below this level (battery protection)
+
+    # Piecewise efficiency for charging.
+    # IMPORTANT: the sum of all power_max_kw values is the maximum charge rate
+    # for the device (here: 1.4 + 2.5 = 3.9 kW), not the capacity of any one
+    # segment. Each segment is an independent LP variable; the solver fills
+    # lower segments first because higher efficiency costs less to use.
+    # Segments should be listed with the highest-efficiency (lowest-loss) range
+    # first, so the solver prioritises efficient charging over brute-force rate.
+    # Most batteries are most efficient at moderate power and less efficient at
+    # very low or very high power; typical curves peak around 20–60% of rated power.
+    charge_segments:
+      - { power_max_kw: 2.5, efficiency: 0.95 }   # moderate power, peak efficiency
+      - { power_max_kw: 1.4, efficiency: 0.88 }   # high power region, reduced efficiency
+
+    # Piecewise efficiency for discharging.
+    discharge_segments:
+      - { power_max_kw: 2.5, efficiency: 0.95 }
+
+    # Degradation cost per kWh of energy throughput in EUR.
+    # Prevents the solver from cycling to exploit tiny price spreads that do not
+    # justify the wear. Typical range: 0.02 – 0.05 EUR/kWh.
+    wear_cost_eur_per_kwh: 0.02
+
+    # --- SOC penalty (plan 21) ---
+    # Preferred minimum SOC. When SOC falls below this level, the solver
+    # accrues a soft penalty to discourage dispatch below the desired buffer.
+    # Set both to 0.0 (default) to disable.
+    optimal_lower_soc_kwh: 1.0         # preferred minimum buffer in kWh
+    soc_low_penalty_eur_per_kwh_h: 0.05 # penalty rate: EUR per kWh of deficit per hour
+
+    # --- Power derating near SOC limits (plan 22) ---
+    # Reduces charge power as the battery approaches full, and discharge power
+    # as it approaches empty, replicating battery management system behaviour.
+    # Set both fields in a pair, or omit both to disable.
+    reduce_charge_above_soc_kwh: 4.5   # start reducing charge power above this SOC
+    reduce_charge_min_kw: 0.3          # minimum charge power at capacity_kwh
+    reduce_discharge_below_soc_kwh: 1.5 # start reducing discharge power below this SOC
+    reduce_discharge_min_kw: 0.3       # minimum discharge power at min_soc_kwh
+
+    # Hardware capability flags.
+    capabilities:
+      # True if the hardware only accepts discrete power stages (e.g. 0 / 25 / 50 / 100 %).
+      # When true, mimirheim rounds setpoints to the nearest supported stage before publishing.
+      staged_power: false
+      # True if the battery inverter supports a closed-loop zero-exchange firmware mode.
+      # When true, the inverter autonomously holds grid exchange near zero using local
+      # CT measurements. mimirheim publishes true/false to outputs.exchange_mode each cycle.
+      zero_exchange: false
+
+    # MQTT output topics for battery control commands.
+    # Only published when the corresponding capability flag is true.
+    #
+    # There is no separate shutdown or idle topic. When the solver decides the
+    # battery should do nothing, it publishes kw: 0.0 to the generic setpoint
+    # topic (mimirheim/device/<name>/setpoint). Your downstream automation (HA,
+    # Node-RED) should map kw: 0.0 to whatever the inverter's idle command is —
+    # for most inverters this is simply writing 0 to the charge/discharge power
+    # register.
+    outputs:
+      exchange_mode: null   # derived to mimir/output/battery/battery_main/exchange_mode
+                            # override: exchange_mode: "homeassistant/switch/battery_exchange_mode/command"
+
+    # MQTT topic from which mimirheim reads the live battery SOC.
+    # Topic is derived to mimir/input/battery/battery_main/soc by default.
+    # Unit defaults to 'percent' (value / 100 × capacity_kwh → kWh).
+    # Prefer 'kwh' if your inverter or BMS supports it: the percent-to-kWh
+    # conversion introduces a small systematic error when capacity_kwh drifts
+    # from the cell's actual usable capacity as the battery ages.
+    # Always set the unit explicitly — do not rely on the default.
+    # Override only when using a custom topic or a kWh-reporting sensor:
+    #   inputs:
+    #     soc:
+    #       topic: "homeassistant/sensor/battery_soc/state"  # optional
+    #       unit: kwh    # preferred when the sensor reports absolute kWh
+
+  # --- Example 2: SOS2 piecewise-linear efficiency model (plan 23) ---
+  # Use this when the manufacturer provides efficiency measurements at several
+  # power levels, e.g. from a datasheet or field measurements.
+  battery_sos2_example:
+    capacity_kwh: 10.0
+    min_soc_kwh: 0.5
+    wear_cost_eur_per_kwh: 0.02
+
+    # Three-point efficiency curve: idle (0 kW), medium (3 kW), full (6 kW).
+    # The solver uses SOS2 weights to interpolate between adjacent breakpoints.
+    # The first breakpoint must always be at power_kw: 0.0.
+    charge_efficiency_curve:
+      - { power_kw: 0.0, efficiency: 0.95 }
+      - { power_kw: 3.0, efficiency: 0.92 }
+      - { power_kw: 6.0, efficiency: 0.88 }
+    discharge_efficiency_curve:
+      - { power_kw: 0.0, efficiency: 0.95 }
+      - { power_kw: 3.0, efficiency: 0.92 }
+      - { power_kw: 6.0, efficiency: 0.88 }
+
+    capabilities:
+      # True if the hardware only accepts discrete power stages (e.g. 0 / 25 / 50 / 100 %).
+      staged_power: false
+      # True if the battery inverter supports a closed-loop zero-exchange firmware mode.
+      zero_exchange: false
+
+    inputs:
+      soc:
+        unit: kwh              # topic derived to mimir/input/battery/battery_sos2_example/soc
+
+# ---------------------------------------------------------------------------
+# PV arrays
+# ---------------------------------------------------------------------------
+# Named map. You may configure zero or more PV arrays.
+#
+# PV output is not a decision variable — the solver uses the forecast as a
+# fixed parameter. The capabilities and outputs sections control what control
+# commands mimirheim sends to the inverter after each solve.
+
+pv_arrays:
+  pv_roof:
+    max_power_kw: 4.5       # peak output; used to clip unreasonable forecast values
+    # topic_forecast derived to mimir/input/pv/pv_roof/forecast by default.
+    # Override to read from a different MQTT source:
+    #   topic_forecast: "homeassistant/sensor/pv_forecast/state"
+
+    # Staged power mode (plan 30). Uncomment production_stages when your inverter
+    # only accepts discrete power register values (e.g. 0/25/50/100% of rated power).
+    # List the supported kW levels in ascending order. The first value MUST be 0.0
+    # (the off state). max_power_kw must be >= the last (largest) value.
+    # production_stages is mutually exclusive with capabilities.power_limit and
+    # capabilities.on_off — set both of those to false when using staged mode.
+    #
+    # Example: an inverter that accepts 0, 1.5, 3.0, or 4.5 kW:
+    # production_stages:
+    #   - 0.0
+    #   - 1.5
+    #   - 3.0
+    #   - 4.5
+
+    # Hardware capability flags (plan 18).
+    # Enable the flags that your inverter supports. Only enabled capabilities
+    # result in published output topics. Set power_limit: false if you use
+    # production_stages above (they are mutually exclusive).
+    capabilities:
+      power_limit: true        # inverter accepts a continuous kW production limit
+      zero_export: false       # inverter has a discrete zero-export register
+      on_off: false            # inverter supports discrete on/off switching
+
+    # MQTT output topics for production limit and zero-export commands (plan 18).
+    # Only published when the corresponding capability flag is true.
+    # When production_stages is active, power_limit_kw receives the chosen
+    # stage value (the hardware register value) rather than the effective output.
+    # All topics are derived from mqtt.topic_prefix by default:
+    #   power_limit_kw   -> mimir/output/pv/pv_roof/power_limit_kw
+    #   zero_export_mode -> mimir/output/pv/pv_roof/zero_export_mode
+    #   on_off_mode      -> mimir/output/pv/pv_roof/on_off_mode  ("true" = on, "false" = off)
+    # Override any field to use a non-default topic.
+
+# ---------------------------------------------------------------------------
+# EV chargers
+# ---------------------------------------------------------------------------
+# Named map. You may configure zero or more EV chargers.
+
+ev_chargers:
+  ev_charger:
+    capacity_kwh: 52.0      # vehicle battery capacity
+    min_soc_kwh: 15.0        # never discharge the vehicle below this level
+
+    charge_segments:
+      - { power_max_kw: 11.0, efficiency: 0.93 }
+
+    # Leave discharge_segments empty if the charger does not support V2H.
+    discharge_segments: []
+
+    wear_cost_eur_per_kwh: 0.03
+
+    capabilities:
+      staged_power: false      # this charger accepts continuous power control
+      zero_exchange: false     # set to true if the charger supports closed-loop zero-exchange mode
+      v2h: false               # set to true if the hardware supports vehicle-to-home discharge
+      loadbalance: false       # set to true if the EVSE supports autonomous PV-surplus following
+
+    # Control output topics. mimirheim publishes to these topics each solve cycle.
+    # Only published when the corresponding capability flag is true.
+    # Both topics are derived from mqtt.topic_prefix by default:
+    #   exchange_mode  -> mimir/output/ev/ev_charger/exchange_mode
+    #   loadbalance_cmd -> mimir/output/ev/ev_charger/loadbalance
+    # Override to use charger-vendor-specific topics:
+    #   outputs:
+    #     exchange_mode: "homeassistant/switch/ev_exchange_mode/command"
+    #     loadbalance_cmd: "homeassistant/switch/ev_loadbalance/command"
+
+    # MQTT topics from which mimirheim reads the live EV state.
+    # Both topics derived from mqtt.topic_prefix by default:
+    #   soc.topic      -> mimir/input/ev/ev_charger/soc
+    #   plugged_in_topic -> mimir/input/ev/ev_charger/plugged_in
+    # Override to read directly from HA sensors:
+    #   inputs:
+    #     soc:
+    #       topic: "homeassistant/sensor/ev_soc/state"
+    #       unit: kwh
+    #     plugged_in_topic: "homeassistant/binary_sensor/ev_plugged/state"
+    inputs:
+      soc:
+        unit: kwh              # publish absolute kWh, not percentage
+
+# ---------------------------------------------------------------------------
+# Deferrable loads
+# ---------------------------------------------------------------------------
+# Named map. Each load runs at a fixed power for a fixed number of steps,
+# within a window provided at runtime via MQTT.
+
+deferrable_loads:
+  washing_machine:
+    # Per-step power draw during the wash cycle, in kW. One entry per time step.
+    # The array length determines the run duration (8 entries = 2 hours at 15 min steps).
+    # A washing machine draws high power during heating, low during washing, high again
+    # for the spin cycle — a profile captures this more accurately than a flat value.
+    power_profile: [2.0, 2.0, 0.5, 0.5, 0.5, 0.5, 2.2, 2.2]
+
+    # Time window and control topics — all derived from mqtt.topic_prefix:
+    #   topic_window_earliest      -> mimir/input/deferrable/washing_machine/window_earliest
+    #   topic_window_latest        -> mimir/input/deferrable/washing_machine/window_latest
+    #   topic_committed_start_time -> mimir/input/deferrable/washing_machine/committed_start
+    #   topic_recommended_start    -> mimir/output/deferrable/washing_machine/recommended_start
+    #
+    # Override any field. Example: map window topics from HA input_datetime helpers:
+    #   topic_window_earliest: "homeassistant/input_datetime/washing_machine_earliest/state"
+    #   topic_window_latest:   "homeassistant/input_datetime/washing_machine_latest/state"
+
+# ---------------------------------------------------------------------------
+# Static loads
+# ---------------------------------------------------------------------------
+# Named map. Static loads are inflexible — lighting, fridge, TV, etc.
+# The solver cannot shift or reduce these; they are fixed parameters.
+
+static_loads:
+  base_load: {}    # topic_forecast derived to mimir/input/baseload/base_load/forecast
+                   # override: topic_forecast: "mimir/input/base_load_forecast"
+
+# ---------------------------------------------------------------------------
+# Hybrid inverters (plan 24)
+# ---------------------------------------------------------------------------
+# Named map. A hybrid inverter is a DC-coupled system combining PV, battery,
+# and the AC grid through a single inverter stage. The DC bus balance is
+# modelled explicitly; the battery and inverter share one device object.
+#
+# Use this instead of separate battery + PV entries when your hardware is a
+# DC-coupled hybrid inverter (e.g. Huawei SUN2000, SolarEdge StorEdge,
+# Fronius Gen24).
+
+hybrid_inverters:
+  hybrid_main:
+    # Battery (DC side)
+    capacity_kwh: 10.0       # usable battery capacity
+    min_soc_kwh: 0.5         # minimum battery SOC
+    max_charge_kw: 5.0       # maximum DC charge power
+    max_discharge_kw: 5.0    # maximum DC discharge power
+    battery_charge_efficiency: 0.95    # DC-side round-trip charge efficiency
+    battery_discharge_efficiency: 0.95 # DC-side round-trip discharge efficiency
+
+    # Inverter (AC–DC conversion)
+    inverter_efficiency: 0.97  # AC→DC (import) and DC→AC (export/home supply) efficiency
+
+    # PV (DC side)
+    max_pv_kw: 8.0             # maximum PV DC input to the inverter
+    # topic_pv_forecast derived to mimir/input/hybrid/hybrid_main/pv_forecast by default.
+    # Override: topic_pv_forecast: "homeassistant/sensor/hybrid_pv_forecast/state"
+
+    wear_cost_eur_per_kwh: 0.02
+
+    # MQTT topic from which mimirheim reads the live battery SOC.
+    # Topic derived to mimir/input/hybrid/hybrid_main/soc by default.
+    # Override: topic: "homeassistant/sensor/hybrid_soc/state"
+    inputs:
+      soc:
+        unit: kwh
+
+# ---------------------------------------------------------------------------
+# Thermal boilers (plan 25)
+# ---------------------------------------------------------------------------
+# Named map. Models a domestic hot water (DHW) boiler: resistive immersion
+# heater (cop=1.0) or a DHW heat pump (cop >= 2.0). The tank temperature is
+# tracked as a state variable; the solver enforces minimum and maximum
+# temperature bounds at every step.
+
+thermal_boilers:
+  dhw_boiler:
+    volume_liters: 200.0              # water volume of the tank
+    elec_power_kw: 2.0                # rated electrical input power
+    cop: 1.0                          # 1.0 = resistive element; >1 = heat pump DHW
+    setpoint_c: 60.0                  # target water temperature (upper bound)
+    min_temp_c: 45.0                  # minimum acceptable temperature (hard lower bound)
+    cooling_rate_k_per_hour: 2.0      # tank cooling rate: insulation losses + draw
+
+    # Minimum consecutive steps the heater must run once started.
+    # Prevents short bursts that stress the element/compressor.
+    # Set to 0 or 1 to disable. Default: 0.
+    min_run_steps: 0
+
+    wear_cost_eur_per_kwh: 0.0
+
+    # MQTT topic from which mimirheim reads the current water temperature.
+    # Topic derived to mimir/input/thermal_boiler/dhw_boiler/temp_c by default.
+    # Override: inputs:
+    #   topic_current_temp: "homeassistant/sensor/boiler_temp/state"
+
+# ---------------------------------------------------------------------------
+# Space heating heat pumps (plan 26)
+# ---------------------------------------------------------------------------
+# Named map. Models a space heating heat pump using the degree-days demand
+# approach. The external system (HA, Node-RED) computes how much heat the
+# building needs today from degree-days data and publishes it to MQTT.
+# mimirheim schedules the HP to meet that demand at minimum electricity cost.
+#
+# Two control modes are available; configure exactly one:
+#
+#   On/off mode: provide elec_power_kw and cop.
+#     Suitable for fixed-speed compressors.
+#
+#   Power-stage (SOS2) mode: provide stages.
+#     Suitable for inverter-driven variable-speed compressors.
+#     Stage 0 must always be the zero-power off sentinel (elec_kw: 0.0, cop: 0.0).
+
+space_heating_hps:
+  # --- Example 1: on/off mode ---
+  space_heating_onoff:
+    elec_power_kw: 8.0      # rated electrical input power at full load
+    cop: 3.5                 # coefficient of performance
+    min_run_steps: 4         # minimum run length (4 × 15 min = 1 hour)
+    wear_cost_eur_per_kwh: 0.01
+
+    # topic_heat_needed_kwh derived to mimir/input/space_heating/space_heating_onoff/heat_needed_kwh.
+    # topic_heat_produced_today_kwh derived to mimir/input/space_heating/space_heating_onoff/heat_produced_today_kwh.
+    # Override: inputs:
+    #   topic_heat_needed_kwh: "mimir/input/space_heating/heat_needed_kwh"
+    #   topic_heat_produced_today_kwh: "mimir/input/space_heating/heat_produced_today_kwh"
+
+    # Optional: building thermal model (plan 28). When set, the degree-days
+    # heat_needed_kwh approach is replaced by an indoor temperature model.
+    # The solver tracks T_indoor per step and keeps it within the comfort band.
+    # Calibrate thermal_capacity_kwh_per_k from the building's cool-down rate;
+    # calibrate heat_loss_coeff_kw_per_k from its steady-state heat requirement.
+    #
+    # building_thermal:
+    #   thermal_capacity_kwh_per_k: 8.0    # building thermal mass in kWh/K
+    #   heat_loss_coeff_kw_per_k: 0.6      # heat loss coefficient in kW/K
+    #   comfort_min_c: 19.0                # lower comfort bound in °C
+    #   comfort_max_c: 23.0                # upper comfort bound (pre-heat ceiling) in °C
+    #   inputs:
+    #     topic_current_indoor_temp_c: "homeassistant/sensor/indoor_temp/state"
+    #     topic_outdoor_temp_forecast_c: "mimir/input/outdoor_temp_forecast"
+
+  # --- Example 2: power-stage (SOS2) mode ---
+  space_heating_inverter:
+    stages:
+      - { elec_kw: 0.0, cop: 0.0 }   # sentinel: HP off
+      - { elec_kw: 3.0, cop: 4.2 }   # minimum power / maximum COP
+      - { elec_kw: 6.0, cop: 3.8 }   # half power
+      - { elec_kw: 9.0, cop: 3.2 }   # full power
+    min_run_steps: 4
+    wear_cost_eur_per_kwh: 0.01
+
+    # topic_heat_needed_kwh derived to mimir/input/space_heating/space_heating_inverter/heat_needed_kwh.
+
+    # building_thermal:
+    #   thermal_capacity_kwh_per_k: 8.0
+    #   heat_loss_coeff_kw_per_k: 0.6
+    #   comfort_min_c: 19.0
+    #   comfort_max_c: 23.0
+    #   inputs:
+    #     topic_current_indoor_temp_c: "homeassistant/sensor/indoor_temp/state"
+    #     topic_outdoor_temp_forecast_c: "mimir/input/outdoor_temp_forecast"
+
+# ---------------------------------------------------------------------------
+# Combined DHW and space heating heat pumps (plan 27)
+# ---------------------------------------------------------------------------
+# Named map. A combi heat pump covers both domestic hot water (DHW) and space
+# heating (SH) from one compressor. It operates in DHW mode or SH mode per
+# step — never both simultaneously.
+#
+# The DHW tank temperature model is identical to thermal_boilers above.
+# The SH demand model is identical to space_heating_hps in on/off mode above.
+# DHW mode typically has a lower COP than SH mode due to the higher temperature
+# lift to the hot water setpoint.
+
+combi_heat_pumps:
+  combi_hp:
+    elec_power_kw: 6.0      # rated electrical power — same for both modes
+    cop_dhw: 2.8             # COP in DHW (hot water) mode
+    cop_sh: 3.8              # COP in space heating mode (lower temp lift → higher COP)
+
+    # DHW tank parameters
+    volume_liters: 200.0
+    setpoint_c: 55.0         # DHW target temperature
+    min_temp_c: 40.0         # DHW minimum temperature (hard constraint)
+    cooling_rate_k_per_hour: 2.0
+
+    # Minimum consecutive steps across both modes combined.
+    # A DHW→SH mode switch within a running block is allowed.
+    min_run_steps: 4
+
+    wear_cost_eur_per_kwh: 0.01
+
+    # Input topics derived by default:
+    #   topic_current_temp     -> mimir/input/combi_hp/combi_hp/temp_c
+    #   topic_heat_needed_kwh  -> mimir/input/combi_hp/combi_hp/sh_heat_needed_kwh
+    # Override: inputs:
+    # Override: inputs:
+    #   topic_current_temp: "homeassistant/sensor/combi_boiler_temp/state"
+
+    # Optional: building thermal model for the SH mode (plan 28).
+    # When set, the degree-days SH constraint is replaced by a comfort band.
+    # DHW mode and tank dynamics are unaffected.
+    #
+    # building_thermal:
+    #   thermal_capacity_kwh_per_k: 8.0
+    #   heat_loss_coeff_kw_per_k: 0.6
+    #   comfort_min_c: 19.0
+    #   comfort_max_c: 23.0
+    #   inputs:
+    #     topic_current_indoor_temp_c: "homeassistant/sensor/indoor_temp/state"
+    #     topic_outdoor_temp_forecast_c: "mimir/input/outdoor_temp_forecast"
+
+# ---------------------------------------------------------------------------
+# Objectives
+# ---------------------------------------------------------------------------
+# Parameters that tune the objective function.
+# The active strategy is set at runtime via the MQTT topic mimir/input/strategy.
+# Defaults to minimize_cost when that topic has not been received.
+
+objectives:
+  # Weights used when the strategy is 'balanced'.
+  # Only the ratio matters; both default to 1.0 if omitted.
+  balanced_weights:
+    cost_weight: 1.0            # weight on revenue / import-cost terms
+    self_sufficiency_weight: 1.0 # weight on grid import penalty term
+
+  # Minimum cost benefit (EUR) over the naive baseline required for mimirheim to
+  # dispatch storage. When the projected saving is below this value, mimirheim
+  # publishes an idle schedule and sets dispatch_suppressed=true on the status
+  # topic. 0.0 (default) disables the check.
+  # Useful on flat-price days to avoid marginal battery cycling for tiny gains.
+  # Has no effect when an EV with a charge deadline is connected.
+  min_dispatch_gain_eur: 0.0
+
+  # Optional exchange-shaping secondary term. When set to a small positive
+  # value, adds lambda * sum_t(import_t + export_t) to the objective. This
+  # breaks solver indifference among solutions with equal primary cost by
+  # favouring lower total grid exchange. Use with net-of-meter (NoM) tariffs
+  # where symmetry makes the primary cost term near-zero.
+  #
+  # Choose a value orders of magnitude smaller than your typical energy prices
+  # so the term cannot reverse an economically justified dispatch decision.
+  # A value of 1e-4 (0.0001 EUR/kWh) is a reasonable starting point for
+  # typical European retail tariff levels (0.20–0.35 EUR/kWh).
+  #
+  # 0.0 (default) disables the term entirely, leaving the primary objective
+  # behaviour unchanged.
+  exchange_shaping_weight: 0.0
+
+# ---------------------------------------------------------------------------
+# Hard constraints
+# ---------------------------------------------------------------------------
+# Enforced as inviolable solver constraints, independent of the active strategy.
+# Null disables the cap.
+
+constraints:
+  max_import_kw: null    # hard cap on grid import at any time step; null = no cap
+  max_export_kw: null    # hard cap on grid export at any time step; null = no cap
+
+# ---------------------------------------------------------------------------
+# Solver
+# ---------------------------------------------------------------------------
+# Tuning parameters for the CBC MILP solver backend.
+# These settings do not affect what solution is correct — only how quickly
+# the solver finds it.
+
+solver:
+  # Hard cap on the number of 15-minute steps passed to the solver per cycle.
+  # At 15-minute resolution: 96 = 24 h, 192 = 48 h, 288 = 72 h.
+  #
+  # When the available forecast horizon is longer than this cap, the bundle is
+  # trimmed to this length before building the model. A longer horizon improves
+  # schedule quality (especially for devices with multi-day scheduling windows)
+  # but increases MILP complexity exponentially for binary-variable devices such
+  # as thermal heat pumps.
+  #
+  # The 72-hour default (288 steps) is chosen because the worst-case residential
+  # installation solves within the 59-second wall-clock budget at that length.
+  # At 7 days (672 steps) the same installation exceeds the budget regardless of
+  # tuning. Run mimirheim with --log-level DEBUG to see the exact binary variable
+  # count per solve and tune this value to your installation.
+  #
+  # Minimum: 96 (24 h — at least one full scheduling day must be visible).
+  max_horizon_steps: 288    # 72 h at 15-minute resolution
+
+  # Number of parallel threads CBC may use during branch-and-bound.
+  # -1 means use all available CPU cores.
+  # On a dedicated home server that is otherwise idle between solve cycles,
+  # -1 is the recommended setting. Set to 1 to force single-threaded solving
+  # (useful for debugging or on very constrained hardware).
+  threads: -1
+
+# ---------------------------------------------------------------------------
+# MQTT
+# ---------------------------------------------------------------------------
+
+mqtt:
+  host: "localhost"
+  port: 1883
+  client_id: "mimirheim"
+  # topic_prefix: "mimir"  # default — change here and in all helper mimir_topic_prefix fields
+
+# ---------------------------------------------------------------------------
+# Outputs
+# ---------------------------------------------------------------------------
+# MQTT topics mimirheim publishes to. All are retained.
+
+# outputs:
+#   All four topics are derived from mqtt.topic_prefix when this section is omitted:
+#     schedule:     mimir/strategy/schedule
+#     current:      mimir/strategy/current
+#     last_solve:   mimir/status/last_solve
+#     availability: mimir/status/availability   (publishes "online"/"offline")
+#
+#   Override individual fields only when you need a non-default topic:
+#   outputs:
+#     schedule: "my/custom/schedule/topic"
+
+# MQTT input topic overrides. Optional — omit the whole section or individual
+# fields to use the default derived from mqtt.topic_prefix.
+#
+# Override the prices topic when multiple mimirheim instances share one broker but
+# publish prices to a single shared topic:
+#
+# inputs:
+#   prices: "hio/input/prices"
+
+# ---------------------------------------------------------------------------
+# Debug
+# ---------------------------------------------------------------------------
+# Write solve dumps to disk at DEBUG log level.
+# Each solve pair is: <timestamp>_input.json and <timestamp>_output.json.
+# Format is identical to golden test files — drop a pair into tests/scenarios/
+# to create a regression test.
+#
+# dump_dir: null disables file writing even when log level is DEBUG.
+
+debug:
+  dump_dir: /tmp/mimirheim_dumps   # set to e.g. "/tmp/mimirheim_dumps" to enable
+  max_dumps: 50    # rotate oldest files when limit is reached; 0 = unlimited
+
+# ---------------------------------------------------------------------------
+# Reporting
+# ---------------------------------------------------------------------------
+# Controls whether mimirheim writes reporting-purpose dump files and publishes a
+# dump-available notification to MQTT after each successful solve.
+#
+# This section is independent of debug: above. Setting debug.enabled: false
+# does not suppress reporting. A production deployment typically runs with
+# debug.enabled: false (INFO logging) and reporting.enabled: true.
+#
+# dump_dir must be a path accessible to both the mimirheim container and the
+# mimirheim-reporter container, typically via a shared bind-mount or named volume.
+#
+# The notify_topic carries a small JSON pointer (~200 bytes, QoS 0, not
+# retained). mimirheim-reporter subscribes to this topic to learn about new dumps.
+# It does not poll the filesystem; missed notifications are recovered via a
+# catch-up scan on startup.
+
+reporting:
+  enabled: false
+  dump_dir: /data/dumps       # required when enabled: true
+  max_dumps: 200              # retain at most this many dump pairs; 0 = unlimited
+  # notify_topic derived to mimir/status/dump_available from mqtt.topic_prefix.
+  # Override: notify_topic: "mimir/status/dump_available"
+
+# ---------------------------------------------------------------------------
+# Readiness
+# ---------------------------------------------------------------------------
+# Tuning parameters for forecast coverage checks before solving.
+#
+# mimirheim does not require 24 hours of forecast data to solve. Instead, it solves
+# over whatever horizon all forecasts jointly cover. These settings control when
+# that coverage is deemed sufficient to solve, when to warn, and what
+# constitutes a gap in the data.
+
+# ---------------------------------------------------------------------------
+# Control arbitration
+# ---------------------------------------------------------------------------
+# Parameters for the closed-loop enforcer selection engine. These values
+# control which device (battery, EV, or PV) acts as the single zero-exchange
+# closed-loop enforcer for each time step. All fields are optional; the
+# defaults are suitable for a typical residential installation.
+
+control:
+  # Grid exchange below this value (kW) is treated as near-zero. Enforcer
+  # selection activates only on steps where both import and export are below
+  # this threshold. Steps above it clear all closed-loop flags.
+  # Default: 0.05 kW (50 W).
+  exchange_epsilon_kw: 0.05
+
+  # Minimum absorption headroom (kW) a device must have to be eligible as
+  # enforcer. Devices with less headroom at their current operating point are
+  # excluded. Prevents a nearly-full battery from being selected.
+  # Default: 0.10 kW (100 W).
+  headroom_margin_kw: 0.10
+
+  # A challenger device must exceed the current enforcer's efficiency score
+  # by at least this amount to trigger a switch. Prevents oscillation when
+  # two devices score similarly. Set to 0.0 to disable hysteresis.
+  # Default: 0.05.
+  switch_delta: 0.05
+
+  # Once a device is selected as enforcer, it holds that role for at least
+  # this many consecutive steps, unless it becomes ineligible (EV unplugs,
+  # headroom falls below margin). Prevents rapid step-to-step switching.
+  # Default: 2 steps (30 minutes at 15-minute resolution).
+  min_enforcer_dwell_steps: 2
+
+readiness:
+  # Minimum hours of joint forecast coverage required to solve at all.
+  # If available horizon falls below this, mimirheim will not solve and logs a
+  # blocking message. Default 1 hour: any non-trivial forecast window allows
+  # solving.
+  min_horizon_hours: 1.0
+
+  # If available horizon is below this value (but still above
+  # min_horizon_hours), mimirheim logs a warning on every solve but still solves.
+  # Default 8 hours. For example, day-ahead Nordpool prices published at
+  # 13:00 CET give about 11 hours until midnight. If forecast.solar data only
+  # covers the next 4 hours due to a missed refresh, the warning fires.
+  warn_below_hours: 8.0
+
+  # Any gap between consecutive data points within the computed horizon
+  # that exceeds this value triggers a warning. The gap is filled by
+  # interpolation regardless; the warning signals that the data source may
+  # have failed a refresh cycle. Default 2 hours.
+  max_gap_hours: 2.0
+
+# ---------------------------------------------------------------------------
+# Home Assistant MQTT Discovery
+# ---------------------------------------------------------------------------
+# When enabled, mimirheim publishes MQTT discovery payloads on every broker
+# connection so HA auto-creates entities for all mimirheim outputs.
+#
+# The following entities are created per device type:
+#   - batteries / hybrid_inverters: sensor for charge/discharge kW setpoint
+#   - pv_arrays:  sensor for production limit kW; binary_sensor for zero-export mode
+#   - ev_chargers: sensor for charge/discharge kW setpoint
+#   - deferrable_loads: sensor for scheduled power draw
+#   - thermal_boilers: sensor for heater power setpoint
+#   - space_heating_hps: sensor for electrical power draw setpoint
+#   - combi_heat_pumps: sensor for electrical power draw setpoint
+#   - grid: sensor for import kW, export kW
+#   - status: binary_sensor for availability, sensor for last solve info
+
+homeassistant:
+  # Requires Home Assistant 2024.2 or later. Uses the HA MQTT device JSON
+  # discovery format: a single retained topic per mimirheim instance at
+  # {discovery_prefix}/device/{device_id}/config encodes all entities.
+  # Publishing an empty payload to that topic removes the device from HA.
+
+  # Enable HA MQTT discovery. Default false.
+  enabled: false
+
+  # Topic prefix used by HA for discovery. Change only if your HA instance
+  # uses a non-default discovery prefix. Default: 'homeassistant'.
+  discovery_prefix: "homeassistant"
+
+  # Human-readable device name shown in HA. All entities published by this
+  # mimirheim instance are grouped under this device in the HA device registry.
+  # Default: 'mimirheim'.
+  device_name: "mimirheim"
+
+  # Unique identifier for the device in the HA device registry. If omitted,
+  # defaults to the MQTT client_id. Must be stable across restarts; changing
+  # it creates a new device in HA.
+  device_id: null
