@@ -1,4 +1,4 @@
-#!/usr/bin/with-contenv sh
+#!/command/with-contenv sh
 exec 2>&1
 if [ "${ENABLE_SCHEDULER:-true}" != "true" ]; then
     echo "scheduler: disabled via add-on options"

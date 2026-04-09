@@ -114,7 +114,7 @@ COPY --chown=root:root container/etc/ /etc/
 # mimirheim does not implement the s6 readiness protocol.
 RUN rm -f /etc/s6-overlay/s6-rc.d/mimirheim/notification-fd
 
-# Make all run scripts executable.
+# Make all run scripts and cont-init.d scripts executable.
 RUN chmod +x \
     /etc/s6-overlay/s6-rc.d/mimirheim/run \
     /etc/s6-overlay/s6-rc.d/nordpool/run \
@@ -125,7 +125,9 @@ RUN chmod +x \
     /etc/s6-overlay/s6-rc.d/baseload-static/run \
     /etc/s6-overlay/s6-rc.d/scheduler/run \
     /etc/s6-overlay/s6-rc.d/reporter/run \
-    /etc/s6-overlay/s6-rc.d/config-editor/run
+    /etc/s6-overlay/s6-rc.d/config-editor/run \
+    /etc/cont-init.d/00-options-env.sh \
+    /etc/cont-init.d/01-mqtt-env.sh
 
 # /config is the mount point for user-supplied YAML configuration files.
 VOLUME ["/config"]
