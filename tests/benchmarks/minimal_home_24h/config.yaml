@@ -1,0 +1,36 @@
+mqtt:
+  host: localhost
+  client_id: mimir-bench-1
+  topic_prefix: mimir
+
+outputs:
+  schedule: mimir/schedule
+  current: mimir/current
+  last_solve: mimir/status/last_solve
+  availability: mimir/status/availability
+
+grid:
+  import_limit_kw: 10.0
+  export_limit_kw: 6.0
+
+batteries:
+  home_bat:
+    capacity_kwh: 10.0
+    charge_segments:
+      - {power_max_kw: 3.6, efficiency: 0.95}
+    discharge_segments:
+      - {power_max_kw: 3.6, efficiency: 0.95}
+    wear_cost_eur_per_kwh: 0.02
+    inputs:
+      soc:
+        topic: mimir/input/home_bat/soc
+        unit: kwh
+
+pv_arrays:
+  roof_south:
+    max_power_kw: 5.0
+    topic_forecast: mimir/input/pv/roof_south
+
+static_loads:
+  household:
+    topic_forecast: mimir/input/baseload

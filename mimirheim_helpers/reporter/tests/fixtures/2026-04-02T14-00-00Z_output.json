@@ -1,0 +1,2475 @@
+{
+  "strategy": "minimize_cost",
+  "solve_status": "optimal",
+  "objective_value": -3.894753,
+  "dispatch_suppressed": false,
+  "naive_cost_eur": 1.325542,
+  "optimised_cost_eur": 0.385763,
+  "soc_credit_eur": 1.038999,
+  "schedule": [
+    {
+      "t": "2026-04-02T14:00:00Z",
+      "import_price_eur_per_kwh": 0.249691,
+      "export_price_eur_per_kwh": 0.027994,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.7,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 1.197,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.497,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T14:15:00Z",
+      "import_price_eur_per_kwh": 0.25585,
+      "export_price_eur_per_kwh": 0.034153,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.7,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 1.197,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.497,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T14:30:00Z",
+      "import_price_eur_per_kwh": 0.263436,
+      "export_price_eur_per_kwh": 0.04174,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.7,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 1.197,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.497,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T14:45:00Z",
+      "import_price_eur_per_kwh": 0.292948,
+      "export_price_eur_per_kwh": 0.071252,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.7,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 1.197,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.497,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T15:00:00Z",
+      "import_price_eur_per_kwh": 0.276964,
+      "export_price_eur_per_kwh": 0.055268,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.258,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.982,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.724,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T15:15:00Z",
+      "import_price_eur_per_kwh": 0.268712,
+      "export_price_eur_per_kwh": 0.047016,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.258,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.982,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.724,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T15:30:00Z",
+      "import_price_eur_per_kwh": 0.28472,
+      "export_price_eur_per_kwh": 0.063024,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.258,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.982,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.724,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T15:45:00Z",
+      "import_price_eur_per_kwh": 0.281937,
+      "export_price_eur_per_kwh": 0.060241,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.258,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.982,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.724,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T16:00:00Z",
+      "import_price_eur_per_kwh": 0.270612,
+      "export_price_eur_per_kwh": 0.048915,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.08,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.678,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.598,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T16:15:00Z",
+      "import_price_eur_per_kwh": 0.281574,
+      "export_price_eur_per_kwh": 0.059878,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.08,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.678,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.598,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T16:30:00Z",
+      "import_price_eur_per_kwh": 0.295429,
+      "export_price_eur_per_kwh": 0.073732,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.08,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.678,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.598,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T16:45:00Z",
+      "import_price_eur_per_kwh": 0.319338,
+      "export_price_eur_per_kwh": 0.097642,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.08,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.678,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.598,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T17:00:00Z",
+      "import_price_eur_per_kwh": 0.301333,
+      "export_price_eur_per_kwh": 0.079637,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.093,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.338,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.431,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T17:15:00Z",
+      "import_price_eur_per_kwh": 0.322533,
+      "export_price_eur_per_kwh": 0.100836,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.093,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.338,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.431,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T17:30:00Z",
+      "import_price_eur_per_kwh": 0.335988,
+      "export_price_eur_per_kwh": 0.114292,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.093,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.338,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.431,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T17:45:00Z",
+      "import_price_eur_per_kwh": 0.351718,
+      "export_price_eur_per_kwh": 0.130022,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.093,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.338,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.431,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T18:00:00Z",
+      "import_price_eur_per_kwh": 0.339037,
+      "export_price_eur_per_kwh": 0.117341,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.357,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.101,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.458,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T18:15:00Z",
+      "import_price_eur_per_kwh": 0.326574,
+      "export_price_eur_per_kwh": 0.104878,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.458,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.458,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T18:30:00Z",
+      "import_price_eur_per_kwh": 0.322363,
+      "export_price_eur_per_kwh": 0.100667,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.458,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.458,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T18:45:00Z",
+      "import_price_eur_per_kwh": 0.310844,
+      "export_price_eur_per_kwh": 0.089148,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.458,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.458,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T19:00:00Z",
+      "import_price_eur_per_kwh": 0.329805,
+      "export_price_eur_per_kwh": 0.108109,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.434,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.434,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T19:15:00Z",
+      "import_price_eur_per_kwh": 0.309912,
+      "export_price_eur_per_kwh": 0.088216,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.434,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.434,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T19:30:00Z",
+      "import_price_eur_per_kwh": 0.308218,
+      "export_price_eur_per_kwh": 0.086522,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.434,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.434,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T19:45:00Z",
+      "import_price_eur_per_kwh": 0.29365,
+      "export_price_eur_per_kwh": 0.071954,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.434,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.434,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T20:00:00Z",
+      "import_price_eur_per_kwh": 0.311933,
+      "export_price_eur_per_kwh": 0.090237,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.372,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.372,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T20:15:00Z",
+      "import_price_eur_per_kwh": 0.298502,
+      "export_price_eur_per_kwh": 0.076806,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.372,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.372,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T20:30:00Z",
+      "import_price_eur_per_kwh": 0.293142,
+      "export_price_eur_per_kwh": 0.071445,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.372,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.372,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T20:45:00Z",
+      "import_price_eur_per_kwh": 0.286293,
+      "export_price_eur_per_kwh": 0.064597,
+      "grid_import_kw": 0.372,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.372,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T21:00:00Z",
+      "import_price_eur_per_kwh": 0.293069,
+      "export_price_eur_per_kwh": 0.071373,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.303,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.303,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T21:15:00Z",
+      "import_price_eur_per_kwh": 0.283208,
+      "export_price_eur_per_kwh": 0.061511,
+      "grid_import_kw": 0.303,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.303,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T21:30:00Z",
+      "import_price_eur_per_kwh": 0.290298,
+      "export_price_eur_per_kwh": 0.068602,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.303,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.303,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T21:45:00Z",
+      "import_price_eur_per_kwh": 0.274205,
+      "export_price_eur_per_kwh": 0.052509,
+      "grid_import_kw": 0.303,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.303,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T22:00:00Z",
+      "import_price_eur_per_kwh": 0.306585,
+      "export_price_eur_per_kwh": 0.084889,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.096,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.096,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T22:15:00Z",
+      "import_price_eur_per_kwh": 0.300837,
+      "export_price_eur_per_kwh": 0.079141,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.096,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.096,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T22:30:00Z",
+      "import_price_eur_per_kwh": 0.290419,
+      "export_price_eur_per_kwh": 0.068723,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.096,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.096,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T22:45:00Z",
+      "import_price_eur_per_kwh": 0.285591,
+      "export_price_eur_per_kwh": 0.063895,
+      "grid_import_kw": 0.096,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.096,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T23:00:00Z",
+      "import_price_eur_per_kwh": 0.286329,
+      "export_price_eur_per_kwh": 0.064633,
+      "grid_import_kw": 0.249,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.249,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T23:15:00Z",
+      "import_price_eur_per_kwh": 0.285809,
+      "export_price_eur_per_kwh": 0.064113,
+      "grid_import_kw": 0.249,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.249,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T23:30:00Z",
+      "import_price_eur_per_kwh": 0.286184,
+      "export_price_eur_per_kwh": 0.064488,
+      "grid_import_kw": 0.249,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.249,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-02T23:45:00Z",
+      "import_price_eur_per_kwh": 0.274689,
+      "export_price_eur_per_kwh": 0.052993,
+      "grid_import_kw": 0.249,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.249,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T00:00:00Z",
+      "import_price_eur_per_kwh": 0.289959,
+      "export_price_eur_per_kwh": 0.068263,
+      "grid_import_kw": 0.2239,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0001,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.224,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T00:15:00Z",
+      "import_price_eur_per_kwh": 0.280848,
+      "export_price_eur_per_kwh": 0.059152,
+      "grid_import_kw": 0.224,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.224,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T00:30:00Z",
+      "import_price_eur_per_kwh": 0.274266,
+      "export_price_eur_per_kwh": 0.05257,
+      "grid_import_kw": 0.224,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.224,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T00:45:00Z",
+      "import_price_eur_per_kwh": 0.27354,
+      "export_price_eur_per_kwh": 0.051843,
+      "grid_import_kw": 0.224,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.224,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T01:00:00Z",
+      "import_price_eur_per_kwh": 0.279977,
+      "export_price_eur_per_kwh": 0.058281,
+      "grid_import_kw": 0.235,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.235,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T01:15:00Z",
+      "import_price_eur_per_kwh": 0.277412,
+      "export_price_eur_per_kwh": 0.055716,
+      "grid_import_kw": 0.235,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.235,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T01:30:00Z",
+      "import_price_eur_per_kwh": 0.272959,
+      "export_price_eur_per_kwh": 0.051263,
+      "grid_import_kw": 0.235,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.235,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T01:45:00Z",
+      "import_price_eur_per_kwh": 0.275536,
+      "export_price_eur_per_kwh": 0.05384,
+      "grid_import_kw": 0.235,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.235,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T02:00:00Z",
+      "import_price_eur_per_kwh": 0.278513,
+      "export_price_eur_per_kwh": 0.056817,
+      "grid_import_kw": 0.191,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.191,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T02:15:00Z",
+      "import_price_eur_per_kwh": 0.278368,
+      "export_price_eur_per_kwh": 0.056671,
+      "grid_import_kw": 0.191,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.191,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T02:30:00Z",
+      "import_price_eur_per_kwh": 0.278876,
+      "export_price_eur_per_kwh": 0.05718,
+      "grid_import_kw": 0.191,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.191,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T02:45:00Z",
+      "import_price_eur_per_kwh": 0.277508,
+      "export_price_eur_per_kwh": 0.055812,
+      "grid_import_kw": 0.191,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.191,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T03:00:00Z",
+      "import_price_eur_per_kwh": 0.277545,
+      "export_price_eur_per_kwh": 0.055849,
+      "grid_import_kw": 0.192,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.192,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T03:15:00Z",
+      "import_price_eur_per_kwh": 0.279457,
+      "export_price_eur_per_kwh": 0.05776,
+      "grid_import_kw": 0.192,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.192,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T03:30:00Z",
+      "import_price_eur_per_kwh": 0.275258,
+      "export_price_eur_per_kwh": 0.053562,
+      "grid_import_kw": 0.192,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.192,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T03:45:00Z",
+      "import_price_eur_per_kwh": 0.283861,
+      "export_price_eur_per_kwh": 0.062165,
+      "grid_import_kw": 0.192,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.192,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T04:00:00Z",
+      "import_price_eur_per_kwh": 0.276262,
+      "export_price_eur_per_kwh": 0.054566,
+      "grid_import_kw": 0.221,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.221,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T04:15:00Z",
+      "import_price_eur_per_kwh": 0.289911,
+      "export_price_eur_per_kwh": 0.068215,
+      "grid_import_kw": 0.221,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.221,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T04:30:00Z",
+      "import_price_eur_per_kwh": 0.305072,
+      "export_price_eur_per_kwh": 0.083376,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.221,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.221,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T04:45:00Z",
+      "import_price_eur_per_kwh": 0.303717,
+      "export_price_eur_per_kwh": 0.082021,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.221,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.221,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T05:00:00Z",
+      "import_price_eur_per_kwh": 0.304552,
+      "export_price_eur_per_kwh": 0.082856,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.42,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.42,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T05:15:00Z",
+      "import_price_eur_per_kwh": 0.303995,
+      "export_price_eur_per_kwh": 0.082299,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.42,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.42,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T05:30:00Z",
+      "import_price_eur_per_kwh": 0.299869,
+      "export_price_eur_per_kwh": 0.078173,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.42,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.42,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T05:45:00Z",
+      "import_price_eur_per_kwh": 0.292706,
+      "export_price_eur_per_kwh": 0.07101,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.42,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.0,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.42,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T06:00:00Z",
+      "import_price_eur_per_kwh": 0.32511,
+      "export_price_eur_per_kwh": 0.103414,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.033,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": false
+        },
+        "roof_pv": {
+          "kw": 0.272,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.239,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T06:15:00Z",
+      "import_price_eur_per_kwh": 0.299712,
+      "export_price_eur_per_kwh": 0.078016,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.033,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": false
+        },
+        "roof_pv": {
+          "kw": 0.272,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.239,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T06:30:00Z",
+      "import_price_eur_per_kwh": 0.29071,
+      "export_price_eur_per_kwh": 0.069013,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.033,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": false
+        },
+        "roof_pv": {
+          "kw": 0.272,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.239,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T06:45:00Z",
+      "import_price_eur_per_kwh": 0.261343,
+      "export_price_eur_per_kwh": 0.039647,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.033,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.272,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.239,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T07:00:00Z",
+      "import_price_eur_per_kwh": 0.309065,
+      "export_price_eur_per_kwh": 0.087369,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.3017,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0267,
+          "type": "battery",
+          "zero_export_mode": false
+        },
+        "roof_pv": {
+          "kw": 0.524,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.249,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T07:15:00Z",
+      "import_price_eur_per_kwh": 0.283365,
+      "export_price_eur_per_kwh": 0.061669,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.275,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": false
+        },
+        "roof_pv": {
+          "kw": 0.524,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.249,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T07:30:00Z",
+      "import_price_eur_per_kwh": 0.261137,
+      "export_price_eur_per_kwh": 0.039441,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.275,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.524,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.249,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T07:45:00Z",
+      "import_price_eur_per_kwh": 0.237784,
+      "export_price_eur_per_kwh": 0.016088,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.275,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.524,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.249,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T08:00:00Z",
+      "import_price_eur_per_kwh": 0.289052,
+      "export_price_eur_per_kwh": 0.067356,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.9805,
+      "devices": {
+        "home_battery": {
+          "kw": 0.4455,
+          "type": "battery",
+          "zero_export_mode": false
+        },
+        "roof_pv": {
+          "kw": 0.81,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.275,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T08:15:00Z",
+      "import_price_eur_per_kwh": 0.252474,
+      "export_price_eur_per_kwh": 0.030777,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.535,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": false
+        },
+        "roof_pv": {
+          "kw": 0.81,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.275,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T08:30:00Z",
+      "import_price_eur_per_kwh": 0.214238,
+      "export_price_eur_per_kwh": -0.007459,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.535,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.81,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.275,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T08:45:00Z",
+      "import_price_eur_per_kwh": 0.202428,
+      "export_price_eur_per_kwh": -0.019268,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.535,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.81,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.275,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T09:00:00Z",
+      "import_price_eur_per_kwh": 0.22295,
+      "export_price_eur_per_kwh": 0.001253,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 1.4997,
+      "devices": {
+        "home_battery": {
+          "kw": 0.8667,
+          "type": "battery",
+          "zero_export_mode": false
+        },
+        "roof_pv": {
+          "kw": 1.073,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.44,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T09:15:00Z",
+      "import_price_eur_per_kwh": 0.208345,
+      "export_price_eur_per_kwh": -0.013351,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0559,
+      "devices": {
+        "home_battery": {
+          "kw": -0.5771,
+          "type": "battery",
+          "zero_export_mode": false
+        },
+        "roof_pv": {
+          "kw": 1.073,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.44,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T09:30:00Z",
+      "import_price_eur_per_kwh": 0.195144,
+      "export_price_eur_per_kwh": -0.026552,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.633,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 1.073,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.44,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T09:45:00Z",
+      "import_price_eur_per_kwh": 0.172952,
+      "export_price_eur_per_kwh": -0.048744,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.633,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 1.073,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.44,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T10:00:00Z",
+      "import_price_eur_per_kwh": 0.194575,
+      "export_price_eur_per_kwh": -0.027121,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.852,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 1.251,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.399,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T10:15:00Z",
+      "import_price_eur_per_kwh": 0.173315,
+      "export_price_eur_per_kwh": -0.048381,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.852,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 1.251,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.399,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T10:30:00Z",
+      "import_price_eur_per_kwh": 0.1598,
+      "export_price_eur_per_kwh": -0.061896,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.852,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 1.251,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.399,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T10:45:00Z",
+      "import_price_eur_per_kwh": 0.146284,
+      "export_price_eur_per_kwh": -0.075412,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.852,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 1.251,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.399,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T11:00:00Z",
+      "import_price_eur_per_kwh": 0.158953,
+      "export_price_eur_per_kwh": -0.062743,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -1.082,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 1.364,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.282,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T11:15:00Z",
+      "import_price_eur_per_kwh": 0.149962,
+      "export_price_eur_per_kwh": -0.071734,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -1.082,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 1.364,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.282,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T11:30:00Z",
+      "import_price_eur_per_kwh": 0.145207,
+      "export_price_eur_per_kwh": -0.076489,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -1.082,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 1.364,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.282,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T11:45:00Z",
+      "import_price_eur_per_kwh": 0.137681,
+      "export_price_eur_per_kwh": -0.084015,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -1.082,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 1.364,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.282,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T12:00:00Z",
+      "import_price_eur_per_kwh": 0.141262,
+      "export_price_eur_per_kwh": -0.080434,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -1.124,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 1.386,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.262,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T12:15:00Z",
+      "import_price_eur_per_kwh": 0.138262,
+      "export_price_eur_per_kwh": -0.083434,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -1.124,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 1.386,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.262,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T12:30:00Z",
+      "import_price_eur_per_kwh": 0.136447,
+      "export_price_eur_per_kwh": -0.085249,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -1.124,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 1.386,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.262,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T12:45:00Z",
+      "import_price_eur_per_kwh": 0.136761,
+      "export_price_eur_per_kwh": -0.084935,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -1.124,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 1.386,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.262,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T13:00:00Z",
+      "import_price_eur_per_kwh": 0.136773,
+      "export_price_eur_per_kwh": -0.084923,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -1.011,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 1.338,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.327,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T13:15:00Z",
+      "import_price_eur_per_kwh": 0.136495,
+      "export_price_eur_per_kwh": -0.085201,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -1.011,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 1.338,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.327,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T13:30:00Z",
+      "import_price_eur_per_kwh": 0.140077,
+      "export_price_eur_per_kwh": -0.081619,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -1.011,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 1.338,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.327,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T13:45:00Z",
+      "import_price_eur_per_kwh": 0.147712,
+      "export_price_eur_per_kwh": -0.073984,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -1.011,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 1.338,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.327,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T14:00:00Z",
+      "import_price_eur_per_kwh": 0.139,
+      "export_price_eur_per_kwh": -0.082696,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.791,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 1.197,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.406,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T14:15:00Z",
+      "import_price_eur_per_kwh": 0.150579,
+      "export_price_eur_per_kwh": -0.071117,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.791,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 1.197,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.406,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T14:30:00Z",
+      "import_price_eur_per_kwh": 0.175142,
+      "export_price_eur_per_kwh": -0.046554,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.791,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 1.197,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.406,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T14:45:00Z",
+      "import_price_eur_per_kwh": 0.194575,
+      "export_price_eur_per_kwh": -0.027121,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.791,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 1.197,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.406,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T15:00:00Z",
+      "import_price_eur_per_kwh": 0.188513,
+      "export_price_eur_per_kwh": -0.033183,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.228,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.982,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.754,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T15:15:00Z",
+      "import_price_eur_per_kwh": 0.211479,
+      "export_price_eur_per_kwh": -0.010217,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.228,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": false
+        },
+        "roof_pv": {
+          "kw": 0.982,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.754,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T15:30:00Z",
+      "import_price_eur_per_kwh": 0.231214,
+      "export_price_eur_per_kwh": 0.009518,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.228,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": false
+        },
+        "roof_pv": {
+          "kw": 0.982,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.754,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T15:45:00Z",
+      "import_price_eur_per_kwh": 0.248299,
+      "export_price_eur_per_kwh": 0.026603,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.377,
+      "devices": {
+        "home_battery": {
+          "kw": 0.149,
+          "type": "battery",
+          "zero_export_mode": false
+        },
+        "roof_pv": {
+          "kw": 0.982,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.754,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T16:00:00Z",
+      "import_price_eur_per_kwh": 0.235158,
+      "export_price_eur_per_kwh": 0.013462,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": -0.184,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.68,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.496,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T16:15:00Z",
+      "import_price_eur_per_kwh": 0.255898,
+      "export_price_eur_per_kwh": 0.034202,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.184,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": false
+        },
+        "roof_pv": {
+          "kw": 0.68,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.496,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T16:30:00Z",
+      "import_price_eur_per_kwh": 0.266001,
+      "export_price_eur_per_kwh": 0.044305,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.184,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": false
+        },
+        "roof_pv": {
+          "kw": 0.68,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.496,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T16:45:00Z",
+      "import_price_eur_per_kwh": 0.269535,
+      "export_price_eur_per_kwh": 0.047838,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.184,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": false
+        },
+        "roof_pv": {
+          "kw": 0.68,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.496,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T17:00:00Z",
+      "import_price_eur_per_kwh": 0.292912,
+      "export_price_eur_per_kwh": 0.071216,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.075,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.342,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.417,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T17:15:00Z",
+      "import_price_eur_per_kwh": 0.280969,
+      "export_price_eur_per_kwh": 0.059273,
+      "grid_import_kw": 0.075,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.342,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.417,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T17:30:00Z",
+      "import_price_eur_per_kwh": 0.286329,
+      "export_price_eur_per_kwh": 0.064633,
+      "grid_import_kw": 0.075,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.342,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.417,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T17:45:00Z",
+      "import_price_eur_per_kwh": 0.28593,
+      "export_price_eur_per_kwh": 0.064234,
+      "grid_import_kw": 0.075,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "zero_export_mode": true
+        },
+        "roof_pv": {
+          "kw": 0.342,
+          "type": "pv"
+        },
+        "base_load": {
+          "kw": -0.417,
+          "type": "static_load"
+        }
+      }
+    }
+  ]
+}

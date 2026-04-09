@@ -1,0 +1,9 @@
+#!/usr/bin/with-contenv sh
+exec 2>&1
+CONFIG=/config/mimirheim.yaml
+if [ ! -f "$CONFIG" ]; then
+    echo "mimirheim: $CONFIG not found — sleeping until config appears"
+    exec sleep 5
+    exit 1
+fi
+exec /app/.venv/bin/python -m mimirheim --config "$CONFIG"

@@ -1,0 +1,12 @@
+#!/usr/bin/with-contenv sh
+exec 2>&1
+if [ "${ENABLE_SCHEDULER:-true}" != "true" ]; then
+    echo "scheduler: disabled via add-on options"
+    exec sleep infinity
+fi
+CONFIG=/config/scheduler.yaml
+if [ ! -f "$CONFIG" ]; then
+    echo "scheduler: $CONFIG not found — service disabled"
+    exec sleep infinity
+fi
+exec /app/.venv/bin/python -m scheduler --config "$CONFIG"

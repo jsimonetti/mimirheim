@@ -1,0 +1,25 @@
+# Exclude all .venv directories inside input tool subdirectories.
+# Each tool has its own local venv for development; the Docker build creates
+# a single combined venv via uv and does not use these.
+**/.venv/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/.pytest_cache/
+**/dist/
+**/build/
+**/*.egg-info/
+
+# Test artifacts
+tests/
+**/tests/
+
+# Development and documentation files that are not needed at runtime.
+AGENTS.md
+IMPLEMENTATION_DETAILS.md
+plans/
+unsorted_notes.ignore.txt
+develop.yaml
+examples/
+
+# The container/ directory (Dockerfile + s6 service definitions) is included.

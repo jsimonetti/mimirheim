@@ -1,0 +1,134 @@
+[project]
+name = "mimirheim"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "mip>=1.14",
+    "pydantic>=2.7",
+    "paho-mqtt>=2.0",
+    "pyyaml>=6.0",
+]
+
+# ---------------------------------------------------------------------------
+# Optional extras — install only the helpers you need.
+#
+# Core install (solver only, no helper deps):
+#   pip install mimirheim
+#
+# With specific helpers:
+#   pip install "mimirheim[nordpool,pv-fetcher,reporter]"
+#
+# Everything (all helpers):
+#   pip install "mimirheim[helpers]"
+# ---------------------------------------------------------------------------
+[project.optional-dependencies]
+scheduler = [
+    "apscheduler>=3.10,<4.0",
+]
+nordpool = [
+    "pynordpool>=0.1",
+]
+pv-fetcher = [
+    "forecast-solar>=5.0",
+]
+pv-ml-learner = [
+    "httpx>=0.27",
+    "knmi-py>=0.2",
+    "sqlalchemy>=2.0",
+    "xgboost>=2.0",
+    "scikit-learn>=1.4",
+    "joblib>=1.3",
+    "pandas>=2.2",
+]
+baseload-ha = [
+    "httpx>=0.27",
+]
+baseload-ha-db = [
+    "sqlalchemy>=2.0",
+]
+baseload-ha-db-postgres = [
+    "psycopg2-binary>=2.9",
+]
+baseload-ha-db-mysql = [
+    "pymysql>=1.1",
+]
+reporter = [
+    "plotly>=6.6.0",
+]
+config-editor = []
+# Meta-extra: installs every helper's runtime dependencies in one shot.
+# Used by the container build and by full developer environments.
+helpers = [
+    "apscheduler>=3.10,<4.0",
+    "pynordpool>=0.1",
+    "forecast-solar>=5.0",
+    "httpx>=0.27",
+    "knmi-py>=0.2",
+    "sqlalchemy>=2.0",
+    "xgboost>=2.0",
+    "scikit-learn>=1.4",
+    "joblib>=1.3",
+    "pandas>=2.2",
+    "plotly>=6.6.0",
+]
+
+# All module packages live in the single mimirheim wheel.
+# helper_common and every helper tool module are included here so that
+# the wheel remains self-contained; the extras above gate which third-party
+# deps are installed, not which modules are present.
+[tool.hatch.build.targets.wheel]
+packages = [
+    "mimirheim",
+    "mimirheim_helpers/common/helper_common",
+    "mimirheim_helpers/scheduler/scheduler",
+    "mimirheim_helpers/prices/nordpool/nordpool",
+    "mimirheim_helpers/pv/forecast.solar/pv_fetcher",
+    "mimirheim_helpers/pv/pv_ml_learner/pv_ml_learner",
+    "mimirheim_helpers/baseload/homeassistant/baseload_ha",
+    "mimirheim_helpers/baseload/homeassistant_db/baseload_ha_db",
+    "mimirheim_helpers/baseload/static/baseload_static",
+    "mimirheim_helpers/reporter/reporter",
+    "mimirheim_helpers/config_editor/config_editor",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-benchmark>=4.0",
+    "amqtt>=0.11",
+    "plotly>=6.6.0",
+    "freezegun>=1.4",
+    "respx>=0.21",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+addopts = "-m 'not integration' --import-mode=importlib"
+testpaths = [
+    "tests",
+    "mimirheim_helpers/common/tests",
+    "mimirheim_helpers/scheduler/tests",
+    "mimirheim_helpers/prices/nordpool/tests",
+    "mimirheim_helpers/pv/forecast.solar/tests",
+    "mimirheim_helpers/pv/pv_ml_learner/tests",
+    "mimirheim_helpers/baseload/homeassistant/tests",
+    "mimirheim_helpers/baseload/homeassistant_db/tests",
+    "mimirheim_helpers/baseload/static/tests",
+    "mimirheim_helpers/reporter/tests",
+    "mimirheim_helpers/config_editor/tests",
+]
+markers = [
+    "integration: marks tests that require a live MQTT broker (run with -m integration)",
+    "benchmark: marks performance benchmark tests (measured by pytest-benchmark, never fail on timing)",
+]
+filterwarnings = [
+    # passlib 1.7.4 (pulled in by amqtt) imports the deprecated 'crypt' module.
+    # passlib is unmaintained; the warning originates in third-party code and
+    # cannot be fixed here. Suppress it to keep test output clean.
+    "ignore:'crypt' is deprecated:DeprecationWarning:passlib",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

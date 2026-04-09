@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mimirheim config editor</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>mimirheim config editor</h1>
+    <div id="save-bar">
+      <span id="save-status"></span>
+      <button id="save-btn" type="button">Save</button>
+    </div>
+  </header>
+
+  <nav id="tab-bar">
+    <!-- Tab buttons are injected by app.js -->
+  </nav>
+
+  <main id="content-pane">
+    <!-- Active tab content is rendered here by app.js -->
+    <p id="loading-msg">Loading&hellip;</p>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

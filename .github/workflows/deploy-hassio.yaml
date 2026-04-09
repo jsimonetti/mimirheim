@@ -1,0 +1,43 @@
+name: Deploy HA add-on repository
+
+# Pushes the contents of hassio-repository/ to the root of the
+# jsimonetti/hassio-apps repository. The add-on builder workflow inside
+# that repository then detects changed files and triggers image builds.
+#
+# Runs on every push to main that touches hassio-repository/, and on every
+# version tag so the stable channel receives the new release.
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+    paths:
+      - "hassio-repository/**"
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Push hassio-repository/ to jsimonetti/hassio-apps
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Deploy subdirectory to hassio-addons
+        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4.0.0
+        with:
+          deploy_key: ${{ secrets.HASSIO_APPS_DEPLOY_KEY }}
+          external_repository: jsimonetti/hassio-apps
+          publish_branch: main
+          publish_dir: ./hassio-repository
+          # keep_files: false replaces the entire target branch with the
+          # contents of hassio-repository/ on each push. This ensures that
+          # deletions in the source are always reflected in the deployed repo.
+          keep_files: false
+          force_orphan: false

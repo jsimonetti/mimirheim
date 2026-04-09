@@ -1,0 +1,132 @@
+# Example configuration for the static baseload daemon.
+#
+# This tool publishes a predefined kilowatt load profile to MQTT on demand.
+# No external services are contacted — the entire forecast is encoded here.
+# The published payload is identical in format to that produced by the
+# homeassistant baseload tool and is consumed by mimirheim in the same way.
+
+mqtt:
+  host: localhost
+  port: 1883
+  client_id: baseload-static-daemon
+  # username: your-mqtt-username
+  # password: your-mqtt-password
+
+# MQTT topic that triggers a publish cycle when a message is received.
+# The message content is ignored; the presence of a message fires one cycle.
+trigger_topic: mimir/input/tools/baseload/trigger
+
+# Must match mqtt.topic_prefix in the mimirheim configuration.
+# Determines the derived output_topic and mimir_trigger_topic when not set explicitly.
+# Change only when mimirheim uses a non-default topic prefix.
+# mimir_topic_prefix: mimir  # default
+
+# MQTT topic to which the hourly forecast is published (retained).
+# Derived from mimir_topic_prefix and mimir_static_load_name when not set:
+#   mimir/input/baseload/base_load/forecast
+# Override only when using a non-default static_loads device name:
+# output_topic: mimir/input/baseload/my_load/forecast
+
+baseload:
+  # horizon_hours controls how many hourly steps are published, starting from
+  # the current wall-clock hour. The profile is tiled (repeated) to fill the
+  # window, so a 24-element profile covers 48 hours by repeating twice.
+  # Range: 1–168 (one week). Defaults to 48.
+  horizon_hours: 48
+
+  # profile_kw defines the repeating load pattern in kilowatts.
+  # The most common format is 24 values, one per UTC hour-of-day (00:00–23:00).
+  # The first entry corresponds to midnight UTC, the second to 01:00 UTC, etc.
+  # Any length from 1 to 168 is accepted; for a flat constant load, supply
+  # a single value.
+  #
+  # When weekly_profiles_kw is also set, profile_kw acts as a fallback for
+  # any weekday not explicitly listed there. When weekly_profiles_kw covers
+  # all 7 days, profile_kw may be omitted entirely.
+  #
+  # These example values represent a typical household daily profile (UTC).
+  profile_kw:
+    - 0.30  # 00:00 UTC
+    - 0.28  # 01:00 UTC
+    - 0.27  # 02:00 UTC
+    - 0.26  # 03:00 UTC
+    - 0.27  # 04:00 UTC
+    - 0.32  # 05:00 UTC
+    - 0.55  # 06:00 UTC
+    - 0.85  # 07:00 UTC
+    - 0.90  # 08:00 UTC
+    - 0.70  # 09:00 UTC
+    - 0.60  # 10:00 UTC
+    - 0.55  # 11:00 UTC
+    - 0.60  # 12:00 UTC
+    - 0.55  # 13:00 UTC
+    - 0.50  # 14:00 UTC
+    - 0.48  # 15:00 UTC
+    - 0.52  # 16:00 UTC
+    - 0.70  # 17:00 UTC
+    - 0.95  # 18:00 UTC
+    - 0.90  # 19:00 UTC
+    - 0.80  # 20:00 UTC
+    - 0.65  # 21:00 UTC
+    - 0.50  # 22:00 UTC
+    - 0.38  # 23:00 UTC
+
+  # weekly_profiles_kw provides per-weekday load patterns in UTC.
+  # Keys are Python weekday numbers: 0=Monday, 1=Tuesday, ..., 6=Sunday.
+  # Each entry follows the same rules as profile_kw: 1–168 values indexed
+  # by UTC hour-of-day via modulo. When a step's weekday has an entry here,
+  # it takes precedence over profile_kw.
+  #
+  # If all 7 days are listed, profile_kw may be omitted entirely.
+  #
+  # Example: distinct weekend profile, weekdays use profile_kw as fallback.
+  # weekly_profiles_kw:
+  #   5:  # Saturday
+  #     - 0.32  # 00:00 UTC
+  #     - 0.30  # 01:00 UTC
+  #     - 0.29  # 02:00 UTC
+  #     - 0.28  # 03:00 UTC
+  #     - 0.28  # 04:00 UTC
+  #     - 0.30  # 05:00 UTC
+  #     - 0.35  # 06:00 UTC
+  #     - 0.50  # 07:00 UTC
+  #     - 0.80  # 08:00 UTC
+  #     - 0.95  # 09:00 UTC
+  #     - 0.90  # 10:00 UTC
+  #     - 0.85  # 11:00 UTC
+  #     - 0.90  # 12:00 UTC
+  #     - 0.85  # 13:00 UTC
+  #     - 0.80  # 14:00 UTC
+  #     - 0.75  # 15:00 UTC
+  #     - 0.75  # 16:00 UTC
+  #     - 0.85  # 17:00 UTC
+  #     - 1.00  # 18:00 UTC
+  #     - 0.95  # 19:00 UTC
+  #     - 0.85  # 20:00 UTC
+  #     - 0.75  # 21:00 UTC
+  #     - 0.60  # 22:00 UTC
+  #     - 0.45  # 23:00 UTC
+  #   6:  # Sunday (same as Saturday in this example)
+  #     - 0.32  # 00:00 UTC
+  #     # ... (24 values)
+
+# Set signal_mimir to true and uncomment mimir_trigger_topic to chain this tool
+# into the mimirheim solve loop after the forecast is published.
+signal_mimir: false
+# mimir_trigger_topic: mimir/input/trigger
+
+# HA MQTT discovery. When enabled, the daemon publishes a retained discovery
+# payload that creates a button entity in Home Assistant. Pressing the button
+# sends a message to trigger_topic, firing one publish cycle.
+# discovery_prefix must match the MQTT discovery prefix configured in HA
+# (Settings → Devices & Services → MQTT), which defaults to "homeassistant".
+# device_name is the label shown in the HA device card.
+# ha_discovery:
+#   enabled: true
+#   discovery_prefix: homeassistant
+#   device_name: Baseload Static
+
+# Optional. When set, the daemon publishes a JSON stats payload to this MQTT
+# topic after every publish cycle (success or failure). See nordpool.yaml for
+# the full payload description.
+# stats_topic: mimir/input/tools/baseload/stats

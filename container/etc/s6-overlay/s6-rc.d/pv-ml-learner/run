@@ -1,0 +1,12 @@
+#!/usr/bin/with-contenv sh
+exec 2>&1
+if [ "${ENABLE_PV_ML_LEARNER:-true}" != "true" ]; then
+    echo "pv-ml-learner: disabled via add-on options"
+    exec sleep infinity
+fi
+CONFIG=/config/pv-ml-learner.yaml
+if [ ! -f "$CONFIG" ]; then
+    echo "pv-ml-learner: $CONFIG not found — service disabled"
+    exec sleep infinity
+fi
+exec /app/.venv/bin/python -m pv_ml_learner --config "$CONFIG"

@@ -1,0 +1,61 @@
+mqtt:
+  host: localhost
+  port: 1883
+  client_id: nordpool-prices
+  # username: your-mqtt-username
+  # password: your-mqtt-password
+  # tls_allow_insecure: true
+
+trigger_topic: mimir/input/tools/prices/trigger
+output_topic: mimir/input/prices
+
+# Must match mqtt.topic_prefix in the mimirheim configuration.
+# All derived topics (output_topic, mimir_trigger_topic) are computed from this value.
+# Change only when mimirheim uses a non-default topic prefix.
+# mimir_topic_prefix: mimir  # default
+
+nordpool:
+  area: NO2
+
+  # import_formula computes the all-in consumer import price from the raw
+  # Nordpool spot price. The expression may use:
+  #   price  — raw spot price in EUR/kWh (already converted from EUR/MWh)
+  #   ts     — step start time as a UTC-aware datetime object
+  #
+  # Example: Dutch Tibber all-in import price
+  #   epex component: price
+  #   supplier markup: + 0.09161 EUR/kWh
+  #   VAT (21%):       * 1.21
+  #   grid & taxes:    + 0.0248 EUR/kWh
+  import_formula: "((price + 0.09161) * 1.21) + 0.0248"
+
+  # export_formula computes the net feed-in credit. For most suppliers this
+  # is the raw spot price minus any feed-in taxes. The same variables are
+  # available as for import_formula.
+  #
+  # Example: raw spot price with no markup or deduction
+  export_formula: "price"
+
+# Set signal_mimir to true and uncomment mimir_trigger_topic to chain this tool
+# into the mimirheim solve loop after prices are published.
+# mimir_trigger_topic: mimir/input/trigger
+
+# HA MQTT discovery. When enabled, the daemon publishes a retained discovery
+# payload that creates a button entity in Home Assistant. Pressing the button
+# sends a message to trigger_topic, firing one fetch cycle.
+# ha_discovery:
+#   enabled: true
+#   discovery_prefix: homeassistant
+#   device_name: Nordpool Prices
+
+# Optional. When set, the daemon publishes a JSON stats payload to this MQTT
+# topic after every fetch cycle (success or failure). The payload contains:
+#   ts           — ISO-8601 UTC timestamp at which the cycle started
+#   success      — true on success, false if an unhandled exception occurred
+#   duration_s   — wall-clock seconds the cycle took
+#   horizon_hours — hours of data published (null if not reported by this tool)
+#   exit_code    — reserved, always null
+#   exit_message — reserved, always null
+# When ha_discovery is also enabled, four HA sensor entities are registered
+# under the same device as the trigger button.
+# stats_topic: mimir/input/tools/prices/stats

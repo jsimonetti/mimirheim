@@ -1,0 +1,70 @@
+# mimirheim-reporter example configuration
+#
+# Copy this file to your deployment location and adjust the paths and MQTT
+# settings to match your environment.  The reporter daemon reads this file
+# at startup via --config.
+
+# MQTT broker connection
+mqtt:
+  host: "localhost"
+  port: 1883
+  # username: "mqttuser"
+  # password: "s3cr3t"
+  client_id: "mimirheim-reporter"
+
+# Must match mqtt.topic_prefix in the mimirheim configuration.
+# Used to derive reporting.notify_topic when it is not set explicitly.
+# Change only when mimirheim uses a non-default topic prefix.
+# mimir_topic_prefix: mimir  # default
+
+# Reporting paths and retention
+reporting:
+  # Shared directory where mimirheim writes {ts}_input.json / {ts}_output.json pairs.
+  # Must be readable by the reporter process (e.g. Docker named volume or bind-mount).
+  dump_dir: "/data/mimirheim/dumps"
+
+  # Directory where the reporter writes {ts}_report.html, inventory.js, and
+  # copies index.html / plotly.min.js.  Serve this directory with any static
+  # HTTP server (nginx, caddy, Home Assistant serve-static add-on, etc.).
+  output_dir: "/data/mimirheim/reports"
+
+  # Maximum number of *_report.html files to retain.  Older files are removed
+  # automatically when the limit is exceeded.  0 = unlimited.
+  max_reports: 100
+
+  # MQTT topic to subscribe to for dump-available notifications.
+  # Must match reporting.notify_topic in the mimirheim configuration.
+  notify_topic: "mimir/status/dump_available"
+
+# MQTT publishing of apex-charts-compatible chart and summary data.
+# Both topics are optional and independent.  Remove or leave as null to
+# disable publishing for that topic.
+#
+# chart_topic receives a JSON object with time-series arrays for use with
+# the apexcharts-card HA custom component.  Each series is a list of
+# [ISO-timestamp, value] pairs at 15-minute intervals.
+#
+# summary_topic receives a compact JSON object with scalar economic and
+# exchange statistics for the last solve (naive_cost_eur, saving_eur,
+# self_sufficiency_pct, grid_import_kwh, etc.).
+#
+# Both payloads are published retained so any HA dashboard that subscribes
+# receives the latest values immediately on load.
+chart_publishing:
+  chart_topic: "mimir/reporter/chart"
+  summary_topic: "mimir/reporter/summary"
+  # Maximum serialised payload size in bytes.  Payloads exceeding this limit
+  # are dropped with a WARNING log rather than published.  0 = unlimited.
+  max_payload_bytes: 65536
+
+# Home Assistant MQTT discovery for the chart and summary sensors.
+# When enabled, a single retained discovery payload is published to
+#   {discovery_prefix}/device/{device_id}/config
+# so HA creates both sensors automatically without manual YAML.
+# Requires Home Assistant 2024.2 or later.
+#
+# ha_discovery:
+#   enabled: true
+#   discovery_prefix: "homeassistant"
+#   device_id: null           # defaults to mqtt.client_id ("mimirheim-reporter")
+#   device_name: "mimirheim Reporter"

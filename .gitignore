@@ -1,0 +1,10 @@
+.venv/
+.benchmarks/
+__pycache__/
+*.pyc
+dist/
+.pytest_cache/
+*.egg-info/
+mimirheim_dumps/
+dev/
+wiki/

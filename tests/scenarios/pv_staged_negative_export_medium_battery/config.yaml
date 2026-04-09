@@ -1,0 +1,42 @@
+# Staged PV with negative export price and medium-full battery.
+# 
+# Export costs -0.10 EUR/kWh. Battery has only 0.20 kWh total headroom
+# across the 4-step horizon. Solver blends stages to avoid export entirely,
+# inserting a small discharge step to create headroom within the horizon.
+
+mqtt:
+  host: localhost
+  client_id: sim
+outputs:
+  schedule: x/s
+  current: x/c
+  last_solve: x/l
+  availability: x/a
+grid:
+  import_limit_kw: 10.0
+  export_limit_kw: 5.0
+batteries:
+  bat:
+    capacity_kwh: 5.0
+    charge_segments:
+    - power_max_kw: 2.5
+      efficiency: 0.95
+    discharge_segments:
+    - power_max_kw: 2.5
+      efficiency: 0.95
+    wear_cost_eur_per_kwh: 0.005
+    capabilities:
+      zero_exchange: true
+pv_arrays:
+  solar_roof:
+    max_power_kw: 4.5
+    production_stages:
+    - 0.0
+    - 0.28
+    - 0.37
+    - 0.48
+    - 0.88
+    - 2.5
+    - 4.5
+static_loads:
+  house: {}

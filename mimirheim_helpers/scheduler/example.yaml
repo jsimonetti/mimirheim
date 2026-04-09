@@ -1,0 +1,76 @@
+# mimirheim-scheduler — example configuration
+#
+# The scheduler publishes an empty MQTT message to a configured topic each
+# time a cron expression fires. That message is the only signal the scheduler
+# sends; the receiving tool decides what to do when it arrives.
+#
+# Each entry in the schedules list is a single-key dict:
+#   {cron_expression: mqtt_topic}
+#
+# The topics below are the standard conventions used by each mimirheim helper.
+# They must match the trigger_topic (and training.*_trigger_topic for
+# pv_ml_learner) fields in each tool's own configuration file.
+#
+# mimirheim's main solve trigger is canonical — it is derived from mqtt.topic_prefix
+# using the same function in helper_common.topics.trigger_topic(prefix):
+#   default prefix "mimir"  →  mimir/input/trigger
+#
+# The tool trigger topics follow the convention:
+#   mimir/input/tools/{tool_name}/trigger
+# They are arbitrary strings; they just have to be the same value in both
+# the scheduler and the tool config. The values below are the recommended
+# defaults for a standard single-broker deployment with default prefix "mimir".
+
+mqtt:
+  host: localhost
+  port: 1883
+  client_id: mimir-scheduler
+  # username: user
+  # password: secret
+
+schedules:
+  # -------------------------------------------------------------------------
+  # Day-ahead electricity prices (nordpool / ENTSO-E)
+  # Nordpool publishes new day-ahead prices around 12:42 CET (11:42 UTC).
+  # Refresh again at midnight so the horizon includes prices for the new day.
+  # Tool trigger_topic: mimir/input/tools/prices/trigger
+  # -------------------------------------------------------------------------
+  - "42 11 * * *":  mimir/input/tools/prices/trigger   # day-ahead prices published
+  - "5 0 * * *":    mimir/input/tools/prices/trigger    # midnight horizon rollover
+
+  # -------------------------------------------------------------------------
+  # PV forecast — forecast.solar fetcher (pv_fetcher)
+  # Refresh every 3 hours. A pre-dawn update seeds the morning schedule.
+  # Tool trigger_topic: mimir/input/tools/pv/trigger
+  # -------------------------------------------------------------------------
+  - "0 3,6,9,12,15,18 * * *": mimir/input/tools/pv/trigger
+
+  # -------------------------------------------------------------------------
+  # PV ML learner inference (pv_ml_learner)
+  # Run inference after each weather forecast update (3-hourly).
+  # Tool training.inference_trigger_topic: mimir/input/tools/pv_ml_learner/infer
+  # -------------------------------------------------------------------------
+  # - "15 3,6,9,12,15,18 * * *": mimir/input/tools/pv_ml_learner/infer
+
+  # -------------------------------------------------------------------------
+  # PV ML learner training (pv_ml_learner)
+  # Retrain the model weekly — overnight, after the day's actuals are complete.
+  # Tool training.train_trigger_topic: mimir/input/tools/pv_ml_learner/train
+  # -------------------------------------------------------------------------
+  # - "0 2 * * 0":  mimir/input/tools/pv_ml_learner/train
+
+  # -------------------------------------------------------------------------
+  # Base load forecast (baseload_static / baseload_ha / baseload_ha_db)
+  # Historical averages change slowly; once daily at midnight is sufficient.
+  # Tool trigger_topic: mimir/input/tools/baseload/trigger
+  # -------------------------------------------------------------------------
+  - "0 0 * * *":    mimir/input/tools/baseload/trigger
+
+  # -------------------------------------------------------------------------
+  # mimirheim solve cycle
+  # Solve every 15 minutes. mimirheim only solves when all readiness conditions are
+  # met; a trigger that arrives before inputs are ready is silently discarded.
+  # Derived from mqtt.topic_prefix via helper_common.topics.trigger_topic():
+  #   "mimirheim" (default prefix)  →  mimir/input/trigger
+  # -------------------------------------------------------------------------
+  - "*/15 * * * *": mimir/input/trigger

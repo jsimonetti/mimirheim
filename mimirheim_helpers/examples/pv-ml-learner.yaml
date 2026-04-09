@@ -1,0 +1,132 @@
+mqtt:
+  host: localhost
+  port: 1883
+  client_id: pv-ml-learner
+  # username: your-mqtt-username
+  # password: your-mqtt-password
+
+# When true, publish an empty non-retained message to mimir_trigger_topic after
+# every complete inference cycle (all arrays published). Set to true to chain
+# pv_ml_learner into the mimirheim solve loop.
+signal_mimir: false
+# mimir_trigger_topic: mimir/input/trigger
+
+# Must match mqtt.topic_prefix in the mimirheim configuration.
+# Determines derived output_topic for each array and the default mimir_trigger_topic.
+# Change only when mimirheim uses a non-default topic prefix.
+# mimir_topic_prefix: mimir  # default
+
+knmi:
+  # KNMI station ID. 260 = De Bilt. Use the nearest station to your location.
+  # Full station list: https://www.knmi.nl/kennis-en-datacentrum/achtergrond/data-ophalen-vanuit-de-automatische-weersstations
+  # No API key required — knmi-py uses the public KNMI script endpoint.
+  # KNMI history is backfilled automatically to cover the full HA actuals window.
+  station_id: 260
+
+meteoserver:
+  # Register at https://meteoserver.nl to obtain a free API key.
+  api_key: "your-meteoserver-api-key"
+  # GPS coordinates of the PV installation (decimal degrees).
+  latitude: 52.10
+  longitude: 5.18
+  # Number of hourly forecast steps to fetch and use (1–54). 48 h is a good default.
+  forecast_horizon_hours: 48
+
+homeassistant:
+  # Path to the Home Assistant SQLite database. In a container, bind-mount the
+  # HA config directory so this path is accessible.
+  db_path: /config/home-assistant_v2.db
+
+# One entry per independently metered PV array. At least one array is required.
+# Add more entries here for installations with multiple inverters or arrays.
+arrays:
+  - name: main
+    # Installed peak power in kWp. Predictions above peak_power_kwp * 1.1 are
+    # clamped to this ceiling.
+    peak_power_kwp: 5.2
+
+    # MQTT topic to which the forecast is published (retained, mimirheim format).
+    # Derived from mimir_topic_prefix and array name when not set:
+    #   mimir/input/pv/main/forecast
+    # The array name must match the corresponding mimirheim pv_arrays device name.
+    # Override: output_topic: mimir/input/pv/main/forecast
+
+    # One or more HA energy sensor entity IDs whose hourly production is summed
+    # for this array. All sensors must have state_class: total_increasing and
+    # appear in long_term_statistics.
+    sum_entity_ids:
+      - sensor.solaredge_energy_today
+
+    # Paths where the trained XGBoost model and metadata are stored.
+    # These files are written after the first successful training run.
+    model_path: /data/pv_ml_learner_main.joblib
+    metadata_path: /data/pv_ml_learner_main_meta.json
+
+    # Optional: binary or numeric sensors that indicate when this array's
+    # inverter was actively limiting production (export cap, grid protection).
+    # Any training hour where any of these sensors reads True or > 0 is excluded
+    # from training. Hours with no recorded value are included normally.
+    # See Critical Concern 7 in plans/41_pv_ml_forecast_helper.md for rationale.
+    # exclude_limiting_entity_ids:
+    #   - binary_sensor.solaredge_export_limited
+
+  # Uncomment and fill in to add a second array (e.g. roof-east + roof-west):
+  # - name: east
+  #   peak_power_kwp: 3.0
+  #   output_topic: mimir/input/pv_forecast/east
+  #   sum_entity_ids:
+  #     - sensor.east_roof_energy_today
+  #   model_path: /data/pv_ml_learner_east.joblib
+  #   metadata_path: /data/pv_ml_learner_east_meta.json
+
+storage:
+  # Shared SQLite database for KNMI observations, Meteoserver forecasts, and
+  # all PV actuals (keyed by array name). Must be on a persistent volume.
+  db_path: /data/pv_ml_learner.db
+
+training:
+  # MQTT topic that triggers a full training cycle: ingest new KNMI and HA data
+  # for all arrays, retrain, then immediately run an inference cycle.
+  # Publish any message here from an external scheduler (HA automation, cron,
+  # Node-RED) to trigger training. Recommended: once daily at 03:00 UTC.
+  train_trigger_topic: mimir/input/tools/pv_ml_learner/train
+
+  # MQTT topic that triggers an inference-only cycle: fetch a fresh Meteoserver
+  # forecast, run all arrays, publish. Recommended: fire shortly after each
+  # Meteoserver model update (~04:05, 10:05, 16:05 UTC).
+  inference_trigger_topic: mimir/input/tools/pv_ml_learner/infer
+
+  # Minimum number of distinct calendar months required before training proceeds.
+  # Reduce temporarily while data is accumulating (minimum 1).
+  min_months_required: 12
+
+  # XGBoost hyperparameter grid for TimeSeriesSplit cross-validation.
+  # Omit the hyperparams block entirely to use the built-in defaults.
+  hyperparams:
+    n_estimators: [200, 500]
+    max_depth: [4, 6]
+    learning_rate: [0.05, 0.1]
+    subsample: [0.8, 1.0]
+    min_child_weight: [1, 5]
+
+  # Number of TimeSeriesSplit CV folds. Reduce to 2 for faster iteration.
+  n_cv_splits: 5
+
+# HA MQTT discovery. When enabled, publishes retained discovery payloads that
+# create button entities in Home Assistant for manual training/inference triggers.
+# ha_discovery:
+#   enabled: true
+#   discovery_prefix: homeassistant
+#   device_name: MIMIRHEIM PV ML Learner
+
+# Optional. When set, the daemon publishes a JSON stats payload to this MQTT
+# topic after every cycle (success or failure). The payload contains:
+#   ts            — ISO-8601 UTC timestamp at which the cycle started
+#   success       — true on success, false if an unhandled exception occurred
+#   duration_s    — wall-clock seconds the cycle took
+#   horizon_hours — hours of forecast data published (null if not applicable)
+#   exit_code     — reserved, always null
+#   exit_message  — reserved, always null
+# When ha_discovery is also enabled, four HA sensor entities are registered
+# under the same device as the trigger buttons.
+# stats_topic: mimir/input/tools/pv_ml_learner/stats

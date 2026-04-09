@@ -1,0 +1,41 @@
+{
+  "strategy": "minimize_cost",
+  "solve_time_utc": "2026-04-07T13:00:00Z",
+  "horizon_prices": [
+    0.25,
+    0.25,
+    0.25,
+    0.25
+  ],
+  "horizon_export_prices": [
+    0.15,
+    0.15,
+    0.15,
+    0.15
+  ],
+  "horizon_confidence": [
+    1.0,
+    1.0,
+    1.0,
+    1.0
+  ],
+  "pv_forecast": [
+    4.0,
+    4.0,
+    4.0,
+    4.0
+  ],
+  "base_load_forecast": [
+    0.05,
+    0.05,
+    0.05,
+    0.05
+  ],
+  "battery_inputs": {
+    "bat": {
+      "soc_kwh": 4.8
+    }
+  },
+  "ev_inputs": {},
+  "deferrable_windows": {}
+}

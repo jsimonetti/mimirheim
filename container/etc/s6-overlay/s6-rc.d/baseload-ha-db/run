@@ -1,0 +1,12 @@
+#!/usr/bin/with-contenv sh
+exec 2>&1
+if [ "${ENABLE_BASELOAD_HA_DB:-true}" != "true" ]; then
+    echo "baseload-ha-db: disabled via add-on options"
+    exec sleep infinity
+fi
+CONFIG=/config/baseload-ha-db.yaml
+if [ ! -f "$CONFIG" ]; then
+    echo "baseload-ha-db: $CONFIG not found — service disabled"
+    exec sleep infinity
+fi
+exec /app/.venv/bin/python -m baseload_ha_db --config "$CONFIG"

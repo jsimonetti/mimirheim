@@ -1,0 +1,1452 @@
+{
+  "strategy": "minimize_cost",
+  "objective_value": 0.0,
+  "solve_status": "optimal",
+  "dispatch_suppressed": false,
+  "naive_cost_eur": 1.1999999999999977,
+  "optimised_cost_eur": 0.0,
+  "soc_credit_eur": 0.0,
+  "schedule": [
+    {
+      "t": 0,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 1,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 2,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 3,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 4,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 5,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 6,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 7,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 8,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 9,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 10,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 11,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 12,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 13,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 14,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 15,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 16,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 17,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 18,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 19,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 20,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 21,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 22,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 23,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 24,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 25,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 26,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 27,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 28,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 29,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 30,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 31,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 32,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 33,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 34,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 35,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 36,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 37,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 38,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 39,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 40,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 41,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 42,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 43,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 44,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 45,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 46,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 47,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 48,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 49,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 50,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 51,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 52,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 53,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 54,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 55,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 56,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 57,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 58,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 59,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 60,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 61,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 62,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 63,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 64,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 65,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 66,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 67,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 68,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 69,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 70,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 71,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 72,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 73,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 74,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 75,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 76,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 77,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 78,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 79,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 80,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 81,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 82,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 83,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 84,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 85,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 86,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 87,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 88,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 89,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 90,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 91,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 92,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 93,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 94,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    },
+    {
+      "t": 95,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "ev1": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null
+        }
+      }
+    }
+  ],
+  "deferrable_recommended_starts": {}
+}

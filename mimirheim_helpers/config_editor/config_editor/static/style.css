@@ -1,0 +1,426 @@
+/* mimirheim config editor — minimal stylesheet, no framework */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+:root {
+  --color-bg: #f8f9fa;
+  --color-surface: #ffffff;
+  --color-border: #dee2e6;
+  --color-primary: #0d6efd;
+  --color-primary-hover: #0b5ed7;
+  --color-danger: #dc3545;
+  --color-muted: #6c757d;
+  --color-error-bg: #fff5f5;
+  --color-error-border: #f5c2c7;
+  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --radius: 4px;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 14px;
+  background: var(--color-bg);
+  color: #212529;
+}
+
+/* Header */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.25rem;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+#save-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+#save-status {
+  font-size: 0.85rem;
+  color: var(--color-muted);
+}
+
+#save-btn {
+  padding: 0.4rem 1rem;
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+#save-btn:hover {
+  background: var(--color-primary-hover);
+}
+
+#save-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Tab bar */
+#tab-bar {
+  display: flex;
+  gap: 0;
+  padding: 0 1.25rem;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.tab-btn {
+  padding: 0.6rem 1rem;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--color-muted);
+}
+
+.tab-btn:hover {
+  color: #212529;
+}
+
+.tab-btn.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+/* Tab group (helpers dropdown) */
+.tab-group {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.tab-group-btn {
+  padding: 0.6rem 1rem;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--color-muted);
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.tab-group-btn:hover {
+  color: #212529;
+}
+
+.tab-group-btn.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+.tab-group-caret {
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+
+.tab-group-menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 100;
+  list-style: none;
+  margin: 0;
+  padding: 0.25rem 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  min-width: 160px;
+}
+
+.tab-group-menu.open {
+  display: block;
+}
+
+.tab-group-item {
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: #212529;
+  white-space: nowrap;
+}
+
+.tab-group-item:hover {
+  background: var(--color-bg);
+}
+
+.tab-group-item.active {
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+/* Content pane */
+#content-pane {
+  padding: 1.25rem;
+  max-width: 900px;
+}
+
+/* Form layout */
+.form-section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.form-section h2 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-muted);
+  margin: 0 0 0.75rem 0;
+}
+
+.field-row {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0.75rem;
+}
+
+.field-row label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+}
+
+.field-row input[type="text"],
+.field-row input[type="number"],
+.field-row select {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  max-width: 320px;
+}
+
+.field-row input[type="checkbox"] {
+  margin-top: 0.25rem;
+}
+
+.field-row .field-hint {
+  font-size: 0.8rem;
+  color: var(--color-muted);
+  margin-top: 0.2rem;
+}
+
+.field-row .field-unit {
+  font-size: 0.8rem;
+  color: var(--color-muted);
+  margin-top: 0.2rem;
+}
+
+/* Advanced toggle */
+.advanced-toggle {
+  margin-top: 0.5rem;
+  font-size: 0.82rem;
+  color: var(--color-primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.advanced-fields {
+  margin-top: 0.5rem;
+}
+
+.advanced-fields.hidden {
+  display: none;
+}
+
+/* CRUD component */
+.crud-container {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.crud-list-panel {
+  width: 220px;
+  flex-shrink: 0;
+}
+
+.crud-detail-panel {
+  flex: 1;
+}
+
+.crud-instance-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.crud-instance-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+  font-size: 0.9rem;
+  background: var(--color-surface);
+}
+
+.crud-instance-item:last-child {
+  border-bottom: none;
+}
+
+.crud-instance-item.selected {
+  background: #e8f0fe;
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.crud-instance-item .remove-btn {
+  background: none;
+  border: none;
+  color: var(--color-danger);
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0;
+  opacity: 0;
+}
+
+.crud-instance-item:hover .remove-btn,
+.crud-instance-item.selected .remove-btn {
+  opacity: 1;
+}
+
+.crud-add-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.crud-add-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+}
+
+.crud-add-row button {
+  padding: 0.35rem 0.75rem;
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.crud-empty-hint {
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  padding: 0.75rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+/* Error display */
+.error-banner {
+  background: var(--color-error-bg);
+  border: 1px solid var(--color-error-border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+
+.error-banner ul {
+  margin: 0.25rem 0 0 0;
+  padding-left: 1.2rem;
+}
+
+/* Sub-list (array of objects like segments) */
+.sublist-container {
+  margin-top: 0.5rem;
+}
+
+.sublist-item {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+  margin-bottom: 0.5rem;
+  padding: 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+}
+
+/* label + input column inside a sublist item */
+.sublist-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.sublist-field label {
+  font-size: 0.78rem;
+  color: var(--color-muted);
+  font-weight: 500;
+}
+
+.sublist-field input {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.sublist-item .remove-subitem-btn {
+  padding: 0.3rem 0.6rem;
+  background: none;
+  border: 1px solid var(--color-danger);
+  color: var(--color-danger);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.add-subitem-btn {
+  padding: 0.3rem 0.75rem;
+  background: none;
+  border: 1px solid var(--color-primary);
+  color: var(--color-primary);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.82rem;
+}
