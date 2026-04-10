@@ -1,3 +1,7 @@
+<img width="1254" height="1254" alt="image" src="https://github.com/user-attachments/assets/9908dd34-94f7-4ede-938e-a55b9eaa9f08" />
+
+
+
 # Mimirheim — Home Energy Optimiser
 
 **mimirheim** is an open-source Python service that computes an optimal energy dispatch schedule for a residential home. Given forecasts of electricity prices, PV generation, and household load, it determines the best schedule for every controllable device — battery, EV, deferrable loads — over a rolling 24-hour planning horizon.
