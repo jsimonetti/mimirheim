@@ -46,6 +46,8 @@ ARG PYTHON_VERSION=3.12
 # ---------------------------------------------------------------------------
 FROM python:${PYTHON_VERSION}-slim-bookworm AS builder
 
+RUN apt-get update && apt-get install -y --no-install-recommends binutils && rm -rf /var/lib/apt/lists/*
+
 # Install uv — fast dependency installer.
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
@@ -63,7 +65,12 @@ RUN uv venv /app/.venv --python python${PYTHON_VERSION} && \
 COPY mimirheim/ ./mimirheim/
 COPY mimirheim_helpers/ ./mimirheim_helpers/
 
-RUN UV_PROJECT_ENVIRONMENT=/app/.venv uv sync --all-extras --frozen --no-editable
+RUN UV_PROJECT_ENVIRONMENT=/app/.venv uv sync --all-extras --frozen --no-editable && \
+    find /app/.venv -type d \( -name "tests" -o -name "test" -o -name "*.dist-info" \) -prune -exec rm -rf '{}' + && \
+    /app/.venv/bin/python -m compileall -q -b /app/.venv && \
+    find /app/.venv -type f \( -name "*.py" -o -name "*.pyi" -o -name "*.cpp" -o -name "*.hpp" -o -name "*.c" -o -name "*.h" \) -delete && \
+    find /app/.venv/lib/python*/site-packages/ -type f -executable -exec strip --strip-unneeded '{}' + || true
+
 
 # ---------------------------------------------------------------------------
 # Stage 2: final image
@@ -94,8 +101,8 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* /tmp/s6-overlay-*.tar.xz
 
 # Create a non-root user for all services.
-RUN groupadd -r -g 1000 app && \
-    useradd -r -u 1000 -g app -d /app -s /sbin/nologin app
+RUN groupadd -g 1000 app && \
+    useradd -u 1000 -g app -d /app -s /sbin/nologin app
 
 # Copy the venv from the builder stage.
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
@@ -113,7 +120,7 @@ COPY --chown=root:root container/etc/ /etc/
 # mimirheim does not implement the s6 readiness protocol.
 RUN rm -f /etc/s6-overlay/s6-rc.d/mimirheim/notification-fd
 
-# Make all run scripts executable.
+# Make all run scripts and cont-init.d scripts executable.
 RUN chmod +x \
     /etc/s6-overlay/s6-rc.d/mimirheim/run \
     /etc/s6-overlay/s6-rc.d/nordpool/run \
@@ -124,7 +131,9 @@ RUN chmod +x \
     /etc/s6-overlay/s6-rc.d/baseload-static/run \
     /etc/s6-overlay/s6-rc.d/scheduler/run \
     /etc/s6-overlay/s6-rc.d/reporter/run \
-    /etc/s6-overlay/s6-rc.d/config-editor/run
+    /etc/s6-overlay/s6-rc.d/config-editor/run \
+    /etc/cont-init.d/00-options-env.sh \
+    /etc/cont-init.d/01-mqtt-env.sh
 
 # /config is the mount point for user-supplied YAML configuration files.
 VOLUME ["/config"]

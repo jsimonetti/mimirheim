@@ -1,4 +1,4 @@
-#!/usr/bin/with-contenv sh
+#!/command/with-contenv sh
 exec 2>&1
 if [ "${ENABLE_BASELOAD_HA_DB:-true}" != "true" ]; then
     echo "baseload-ha-db: disabled via add-on options"

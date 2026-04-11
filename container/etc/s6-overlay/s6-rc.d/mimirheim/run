@@ -1,4 +1,4 @@
-#!/usr/bin/with-contenv sh
+#!/command/with-contenv sh
 exec 2>&1
 CONFIG=/config/mimirheim.yaml
 if [ ! -f "$CONFIG" ]; then
