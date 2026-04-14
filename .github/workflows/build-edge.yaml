@@ -1,3 +1,5 @@
+name: Create edge image and push to GHCR
+
 on:
   push:
     branches:

@@ -1,9 +1,10 @@
+name: Create release image and push to GHCR
+
 on:
-  push:
+  release:
+    types: [published]
     tags:
       - "v*"
-    exclude:
-      - "hassio-repository/**"
   workflow_dispatch:
 
 env:
