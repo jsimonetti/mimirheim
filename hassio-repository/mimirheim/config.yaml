@@ -1,5 +1,5 @@
 name: Mimirheim
-version: "0.1.0"
+version: 0.1.0
 slug: mimirheim
 description: >-
   MILP energy optimiser for home battery, PV, and EV scheduling against dynamic
@@ -11,7 +11,7 @@ arch:
 startup: application
 boot: auto
 init: false
-image: ghcr.io/jsimonetti/mimirheim
+image: ghcr.io/jsimonetti/mimirheim:v0.1.0
 stage: stable
 
 # addon_config mounts the add-on's private config directory to /config
@@ -54,7 +54,7 @@ options:
   enable_baseload_static: false
   enable_scheduler: false
   enable_reporter: false
-  enable_config_editor: false
+  enable_config_editor: true
 
 schema:
   enable_nordpool: bool

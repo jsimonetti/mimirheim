@@ -1,7 +1,7 @@
 on:
   push:
-    branches:
-      - main
+    tags:
+      - "v*"
     exclude:
       - "hassio-repository/**"
   workflow_dispatch:

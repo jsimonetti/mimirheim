@@ -1,5 +1,5 @@
 name: Mimirheim (Beta)
-version: "edge"
+version: edge
 slug: mimirheim-beta
 description: >-
   MILP energy optimiser for home battery, PV, and EV scheduling against dynamic
@@ -11,7 +11,7 @@ arch:
 startup: application
 boot: auto
 init: false
-image: ghcr.io/jsimonetti/mimirheim
+image: ghcr.io/jsimonetti/mimirheim:edge
 stage: experimental
 
 map:
@@ -39,7 +39,7 @@ options:
   enable_baseload_static: false
   enable_scheduler: false
   enable_reporter: false
-  enable_config_editor: false
+  enable_config_editor: true
 
 schema:
   enable_nordpool: bool

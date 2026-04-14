@@ -1,4 +1,4 @@
-#!/usr/bin/with-contenv sh
+#!/command/with-contenv sh
 exec 2>&1
 if [ "${ENABLE_PV_ML_LEARNER:-true}" != "true" ]; then
     echo "pv-ml-learner: disabled via add-on options"
