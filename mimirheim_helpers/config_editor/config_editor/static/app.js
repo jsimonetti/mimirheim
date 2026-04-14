@@ -147,6 +147,11 @@ function buildFieldRow(fieldName, fieldSchema, value, bindPath, parentData) {
     const nonNull = resolvedSchema.anyOf.find(s => s.type !== "null" && !s.$ref?.includes("null"));
     if (nonNull) effectiveSchema = nonNull;
   }
+  // If the selected variant is itself a $ref (e.g. anyOf: [$ref, null]),
+  // resolve it so that type-checking branches below work correctly.
+  if (effectiveSchema.$ref) {
+    effectiveSchema = resolveRef(effectiveSchema.$ref) || effectiveSchema;
+  }
 
   const type = effectiveSchema.type;
   const isNullable = fieldSchema.anyOf?.some(s => s.type === "null") ||
@@ -170,6 +175,7 @@ function buildFieldRow(fieldName, fieldSchema, value, bindPath, parentData) {
     if (effectiveSchema.maximum !== undefined) input.max = effectiveSchema.maximum;
     if (effectiveSchema.exclusiveMinimum !== undefined) input.min = effectiveSchema.exclusiveMinimum;
     if (type === "number") input.step = "any";
+    if (fieldSchema.default !== undefined && fieldSchema.default !== null) input.placeholder = String(fieldSchema.default);
   } else if (effectiveSchema.enum) {
     input = document.createElement("select");
     input.name = bindPath;
@@ -177,7 +183,9 @@ function buildFieldRow(fieldName, fieldSchema, value, bindPath, parentData) {
     if (isNullable) {
       const opt = document.createElement("option");
       opt.value = "";
-      opt.textContent = "(not set)";
+      opt.textContent = (fieldSchema.default !== undefined && fieldSchema.default !== null)
+        ? `(default: ${fieldSchema.default})`
+        : "(not set)";
       input.appendChild(opt);
     }
     for (const opt of effectiveSchema.enum) {
@@ -210,6 +218,7 @@ function buildFieldRow(fieldName, fieldSchema, value, bindPath, parentData) {
     input.id = `field-${bindPath}`;
     if (value !== undefined && value !== null) input.value = value;
     if (isNullable && (value === undefined || value === null)) input.value = "";
+    if (fieldSchema.default !== undefined && fieldSchema.default !== null) input.placeholder = String(fieldSchema.default);
   }
 
   row.appendChild(input);
