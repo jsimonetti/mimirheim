@@ -64,11 +64,8 @@ COPY mimirheim/ ./mimirheim/
 COPY mimirheim_helpers/ ./mimirheim_helpers/
 
 RUN UV_PROJECT_ENVIRONMENT=/app/.venv uv sync --all-extras --frozen --no-editable && \
-    find /app/.venv -type d \( -name "tests" -o -name "test" -o -name "*.dist-info" \) -prune -exec rm -rf '{}' + && \
-    /app/.venv/bin/python -m compileall -q -b /app/.venv && \
-    find /app/.venv -type f \( -name "*.py" -o -name "*.pyi" -o -name "*.cpp" -o -name "*.hpp" -o -name "*.c" -o -name "*.h" \) -delete && \
-    find /app/.venv/lib/python*/site-packages/ -type f -executable -exec strip --strip-unneeded '{}' + || true
-
+    /app/.venv/bin/python -m compileall -q -b /app/.venv
+    
 # ---------------------------------------------------------------------------
 # Stage 2: final image
 # ---------------------------------------------------------------------------
@@ -116,10 +113,6 @@ COPY --chown=app:app mimirheim_helpers/examples/ /app/examples/
 
 # Copy s6-overlay service definitions.
 COPY --chown=root:root container/etc/ /etc/
-
-# Remove the stray notification-fd file left from an earlier iteration;
-# mimirheim does not implement the s6 readiness protocol.
-RUN rm -f /etc/s6-overlay/s6-rc.d/mimirheim/notification-fd
 
 # Make all run scripts executable.
 RUN chmod +x \

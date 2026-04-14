@@ -14,3 +14,7 @@
 # port: 8099
 # config_dir: /config
 # log_level: INFO
+#
+# Set disabled: true (or include a bare 'disabled' key) to stop the config editor
+# from starting without removing this file. The container service will exit cleanly.
+# disabled: true

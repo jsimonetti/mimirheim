@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bashio
 # Inject MQTT broker credentials from the HA Supervisor into the s6
 # container environment so all services inherit them automatically.
 #

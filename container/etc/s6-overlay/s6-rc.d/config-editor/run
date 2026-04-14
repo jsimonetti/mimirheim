@@ -5,8 +5,9 @@ if [ "${ENABLE_CONFIG_EDITOR:-true}" != "true" ]; then
     exec sleep infinity
 fi
 CONFIG=/config/config-editor.yaml
-if [ ! -f "$CONFIG" ]; then
-    echo "config-editor: $CONFIG not found — service disabled"
+DISABLED=$(grep -E '^[[:space:]]*disabled:[[:space:]]*true[[:space:]]*$' "$CONFIG" 2>/dev/null || true)
+if [ -n "$DISABLED" ]; then
+    echo "config-editor: disabled via $CONFIG"
     exec sleep infinity
 fi
 exec /app/.venv/bin/python -m config_editor --config "$CONFIG"

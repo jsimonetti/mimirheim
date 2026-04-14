@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bashio
 # Read per-service enable flags from the HA add-on options and write them
 # to the s6 container environment so all service run scripts can check them.
 #

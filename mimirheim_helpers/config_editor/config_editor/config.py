@@ -31,6 +31,10 @@ class ConfigEditorConfig(BaseModel):
             files. Default /config. This must be the same directory that is
             bind-mounted into the container.
         log_level: Python logging level name. Default INFO.
+        disabled: If True, or if the key is present without a value (null),
+            load_config() exits with code 0 without starting the server.
+            Exists so that users can disable the editor without removing
+            the config file.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -65,6 +69,14 @@ class ConfigEditorConfig(BaseModel):
         ),
         json_schema_extra={"ui_label": "Allowed IP", "ui_group": "advanced"},
     )
+    disabled: bool | None = Field(
+        default=False,
+        description=(
+            "Set to true, or include as a bare key without a value, to disable the "
+            "config editor without removing the config file. load_config() will exit "
+            "with code 0 when this is set."
+        ),
+    )
 
 
 def load_config(path: str) -> ConfigEditorConfig:
@@ -80,12 +92,16 @@ def load_config(path: str) -> ConfigEditorConfig:
         The validated ConfigEditorConfig instance.
 
     Raises:
-        SystemExit: With exit code 1 if the file cannot be read or the
-            configuration fails Pydantic validation.
+        SystemExit: With exit code 0 if the config marks the editor as disabled.
+        SystemExit: With exit code 1 if the file exists but cannot be read, or
+            if the configuration fails Pydantic validation.
     """
     try:
         with Path(path).open() as fh:
             raw = yaml.safe_load(fh) or {}
+    except FileNotFoundError:
+        # No config file is not an error: the editor starts with all defaults.
+        return ConfigEditorConfig()
     except OSError as exc:
         print(f"ERROR: Cannot read config file {path!r}: {exc}", file=sys.stderr)
         sys.exit(1)
@@ -95,6 +111,11 @@ def load_config(path: str) -> ConfigEditorConfig:
     except PydanticValidationError as exc:
         print(f"ERROR: Invalid configuration in {path!r}:\n{exc}", file=sys.stderr)
         sys.exit(1)
+
+    # A bare `disabled` key (YAML null) or `disabled: true` both mean the user
+    # wants the editor off. Exit cleanly so the process terminates without noise.
+    if cfg.disabled is None or cfg.disabled is True:
+        sys.exit(0)
 
     # Override allowed_ip from the environment variable injected by
     # cont-init.d/00-options-env.sh when running as a HA add-on. The variable

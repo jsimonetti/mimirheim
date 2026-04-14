@@ -5,13 +5,14 @@ Tests verify:
 - Custom values for port, config_dir, and log_level are accepted.
 - port values outside the valid range (1024–65535) are rejected.
 - Unknown top-level fields are rejected (extra="forbid").
-- load_config() returns a ConfigEditorConfig with defaults when the file
-  is empty or contains only comments.
+- load_config() returns defaults when the config file does not exist.
 - load_config() applies the CONFIG_EDITOR_ALLOWED_IP environment variable
   override after Pydantic validation.
 - load_config() clears allowed_ip when CONFIG_EDITOR_ALLOWED_IP is unset,
   even if a previous call had set a value (env var takes precedence over
   any residual state).
+- load_config() exits with code 0 when disabled is true or null (bare key).
+- load_config() continues normally when disabled is false or absent.
 """
 from __future__ import annotations
 
@@ -125,11 +126,12 @@ def test_load_config_custom_port(tmp_path: Path) -> None:
     assert cfg.port == 9000
 
 
-def test_load_config_missing_file_exits(tmp_path: Path) -> None:
-    """load_config() calls sys.exit(1) when the file does not exist."""
-    with pytest.raises(SystemExit) as exc_info:
-        load_config(str(tmp_path / "nonexistent.yaml"))
-    assert exc_info.value.code == 1
+def test_load_config_missing_file_returns_defaults(tmp_path: Path) -> None:
+    """load_config() returns defaults when the config file does not exist."""
+    cfg = load_config(str(tmp_path / "nonexistent.yaml"))
+    assert cfg.port == 8099
+    assert cfg.config_dir == Path("/config")
+    assert cfg.log_level == "INFO"
 
 
 def test_load_config_invalid_config_exits(tmp_path: Path) -> None:
@@ -170,3 +172,66 @@ def test_load_config_empty_env_var_treated_as_none(tmp_path: Path, monkeypatch: 
     cfg_file.write_text("")
     cfg = load_config(str(cfg_file))
     assert cfg.allowed_ip is None
+
+
+# ---------------------------------------------------------------------------
+# ConfigEditorConfig: disabled field
+# ---------------------------------------------------------------------------
+
+def test_disabled_false_is_default() -> None:
+    """disabled defaults to False when the key is absent."""
+    cfg = ConfigEditorConfig.model_validate({})
+    assert cfg.disabled is False
+
+
+def test_disabled_true_accepted() -> None:
+    """disabled: true is accepted by the model."""
+    cfg = ConfigEditorConfig.model_validate({"disabled": True})
+    assert cfg.disabled is True
+
+
+def test_disabled_false_accepted() -> None:
+    """disabled: false is accepted and does not cause an exit."""
+    cfg = ConfigEditorConfig.model_validate({"disabled": False})
+    assert cfg.disabled is False
+
+
+def test_disabled_null_accepted() -> None:
+    """A bare disabled key (YAML null) is accepted as None."""
+    cfg = ConfigEditorConfig.model_validate({"disabled": None})
+    assert cfg.disabled is None
+
+
+# ---------------------------------------------------------------------------
+# load_config(): disabled exits cleanly
+# ---------------------------------------------------------------------------
+
+def test_load_config_disabled_true_exits_with_code_zero(tmp_path: Path) -> None:
+    """load_config() exits with code 0 when disabled: true."""
+    cfg_file = tmp_path / "config-editor.yaml"
+    cfg_file.write_text(yaml.dump({"disabled": True}))
+    with pytest.raises(SystemExit) as exc_info:
+        load_config(str(cfg_file))
+    assert exc_info.value.code == 0
+
+
+def test_load_config_disabled_null_exits_with_code_zero(tmp_path: Path) -> None:
+    """load_config() exits with code 0 when disabled is a bare key (null value).
+
+    In YAML, 'disabled:' (key with no value) deserialises to {"disabled": None}.
+    This is the form a user would write if they want to disable the editor without
+    assigning an explicit true/false value.
+    """
+    cfg_file = tmp_path / "config-editor.yaml"
+    cfg_file.write_text("disabled:\n")
+    with pytest.raises(SystemExit) as exc_info:
+        load_config(str(cfg_file))
+    assert exc_info.value.code == 0
+
+
+def test_load_config_disabled_false_does_not_exit(tmp_path: Path) -> None:
+    """load_config() does not exit when disabled: false."""
+    cfg_file = tmp_path / "config-editor.yaml"
+    cfg_file.write_text(yaml.dump({"disabled": False}))
+    cfg = load_config(str(cfg_file))
+    assert cfg.disabled is False
