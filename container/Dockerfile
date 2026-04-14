@@ -46,6 +46,7 @@ ARG PYTHON_VERSION=3.12
 # ---------------------------------------------------------------------------
 FROM python:${PYTHON_VERSION}-slim-bookworm AS builder
 
+RUN apt-get update && apt-get install -y --no-install-recommends binutils
 # Install uv — fast dependency installer.
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
@@ -56,14 +57,17 @@ WORKDIR /build
 # source edits, keeping third-party dependency installation cached separately.
 COPY pyproject.toml uv.lock ./
 
-RUN uv venv /app/.venv --python python${PYTHON_VERSION} && \
-    UV_PROJECT_ENVIRONMENT=/app/.venv uv sync --no-install-project --all-extras --frozen
+RUN uv venv /app/.venv --python python${PYTHON_VERSION}
 
 # Step 2: source files — install the project wheel (no deps, already done).
 COPY mimirheim/ ./mimirheim/
 COPY mimirheim_helpers/ ./mimirheim_helpers/
 
-RUN UV_PROJECT_ENVIRONMENT=/app/.venv uv sync --all-extras --frozen --no-editable
+RUN UV_PROJECT_ENVIRONMENT=/app/.venv uv sync --all-extras --frozen --no-editable && \
+    find /app/.venv -type d \( -name "tests" -o -name "test" -o -name "*.dist-info" \) -prune -exec rm -rf '{}' + && \
+    /app/.venv/bin/python -m compileall -q -b /app/.venv && \
+    find /app/.venv -type f \( -name "*.py" -o -name "*.pyi" -o -name "*.cpp" -o -name "*.hpp" -o -name "*.c" -o -name "*.h" \) -delete && \
+    find /app/.venv/lib/python*/site-packages/ -type f -executable -exec strip --strip-unneeded '{}' + || true
 
 # ---------------------------------------------------------------------------
 # Stage 2: final image
@@ -78,7 +82,7 @@ ARG TARGETARCH
 ADD https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz /tmp/s6-overlay-noarch.tar.xz
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends xz-utils wget && \
+    apt-get install -y --no-install-recommends jq curl xz-utils wget && \
     tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz && \
     case "${TARGETARCH}" in \
         amd64) S6_ARCH="x86_64" ;; \
@@ -94,11 +98,15 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* /tmp/s6-overlay-*.tar.xz
 
 # Create a non-root user for all services.
-RUN groupadd -r -g 1000 app && \
-    useradd -r -u 1000 -g app -d /app -s /sbin/nologin app
+RUN groupadd -g 1000 app && \
+    useradd -u 1000 -g app -d /app -s /sbin/nologin app
+
+COPY --from=ghcr.io/hassio-addons/base:stable /usr/lib/bashio /usr/lib/bashio
+RUN ln -s /usr/lib/bashio/bashio /usr/bin/bashio
 
 # Copy the venv from the builder stage.
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
+
 
 # Copy example configurations so users can bootstrap their /config mount.
 # All helper examples live in mimirheim_helpers/examples/; the mimirheim core example
@@ -124,7 +132,9 @@ RUN chmod +x \
     /etc/s6-overlay/s6-rc.d/baseload-static/run \
     /etc/s6-overlay/s6-rc.d/scheduler/run \
     /etc/s6-overlay/s6-rc.d/reporter/run \
-    /etc/s6-overlay/s6-rc.d/config-editor/run
+    /etc/s6-overlay/s6-rc.d/config-editor/run \
+    /etc/cont-init.d/00-options-env.sh \
+    /etc/cont-init.d/01-mqtt-env.sh
 
 # /config is the mount point for user-supplied YAML configuration files.
 VOLUME ["/config"]
