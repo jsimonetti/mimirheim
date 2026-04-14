@@ -1,6 +1,6 @@
-name: Mimirheim (Beta)
+name: Mimirheim (Edge)
 version: edge
-slug: mimirheim-beta
+slug: mimirheim-edge
 description: >-
   MILP energy optimiser for home battery, PV, and EV scheduling against dynamic
   electricity prices. Edge channel — rebuilt on every commit to main.
@@ -17,6 +17,7 @@ stage: experimental
 map:
   - type: addon_config
     read_only: false
+    pah: /config
   - type: homeassistant_config
     read_only: true
     path: /homeassistant
