@@ -17,7 +17,7 @@
 #     Supervisor host) so the config editor restricts connections to the
 #     HA ingress proxy.
 
-if [ -z "${SUPERVISOR_TOKEN}" ]; then
+if [ -z "${SUPERVISOR_TOKEN:-}" ]; then
     exit 0
 fi
 

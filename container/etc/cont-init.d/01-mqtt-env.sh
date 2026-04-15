@@ -17,7 +17,7 @@
 # absent and this script exits immediately, leaving the YAML config files
 # as the sole source of MQTT credentials.
 
-if [ -z "${SUPERVISOR_TOKEN}" ]; then
+if [ -z "${SUPERVISOR_TOKEN:-}" ]; then
     exit 0
 fi
 
