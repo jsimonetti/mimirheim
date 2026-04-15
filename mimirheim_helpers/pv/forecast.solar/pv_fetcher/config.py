@@ -71,7 +71,7 @@ class ArrayConfig(BaseModel):
             "MQTT topic for the forecast payload. Retained. "
             "Defaults to '{mimir_topic_prefix}/input/pv/{array_key}/forecast' when not set."
         ),
-        json_schema_extra={"ui_label": "Output topic", "ui_group": "advanced"},
+        json_schema_extra={"ui_label": "Output topic", "ui_group": "advanced", "ui_placeholder": "{mimir_topic_prefix}/input/pv/{array_key}/forecast"},
     )
     latitude: float = Field(description="Site latitude in decimal degrees.", json_schema_extra={"ui_label": "Latitude", "ui_group": "basic"})
     longitude: float = Field(description="Site longitude in decimal degrees.", json_schema_extra={"ui_label": "Longitude", "ui_group": "basic"})
@@ -182,7 +182,7 @@ class PvFetcherConfig(BaseModel):
     mimir_trigger_topic: str | None = Field(
         default=None,
         description="mimirheim trigger topic. Defaults to '{mimir_topic_prefix}/input/trigger'.",
-        json_schema_extra={"ui_label": "mimirheim trigger topic", "ui_group": "advanced"},
+        json_schema_extra={"ui_label": "mimirheim trigger topic", "ui_group": "advanced", "ui_placeholder": "{mimir_topic_prefix}/input/trigger"},
     )
     ha_discovery: HomeAssistantConfig | None = Field(
         default=None,

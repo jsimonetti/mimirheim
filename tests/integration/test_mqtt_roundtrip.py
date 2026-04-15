@@ -22,7 +22,7 @@ import json
 import queue
 import threading
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import paho.mqtt.client as paho
 import pytest
@@ -46,6 +46,7 @@ _CONF_96 = [1.0] * 96
 _BAT_SOC_TOPIC = "mimir/input/bat/soc"
 _PRICES_TOPIC = "mimir/input/prices"
 _BASE_FORECAST_TOPIC = "mimir/input/base/forecast"
+_TRIGGER_TOPIC = "mimir/input/trigger"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -248,24 +249,23 @@ async def test_full_stack_publishes_schedule(mqtt_broker: str) -> None:
         # Give paho and amqtt time to establish connections and subscriptions.
         await asyncio.sleep(0.5)
 
-        prices_msg = json.dumps({
-            "steps": [
-                {
-                    "t": t,
-                    "import_price_eur_kwh": _PRICES_96[t],
-                    "export_price_eur_kwh": _EXPORT_96[t],
-                    "confidence": 1.0,
-                }
-                for t in range(96)
-            ],
-        }).encode()
+        prices_msg = json.dumps([
+            {
+                "ts": (datetime.now(UTC) + timedelta(minutes=15 * t)).isoformat(),
+                "import_eur_per_kwh": _PRICES_96[t],
+                "export_eur_per_kwh": _EXPORT_96[t],
+                "confidence": 1.0,
+            }
+            for t in range(96)
+        ]).encode()
         probe.publish(_PRICES_TOPIC, prices_msg, qos=1)
 
-        bat_msg = json.dumps({
-            "soc_kwh": 5.0,
-            "timestamp": datetime.now(UTC).isoformat(),
-        }).encode()
+        bat_msg = b"5.0"
         probe.publish(_BAT_SOC_TOPIC, bat_msg, qos=1)
+        # Trigger the solve. Data topics alone do not queue a solve;
+        # the trigger topic must receive a non-retained message.
+        await asyncio.sleep(0.2)
+        probe.publish(_TRIGGER_TOPIC, b"", qos=1, retain=False)
 
         # Wait for the full round trip: MQTT delivery, solve (HiGHS), publish.
         # HiGHS on a 96-step battery problem typically solves in under 2 seconds.
@@ -292,8 +292,8 @@ async def test_full_stack_publishes_schedule(mqtt_broker: str) -> None:
     assert "schedule" in schedule_payload, (
         f"Published schedule is missing 'schedule' key: {schedule_payload}"
     )
-    assert len(schedule_payload["schedule"]) == 96, (
-        f"Expected 96 schedule steps, got {len(schedule_payload['schedule'])}."
+    assert len(schedule_payload["schedule"]) >= 94, (
+        f"Expected at least 94 schedule steps (up to 96 depending on solve time), got {len(schedule_payload['schedule'])}."
     )
 
 
@@ -356,22 +356,29 @@ async def test_infeasible_solve_publishes_error_status(mqtt_broker: str) -> None
 
         await asyncio.sleep(0.5)
 
-        prices_msg = json.dumps({
-            "steps": [
-                {
-                    "t": t,
-                    "import_price_eur_kwh": 0.10,
-                    "export_price_eur_kwh": 0.05,
-                    "confidence": 1.0,
-                }
-                for t in range(96)
-            ],
-        }).encode()
+        prices_msg = json.dumps([
+            {
+                "ts": (datetime.now(UTC) + timedelta(minutes=15 * t)).isoformat(),
+                "import_eur_per_kwh": 0.10,
+                "export_eur_per_kwh": 0.05,
+                "confidence": 1.0,
+            }
+            for t in range(96)
+        ]).encode()
         probe.publish(_PRICES_TOPIC, prices_msg, qos=1)
 
         # Static load forecast: 1 kW constant across all steps.
-        base_msg = json.dumps([1.0] * 96).encode()
+        base_msg = json.dumps([
+            {
+                "ts": (datetime.now(UTC) + timedelta(minutes=15 * t)).isoformat(),
+                "kw": 1.0,
+            }
+            for t in range(96)
+        ]).encode()
         probe.publish(_BASE_FORECAST_TOPIC, base_msg, qos=1)
+        # Trigger the solve.
+        await asyncio.sleep(0.2)
+        probe.publish(_TRIGGER_TOPIC, b"", qos=1, retain=False)
 
         for _ in range(20):
             await asyncio.sleep(0.5)

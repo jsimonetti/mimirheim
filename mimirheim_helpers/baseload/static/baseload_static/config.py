@@ -110,7 +110,7 @@ class BaseloadConfig(BaseModel):
             "MQTT topic for the retained baseload forecast payload. "
             "Defaults to '{mimir_topic_prefix}/input/baseload/{mimir_static_load_name}/forecast'."
         ),
-        json_schema_extra={"ui_label": "Output topic", "ui_group": "advanced"},
+        json_schema_extra={"ui_label": "Output topic", "ui_group": "advanced", "ui_placeholder": "{mimir_topic_prefix}/input/baseload/{mimir_static_load_name}/forecast"},
     )
     baseload: StaticBaseloadConfig = Field(description="Static load profile and horizon configuration.", json_schema_extra={"ui_label": "Baseload profile", "ui_group": "basic"})
     signal_mimir: bool = Field(default=False, description="Publish to mimir_trigger_topic after publishing the forecast.", json_schema_extra={"ui_label": "Signal mimirheim", "ui_group": "advanced"})

@@ -247,6 +247,8 @@ header h1 {
 
 .advanced-fields {
   margin-top: 0.5rem;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--color-border);
 }
 
 .advanced-fields.hidden {

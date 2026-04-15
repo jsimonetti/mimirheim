@@ -128,7 +128,7 @@ class ArrayConfig(BaseModel):
             "MQTT topic for the retained forecast payload. "
             "Defaults to '{mimir_topic_prefix}/input/pv/{name}/forecast' when not set."
         ),
-        json_schema_extra={"ui_label": "Output topic", "ui_group": "advanced"},
+        json_schema_extra={"ui_label": "Output topic", "ui_group": "advanced", "ui_placeholder": "{mimir_topic_prefix}/input/pv/{name}/forecast"},
     )
     sum_entity_ids: list[str] = Field(
         min_length=1,
@@ -288,7 +288,7 @@ class PvLearnerConfig(BaseModel):
     mimir_trigger_topic: str | None = Field(
         default=None,
         description="mimirheim trigger topic. Defaults to '{mimir_topic_prefix}/input/trigger'.",
-        json_schema_extra={"ui_label": "mimirheim trigger topic", "ui_group": "advanced"},
+        json_schema_extra={"ui_label": "mimirheim trigger topic", "ui_group": "advanced", "ui_placeholder": "{mimir_topic_prefix}/input/trigger"},
     )
     knmi: KnmiConfig = Field(description="KNMI weather station configuration.", json_schema_extra={"ui_label": "KNMI", "ui_group": "basic"})
     meteoserver: MeteoserverConfig = Field(description="Meteoserver API configuration.", json_schema_extra={"ui_label": "Meteoserver", "ui_group": "basic"})

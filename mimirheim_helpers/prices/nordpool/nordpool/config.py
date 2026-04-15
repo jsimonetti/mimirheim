@@ -142,7 +142,7 @@ class NordpoolConfig(BaseModel):
             "MQTT topic for the retained price payload. "
             "Defaults to '{mimir_topic_prefix}/input/prices' when not set."
         ),
-        json_schema_extra={"ui_label": "Output topic", "ui_group": "advanced"},
+        json_schema_extra={"ui_label": "Output topic", "ui_group": "advanced", "ui_placeholder": "{mimir_topic_prefix}/input/prices"},
     )
     nordpool: NordpoolApiConfig = Field(description="Nordpool API and pricing formula parameters.", json_schema_extra={"ui_label": "Nordpool API", "ui_group": "basic"})
     ha_discovery: HomeAssistantConfig | None = Field(

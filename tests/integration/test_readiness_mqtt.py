@@ -18,7 +18,7 @@ import json
 import queue
 import threading
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import paho.mqtt.client as paho
 import pytest
@@ -37,6 +37,7 @@ from mimirheim.io.mqtt_publisher import MqttPublisher
 
 _BAT_SOC_TOPIC = "mimir/input/bat/soc"
 _PRICES_TOPIC = "mimir/input/prices"
+_TRIGGER_TOPIC = "mimir/input/trigger"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -96,24 +97,21 @@ def _make_hioo_paho_client(client_id: str) -> paho.Client:
 
 def _prices_msg() -> bytes:
     """Return a serialised 96-step prices payload."""
-    return json.dumps({
-        "steps": [
-            {
-                "t": t,
-                "import_price_eur_kwh": 0.20,
-                "export_price_eur_kwh": 0.05,
-                "confidence": 1.0,
-            }
-            for t in range(96)
-        ],
-    }).encode()
+    now = datetime.now(UTC)
+    return json.dumps([
+        {
+            "ts": (now + timedelta(minutes=15 * t)).isoformat(),
+            "import_eur_per_kwh": 0.20,
+            "export_eur_per_kwh": 0.05,
+            "confidence": 1.0,
+        }
+        for t in range(96)
+    ]).encode()
 
 
 def _bat_soc_msg(ts: datetime | None = None) -> bytes:
-    """Return a serialised battery SOC payload with the given timestamp."""
-    if ts is None:
-        ts = datetime.now(UTC)
-    return json.dumps({"soc_kwh": 5.0, "timestamp": ts.isoformat()}).encode()
+    """Return a serialised battery SOC payload."""
+    return b"5.0"
 
 
 def _run_solve_loop(
@@ -212,7 +210,15 @@ async def test_retained_messages_trigger_solve_on_connect(mqtt_broker: str) -> N
         mqtt_client.start()
         solve_thread.start()
 
-        # Wait for retained messages to arrive, solve, and result to be published.
+        # Give the client time to connect and receive the retained messages,
+        # then publish a trigger. Retained data alone does not queue a solve;
+        # the trigger topic requires a fresh non-retained message.
+        await asyncio.sleep(0.5)
+        trigger_probe = _make_paho_client(port, client_id=f"trigger-probe-{uuid.uuid4().hex[:8]}")
+        trigger_probe.publish(_TRIGGER_TOPIC, b"", qos=1, retain=False)
+        await asyncio.sleep(0.2)
+        trigger_probe.loop_stop()
+        trigger_probe.disconnect()
         for _ in range(20):
             await asyncio.sleep(0.5)
             if schedule_received.is_set():

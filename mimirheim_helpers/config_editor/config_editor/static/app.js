@@ -134,6 +134,19 @@ function buildFieldRow(fieldName, fieldSchema, value, bindPath, parentData) {
   label.setAttribute("for", `field-${bindPath}`);
   row.appendChild(label);
 
+  // Determine the placeholder text to show in empty inputs.
+  // Two sources, checked in priority order:
+  //   1. fieldSchema.ui_placeholder — explicit declaration in json_schema_extra,
+  //      used for fields whose runtime default is derived (e.g. MQTT topic patterns).
+  //   2. fieldSchema.default — the JSON Schema default value, for fields with a
+  //      literal scalar default (e.g. port: 1883, topic_prefix: "mimir").
+  let placeholderText = null;
+  if (fieldSchema.ui_placeholder !== undefined) {
+    placeholderText = String(fieldSchema.ui_placeholder);
+  } else if (fieldSchema.default !== undefined && fieldSchema.default !== null) {
+    placeholderText = String(fieldSchema.default);
+  }
+
   // Resolve $ref if necessary.
   let resolvedSchema = fieldSchema;
   const ref = fieldSchema.$ref;
@@ -175,7 +188,7 @@ function buildFieldRow(fieldName, fieldSchema, value, bindPath, parentData) {
     if (effectiveSchema.maximum !== undefined) input.max = effectiveSchema.maximum;
     if (effectiveSchema.exclusiveMinimum !== undefined) input.min = effectiveSchema.exclusiveMinimum;
     if (type === "number") input.step = "any";
-    if (fieldSchema.default !== undefined && fieldSchema.default !== null) input.placeholder = String(fieldSchema.default);
+    if (placeholderText) input.placeholder = placeholderText;
   } else if (effectiveSchema.enum) {
     input = document.createElement("select");
     input.name = bindPath;
@@ -183,8 +196,8 @@ function buildFieldRow(fieldName, fieldSchema, value, bindPath, parentData) {
     if (isNullable) {
       const opt = document.createElement("option");
       opt.value = "";
-      opt.textContent = (fieldSchema.default !== undefined && fieldSchema.default !== null)
-        ? `(default: ${fieldSchema.default})`
+      opt.textContent = placeholderText
+        ? `(default: ${placeholderText})`
         : "(not set)";
       input.appendChild(opt);
     }
@@ -218,7 +231,7 @@ function buildFieldRow(fieldName, fieldSchema, value, bindPath, parentData) {
     input.id = `field-${bindPath}`;
     if (value !== undefined && value !== null) input.value = value;
     if (isNullable && (value === undefined || value === null)) input.value = "";
-    if (fieldSchema.default !== undefined && fieldSchema.default !== null) input.placeholder = String(fieldSchema.default);
+    if (placeholderText) input.placeholder = placeholderText;
   }
 
   row.appendChild(input);

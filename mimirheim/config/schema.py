@@ -353,7 +353,7 @@ class InputsConfig(BaseModel):
             "Topic for per-step price data. Defaults to "
             "'{mqtt.topic_prefix}/input/prices' when not set."
         ),
-        json_schema_extra={"ui_label": "Prices topic", "ui_group": "advanced"},
+        json_schema_extra={"ui_label": "Prices topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/input/prices"},
     )
 
 class OutputsConfig(BaseModel):
@@ -378,7 +378,7 @@ class OutputsConfig(BaseModel):
             "Topic for the full horizon schedule. "
             "Defaults to '{mqtt.topic_prefix}/strategy/schedule'."
         ),
-        json_schema_extra={"ui_label": "Schedule topic", "ui_group": "advanced"},
+        json_schema_extra={"ui_label": "Schedule topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/strategy/schedule"},
     )
     current: str | None = Field(
         default=None,
@@ -386,7 +386,7 @@ class OutputsConfig(BaseModel):
             "Topic for the current-step strategy summary. "
             "Defaults to '{mqtt.topic_prefix}/strategy/current'."
         ),
-        json_schema_extra={"ui_label": "Current topic", "ui_group": "advanced"},
+        json_schema_extra={"ui_label": "Current topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/strategy/current"},
     )
     last_solve: str | None = Field(
         default=None,
@@ -394,7 +394,7 @@ class OutputsConfig(BaseModel):
             "Topic for the retained solve-status message. "
             "Defaults to '{mqtt.topic_prefix}/status/last_solve'."
         ),
-        json_schema_extra={"ui_label": "Last solve topic", "ui_group": "advanced"},
+        json_schema_extra={"ui_label": "Last solve topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/status/last_solve"},
     )
     availability: str | None = Field(
         default=None,
@@ -402,7 +402,7 @@ class OutputsConfig(BaseModel):
             "Topic for birth ('online') and last-will ('offline') messages. "
             "Defaults to '{mqtt.topic_prefix}/status/availability'."
         ),
-        json_schema_extra={"ui_label": "Availability topic", "ui_group": "advanced"},
+        json_schema_extra={"ui_label": "Availability topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/status/availability"},
     )
 
 class HomeAssistantConfig(BaseModel):
@@ -521,7 +521,7 @@ class ReportingConfig(BaseModel):
             "MQTT topic for dump-available notifications. "
             "Defaults to '{mqtt.topic_prefix}/status/dump_available' when not set."
         ),
-        json_schema_extra={"ui_label": "Notify topic", "ui_group": "advanced"},
+        json_schema_extra={"ui_label": "Notify topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/status/dump_available"},
     )
 
     @model_validator(mode="after")
@@ -702,7 +702,7 @@ class BatteryOutputsConfig(BaseModel):
             "Defaults to '{mqtt.topic_prefix}/output/battery/{name}/exchange_mode' "
             "when not set."
         ),
-        json_schema_extra={"ui_label": "Exchange mode topic", "ui_group": "advanced"},
+        json_schema_extra={"ui_label": "Exchange mode topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/output/battery/{name}/exchange_mode"},
     )
 
 class BatteryConfig(BaseModel):
@@ -1051,7 +1051,7 @@ class EvInputsConfig(BaseModel):
             "MQTT topic for the EV plug state. "
             "Defaults to '{mqtt.topic_prefix}/input/ev/{name}/plugged_in' when not set."
         ),
-        json_schema_extra={"ui_label": "Plug state topic", "ui_group": "advanced"},
+        json_schema_extra={"ui_label": "Plug state topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/input/ev/{name}/plugged_in"},
     )
 
 class EvCapabilitiesConfig(BaseModel):
@@ -1155,7 +1155,7 @@ class EvOutputsConfig(BaseModel):
             "Defaults to '{mqtt.topic_prefix}/output/ev/{name}/exchange_mode' "
             "when not set."
         ),
-        json_schema_extra={"ui_label": "Exchange mode topic", "ui_group": "advanced"},
+        json_schema_extra={"ui_label": "Exchange mode topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/output/ev/{name}/exchange_mode"},
     )
     loadbalance_cmd: str | None = Field(
         default=None,
@@ -1164,7 +1164,7 @@ class EvOutputsConfig(BaseModel):
             "Defaults to '{mqtt.topic_prefix}/output/ev/{name}/loadbalance' "
             "when not set."
         ),
-        json_schema_extra={"ui_label": "Load balance topic", "ui_group": "advanced"},
+        json_schema_extra={"ui_label": "Load balance topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/output/ev/{name}/loadbalance"},
     )
 
 class EvConfig(BaseModel):
@@ -1382,7 +1382,7 @@ class PvOutputsConfig(BaseModel):
             "Defaults to '{mqtt.topic_prefix}/output/pv/{name}/power_limit_kw' "
             "when not set."
         ),
-        json_schema_extra={"ui_label": "Power limit topic", "ui_group": "advanced"},
+        json_schema_extra={"ui_label": "Power limit topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/output/pv/{name}/power_limit_kw"},
     )
     zero_export_mode: str | None = Field(
         default=None,
@@ -1391,7 +1391,7 @@ class PvOutputsConfig(BaseModel):
             "Defaults to '{mqtt.topic_prefix}/output/pv/{name}/zero_export_mode' "
             "when not set."
         ),
-        json_schema_extra={"ui_label": "Zero-export mode topic", "ui_group": "advanced"},
+        json_schema_extra={"ui_label": "Zero-export mode topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/output/pv/{name}/zero_export_mode"},
     )
     on_off_mode: str | None = Field(
         default=None,
@@ -1403,7 +1403,7 @@ class PvOutputsConfig(BaseModel):
             "Defaults to '{mqtt.topic_prefix}/output/pv/{name}/on_off_mode' "
             "when not set."
         ),
-        json_schema_extra={"ui_label": "On/off mode topic", "ui_group": "advanced"},
+        json_schema_extra={"ui_label": "On/off mode topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/output/pv/{name}/on_off_mode"},
     )
 
 class PvConfig(BaseModel):
@@ -1453,7 +1453,7 @@ class PvConfig(BaseModel):
             "MQTT topic for the per-step PV power forecast in kW. "
             "Defaults to '{mqtt.topic_prefix}/input/pv/{name}/forecast' when not set."
         ),
-        json_schema_extra={"ui_label": "Forecast topic", "ui_group": "advanced"},
+        json_schema_extra={"ui_label": "Forecast topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/input/pv/{name}/forecast"},
     )
     production_stages: list[float] | None = Field(
         default=None,
@@ -1612,7 +1612,7 @@ class HybridInverterConfig(BaseModel):
             "MQTT topic for per-step PV DC power forecast in kW. "
             "Defaults to '{mqtt.topic_prefix}/input/hybrid/{name}/pv_forecast' when not set."
         ),
-        json_schema_extra={"ui_label": "PV forecast topic", "ui_group": "advanced"},
+        json_schema_extra={"ui_label": "PV forecast topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/input/hybrid/{name}/pv_forecast"},
     )
     inputs: BatteryInputsConfig | None = Field(
         default_factory=BatteryInputsConfig,
@@ -1683,7 +1683,7 @@ class DeferrableLoadConfig(BaseModel):
             "MQTT topic for earliest start datetime. "
             "Defaults to '{mqtt.topic_prefix}/input/deferrable/{name}/window_earliest' when not set."
         ),
-        json_schema_extra={"ui_label": "Earliest start topic", "ui_group": "advanced"},
+        json_schema_extra={"ui_label": "Earliest start topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/input/deferrable/{name}/window_earliest"},
     )
     topic_window_latest: str | None = Field(
         default=None,
@@ -1691,7 +1691,7 @@ class DeferrableLoadConfig(BaseModel):
             "MQTT topic for latest end datetime. "
             "Defaults to '{mqtt.topic_prefix}/input/deferrable/{name}/window_latest' when not set."
         ),
-        json_schema_extra={"ui_label": "Latest end topic", "ui_group": "advanced"},
+        json_schema_extra={"ui_label": "Latest end topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/input/deferrable/{name}/window_latest"},
     )
     topic_committed_start_time: str | None = Field(
         default=None,
@@ -1744,7 +1744,7 @@ class StaticLoadConfig(BaseModel):
             "MQTT topic for the per-step base load forecast in kW. "
             "Defaults to '{mqtt.topic_prefix}/input/baseload/{name}/forecast' when not set."
         ),
-        json_schema_extra={"ui_label": "Forecast topic", "ui_group": "advanced"},
+        json_schema_extra={"ui_label": "Forecast topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/input/baseload/{name}/forecast"},
     )
 
 # ---------------------------------------------------------------------------
@@ -1895,7 +1895,7 @@ class ThermalBoilerInputsConfig(BaseModel):
             "MQTT topic publishing the current water temperature in °C, retained. "
             "Defaults to '{mqtt.topic_prefix}/input/thermal_boiler/{name}/temp_c' when not set."
         ),
-        json_schema_extra={"ui_label": "Current temperature topic", "ui_group": "advanced"},
+        json_schema_extra={"ui_label": "Current temperature topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/input/thermal_boiler/{name}/temp_c"},
     )
 
 class ThermalBoilerConfig(BaseModel):

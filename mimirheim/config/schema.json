@@ -332,7 +332,8 @@
           "description": "MQTT topic for the closed-loop zero-exchange mode boolean flag. Defaults to '{mqtt.topic_prefix}/output/battery/{name}/exchange_mode' when not set.",
           "title": "Exchange Mode",
           "ui_group": "advanced",
-          "ui_label": "Exchange mode topic"
+          "ui_label": "Exchange mode topic",
+          "ui_placeholder": "{mqtt.topic_prefix}/output/battery/{name}/exchange_mode"
         }
       },
       "title": "BatteryOutputsConfig",
@@ -739,7 +740,8 @@
           "description": "MQTT topic for earliest start datetime. Defaults to '{mqtt.topic_prefix}/input/deferrable/{name}/window_earliest' when not set.",
           "title": "Topic Window Earliest",
           "ui_group": "advanced",
-          "ui_label": "Earliest start topic"
+          "ui_label": "Earliest start topic",
+          "ui_placeholder": "{mqtt.topic_prefix}/input/deferrable/{name}/window_earliest"
         },
         "topic_window_latest": {
           "anyOf": [
@@ -754,7 +756,8 @@
           "description": "MQTT topic for latest end datetime. Defaults to '{mqtt.topic_prefix}/input/deferrable/{name}/window_latest' when not set.",
           "title": "Topic Window Latest",
           "ui_group": "advanced",
-          "ui_label": "Latest end topic"
+          "ui_label": "Latest end topic",
+          "ui_placeholder": "{mqtt.topic_prefix}/input/deferrable/{name}/window_latest"
         },
         "topic_committed_start_time": {
           "anyOf": [
@@ -1032,7 +1035,8 @@
           "description": "MQTT topic for the EV plug state. Defaults to '{mqtt.topic_prefix}/input/ev/{name}/plugged_in' when not set.",
           "title": "Plugged In Topic",
           "ui_group": "advanced",
-          "ui_label": "Plug state topic"
+          "ui_label": "Plug state topic",
+          "ui_placeholder": "{mqtt.topic_prefix}/input/ev/{name}/plugged_in"
         }
       },
       "title": "EvInputsConfig",
@@ -1055,7 +1059,8 @@
           "description": "MQTT topic for the closed-loop zero-exchange mode boolean flag. Defaults to '{mqtt.topic_prefix}/output/ev/{name}/exchange_mode' when not set.",
           "title": "Exchange Mode",
           "ui_group": "advanced",
-          "ui_label": "Exchange mode topic"
+          "ui_label": "Exchange mode topic",
+          "ui_placeholder": "{mqtt.topic_prefix}/output/ev/{name}/exchange_mode"
         },
         "loadbalance_cmd": {
           "anyOf": [
@@ -1070,7 +1075,8 @@
           "description": "MQTT topic for the load-balance mode enable boolean flag. Defaults to '{mqtt.topic_prefix}/output/ev/{name}/loadbalance' when not set.",
           "title": "Loadbalance Cmd",
           "ui_group": "advanced",
-          "ui_label": "Load balance topic"
+          "ui_label": "Load balance topic",
+          "ui_placeholder": "{mqtt.topic_prefix}/output/ev/{name}/loadbalance"
         }
       },
       "title": "EvOutputsConfig",
@@ -1276,7 +1282,8 @@
           "description": "MQTT topic for per-step PV DC power forecast in kW. Defaults to '{mqtt.topic_prefix}/input/hybrid/{name}/pv_forecast' when not set.",
           "title": "Topic Pv Forecast",
           "ui_group": "advanced",
-          "ui_label": "PV forecast topic"
+          "ui_label": "PV forecast topic",
+          "ui_placeholder": "{mqtt.topic_prefix}/input/hybrid/{name}/pv_forecast"
         },
         "inputs": {
           "anyOf": [
@@ -1319,7 +1326,8 @@
           "description": "Topic for per-step price data. Defaults to '{mqtt.topic_prefix}/input/prices' when not set.",
           "title": "Prices",
           "ui_group": "advanced",
-          "ui_label": "Prices topic"
+          "ui_label": "Prices topic",
+          "ui_placeholder": "{mqtt.topic_prefix}/input/prices"
         }
       },
       "title": "InputsConfig",
@@ -1462,7 +1470,8 @@
           "description": "Topic for the full horizon schedule. Defaults to '{mqtt.topic_prefix}/strategy/schedule'.",
           "title": "Schedule",
           "ui_group": "advanced",
-          "ui_label": "Schedule topic"
+          "ui_label": "Schedule topic",
+          "ui_placeholder": "{mqtt.topic_prefix}/strategy/schedule"
         },
         "current": {
           "anyOf": [
@@ -1477,7 +1486,8 @@
           "description": "Topic for the current-step strategy summary. Defaults to '{mqtt.topic_prefix}/strategy/current'.",
           "title": "Current",
           "ui_group": "advanced",
-          "ui_label": "Current topic"
+          "ui_label": "Current topic",
+          "ui_placeholder": "{mqtt.topic_prefix}/strategy/current"
         },
         "last_solve": {
           "anyOf": [
@@ -1492,7 +1502,8 @@
           "description": "Topic for the retained solve-status message. Defaults to '{mqtt.topic_prefix}/status/last_solve'.",
           "title": "Last Solve",
           "ui_group": "advanced",
-          "ui_label": "Last solve topic"
+          "ui_label": "Last solve topic",
+          "ui_placeholder": "{mqtt.topic_prefix}/status/last_solve"
         },
         "availability": {
           "anyOf": [
@@ -1507,7 +1518,8 @@
           "description": "Topic for birth ('online') and last-will ('offline') messages. Defaults to '{mqtt.topic_prefix}/status/availability'.",
           "title": "Availability",
           "ui_group": "advanced",
-          "ui_label": "Availability topic"
+          "ui_label": "Availability topic",
+          "ui_placeholder": "{mqtt.topic_prefix}/status/availability"
         }
       },
       "title": "OutputsConfig",
@@ -1570,7 +1582,8 @@
           "description": "MQTT topic for the per-step PV power forecast in kW. Defaults to '{mqtt.topic_prefix}/input/pv/{name}/forecast' when not set.",
           "title": "Topic Forecast",
           "ui_group": "advanced",
-          "ui_label": "Forecast topic"
+          "ui_label": "Forecast topic",
+          "ui_placeholder": "{mqtt.topic_prefix}/input/pv/{name}/forecast"
         },
         "production_stages": {
           "anyOf": [
@@ -1627,7 +1640,8 @@
           "description": "MQTT topic for the production limit setpoint in kW. Defaults to '{mqtt.topic_prefix}/output/pv/{name}/power_limit_kw' when not set.",
           "title": "Power Limit Kw",
           "ui_group": "advanced",
-          "ui_label": "Power limit topic"
+          "ui_label": "Power limit topic",
+          "ui_placeholder": "{mqtt.topic_prefix}/output/pv/{name}/power_limit_kw"
         },
         "zero_export_mode": {
           "anyOf": [
@@ -1642,7 +1656,8 @@
           "description": "MQTT topic for the zero-export mode boolean command. Defaults to '{mqtt.topic_prefix}/output/pv/{name}/zero_export_mode' when not set.",
           "title": "Zero Export Mode",
           "ui_group": "advanced",
-          "ui_label": "Zero-export mode topic"
+          "ui_label": "Zero-export mode topic",
+          "ui_placeholder": "{mqtt.topic_prefix}/output/pv/{name}/zero_export_mode"
         },
         "on_off_mode": {
           "anyOf": [
@@ -1657,7 +1672,8 @@
           "description": "MQTT topic for the on/off command. Published once per solve cycle. Payload \"true\" means the inverter should be ON (producing); payload \"false\" means the inverter should be OFF (curtailed by mimirheim). Only relevant when capabilities.on_off is True. Defaults to '{mqtt.topic_prefix}/output/pv/{name}/on_off_mode' when not set.",
           "title": "On Off Mode",
           "ui_group": "advanced",
-          "ui_label": "On/off mode topic"
+          "ui_label": "On/off mode topic",
+          "ui_placeholder": "{mqtt.topic_prefix}/output/pv/{name}/on_off_mode"
         }
       },
       "title": "PvOutputsConfig",
@@ -1748,7 +1764,8 @@
           "description": "MQTT topic for dump-available notifications. Defaults to '{mqtt.topic_prefix}/status/dump_available' when not set.",
           "title": "Notify Topic",
           "ui_group": "advanced",
-          "ui_label": "Notify topic"
+          "ui_label": "Notify topic",
+          "ui_placeholder": "{mqtt.topic_prefix}/status/dump_available"
         }
       },
       "title": "ReportingConfig",
@@ -1975,7 +1992,8 @@
           "description": "MQTT topic for the per-step base load forecast in kW. Defaults to '{mqtt.topic_prefix}/input/baseload/{name}/forecast' when not set.",
           "title": "Topic Forecast",
           "ui_group": "advanced",
-          "ui_label": "Forecast topic"
+          "ui_label": "Forecast topic",
+          "ui_placeholder": "{mqtt.topic_prefix}/input/baseload/{name}/forecast"
         }
       },
       "title": "StaticLoadConfig",
@@ -2093,7 +2111,8 @@
           "description": "MQTT topic publishing the current water temperature in \u00b0C, retained. Defaults to '{mqtt.topic_prefix}/input/thermal_boiler/{name}/temp_c' when not set.",
           "title": "Topic Current Temp",
           "ui_group": "advanced",
-          "ui_label": "Current temperature topic"
+          "ui_label": "Current temperature topic",
+          "ui_placeholder": "{mqtt.topic_prefix}/input/thermal_boiler/{name}/temp_c"
         }
       },
       "title": "ThermalBoilerInputsConfig",
