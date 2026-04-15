@@ -2,11 +2,13 @@
 exec 2>&1
 if [ "${ENABLE_BASELOAD_HA:-true}" != "true" ]; then
     echo "baseload-ha: disabled via add-on options"
-    exec sleep infinity
+    /command/s6-svc -d /run/service/baseload-ha
+    exit 0
 fi
 CONFIG=/config/baseload-ha.yaml
 if [ ! -f "$CONFIG" ]; then
     echo "baseload-ha: $CONFIG not found — service disabled"
-    exec sleep infinity
+    /command/s6-svc -d /run/service/baseload-ha
+    exit 0
 fi
 exec /app/.venv/bin/python -m baseload_ha --config "$CONFIG"

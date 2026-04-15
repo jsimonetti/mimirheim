@@ -2,12 +2,14 @@
 exec 2>&1
 if [ "${ENABLE_CONFIG_EDITOR:-true}" != "true" ]; then
     echo "config-editor: disabled via add-on options"
-    exec sleep infinity
+    /command/s6-svc -d /run/service/config-editor
+    exit 0
 fi
 CONFIG=/config/config-editor.yaml
 DISABLED=$(grep -E '^[[:space:]]*disabled:[[:space:]]*true[[:space:]]*$' "$CONFIG" 2>/dev/null || true)
 if [ -n "$DISABLED" ]; then
     echo "config-editor: disabled via $CONFIG"
-    exec sleep infinity
+    /command/s6-svc -d /run/service/config-editor
+    exit 0
 fi
 exec /app/.venv/bin/python -m config_editor --config "$CONFIG"

@@ -2,11 +2,13 @@
 exec 2>&1
 if [ "${ENABLE_BASELOAD_STATIC:-true}" != "true" ]; then
     echo "baseload-static: disabled via add-on options"
-    exec sleep infinity
+    /command/s6-svc -d /run/service/baseload-static
+    exit 0
 fi
 CONFIG=/config/baseload-static.yaml
 if [ ! -f "$CONFIG" ]; then
     echo "baseload-static: $CONFIG not found — service disabled"
-    exec sleep infinity
+    /command/s6-svc -d /run/service/baseload-static
+    exit 0
 fi
 exec /app/.venv/bin/python -m baseload_static --config "$CONFIG"

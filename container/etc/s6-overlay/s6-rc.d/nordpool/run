@@ -5,11 +5,13 @@ exec 2>&1
 # config-file-presence gate remains the only control.
 if [ "${ENABLE_NORDPOOL:-true}" != "true" ]; then
     echo "nordpool: disabled via add-on options"
-    exec sleep infinity
+    /command/s6-svc -d /run/service/nordpool
+    exit 0
 fi
 CONFIG=/config/nordpool.yaml
 if [ ! -f "$CONFIG" ]; then
     echo "nordpool: $CONFIG not found — service disabled"
-    exec sleep infinity
+    /command/s6-svc -d /run/service/nordpool
+    exit 0
 fi
 exec /app/.venv/bin/python -m nordpool --config "$CONFIG"

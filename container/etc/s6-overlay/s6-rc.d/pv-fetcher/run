@@ -2,11 +2,13 @@
 exec 2>&1
 if [ "${ENABLE_PV_FETCHER:-true}" != "true" ]; then
     echo "pv-fetcher: disabled via add-on options"
-    exec sleep infinity
+    /command/s6-svc -d /run/service/pv-fetcher
+    exit 0
 fi
 CONFIG=/config/pv-fetcher.yaml
 if [ ! -f "$CONFIG" ]; then
     echo "pv-fetcher: $CONFIG not found — service disabled"
-    exec sleep infinity
+    /command/s6-svc -d /run/service/pv-fetcher
+    exit 0
 fi
 exec /app/.venv/bin/python -m pv_fetcher --config "$CONFIG"
