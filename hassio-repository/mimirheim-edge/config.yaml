@@ -17,7 +17,6 @@ stage: experimental
 map:
   - type: addon_config
     read_only: false
-    pah: /config
   - type: homeassistant_config
     read_only: true
     path: /homeassistant
