@@ -1051,7 +1051,7 @@ function renderHelperTab(container, filename) {
       body = { enabled: true, config: cfg };
     }
     try {
-      const resp = await fetch(`/api/helper-config/${filename}`, {
+      const resp = await fetch(`api/helper-config/${filename}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -1060,7 +1060,7 @@ function renderHelperTab(container, filename) {
       if (data.ok) {
         statusSpan.textContent = "Saved. Container restart required for s6 service changes.";
         // Refresh state.
-        const refreshed = await fetch("/api/helper-configs");
+        const refreshed = await fetch("api/helper-configs");
         gHelperConfigs = await refreshed.json();
         setTimeout(() => { statusSpan.textContent = ""; }, 6000);
       } else {
@@ -1156,14 +1156,14 @@ function renderBaseloadTab(container) {
       // Disable whichever variant is active.
       const toDisable = BASELOAD_VARIANTS.filter(v => gHelperConfigs[v.file]?.enabled).map(v => v.file);
       for (const f of toDisable) {
-        await fetch(`/api/helper-config/${f}`, {
+        await fetch(`api/helper-config/${f}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ enabled: false }),
         });
       }
       statusSpan.textContent = "Disabled.";
-      const refreshed = await fetch("/api/helper-configs");
+      const refreshed = await fetch("api/helper-configs");
       gHelperConfigs = await refreshed.json();
       saveBtn.disabled = false;
       return;
@@ -1172,7 +1172,7 @@ function renderBaseloadTab(container) {
     const cfg = formEl ? collectHelperFormData(formEl, gHelperSchemas[selectedFile]) : {};
     body = { enabled: true, config: cfg };
     try {
-      const resp = await fetch(`/api/helper-config/${selectedFile}`, {
+      const resp = await fetch(`api/helper-config/${selectedFile}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -1180,7 +1180,7 @@ function renderBaseloadTab(container) {
       const data = await resp.json();
       if (data.ok) {
         statusSpan.textContent = "Saved. Container restart required.";
-        const refreshed = await fetch("/api/helper-configs");
+        const refreshed = await fetch("api/helper-configs");
         gHelperConfigs = await refreshed.json();
         setTimeout(() => { statusSpan.textContent = ""; }, 6000);
       } else {
@@ -1278,7 +1278,7 @@ async function saveConfig() {
   status.textContent = "Saving…";
 
   try {
-    const resp = await fetch("/api/config", {
+    const resp = await fetch("api/config", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(gConfig),
@@ -1320,10 +1320,10 @@ async function init() {
   // Load schema, current mimirheim config, helper configs, and helper schemas
   // in parallel. All four responses are needed before any tab can render.
   const [schemaResp, configResp, helperConfigsResp, helperSchemasResp] = await Promise.all([
-    fetch("/api/schema"),
-    fetch("/api/config"),
-    fetch("/api/helper-configs"),
-    fetch("/api/helper-schemas"),
+    fetch("api/schema"),
+    fetch("api/config"),
+    fetch("api/helper-configs"),
+    fetch("api/helper-schemas"),
   ]);
   gSchema = await schemaResp.json();
   const configData = await configResp.json();
