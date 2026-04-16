@@ -18,6 +18,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from reporter.metrics import avg_segment_efficiency, compute_economic_metrics, compute_schedule_metrics
+
 # Each solver time step is 15 minutes.
 _STEP_MINUTES = 15
 _STEP_HOURS = _STEP_MINUTES / 60.0
@@ -120,8 +122,8 @@ def build_chart_payload(inp: dict[str, Any], out: dict[str, Any]) -> dict[str, A
 
     for bat_name, bat_cfg in cfg.get("batteries", {}).items():
         initial_soc = battery_inputs.get(bat_name, {}).get("soc_kwh", 0.0)
-        charge_eff = _avg_eff(bat_cfg.get("charge_segments"))
-        discharge_eff = _avg_eff(bat_cfg.get("discharge_segments"))
+        charge_eff = avg_segment_efficiency(bat_cfg.get("charge_segments"), bat_cfg.get("charge_curve"))
+        discharge_eff = avg_segment_efficiency(bat_cfg.get("discharge_segments"), bat_cfg.get("discharge_curve"))
 
         # Reconstruct SOC trajectory from the schedule.
         # Sign convention: negative kw = charging (SOC increases),
@@ -168,52 +170,23 @@ def build_summary_payload(inp: dict[str, Any], out: dict[str, Any]) -> dict[str,
     Returns:
         Dict with scalar fields suitable for JSON serialisation.
     """
-    naive = out.get("naive_cost_eur") or 0.0
-    optimised = out.get("optimised_cost_eur") or 0.0
-    credit = out.get("soc_credit_eur") or 0.0
-    effective = optimised - credit
-    saving = naive - effective
-
-    if naive != 0.0:
-        saving_pct = round(saving / naive * 100.0, 1)
-    else:
-        saving_pct = 0.0
-
+    eco = compute_economic_metrics(out)
     schedule: list[dict[str, Any]] = out.get("schedule", [])
-    grid_import_kwh = sum(
-        s.get("grid_import_kw", 0.0) * _STEP_HOURS for s in schedule
-    )
-    grid_export_kwh = sum(
-        s.get("grid_export_kw", 0.0) * _STEP_HOURS for s in schedule
-    )
-
-    # Self-sufficiency: fraction of total load met without importing.
-    load_total_kwh = sum(
-        max(0.0, d.get("kw", 0.0)) * _STEP_HOURS
-        for s in schedule
-        for d in s.get("devices", {}).values()
-        if d.get("type") in ("static_load", "deferrable_load")
-    )
-    load_served_local = max(0.0, load_total_kwh - grid_import_kwh)
-    self_suf_pct = (
-        round(load_served_local / load_total_kwh * 100.0, 1)
-        if load_total_kwh > 0.0
-        else 0.0
-    )
+    sm = compute_schedule_metrics(schedule)
 
     return {
         "solve_time_utc": inp.get("triggered_at_utc") or inp.get("solve_time_utc", ""),
         "strategy": out.get("strategy", ""),
         "solve_status": out.get("solve_status", ""),
-        "naive_cost_eur": round(naive, 4),
-        "optimised_cost_eur": round(optimised, 4),
-        "soc_credit_eur": round(credit, 4),
-        "effective_cost_eur": round(effective, 4),
-        "saving_eur": round(saving, 4),
-        "saving_pct": saving_pct,
-        "self_sufficiency_pct": self_suf_pct,
-        "grid_import_kwh": round(grid_import_kwh, 4),
-        "grid_export_kwh": round(grid_export_kwh, 4),
+        "naive_cost_eur": eco.naive_cost_eur,
+        "optimised_cost_eur": eco.optimised_cost_eur,
+        "soc_credit_eur": eco.soc_credit_eur,
+        "effective_cost_eur": eco.effective_cost_eur,
+        "saving_eur": eco.saving_eur,
+        "saving_pct": eco.saving_pct,
+        "self_sufficiency_pct": sm.self_sufficiency_pct,
+        "grid_import_kwh": sm.grid_import_kwh,
+        "grid_export_kwh": sm.grid_export_kwh,
     }
 
 
@@ -239,8 +212,4 @@ def _fmt_utc(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _avg_eff(segments: list[dict[str, Any]] | None) -> float:
-    """Return the average efficiency across segments, or 1.0 if none are given."""
-    if not segments:
-        return 1.0
-    return sum(s.get("efficiency", 1.0) for s in segments) / len(segments)
+

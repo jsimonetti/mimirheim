@@ -50,6 +50,8 @@ from typing import Any
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from reporter.metrics import avg_segment_efficiency, compute_economic_metrics, compute_schedule_metrics
+
 # Each solver time step is 15 minutes.
 STEP_MINUTES = 15
 STEP_HOURS = STEP_MINUTES / 60.0
@@ -496,11 +498,12 @@ def _build_summary_tables(
     Returns:
         A tuple ``(left_table, right_table)`` of ``go.Table`` traces.
     """
-    naive = out.get("naive_cost_eur") or 0.0
-    optimised = out.get("optimised_cost_eur") or 0.0
-    credit = out.get("soc_credit_eur") or 0.0
-    effective = optimised - credit
-    saving = naive - effective
+    eco = compute_economic_metrics(out)
+    naive = eco.naive_cost_eur
+    optimised = eco.optimised_cost_eur
+    credit = eco.soc_credit_eur
+    effective = eco.effective_cost_eur
+    saving = eco.saving_eur
 
     n_steps = len(schedule)
     horizon_h = n_steps * STEP_HOURS
@@ -564,44 +567,12 @@ def _build_summary_tables(
     # ------------------------------------------------------------------
     # Right table: exchange and self-sufficiency
     # ------------------------------------------------------------------
-    total_import_kwh = sum(
-        s.get("grid_import_kw", 0.0) * STEP_HOURS for s in schedule
-    )
-    total_export_kwh = sum(
-        s.get("grid_export_kw", 0.0) * STEP_HOURS for s in schedule
-    )
-
-    # PV generation total (kWh): positive kw from PV devices.
-    pv_total_kwh = sum(
-        max(0.0, sp.get("kw", 0.0)) * STEP_HOURS
-        for s in schedule
-        for sp in s.get("devices", {}).values()
-        if sp.get("type") == "pv"
-    )
-    # Load total (kWh): positive kw from static_load devices.
-    load_total_kwh = sum(
-        max(0.0, sp.get("kw", 0.0)) * STEP_HOURS
-        for s in schedule
-        for sp in s.get("devices", {}).values()
-        if sp.get("type") in ("static_load", "deferrable_load")
-    )
-
-    # Self-consumption: PV energy NOT exported (used locally).
-    # self_consumption = PV - export (clipped to PV total)
-    self_consumption_kwh = max(0.0, pv_total_kwh - total_export_kwh)
-    self_consumption_pct = (
-        round(self_consumption_kwh / pv_total_kwh * 100.0, 1)
-        if pv_total_kwh > 0.0
-        else 0.0
-    )
-
-    # Self-sufficiency: fraction of load met without importing from grid.
-    load_served_local = max(0.0, load_total_kwh - total_import_kwh)
-    self_suf_pct = (
-        round(load_served_local / load_total_kwh * 100.0, 1)
-        if load_total_kwh > 0.0
-        else 0.0
-    )
+    m = compute_schedule_metrics(schedule)
+    total_import_kwh = m.grid_import_kwh
+    total_export_kwh = m.grid_export_kwh
+    pv_total_kwh = m.pv_total_kwh
+    self_consumption_pct = m.self_consumption_pct
+    self_suf_pct = m.self_sufficiency_pct
 
     right_rows = [
         ("Total import", f"{total_import_kwh:.3f} kWh"),
@@ -1427,38 +1398,6 @@ def _hex_to_rgb(hex_color: str) -> str:
     return f"{r},{g},{b}"
 
 
-def _avg_efficiency(
-    segments: list[dict] | None, curve: list[dict] | None
-) -> float:
-    """Return a representative round-trip efficiency for a device model.
-
-    Uses the capacity-weighted average across segments for the segment model.
-    For the SOS2 piecewise-linear curve, returns the full-load efficiency.
-    Falls back to 1.0 when neither model is found.
-
-    Args:
-        segments: List of segment dicts with ``power_max_kw`` and
-            ``efficiency`` keys. May be None.
-        curve: List of breakpoint dicts with ``power_kw`` and ``efficiency``
-            keys. May be None.
-
-    Returns:
-        A representative efficiency in the range (0, 1].
-    """
-    if segments:
-        total_kw = sum(s["power_max_kw"] for s in segments)
-        if total_kw > 0.0:
-            return (
-                sum(s["efficiency"] * s["power_max_kw"] for s in segments)
-                / total_kw
-            )
-    if curve:
-        non_zero = [bp for bp in curve if bp["power_kw"] > 0.0]
-        if non_zero:
-            return non_zero[-1]["efficiency"]
-    return 1.0
-
-
 def _build_device_meta(inp: dict) -> dict[str, dict]:
     """Return per-device metadata extracted from the embedded config section.
 
@@ -1488,10 +1427,10 @@ def _build_device_meta(inp: dict) -> dict[str, dict]:
             "dtype": "battery",
             "capacity_kwh": bat["capacity_kwh"],
             "min_soc_kwh": bat.get("min_soc_kwh", 0.0),
-            "charge_eff": _avg_efficiency(
+            "charge_eff": avg_segment_efficiency(
                 bat.get("charge_segments"), bat.get("charge_efficiency_curve")
             ),
-            "discharge_eff": _avg_efficiency(
+            "discharge_eff": avg_segment_efficiency(
                 bat.get("discharge_segments"), bat.get("discharge_efficiency_curve")
             ),
             "initial_soc": initial,
@@ -1505,8 +1444,8 @@ def _build_device_meta(inp: dict) -> dict[str, dict]:
             "dtype": "ev_charger",
             "capacity_kwh": ev["capacity_kwh"],
             "min_soc_kwh": ev.get("min_soc_kwh", 0.0),
-            "charge_eff": _avg_efficiency(ev.get("charge_segments"), None),
-            "discharge_eff": _avg_efficiency(ev.get("discharge_segments"), None),
+            "charge_eff": avg_segment_efficiency(ev.get("charge_segments"), None),
+            "discharge_eff": avg_segment_efficiency(ev.get("discharge_segments"), None),
             "initial_soc": state.get("soc_kwh", 0.0),
         }
 

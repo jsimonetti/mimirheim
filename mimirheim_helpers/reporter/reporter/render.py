@@ -32,6 +32,7 @@ from reporter._render_helpers import (
     _reconstruct_soc,
     _timestamps,
 )
+from reporter.metrics import compute_economic_metrics, compute_schedule_metrics
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -114,10 +115,7 @@ def build_report_html(inp: dict, out: dict) -> str:
     # Section 3: optimised energy flows
     # ------------------------------------------------------------------
     _, opt_traces = _build_energy_flows_traces(inp, out, xs)
-    _opt_naive = out.get("naive_cost_eur") or 0.0
-    _opt_raw = out.get("optimised_cost_eur") or 0.0
-    _opt_credit = out.get("soc_credit_eur") or 0.0
-    _opt_eff = _opt_raw - _opt_credit
+    _opt_eco = compute_economic_metrics(out)
     opt_fig = go.Figure()
     for tr in opt_traces:
         opt_fig.add_trace(tr)
@@ -144,10 +142,10 @@ def build_report_html(inp: dict, out: dict) -> str:
             ),
             dict(
                 text=(
-                    f"naive {_opt_naive:.4f} € → "
-                    f"raw {_opt_raw:.4f} € − "
-                    f"credit {_opt_credit:.4f} € = "
-                    f"effective {_opt_eff:.4f} €"
+                    f"naive {_opt_eco.naive_cost_eur:.4f} € → "
+                    f"raw {_opt_eco.optimised_cost_eur:.4f} € − "
+                    f"credit {_opt_eco.soc_credit_eur:.4f} € = "
+                    f"effective {_opt_eco.effective_cost_eur:.4f} €"
                 ),
                 xref="paper", yref="paper",
                 x=0.0, y=1.03,
@@ -439,35 +437,23 @@ def _render_summary_html(inp: dict, out: dict, schedule: list[dict]) -> str:
     Returns:
         An HTML string containing a two-column summary section.
     """
-    naive = out.get("naive_cost_eur") or 0.0
-    raw_opt = out.get("optimised_cost_eur") or 0.0
-    credit = out.get("soc_credit_eur") or 0.0
-    effective = raw_opt - credit
-    saving = naive - effective
+    eco = compute_economic_metrics(out)
+    naive = eco.naive_cost_eur
+    raw_opt = eco.optimised_cost_eur
+    credit = eco.soc_credit_eur
+    effective = eco.effective_cost_eur
+    saving = eco.saving_eur
 
     n_steps = len(schedule)
     horizon_h = n_steps * STEP_HOURS
     dispatch_sup = bool(out.get("dispatch_suppressed", False))
 
-    total_import = sum(s.get("grid_import_kw", 0.0) * STEP_HOURS for s in schedule)
-    total_export = sum(s.get("grid_export_kw", 0.0) * STEP_HOURS for s in schedule)
-
-    pv_kwh = sum(
-        max(0.0, sp.get("kw", 0.0)) * STEP_HOURS
-        for s in schedule
-        for sp in s.get("devices", {}).values()
-        if sp.get("type") == "pv"
-    )
-    # Load devices (static_load, deferrable_load) have negative kw values in
-    # the schedule (they consume power). Negate to get the positive kWh consumed.
-    load_kwh = sum(
-        max(0.0, -sp.get("kw", 0.0)) * STEP_HOURS
-        for s in schedule
-        for sp in s.get("devices", {}).values()
-        if sp.get("type") in ("static_load", "deferrable_load")
-    )
-    load_served_local = max(0.0, load_kwh - total_import)
-    self_suf = round(load_served_local / load_kwh * 100.0, 1) if load_kwh > 0 else 0.0
+    m = compute_schedule_metrics(schedule)
+    total_import = m.grid_import_kwh
+    total_export = m.grid_export_kwh
+    pv_kwh = m.pv_total_kwh
+    load_kwh = m.load_total_kwh
+    self_suf = m.self_sufficiency_pct
 
     def row(label: str, value: str, highlight: bool = False, tooltip: str = "") -> str:
         bg = ' style="background:#e8f5e9"' if highlight else ""
