@@ -11,7 +11,7 @@ arch:
 startup: application
 boot: auto
 init: false
-image: ghcr.io/jsimonetti/mimirheim:v0.1.0
+image: ghcr.io/jsimonetti/mimirheim
 stage: stable
 
 # addon_config mounts the add-on's private config directory to /config

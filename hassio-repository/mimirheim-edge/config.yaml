@@ -11,7 +11,7 @@ arch:
 startup: application
 boot: auto
 init: false
-image: ghcr.io/jsimonetti/mimirheim:edge
+image: ghcr.io/jsimonetti/mimirheim
 stage: experimental
 
 map:
