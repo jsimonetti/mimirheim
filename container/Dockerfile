@@ -114,7 +114,7 @@ COPY --chown=app:app mimirheim_helpers/examples/ /app/examples/
 # Copy s6-overlay service definitions.
 COPY --chown=root:root container/etc/ /etc/
 
-# Make all run scripts executable.
+# Make all run scripts and the hassio-env oneshot executable.
 RUN chmod +x \
     /etc/s6-overlay/s6-rc.d/mimirheim/run \
     /etc/s6-overlay/s6-rc.d/nordpool/run \
@@ -126,8 +126,7 @@ RUN chmod +x \
     /etc/s6-overlay/s6-rc.d/scheduler/run \
     /etc/s6-overlay/s6-rc.d/reporter/run \
     /etc/s6-overlay/s6-rc.d/config-editor/run \
-    /etc/cont-init.d/00-options-env.sh \
-    /etc/cont-init.d/01-mqtt-env.sh
+    /etc/s6-overlay/s6-rc.d/hassio-env/hassio-env.sh
 
 # /config is the mount point for user-supplied YAML configuration files.
 VOLUME ["/config"]
