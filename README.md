@@ -23,8 +23,7 @@ mimirheim is a **pure strategist**. It never controls hardware. It reads all inp
 9. [Configuration](#9-configuration)
 10. [Readiness and Staleness](#10-readiness-and-staleness)
 11. [Home Assistant Integration](#11-home-assistant-integration)
-12. [Project Structure](#12-project-structure)
-13. [Testing](#13-testing)
+12. [Testing](#12-testing)
 
 ---
 
@@ -145,8 +144,9 @@ Confidence is applied to revenue/cost terms only, never to constraints. Physical
 
 ## 3. Devices
 
-> **Maturity note** — Battery and PV are the most thoroughly tested and deployed device types.
-> EV chargers, hybrid inverters, deferrable loads, and all thermal devices (boiler, space
+> **Maturity note** — Battery, PV and deferrable loads are the most
+> thoroughly tested and deployed device types.
+> EV chargers, hybrid inverters and all thermal devices (boiler, space
 > heating HP, combi heat pump) are implemented and unit-tested but have seen limited
 > real-world deployment. If you run mimirheim with any of these devices, feedback and bug reports
 > are very welcome. Pull requests with additional integration tests or golden scenarios are
