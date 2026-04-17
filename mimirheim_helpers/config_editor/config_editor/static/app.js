@@ -34,6 +34,9 @@ let gConfig = {};
 /** @type {Object} MQTT fields set by the HA Supervisor via env vars. Empty when running plain Docker. */
 let gMqttEnv = {};
 
+/** @type {boolean} Whether the user has enabled the MQTT override in the General tab. */
+let gMqttOverride = false;
+
 /** @type {Array<{label: string, render: function}>} Registered tabs */
 const gTabs = [];
 
@@ -835,28 +838,64 @@ function renderGeneralTab(container) {
   mqttH.textContent = "MQTT";
   mqttSection.appendChild(mqttH);
 
-  // When MQTT env vars are active (HA Supervisor context), show an info
-  // notice. The form is pre-populated with the effective values (env merged
-  // with any file overrides). On save, fields whose value still matches the
-  // env value are stripped so Supervisor credentials are not baked into the
-  // YAML file.
-  if (gMqttEnv && Object.keys(gMqttEnv).length > 0) {
+  const hasMqttEnv = gMqttEnv && Object.keys(gMqttEnv).length > 0;
+
+  if (hasMqttEnv) {
+    // Supervisor provides MQTT settings — hide the form by default and expose
+    // an opt-in override for users who need different broker settings per
+    // instance (e.g. multiple add-on installs pointing at different brokers).
     const banner = document.createElement("div");
     banner.className = "info-banner";
-    banner.textContent = "MQTT connection settings are provided by the HA Supervisor. "
-      + "The values shown below are effective at runtime. "
-      + "To override a field, type a different value — unchanged fields will not be saved to the config file.";
+    banner.textContent = "MQTT connection settings are provided by the HA Supervisor "
+      + "and do not need to be configured here. "
+      + "Enable the override below only if this instance requires different broker settings.";
     mqttSection.appendChild(banner);
+
+    // Auto-enable override when the saved YAML already has an explicit mqtt section.
+    if (gConfig.mqtt && Object.keys(gConfig.mqtt).length > 0) {
+      gMqttOverride = true;
+    }
+
+    const overrideLabel = document.createElement("label");
+    overrideLabel.style.cssText = "display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem;cursor:pointer;font-weight:500;";
+    const overrideCheck = document.createElement("input");
+    overrideCheck.type = "checkbox";
+    overrideCheck.checked = gMqttOverride;
+    overrideLabel.appendChild(overrideCheck);
+    overrideLabel.appendChild(document.createTextNode("Override MQTT settings for this instance"));
+    mqttSection.appendChild(overrideLabel);
+
+    const mqttFormArea = document.createElement("div");
+    mqttSection.appendChild(mqttFormArea);
+
+    function renderMqttForm() {
+      mqttFormArea.innerHTML = "";
+      if (!overrideCheck.checked) return;
+      const merged = mergedWithMqttEnv(gConfig.mqtt ? { mqtt: gConfig.mqtt } : {});
+      const mqttForm = buildForm("MqttConfig", merged.mqtt || {}, "mqtt");
+      mqttFormArea.appendChild(mqttForm);
+      mqttForm.addEventListener("change", () => {
+        gConfig.mqtt = collectFormData(mqttForm).mqtt;
+      });
+    }
+
+    overrideCheck.addEventListener("change", () => {
+      gMqttOverride = overrideCheck.checked;
+      if (!gMqttOverride) delete gConfig.mqtt;
+      renderMqttForm();
+    });
+
+    renderMqttForm();
+  } else {
+    // No env vars — show MQTT form directly. mqtt is required for mimirheim
+    // to function so it must always be present in the YAML in this mode.
+    const mqttForm = buildForm("MqttConfig", gConfig.mqtt || {}, "mqtt");
+    mqttSection.appendChild(mqttForm);
+    mqttForm.addEventListener("change", () => {
+      gConfig.mqtt = collectFormData(mqttForm).mqtt;
+    });
   }
 
-  // Pre-populate form with merged values: env as base, file config overrides.
-  const mqttDisplayData = mergedWithMqttEnv(gConfig.mqtt ? { mqtt: gConfig.mqtt } : {});
-  const mqttForm = buildForm("MqttConfig", mqttDisplayData.mqtt || {}, "mqtt");
-  mqttSection.appendChild(mqttForm);
-  // Wire changes.
-  mqttForm.addEventListener("change", () => {
-    gConfig.mqtt = collectFormData(mqttForm).mqtt;
-  });
   container.appendChild(mqttSection);
 
   // Render the grid sub-section.
@@ -1333,10 +1372,14 @@ async function saveConfig() {
   status.textContent = "Saving…";
 
   try {
-    // Build the payload, stripping any mqtt fields that are identical to
-    // env-supplied values so Supervisor credentials are not saved to the YAML.
     const payload = JSON.parse(JSON.stringify(gConfig));
-    if (payload.mqtt) stripMqttEnvFields(payload);
+    // When MQTT is Supervisor-controlled and the override toggle is off, exclude
+    // the mqtt section from the payload entirely. The server merges Supervisor
+    // values for validation; the solver reads them from the Supervisor at
+    // runtime so they must not be persisted in the YAML file.
+    if (gMqttEnv && Object.keys(gMqttEnv).length > 0 && !gMqttOverride) {
+      delete payload.mqtt;
+    }
     const resp = await fetch("api/config", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
