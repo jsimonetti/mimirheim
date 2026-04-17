@@ -474,13 +474,43 @@ function collectFormData(formEl) {
     setNestedValue(result, input.name.split("."), value);
   }
   // Collect array fields from sublist containers via their live arrays.
+  // An empty array is treated as null so that nullable list fields with
+  // min_length constraints (e.g. charge_efficiency_curve) are not sent as []
+  // when the user has not added any items. Pydantic then applies the field
+  // default (None) rather than rejecting an empty list.
   for (const sl of formEl.querySelectorAll(".sublist-container")) {
     const path = sl.dataset.bindPath;
     if (path && sl._liveData !== undefined) {
-      setNestedValue(result, path.split("."), sl._liveData);
+      setNestedValue(result, path.split("."), sl._liveData.length === 0 ? null : sl._liveData);
     }
   }
   return result;
+}
+
+/**
+ * Recursively remove null values from an object.
+ *
+ * Null values in the payload correspond to form fields the user left empty.
+ * Omitting them lets Pydantic apply field defaults (e.g. 0.0 for
+ * optional numeric fields) rather than rejecting null as an invalid type.
+ * Array items are preserved as-is; only object keys are pruned.
+ *
+ * @param {*} obj
+ * @returns {*}
+ */
+function stripNulls(obj) {
+  if (Array.isArray(obj)) {
+    return obj.map(item => (item !== null && typeof item === "object") ? stripNulls(item) : item);
+  }
+  if (obj !== null && typeof obj === "object") {
+    const out = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (v === null) continue;
+      out[k] = (typeof v === "object") ? stripNulls(v) : v;
+    }
+    return out;
+  }
+  return obj;
 }
 
 /**
@@ -1372,7 +1402,10 @@ async function saveConfig() {
   status.textContent = "Saving…";
 
   try {
-    const payload = JSON.parse(JSON.stringify(gConfig));
+    let payload = JSON.parse(JSON.stringify(gConfig));
+    // Strip null values so that empty form fields cause Pydantic to apply field
+    // defaults rather than failing type validation for non-nullable fields.
+    payload = stripNulls(payload);
     // When MQTT is Supervisor-controlled and the override toggle is off, exclude
     // the mqtt section from the payload entirely. The server merges Supervisor
     // values for validation; the solver reads them from the Supervisor at
