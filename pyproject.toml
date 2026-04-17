@@ -27,7 +27,7 @@ scheduler = [
     "apscheduler>=3.10,<4.0",
 ]
 nordpool = [
-    "pynordpool>=0.1",
+    "pynordpool>=0.4.0",
 ]
 pv-fetcher = [
     "forecast-solar>=5.0",
@@ -61,7 +61,7 @@ config-editor = []
 # Used by the container build and by full developer environments.
 helpers = [
     "apscheduler>=3.10,<4.0",
-    "pynordpool>=0.1",
+    "pynordpool>=0.4.0",
     "forecast-solar>=5.0",
     "httpx>=0.27",
     "knmi-py>=0.2",

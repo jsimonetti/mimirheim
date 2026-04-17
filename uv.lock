@@ -717,8 +717,8 @@ requires-dist = [
     { name = "psycopg2-binary", marker = "extra == 'baseload-ha-db-postgres'", specifier = ">=2.9" },
     { name = "pydantic", specifier = ">=2.13.2" },
     { name = "pymysql", marker = "extra == 'baseload-ha-db-mysql'", specifier = ">=1.1" },
-    { name = "pynordpool", marker = "extra == 'helpers'", specifier = ">=0.1" },
-    { name = "pynordpool", marker = "extra == 'nordpool'", specifier = ">=0.1" },
+    { name = "pynordpool", marker = "extra == 'helpers'", specifier = ">=0.4.0" },
+    { name = "pynordpool", marker = "extra == 'nordpool'", specifier = ">=0.4.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "respx", specifier = ">=0.23.1" },
     { name = "scikit-learn", marker = "extra == 'helpers'", specifier = ">=1.4" },
@@ -1315,14 +1315,14 @@ wheels = [
 
 [[package]]
 name = "pynordpool"
-version = "0.3.2"
+version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/85/db/418eeeab42bec3b719f4060f80283d2d6bc77523643590b7dfa9a23a6ff5/pynordpool-0.3.2.tar.gz", hash = "sha256:7f777eb07df9c5ad92f92b403da271c16f1fdb4f1b8097d1425039e8dcda44e6", size = 10776, upload-time = "2025-10-29T19:42:16.954Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/21/41/7ae36238851f1d32cfeb082489dbd654f9a59455dbf8bd53bffc441f4170/pynordpool-0.4.0.tar.gz", hash = "sha256:404f1f8af08e8986b46e8b53ebab88c5b0e36e1777daadc56307e174707d6172", size = 10707, upload-time = "2026-04-13T19:34:00.812Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d9/5a/73976e3c02986f6b64aeb97361b0e9570d5d281a38d075f2bbfebba20360/pynordpool-0.3.2-py3-none-any.whl", hash = "sha256:58f0c965510dd6cb103681f54a2e40c46cfef905215a2a92739e04f01ee1dc7e", size = 7084, upload-time = "2025-10-29T19:42:16.154Z" },
+    { url = "https://files.pythonhosted.org/packages/ff/e9/7ff951de86d12b96db6857e417970d249b2cc427e8f565656210ab844930/pynordpool-0.4.0-py3-none-any.whl", hash = "sha256:f191999c9fa88753de90ea3927b93c7d5174fb1343b04bc4eb215b95f143cd5d", size = 7099, upload-time = "2026-04-13T19:34:01.678Z" },
 ]
 
 [[package]]
