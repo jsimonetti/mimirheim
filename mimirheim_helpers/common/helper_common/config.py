@@ -26,8 +26,12 @@ class MqttConfig(BaseModel):
         client_id: MQTT client identifier. Must be unique on the broker.
         username: Optional broker username. Omit for anonymous access.
         password: Optional broker password.
-        tls_allow_insecure: Enable TLS without verifying the broker certificate.
-            Useful for self-signed certificates on private networks. Do not use
+        tls: Enable TLS for the broker connection. Set to True when the broker
+            listens on an encrypted port (typically 8883). When False, a
+            plaintext connection is made regardless of the port number.
+        tls_allow_insecure: When True and tls is also True, skip broker
+            certificate verification. Useful for self-signed certificates on
+            private networks. Has no effect when tls is False. Do not use
             against a broker reachable from an untrusted network.
     """
 
@@ -35,12 +39,17 @@ class MqttConfig(BaseModel):
 
     host: str = Field(description="Broker hostname or IP address.", json_schema_extra={"ui_label": "Broker host", "ui_group": "basic"})
     port: int = Field(default=1883, ge=1, le=65535, description="Broker TCP port.", json_schema_extra={"ui_label": "Broker port", "ui_group": "advanced"})
-    client_id: str = Field(description="MQTT client identifier.", json_schema_extra={"ui_label": "Client ID", "ui_group": "basic"})
+    client_id: str | None = Field(default=None, description="MQTT client identifier. Defaults to a tool-specific value when not set.", json_schema_extra={"ui_label": "Client ID", "ui_group": "basic"})
     username: str | None = Field(default=None, description="Broker username.", json_schema_extra={"ui_label": "Username", "ui_group": "advanced"})
     password: str | None = Field(default=None, description="Broker password.", json_schema_extra={"ui_label": "Password", "ui_group": "advanced"})
+    tls: bool = Field(
+        default=False,
+        description="Enable TLS for the broker connection. Set to true when the broker listens on an encrypted port (typically 8883).",
+        json_schema_extra={"ui_label": "Enable TLS", "ui_group": "advanced"},
+    )
     tls_allow_insecure: bool = Field(
         default=False,
-        description="Enable TLS without verifying the broker certificate.",
+        description="Skip broker certificate verification when TLS is enabled. Has no effect when tls is false.",
         json_schema_extra={"ui_label": "Allow insecure TLS", "ui_group": "advanced"},
     )
 
@@ -106,10 +115,8 @@ def apply_mqtt_env_overrides(raw: dict) -> dict:
     if password := os.environ.get("MQTT_PASSWORD"):
         overrides["password"] = password
     # MQTT_SSL is 'true' or 'false' (a string) as returned by bashio.
-    # tls_allow_insecure is the inverse of ssl: when SSL is disabled the
-    # connection uses plain TCP, not an insecure TLS tunnel.
     if ssl_str := os.environ.get("MQTT_SSL"):
-        overrides["tls_allow_insecure"] = ssl_str.lower() != "true"
+        overrides["tls"] = ssl_str.lower() == "true"
     if overrides:
         raw.setdefault("mqtt", {})
         raw["mqtt"].update(overrides)

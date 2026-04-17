@@ -32,22 +32,31 @@ class MqttConfig(BaseModel):
         topic_prefix: Prefix applied to all mimirheim topics. Default is 'mimir'.
         username: Optional broker username. Omit for anonymous access.
         password: Optional broker password. Only meaningful when username is set.
-        tls_allow_insecure: When True, enable TLS without verifying the broker
-            certificate. Useful for self-signed certificates on private networks.
-            Do not use against a broker reachable from an untrusted network.
+        tls: Enable TLS for the broker connection. Set to True when the broker
+            listens on an encrypted port (typically 8883). When False, a
+            plaintext connection is made regardless of the port number.
+        tls_allow_insecure: When True and tls is also True, skip broker
+            certificate verification. Useful for self-signed certificates on
+            private networks. Has no effect when tls is False. Do not use
+            against a broker reachable from an untrusted network.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     host: str = Field(description="MQTT broker hostname or IP address.", json_schema_extra={"ui_label": "Broker host", "ui_group": "basic"})
     port: int = Field(default=1883, description="MQTT broker port.", json_schema_extra={"ui_label": "Broker port", "ui_group": "advanced"})
-    client_id: str = Field(description="MQTT client identifier.", json_schema_extra={"ui_label": "Client ID", "ui_group": "basic"})
+    client_id: str | None = Field(default=None, description="MQTT client identifier. Defaults to 'mimir' when not set.", json_schema_extra={"ui_label": "Client ID", "ui_group": "basic"})
     topic_prefix: str = Field(default="mimir", description="Topic prefix for all mimirheim topics.", json_schema_extra={"ui_label": "Topic prefix", "ui_group": "advanced"})
     username: str | None = Field(default=None, description="Broker username. Omit for anonymous access.", json_schema_extra={"ui_label": "Username", "ui_group": "advanced"})
     password: str | None = Field(default=None, description="Broker password.", json_schema_extra={"ui_label": "Password", "ui_group": "advanced"})
+    tls: bool = Field(
+        default=False,
+        description="Enable TLS for the broker connection. Set to true when the broker listens on an encrypted port (typically 8883).",
+        json_schema_extra={"ui_label": "Enable TLS", "ui_group": "advanced"},
+    )
     tls_allow_insecure: bool = Field(
         default=False,
-        description="Enable TLS without verifying the broker certificate.",
+        description="Skip broker certificate verification when TLS is enabled. Useful for self-signed certificates on private networks. Has no effect when tls is false.",
         json_schema_extra={"ui_label": "Allow insecure TLS", "ui_group": "advanced"},
     )
 
@@ -2340,6 +2349,13 @@ class MimirheimConfig(BaseModel):
                 f"Device names must be unique across all sections. "
                 f"Duplicate names found: {sorted(duplicates)}"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _set_client_id_default(self) -> "MimirheimConfig":
+        """Set the default MQTT client identifier when not explicitly configured."""
+        if not self.mqtt.client_id:
+            self.mqtt.client_id = "mimir"
         return self
 
     @model_validator(mode="after")

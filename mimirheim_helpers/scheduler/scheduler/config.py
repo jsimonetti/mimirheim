@@ -17,7 +17,7 @@ from pathlib import Path
 
 import yaml
 from apscheduler.triggers.cron import CronTrigger
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic import ValidationError as PydanticValidationError
 
 from helper_common.config import MqttConfig, apply_mqtt_env_overrides
@@ -70,6 +70,13 @@ class SchedulerConfig(BaseModel):
                     f"schedules[{i}] has invalid cron expression: {cron_expr!r}"
                 )
         return v
+
+    @model_validator(mode="after")
+    def _set_client_id_default(self) -> "SchedulerConfig":
+        """Set the default MQTT client identifier when not explicitly configured."""
+        if not self.mqtt.client_id:
+            self.mqtt.client_id = "mimir-scheduler"
+        return self
 
     def parsed_schedules(self) -> list[tuple[str, str]]:
         """Return the schedules as a flat list of (cron_expr, topic) tuples.

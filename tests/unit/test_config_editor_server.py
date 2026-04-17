@@ -303,3 +303,113 @@ def test_post_baseload_enable_disables_other_variants(tmp_path: Path) -> None:
     )
     assert status == 200
     assert not (tmp_path / "baseload-ha.yaml").exists()
+
+
+# ---------------------------------------------------------------------------
+# MQTT env var handling
+# ---------------------------------------------------------------------------
+
+def test_get_config_includes_empty_mqtt_env_when_no_env_vars(tmp_path: Path) -> None:
+    """GET /api/config returns mqtt_env: {} when no MQTT env vars are set."""
+    server = _make_server(tmp_path)
+    status, headers, body = _dispatch_get(server, "/api/config")
+    data = json.loads(body)
+    assert "mqtt_env" in data
+    assert data["mqtt_env"] == {}
+
+
+def test_get_config_includes_mqtt_env_from_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GET /api/config returns mqtt_env populated from MQTT_* env vars."""
+    monkeypatch.setenv("MQTT_HOST", "core-mosquitto")
+    monkeypatch.setenv("MQTT_PORT", "1883")
+    monkeypatch.setenv("MQTT_USERNAME", "user1")
+    monkeypatch.setenv("MQTT_PASSWORD", "secret")
+    monkeypatch.setenv("MQTT_SSL", "false")
+    server = _make_server(tmp_path)
+    status, headers, body = _dispatch_get(server, "/api/config")
+    data = json.loads(body)
+    assert data["mqtt_env"]["host"] == "core-mosquitto"
+    assert data["mqtt_env"]["port"] == 1883
+    assert data["mqtt_env"]["username"] == "user1"
+    assert data["mqtt_env"]["tls"] is False
+
+
+def test_get_config_mqtt_env_tls_true_when_ssl_env_is_true(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """MQTT_SSL=true maps to mqtt_env.tls=True."""
+    monkeypatch.setenv("MQTT_HOST", "broker")
+    monkeypatch.setenv("MQTT_SSL", "true")
+    server = _make_server(tmp_path)
+    status, headers, body = _dispatch_get(server, "/api/config")
+    data = json.loads(body)
+    assert data["mqtt_env"]["tls"] is True
+
+
+def test_post_config_valid_when_mqtt_provided_by_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """POST /api/config succeeds when mqtt fields are absent but supplied by env vars.
+
+    When running as a HA add-on the user's YAML typically has no mqtt: section;
+    the broker settings come from env. Pydantic validation should pass because
+    the server merges env into the validation copy.
+    """
+    monkeypatch.setenv("MQTT_HOST", "core-mosquitto")
+    monkeypatch.setenv("MQTT_PORT", "1883")
+    server = _make_server(tmp_path)
+    # Config with no mqtt section — valid only because env supplies host.
+    config_no_mqtt = {
+        "mqtt": {"client_id": "mimir"},  # client_id is not env-supplied; user must set it
+        "grid": {"import_limit_kw": 25.0, "export_limit_kw": 25.0},
+    }
+    status, headers, body = _dispatch_post(server, "/api/config", config_no_mqtt)
+    data = json.loads(body)
+    assert status == 200, f"Expected 200 but got {status}: {data}"
+    assert data["ok"] is True
+    # The written YAML must not contain mqtt.host (env-supplied, not saved).
+    yaml_path = tmp_path / "mimirheim.yaml"
+    loaded = yaml.safe_load(yaml_path.read_text())
+    assert loaded.get("mqtt", {}).get("host") is None
+
+
+def test_post_config_env_does_not_override_explicit_mqtt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When both env and submitted config contain mqtt.host, the submitted value is saved."""
+    monkeypatch.setenv("MQTT_HOST", "env-broker")
+    server = _make_server(tmp_path)
+    config_with_mqtt = {
+        "mqtt": {"host": "my-broker", "client_id": "mimir"},
+        "grid": {"import_limit_kw": 25.0, "export_limit_kw": 25.0},
+    }
+    status, headers, body = _dispatch_post(server, "/api/config", config_with_mqtt)
+    assert status == 200
+    loaded = yaml.safe_load((tmp_path / "mimirheim.yaml").read_text())
+    # User's explicit value must be written, not the env value.
+    assert loaded["mqtt"]["host"] == "my-broker"
+
+
+def test_post_helper_config_valid_when_mqtt_provided_by_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """POST /api/helper-config/nordpool.yaml succeeds when mqtt is absent but provided by env."""
+    monkeypatch.setenv("MQTT_HOST", "core-mosquitto")
+    monkeypatch.setenv("MQTT_PORT", "1883")
+    server = _make_server(tmp_path)
+    # Nordpool config without mqtt.host — valid only because env supplies it.
+    config_no_mqtt = {
+        "mqtt": {"client_id": "nordpool"},  # client_id is not env-supplied
+        "trigger_topic": "mimirheim/trigger",
+        "nordpool": {"area": "NL"},
+    }
+    status, headers, body = _dispatch_post(
+        server, "/api/helper-config/nordpool.yaml", {"enabled": True, "config": config_no_mqtt}
+    )
+    data = json.loads(body)
+    assert status == 200, f"Expected 200 but got {status}: {data}"
+    assert data["ok"] is True
+    loaded = yaml.safe_load((tmp_path / "nordpool.yaml").read_text())
+    assert loaded.get("mqtt", {}).get("host") is None

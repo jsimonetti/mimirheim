@@ -173,7 +173,7 @@ def _apply_mqtt_env_overrides(raw: dict) -> None:
     if password := os.environ.get("MQTT_PASSWORD"):
         overrides["password"] = password
     if ssl_str := os.environ.get("MQTT_SSL"):
-        overrides["tls_allow_insecure"] = ssl_str.lower() != "true"
+        overrides["tls"] = ssl_str.lower() == "true"
     if overrides:
         raw.setdefault("mqtt", {})
         raw["mqtt"].update(overrides)
@@ -262,10 +262,14 @@ def main() -> None:
         paho.CallbackAPIVersion.VERSION2,
         client_id=config.mqtt.client_id,
     )
-    if config.mqtt.tls_allow_insecure:
+    if config.mqtt.tls:
         import ssl
-        paho_client.tls_set(cert_reqs=ssl.CERT_NONE)
-        paho_client.tls_insecure_set(True)
+        cert_reqs = ssl.CERT_NONE if config.mqtt.tls_allow_insecure else ssl.CERT_REQUIRED
+        paho_client.tls_set(cert_reqs=cert_reqs)
+        if config.mqtt.tls_allow_insecure:
+            paho_client.tls_set(cert_reqs=cert_reqs)
+        if config.mqtt.tls_allow_insecure:
+            paho_client.tls_insecure_set(True)
     if config.mqtt.username is not None:
         paho_client.username_pw_set(config.mqtt.username, config.mqtt.password)
     publisher = MqttPublisher(client=paho_client, config=config)

@@ -31,6 +31,9 @@ let gSchema = null;
 /** @type {Object} Current config dict (last loaded from /api/config) */
 let gConfig = {};
 
+/** @type {Object} MQTT fields set by the HA Supervisor via env vars. Empty when running plain Docker. */
+let gMqttEnv = {};
+
 /** @type {Array<{label: string, render: function}>} Registered tabs */
 const gTabs = [];
 
@@ -42,6 +45,40 @@ function resolveRef(ref) {
   if (!ref || !ref.startsWith("#/$defs/")) return null;
   const name = ref.slice("#/$defs/".length);
   return (gSchema.$defs || {})[name] || null;
+}
+
+/**
+ * Return a copy of a helper or main config with env-supplied mqtt fields
+ * merged in as defaults. File-config values take precedence over env values
+ * so that explicit user overrides are preserved for display.
+ *
+ * @param {Object} config  Config dict (may have an mqtt sub-object or none).
+ * @returns {Object}
+ */
+function mergedWithMqttEnv(config) {
+  if (!gMqttEnv || Object.keys(gMqttEnv).length === 0) return config;
+  return { ...config, mqtt: { ...gMqttEnv, ...(config.mqtt || {}) } };
+}
+
+/**
+ * Strip env-supplied mqtt fields from a config dict in-place before saving.
+ * A field is stripped when its value in the config matches the corresponding
+ * env value, indicating the user has not overridden it. This keeps Supervisor
+ * credentials out of the YAML file.
+ *
+ * @param {Object} config  Config dict that may contain an mqtt sub-object.
+ */
+function stripMqttEnvFields(config) {
+  if (!gMqttEnv || Object.keys(gMqttEnv).length === 0) return;
+  if (!config.mqtt) return;
+  for (const [k, v] of Object.entries(gMqttEnv)) {
+    // Compare after string coercion: form inputs always produce strings,
+    // while env values may be bool (tls) or int (port).
+    if (config.mqtt[k] === v || String(config.mqtt[k]) === String(v)) {
+      delete config.mqtt[k];
+    }
+  }
+  if (Object.keys(config.mqtt).length === 0) delete config.mqtt;
 }
 
 /**
@@ -797,7 +834,24 @@ function renderGeneralTab(container) {
   const mqttH = document.createElement("h2");
   mqttH.textContent = "MQTT";
   mqttSection.appendChild(mqttH);
-  const mqttForm = buildForm("MqttConfig", gConfig.mqtt || {}, "mqtt");
+
+  // When MQTT env vars are active (HA Supervisor context), show an info
+  // notice. The form is pre-populated with the effective values (env merged
+  // with any file overrides). On save, fields whose value still matches the
+  // env value are stripped so Supervisor credentials are not baked into the
+  // YAML file.
+  if (gMqttEnv && Object.keys(gMqttEnv).length > 0) {
+    const banner = document.createElement("div");
+    banner.className = "info-banner";
+    banner.textContent = "MQTT connection settings are provided by the HA Supervisor. "
+      + "The values shown below are effective at runtime. "
+      + "To override a field, type a different value — unchanged fields will not be saved to the config file.";
+    mqttSection.appendChild(banner);
+  }
+
+  // Pre-populate form with merged values: env as base, file config overrides.
+  const mqttDisplayData = mergedWithMqttEnv(gConfig.mqtt ? { mqtt: gConfig.mqtt } : {});
+  const mqttForm = buildForm("MqttConfig", mqttDisplayData.mqtt || {}, "mqtt");
   mqttSection.appendChild(mqttForm);
   // Wire changes.
   mqttForm.addEventListener("change", () => {
@@ -1031,8 +1085,7 @@ function renderHelperTab(container, filename) {
       formArea.innerHTML = "<p>Schema not available for this helper.</p>";
       return;
     }
-    const defName = schema.title || filename;
-    const formEl = buildHelperForm(schema, state.config || {}, filename);
+    const formEl = buildHelperForm(schema, mergedWithMqttEnv(state.config || {}), filename);
     formArea.appendChild(formEl);
   }
 
@@ -1048,6 +1101,7 @@ function renderHelperTab(container, filename) {
     } else {
       const formEl = formArea.querySelector("form, div.helper-form");
       const cfg = formEl ? collectHelperFormData(formEl, schema) : {};
+      stripMqttEnvFields(cfg);
       body = { enabled: true, config: cfg };
     }
     try {
@@ -1139,7 +1193,7 @@ function renderBaseloadTab(container) {
     const schema = gHelperSchemas[selectedFile];
     const existingConfig = gHelperConfigs[selectedFile]?.config || {};
     if (schema) {
-      formArea.appendChild(buildHelperForm(schema, existingConfig, selectedFile));
+      formArea.appendChild(buildHelperForm(schema, mergedWithMqttEnv(existingConfig), selectedFile));
     }
   }
 
@@ -1170,6 +1224,7 @@ function renderBaseloadTab(container) {
     }
     const formEl = formArea.querySelector("div.helper-form");
     const cfg = formEl ? collectHelperFormData(formEl, gHelperSchemas[selectedFile]) : {};
+    stripMqttEnvFields(cfg);
     body = { enabled: true, config: cfg };
     try {
       const resp = await fetch(`api/helper-config/${selectedFile}`, {
@@ -1278,10 +1333,14 @@ async function saveConfig() {
   status.textContent = "Saving…";
 
   try {
+    // Build the payload, stripping any mqtt fields that are identical to
+    // env-supplied values so Supervisor credentials are not saved to the YAML.
+    const payload = JSON.parse(JSON.stringify(gConfig));
+    if (payload.mqtt) stripMqttEnvFields(payload);
     const resp = await fetch("api/config", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(gConfig),
+      body: JSON.stringify(payload),
     });
     const data = await resp.json();
     if (data.ok) {
@@ -1328,6 +1387,7 @@ async function init() {
   gSchema = await schemaResp.json();
   const configData = await configResp.json();
   gConfig = configData.config || {};
+  gMqttEnv = configData.mqtt_env || {};
   gHelperConfigs = await helperConfigsResp.json();
   gHelperSchemas = await helperSchemasResp.json();
 

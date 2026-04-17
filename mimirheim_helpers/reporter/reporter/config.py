@@ -153,6 +153,13 @@ class ReporterConfig(BaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def _set_client_id_default(self) -> "ReporterConfig":
+        """Set the default MQTT client identifier when not explicitly configured."""
+        if not self.mqtt.client_id:
+            self.mqtt.client_id = "mimir-reporter"
+        return self
+
 
 def load_config(path: str) -> ReporterConfig:
     """Load and validate the YAML configuration file.

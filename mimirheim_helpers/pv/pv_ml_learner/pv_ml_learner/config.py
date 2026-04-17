@@ -334,6 +334,13 @@ class PvLearnerConfig(BaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def _set_client_id_default(self) -> "PvLearnerConfig":
+        """Set the default MQTT client identifier when not explicitly configured."""
+        if not self.mqtt.client_id:
+            self.mqtt.client_id = "mimir-pv-forecast"
+        return self
+
 
 def load_config(path: str) -> PvLearnerConfig:
     """Load and validate the YAML configuration file.

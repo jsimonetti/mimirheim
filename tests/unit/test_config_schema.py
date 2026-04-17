@@ -2307,3 +2307,59 @@ def test_custom_prefix_propagates_to_all_device_topics() -> None:
     assert config.batteries["bat1"].inputs.soc.topic == "home/v2/input/battery/bat1/soc"
     assert config.batteries["bat1"].outputs.exchange_mode == "home/v2/output/battery/bat1/exchange_mode"
     assert config.static_loads["bl"].topic_forecast == "home/v2/input/baseload/bl/forecast"
+
+
+# ---------------------------------------------------------------------------
+# MqttConfig TLS fields
+# ---------------------------------------------------------------------------
+
+def test_mqtt_tls_defaults_to_false() -> None:
+    """tls and tls_allow_insecure both default to False."""
+    from mimirheim.config.schema import MqttConfig
+
+    cfg = MqttConfig.model_validate({"host": "localhost", "client_id": "mimirheim"})
+    assert cfg.tls is False
+    assert cfg.tls_allow_insecure is False
+
+
+def test_mqtt_tls_true_accepted() -> None:
+    """tls: true enables TLS independently of tls_allow_insecure."""
+    from mimirheim.config.schema import MqttConfig
+
+    cfg = MqttConfig.model_validate({"host": "localhost", "client_id": "mimirheim", "tls": True})
+    assert cfg.tls is True
+    assert cfg.tls_allow_insecure is False
+
+
+def test_mqtt_tls_allow_insecure_without_tls_accepted() -> None:
+    """tls_allow_insecure can be set even when tls is False (harmless, no effect at runtime)."""
+    from mimirheim.config.schema import MqttConfig
+
+    cfg = MqttConfig.model_validate(
+        {"host": "localhost", "client_id": "mimirheim", "tls": False, "tls_allow_insecure": True}
+    )
+    assert cfg.tls is False
+    assert cfg.tls_allow_insecure is True
+
+
+def test_mqtt_tls_and_insecure_together_accepted() -> None:
+    """tls: true with tls_allow_insecure: true is the self-signed-cert configuration."""
+    from mimirheim.config.schema import MqttConfig
+
+    cfg = MqttConfig.model_validate(
+        {"host": "localhost", "client_id": "mimirheim", "tls": True, "tls_allow_insecure": True}
+    )
+    assert cfg.tls is True
+    assert cfg.tls_allow_insecure is True
+
+
+def test_mqtt_unknown_field_rejected() -> None:
+    """extra='forbid' rejects unknown fields on MqttConfig."""
+    import pytest
+    from pydantic import ValidationError
+    from mimirheim.config.schema import MqttConfig
+
+    with pytest.raises(ValidationError):
+        MqttConfig.model_validate(
+            {"host": "localhost", "client_id": "mimirheim", "enable_ssl": True}
+        )

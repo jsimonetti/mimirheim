@@ -1335,7 +1335,7 @@
     },
     "MqttConfig": {
       "additionalProperties": false,
-      "description": "MQTT broker connection parameters.\n\nAttributes:\n    host: Broker hostname or IP address.\n    port: Broker port. Default is 1883 (unencrypted); use 8883 with TLS.\n    client_id: MQTT client identifier. Must be unique on the broker.\n    topic_prefix: Prefix applied to all mimirheim topics. Default is 'mimir'.\n    username: Optional broker username. Omit for anonymous access.\n    password: Optional broker password. Only meaningful when username is set.\n    tls_allow_insecure: When True, enable TLS without verifying the broker\n        certificate. Useful for self-signed certificates on private networks.\n        Do not use against a broker reachable from an untrusted network.",
+      "description": "MQTT broker connection parameters.\n\nAttributes:\n    host: Broker hostname or IP address.\n    port: Broker port. Default is 1883 (unencrypted); use 8883 with TLS.\n    client_id: MQTT client identifier. Must be unique on the broker.\n    topic_prefix: Prefix applied to all mimirheim topics. Default is 'mimir'.\n    username: Optional broker username. Omit for anonymous access.\n    password: Optional broker password. Only meaningful when username is set.\n    tls: Enable TLS for the broker connection. Set to True when the broker\n        listens on an encrypted port (typically 8883). When False, a\n        plaintext connection is made regardless of the port number.\n    tls_allow_insecure: When True and tls is also True, skip broker\n        certificate verification. Useful for self-signed certificates on\n        private networks. Has no effect when tls is False. Do not use\n        against a broker reachable from an untrusted network.",
       "properties": {
         "host": {
           "description": "MQTT broker hostname or IP address.",
@@ -1353,9 +1353,17 @@
           "ui_label": "Broker port"
         },
         "client_id": {
-          "description": "MQTT client identifier.",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "MQTT client identifier. Defaults to 'mimir' when not set.",
           "title": "Client Id",
-          "type": "string",
           "ui_group": "basic",
           "ui_label": "Client ID"
         },
@@ -1397,9 +1405,17 @@
           "ui_group": "advanced",
           "ui_label": "Password"
         },
+        "tls": {
+          "default": false,
+          "description": "Enable TLS for the broker connection. Set to true when the broker listens on an encrypted port (typically 8883).",
+          "title": "Tls",
+          "type": "boolean",
+          "ui_group": "advanced",
+          "ui_label": "Enable TLS"
+        },
         "tls_allow_insecure": {
           "default": false,
-          "description": "Enable TLS without verifying the broker certificate.",
+          "description": "Skip broker certificate verification when TLS is enabled. Useful for self-signed certificates on private networks. Has no effect when tls is false.",
           "title": "Tls Allow Insecure",
           "type": "boolean",
           "ui_group": "advanced",
@@ -1407,8 +1423,7 @@
         }
       },
       "required": [
-        "host",
-        "client_id"
+        "host"
       ],
       "title": "MqttConfig",
       "type": "object"

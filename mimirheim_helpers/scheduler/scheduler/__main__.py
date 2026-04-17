@@ -48,9 +48,11 @@ def _make_paho_client(config: SchedulerConfig) -> paho.Client:
         client_id=config.mqtt.client_id,
     )
 
-    if config.mqtt.tls_allow_insecure:
-        client.tls_set(cert_reqs=ssl.CERT_NONE)
-        client.tls_insecure_set(True)
+    if config.mqtt.tls:
+        cert_reqs = ssl.CERT_NONE if config.mqtt.tls_allow_insecure else ssl.CERT_REQUIRED
+        client.tls_set(cert_reqs=cert_reqs)
+        if config.mqtt.tls_allow_insecure:
+            client.tls_insecure_set(True)
 
     if config.mqtt.username is not None:
         client.username_pw_set(config.mqtt.username, config.mqtt.password)

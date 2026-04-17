@@ -316,21 +316,30 @@ class ConfigEditorServer:
         Does not validate via Pydantic so that partially-complete configs
         written by the user are returned as-is for display in the frontend.
 
+        The ``mqtt_env`` key in the response contains MQTT broker settings
+        currently set via environment variables (injected by the HA Supervisor).
+        The frontend uses these to show which fields are Supervisor-controlled
+        and to strip them from the saved YAML when the user has not overridden
+        them.
+
         Returns:
-            {"exists": false, "config": {}} when the file is absent.
-            {"exists": true, "config": <dict>} when the file is present.
+            ``{"exists": false, "config": {}, "mqtt_env": {...}}`` when the
+            file is absent.
+            ``{"exists": true, "config": <dict>, "mqtt_env": {...}}`` when the
+            file is present.
         """
+        mqtt_env = self._mqtt_env()
         yaml_path = self._config_dir / "mimirheim.yaml"
         if not yaml_path.exists():
-            return self._json_response(200, {"exists": False, "config": {}})
+            return self._json_response(200, {"exists": False, "config": {}, "mqtt_env": mqtt_env})
 
         try:
             raw = yaml.safe_load(yaml_path.read_text()) or {}
         except yaml.YAMLError as exc:
             logger.warning("Failed to parse mimirheim.yaml: %s", exc)
-            return self._json_response(200, {"exists": True, "config": {}})
+            return self._json_response(200, {"exists": True, "config": {}, "mqtt_env": mqtt_env})
 
-        return self._json_response(200, {"exists": True, "config": raw})
+        return self._json_response(200, {"exists": True, "config": raw, "mqtt_env": mqtt_env})
 
     def _api_post_config(self, body: bytes) -> tuple[int, dict[str, str], bytes]:
         """Validate a JSON config body and write it to mimirheim.yaml.
@@ -338,6 +347,12 @@ class ConfigEditorServer:
         Validation is performed via MimirheimConfig.model_validate. If
         validation fails, HTTP 422 is returned with a list of Pydantic error
         dicts; the file is not written.
+
+        When MQTT env vars are set (HA Supervisor context), the submitted config
+        may omit mqtt fields that are provided by the Supervisor at runtime.
+        The server merges env-supplied mqtt fields into a validation-only copy
+        before calling Pydantic; only the original submitted data is written to
+        disk, keeping Supervisor credentials out of the YAML file.
 
         On success, the config is serialised to YAML and written atomically:
         a temp file is written in the same directory, then os.replace() moves
@@ -357,8 +372,18 @@ class ConfigEditorServer:
         except (json.JSONDecodeError, ValueError) as exc:
             return self._json_response(400, {"ok": False, "errors": str(exc)})
 
+        # Merge env-supplied MQTT fields into a validation-only copy. The user
+        # may have excluded mqtt fields that the Supervisor provides at runtime;
+        # without the merge, Pydantic would reject the config as incomplete.
+        mqtt_env = self._mqtt_env()
+        if mqtt_env:
+            validate_data: dict = dict(data)
+            validate_data["mqtt"] = {**mqtt_env, **dict(data.get("mqtt") or {})}
+        else:
+            validate_data = data
+
         try:
-            MimirheimConfig.model_validate(data)
+            MimirheimConfig.model_validate(validate_data)
         except PydanticValidationError as exc:
             return self._json_response(422, {"ok": False, "errors": exc.errors()})
 
@@ -460,8 +485,17 @@ class ConfigEditorServer:
         config_dict = data.get("config", {})
         model_cls, competitors = self._helper_models[filename]
 
+        # Merge env-supplied MQTT fields for validation only. Helper configs may
+        # omit mqtt fields that the Supervisor provides at runtime.
+        mqtt_env = self._mqtt_env()
+        if mqtt_env:
+            validate_dict: dict = dict(config_dict)
+            validate_dict["mqtt"] = {**mqtt_env, **dict(config_dict.get("mqtt") or {})}
+        else:
+            validate_dict = config_dict
+
         try:
-            model_cls.model_validate(config_dict)
+            model_cls.model_validate(validate_dict)
         except PydanticValidationError as exc:
             return self._json_response(422, {"ok": False, "errors": exc.errors()})
 
@@ -501,3 +535,43 @@ class ConfigEditorServer:
     ) -> tuple[int, dict[str, str], bytes]:
         body = json.dumps(data).encode()
         return status, {"Content-Type": "application/json"}, body
+
+    @staticmethod
+    def _mqtt_env() -> dict[str, Any]:
+        """Read MQTT broker settings from environment variables set by the HA Supervisor.
+
+        Returns only keys that are actually present in the environment. The
+        returned dict can be merged into an ``mqtt:`` section to fill in fields
+        that the user has not explicitly set in their YAML config.
+
+        The mapping is:
+
+        =============== ========================
+        Env var         mqtt field
+        =============== ========================
+        MQTT_HOST       host
+        MQTT_PORT       port
+        MQTT_USERNAME   username
+        MQTT_PASSWORD   password
+        MQTT_SSL        tls (true/false string)
+        =============== ========================
+
+        Returns:
+            Dict mapping mqtt field names to their env-supplied values. Empty
+            when no MQTT env vars are set (plain Docker, no Supervisor).
+        """
+        env: dict[str, Any] = {}
+        if host := os.environ.get("MQTT_HOST"):
+            env["host"] = host
+        if port_str := os.environ.get("MQTT_PORT"):
+            try:
+                env["port"] = int(port_str)
+            except ValueError:
+                pass
+        if username := os.environ.get("MQTT_USERNAME"):
+            env["username"] = username
+        if password := os.environ.get("MQTT_PASSWORD"):
+            env["password"] = password
+        if ssl_str := os.environ.get("MQTT_SSL"):
+            env["tls"] = ssl_str.lower() == "true"
+        return env

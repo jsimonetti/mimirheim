@@ -127,3 +127,10 @@ class BaseloadConfig(BaseModel):
         if self.mimir_trigger_topic is None:
             self.mimir_trigger_topic = _topics.trigger_topic(p)
         return self
+
+    @model_validator(mode="after")
+    def _set_client_id_default(self) -> "BaseloadConfig":
+        """Set the default MQTT client identifier when not explicitly configured."""
+        if not self.mqtt.client_id:
+            self.mqtt.client_id = "mimir-baseload"
+        return self

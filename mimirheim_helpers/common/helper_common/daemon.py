@@ -134,9 +134,11 @@ class MqttDaemon(abc.ABC):
             mqtt.CallbackAPIVersion.VERSION2,
             client_id=cfg.client_id,
         )
-        if cfg.tls_allow_insecure:
-            client.tls_set(cert_reqs=ssl.CERT_NONE)
-            client.tls_insecure_set(True)
+        if cfg.tls:
+            cert_reqs = ssl.CERT_NONE if cfg.tls_allow_insecure else ssl.CERT_REQUIRED
+            client.tls_set(cert_reqs=cert_reqs)
+            if cfg.tls_allow_insecure:
+                client.tls_insecure_set(True)
         if cfg.username is not None:
             client.username_pw_set(cfg.username, cfg.password)
         client.on_connect = self._on_connect
