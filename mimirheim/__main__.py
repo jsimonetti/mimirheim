@@ -267,8 +267,6 @@ def main() -> None:
         cert_reqs = ssl.CERT_NONE if config.mqtt.tls_allow_insecure else ssl.CERT_REQUIRED
         paho_client.tls_set(cert_reqs=cert_reqs)
         if config.mqtt.tls_allow_insecure:
-            paho_client.tls_set(cert_reqs=cert_reqs)
-        if config.mqtt.tls_allow_insecure:
             paho_client.tls_insecure_set(True)
     if config.mqtt.username is not None:
         paho_client.username_pw_set(config.mqtt.username, config.mqtt.password)
