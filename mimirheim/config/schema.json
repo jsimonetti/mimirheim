@@ -149,11 +149,11 @@
         },
         "wear_cost_eur_per_kwh": {
           "default": 0.0,
-          "description": "Degradation cost per kWh throughput in EUR.",
+          "description": "Battery degradation cost per kWh of energy throughput (charge + discharge), in EUR. The solver subtracts this cost from every kWh cycled, so it will not dispatch the battery for a price spread smaller than this value. Set to 0.0 (default) to optimise purely on energy prices without modelling wear. To estimate a representative value: divide the battery replacement cost by the expected lifetime throughput. Example: a 10 kWh battery costing \u20ac3,000 with 3,000 expected full cycles has \u20ac3,000 / (3,000 \u00d7 10 kWh) = \u20ac0.10/kWh of throughput. Typical residential LFP values fall in the \u20ac0.03\u2013\u20ac0.12/kWh range.",
           "minimum": 0,
           "title": "Wear Cost Eur Per Kwh",
           "type": "number",
-          "ui_group": "advanced",
+          "ui_group": "basic",
           "ui_label": "Wear cost (\u20ac/kWh)"
         },
         "optimal_lower_soc_kwh": {
@@ -504,11 +504,11 @@
         },
         "wear_cost_eur_per_kwh": {
           "default": 0.0,
-          "description": "Wear cost per kWh.",
+          "description": "Cycling cost per kWh of electrical consumption, in EUR. Adds a small penalty to each kWh consumed, discouraging unnecessary cycling beyond what the minimum run constraint already enforces. Set to 0.0 (default) for minimal cycling cost modelling.",
           "minimum": 0,
           "title": "Wear Cost Eur Per Kwh",
           "type": "number",
-          "ui_group": "advanced",
+          "ui_group": "basic",
           "ui_label": "Wear cost (\u20ac/kWh)"
         },
         "inputs": {
@@ -939,11 +939,11 @@
         },
         "wear_cost_eur_per_kwh": {
           "default": 0.0,
-          "description": "Degradation cost per kWh throughput in EUR.",
+          "description": "Vehicle battery degradation cost per kWh of energy throughput, in EUR. The solver subtracts this cost from every kWh charged or discharged (V2H), so it will not cycle the vehicle battery for a price spread smaller than this value. Set to 0.0 (default) to optimise purely on energy prices. To estimate: divide the expected battery replacement cost by the expected lifetime throughput. Example: a 60 kWh vehicle battery with a \u20ac8,000 pack and 1,500 full cycles gives \u20ac8,000 / (1,500 \u00d7 60 kWh) = \u20ac0.089/kWh.",
           "minimum": 0,
           "title": "Wear Cost Eur Per Kwh",
           "type": "number",
-          "ui_group": "advanced",
+          "ui_group": "basic",
           "ui_label": "Wear cost (\u20ac/kWh)"
         },
         "capabilities": {
@@ -1262,11 +1262,11 @@
         },
         "wear_cost_eur_per_kwh": {
           "default": 0.0,
-          "description": "Battery degradation cost per kWh DC throughput in EUR.",
+          "description": "Battery degradation cost per kWh of DC throughput (charge + discharge), in EUR. Applied to the DC-side energy flow, before inverter conversion losses. Set to 0.0 (default) to optimise purely on energy prices. To estimate: divide the battery replacement cost by the expected lifetime DC throughput. Example: a 10 kWh battery costing \u20ac3,000 with 3,000 full cycles gives \u20ac3,000 / (3,000 \u00d7 10 kWh) = \u20ac0.10/kWh.",
           "minimum": 0,
           "title": "Wear Cost Eur Per Kwh",
           "type": "number",
-          "ui_group": "advanced",
+          "ui_group": "basic",
           "ui_label": "Wear cost (\u20ac/kWh)"
         },
         "topic_pv_forecast": {
@@ -1913,11 +1913,11 @@
         },
         "wear_cost_eur_per_kwh": {
           "default": 0.0,
-          "description": "Cycling cost per kWh electrical in EUR.",
+          "description": "Cycling cost per kWh of electrical consumption, in EUR. Adds a small penalty to each kWh consumed, discouraging unnecessary cycling beyond what the minimum run constraint already enforces. Set to 0.0 (default) for minimal cycling cost modelling.",
           "minimum": 0,
           "title": "Wear Cost Eur Per Kwh",
           "type": "number",
-          "ui_group": "advanced",
+          "ui_group": "basic",
           "ui_label": "Wear cost (\u20ac/kWh)"
         },
         "inputs": {
@@ -2078,11 +2078,11 @@
         },
         "wear_cost_eur_per_kwh": {
           "default": 0.0,
-          "description": "Cycling cost per kWh of electrical consumption in EUR.",
+          "description": "Cycling cost per kWh of electrical consumption, in EUR. Adds a small penalty to each kWh consumed, discouraging unnecessary cycling beyond what the minimum run constraint already enforces. Meaningful only for heat pump compressors where short-cycling causes wear; set to 0.0 (default) for resistive immersion elements.",
           "minimum": 0,
           "title": "Wear Cost Eur Per Kwh",
           "type": "number",
-          "ui_group": "advanced",
+          "ui_group": "basic",
           "ui_label": "Wear cost (\u20ac/kWh)"
         },
         "inputs": {

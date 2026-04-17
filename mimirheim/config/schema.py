@@ -797,8 +797,20 @@ class BatteryConfig(BaseModel):
         json_schema_extra={"ui_label": "Discharge efficiency curve", "ui_group": "advanced"},
     )
     wear_cost_eur_per_kwh: float = Field(
-        ge=0, default=0.0, description="Degradation cost per kWh throughput in EUR.",
-        json_schema_extra={"ui_label": "Wear cost (\u20ac/kWh)", "ui_group": "advanced"},
+        ge=0,
+        default=0.0,
+        description=(
+            "Battery degradation cost per kWh of energy throughput (charge + discharge), "
+            "in EUR. The solver subtracts this cost from every kWh cycled, so it will not "
+            "dispatch the battery for a price spread smaller than this value. "
+            "Set to 0.0 (default) to optimise purely on energy prices without modelling "
+            "wear. To estimate a representative value: divide the battery replacement cost "
+            "by the expected lifetime throughput. "
+            "Example: a 10 kWh battery costing \u20ac3,000 with 3,000 expected full cycles "
+            "has \u20ac3,000 / (3,000 \u00d7 10 kWh) = \u20ac0.10/kWh of throughput. "
+            "Typical residential LFP values fall in the \u20ac0.03\u2013\u20ac0.12/kWh range."
+        ),
+        json_schema_extra={"ui_label": "Wear cost (\u20ac/kWh)", "ui_group": "basic"},
     )
     optimal_lower_soc_kwh: float = Field(
         default=0.0,
@@ -1205,8 +1217,19 @@ class EvConfig(BaseModel):
         json_schema_extra={"ui_label": "Discharge segments (V2H)", "ui_group": "basic"},
     )
     wear_cost_eur_per_kwh: float = Field(
-        ge=0, default=0.0, description="Degradation cost per kWh throughput in EUR.",
-        json_schema_extra={"ui_label": "Wear cost (\u20ac/kWh)", "ui_group": "advanced"},
+        ge=0,
+        default=0.0,
+        description=(
+            "Vehicle battery degradation cost per kWh of energy throughput, in EUR. "
+            "The solver subtracts this cost from every kWh charged or discharged (V2H), "
+            "so it will not cycle the vehicle battery for a price spread smaller than "
+            "this value. Set to 0.0 (default) to optimise purely on energy prices. "
+            "To estimate: divide the expected battery replacement cost by the expected "
+            "lifetime throughput. "
+            "Example: a 60 kWh vehicle battery with a \u20ac8,000 pack and 1,500 full "
+            "cycles gives \u20ac8,000 / (1,500 \u00d7 60 kWh) = \u20ac0.089/kWh."
+        ),
+        json_schema_extra={"ui_label": "Wear cost (\u20ac/kWh)", "ui_group": "basic"},
     )
     capabilities: EvCapabilitiesConfig = Field(
         default_factory=EvCapabilitiesConfig,
@@ -1612,8 +1635,18 @@ class HybridInverterConfig(BaseModel):
         json_schema_extra={"ui_label": "PV peak power (kW)", "ui_group": "basic"},
     )
     wear_cost_eur_per_kwh: float = Field(
-        ge=0, default=0.0, description="Battery degradation cost per kWh DC throughput in EUR.",
-        json_schema_extra={"ui_label": "Wear cost (\u20ac/kWh)", "ui_group": "advanced"},
+        ge=0,
+        default=0.0,
+        description=(
+            "Battery degradation cost per kWh of DC throughput (charge + discharge), "
+            "in EUR. Applied to the DC-side energy flow, before inverter conversion losses. "
+            "Set to 0.0 (default) to optimise purely on energy prices. "
+            "To estimate: divide the battery replacement cost by the expected lifetime "
+            "DC throughput. "
+            "Example: a 10 kWh battery costing \u20ac3,000 with 3,000 full cycles "
+            "gives \u20ac3,000 / (3,000 \u00d7 10 kWh) = \u20ac0.10/kWh."
+        ),
+        json_schema_extra={"ui_label": "Wear cost (\u20ac/kWh)", "ui_group": "basic"},
     )
     topic_pv_forecast: str | None = Field(
         default=None,
@@ -1976,8 +2009,16 @@ class ThermalBoilerConfig(BaseModel):
         json_schema_extra={"ui_label": "Minimum run steps", "ui_group": "advanced"},
     )
     wear_cost_eur_per_kwh: float = Field(
-        ge=0, default=0.0, description="Cycling cost per kWh of electrical consumption in EUR.",
-        json_schema_extra={"ui_label": "Wear cost (\u20ac/kWh)", "ui_group": "advanced"},
+        ge=0,
+        default=0.0,
+        description=(
+            "Cycling cost per kWh of electrical consumption, in EUR. "
+            "Adds a small penalty to each kWh consumed, discouraging unnecessary "
+            "cycling beyond what the minimum run constraint already enforces. "
+            "Meaningful only for heat pump compressors where short-cycling causes "
+            "wear; set to 0.0 (default) for resistive immersion elements."
+        ),
+        json_schema_extra={"ui_label": "Wear cost (\u20ac/kWh)", "ui_group": "basic"},
     )
     inputs: ThermalBoilerInputsConfig | None = Field(
         default_factory=ThermalBoilerInputsConfig,
@@ -2108,8 +2149,15 @@ class SpaceHeatingConfig(BaseModel):
         json_schema_extra={"ui_label": "Minimum run steps", "ui_group": "advanced"},
     )
     wear_cost_eur_per_kwh: float = Field(
-        ge=0, default=0.0, description="Cycling cost per kWh electrical in EUR.",
-        json_schema_extra={"ui_label": "Wear cost (\u20ac/kWh)", "ui_group": "advanced"},
+        ge=0,
+        default=0.0,
+        description=(
+            "Cycling cost per kWh of electrical consumption, in EUR. "
+            "Adds a small penalty to each kWh consumed, discouraging unnecessary "
+            "cycling beyond what the minimum run constraint already enforces. "
+            "Set to 0.0 (default) for minimal cycling cost modelling."
+        ),
+        json_schema_extra={"ui_label": "Wear cost (\u20ac/kWh)", "ui_group": "basic"},
     )
     inputs: SpaceHeatingInputsConfig | None = Field(
         default_factory=SpaceHeatingInputsConfig,
@@ -2235,7 +2283,17 @@ class CombiHeatPumpConfig(BaseModel):
     min_temp_c: float = Field(default=40.0, description="DHW minimum temperature in °C.", json_schema_extra={"ui_label": "DHW minimum temperature (°C)", "ui_group": "advanced"})
     cooling_rate_k_per_hour: float = Field(ge=0, description="Tank cooling rate in K/h.", json_schema_extra={"ui_label": "Cooling rate (K/h)", "ui_group": "basic"})
     min_run_steps: int = Field(ge=0, default=4, description="Minimum consecutive active steps.", json_schema_extra={"ui_label": "Minimum run steps", "ui_group": "advanced"})
-    wear_cost_eur_per_kwh: float = Field(ge=0, default=0.0, description="Wear cost per kWh.", json_schema_extra={"ui_label": "Wear cost (€/kWh)", "ui_group": "advanced"})
+    wear_cost_eur_per_kwh: float = Field(
+        ge=0,
+        default=0.0,
+        description=(
+            "Cycling cost per kWh of electrical consumption, in EUR. "
+            "Adds a small penalty to each kWh consumed, discouraging unnecessary "
+            "cycling beyond what the minimum run constraint already enforces. "
+            "Set to 0.0 (default) for minimal cycling cost modelling."
+        ),
+        json_schema_extra={"ui_label": "Wear cost (\u20ac/kWh)", "ui_group": "basic"},
+    )
     inputs: CombiHeatPumpInputsConfig | None = Field(
         default_factory=CombiHeatPumpInputsConfig,
         description="MQTT input topic configuration. Defaults to an empty model so topics are derived. Set to null to opt out of MQTT inputs entirely.",
