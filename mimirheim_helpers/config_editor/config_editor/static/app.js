@@ -940,6 +940,33 @@ function renderGeneralTab(container) {
     gConfig.grid = collectFormData(gridForm).grid;
   });
   container.appendChild(gridSection);
+
+  // All remaining scalar config sections, rendered with the same pattern.
+  const scalarSections = [
+    { key: "homeassistant", schemaRef: "HomeAssistantConfig", label: "Home Assistant discovery" },
+    { key: "outputs",       schemaRef: "OutputsConfig",       label: "Output topics" },
+    { key: "inputs",        schemaRef: "InputsConfig",        label: "Input topics" },
+    { key: "reporting",     schemaRef: "ReportingConfig",     label: "Reporting" },
+    { key: "debug",         schemaRef: "DebugConfig",         label: "Debug" },
+    { key: "objectives",    schemaRef: "ObjectivesConfig",    label: "Objectives" },
+    { key: "constraints",   schemaRef: "ConstraintsConfig",   label: "Constraints" },
+    { key: "solver",        schemaRef: "SolverConfig",        label: "Solver" },
+    { key: "readiness",     schemaRef: "ReadinessConfig",     label: "Readiness" },
+    { key: "control",       schemaRef: "ControlConfig",       label: "Control" },
+  ];
+  for (const { key, schemaRef, label } of scalarSections) {
+    const sec = document.createElement("div");
+    sec.className = "form-section";
+    const h = document.createElement("h2");
+    h.textContent = label;
+    sec.appendChild(h);
+    const form = buildForm(schemaRef, gConfig[key] || {}, key);
+    sec.appendChild(form);
+    form.addEventListener("change", () => {
+      gConfig[key] = collectFormData(form)[key];
+    });
+    container.appendChild(sec);
+  }
 }
 
 // ---------------------------------------------------------------------------
