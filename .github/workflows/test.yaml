@@ -6,7 +6,9 @@ on:
       - main
     paths-ignore:
       - "hassio-repository/**"
+      - .github
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: test-${{ github.ref }}
