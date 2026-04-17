@@ -126,7 +126,7 @@ RUN chmod +x \
     /etc/s6-overlay/s6-rc.d/scheduler/run \
     /etc/s6-overlay/s6-rc.d/reporter/run \
     /etc/s6-overlay/s6-rc.d/config-editor/run \
-    /etc/s6-overlay/s6-rc.d/hassio-env/hassio-env.sh
+    /etc/s6-overlay/s6-rc.d/hassio-env/up
 
 # /config is the mount point for user-supplied YAML configuration files.
 VOLUME ["/config"]
