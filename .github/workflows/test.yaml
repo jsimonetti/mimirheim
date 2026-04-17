@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - "hassio-repository/**"
   pull_request:
 
 concurrency:

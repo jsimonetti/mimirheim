@@ -1,11 +1,12 @@
 name: Create edge image and push to GHCR
 
 on:
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - "hassio-repository/**"
+  # Runs only after the test workflow completes successfully on main.
+  # This ensures no edge image is built from a commit that fails tests.
+  workflow_run:
+    workflows: ["Run Unit and Integration Tests"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -26,6 +27,9 @@ jobs:
   build-and-push-image:
     name: Create edge image and push to GHCR
     runs-on: ubuntu-latest
+    # For workflow_run events, only proceed when the test workflow succeeded.
+    # workflow_dispatch runs unconditionally (manual override).
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     permissions:
       contents: write
       packages: write
@@ -36,6 +40,9 @@ jobs:
         with:
           fetch-depth: 1
           token: ${{ secrets.COMMIT_PAT_ACTION }}
+          # Check out the branch (not a detached SHA) so the version-bump
+          # commit and git push at the end of this job work correctly.
+          ref: ${{ github.event.workflow_run.head_branch || github.ref_name }}
 
       - name: Compute build tag
         id: tag

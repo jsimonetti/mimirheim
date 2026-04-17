@@ -22,9 +22,28 @@ env:
   BUILD_REF: ${{ github.sha }}
   
 jobs:
+  test:
+    name: Run tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run tests
+        run: uv run pytest --tb=short -q
+
   build-and-push-image:
     name: Create edge image and push to GHCR
     runs-on: ubuntu-latest
+    needs: test
     permissions:
       contents: read
       packages: write
