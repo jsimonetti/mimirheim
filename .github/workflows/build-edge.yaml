@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-    exclude:
+    paths-ignore:
       - "hassio-repository/**"
   workflow_dispatch:
 
@@ -27,7 +27,7 @@ jobs:
     name: Create edge image and push to GHCR
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
 
     steps:
@@ -35,6 +35,11 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 1
+          token: ${{ secrets.COMMIT_PAT_ACTION }}
+
+      - name: Compute build tag
+        id: tag
+        run: echo "value=$(date -u +%Y%m%d%H%M)" >> "$GITHUB_OUTPUT"
 
       - name: Setup Buildkit
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
@@ -55,6 +60,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=edge,branch=main
+            type=raw,value=edge-${{ steps.tag.outputs.value }}
           labels: |
             io.hass.name="${{ env.BUILD_NAME }}" \
             io.hass.description="${{ env.BUILD_DESCRIPTION }}" \
@@ -79,3 +85,12 @@ jobs:
           cache-to: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache,mode=max
           context: .
           file: container/Dockerfile
+
+      - name: Update edge add-on version
+        run: |
+          sed -i "s/^version:.*/version: edge-${{ steps.tag.outputs.value }}/" hassio-repository/mimirheim-edge/config.yaml
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add hassio-repository/mimirheim-edge/config.yaml
+          git diff --cached --quiet || git commit -m "chore: bump edge version to edge-${{ steps.tag.outputs.value }}"
+          git push
