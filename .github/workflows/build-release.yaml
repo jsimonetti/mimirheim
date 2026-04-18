@@ -41,7 +41,7 @@ jobs:
         run: uv run pytest --tb=short -q
 
   build-and-push-image:
-    name: Create edge image and push to GHCR
+    name: Create release image and push to GHCR
     runs-on: ubuntu-latest
     needs: test
     permissions:
