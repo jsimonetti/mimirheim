@@ -84,7 +84,7 @@ function setMode(mode) {
     if (gReportsAvailable) {
       const iframe = document.createElement('iframe');
       iframe.id  = 'reports-frame';
-      iframe.src = '/reports/';
+      iframe.src = 'reports/';
       reportsPane.appendChild(iframe);
     } else {
       const msg = document.createElement('p');

@@ -295,13 +295,20 @@ class ConfigEditorServer:
         return 200, {"Content-Type": "text/html; charset=utf-8"}, index.read_bytes()
 
     def _serve_reports_index(self) -> tuple[int, dict[str, str], bytes]:
-        """Serve the reports index.html from the configured reports directory."""
+        """Serve the reports index.html from the configured reports directory.
+
+        Any ``target="_blank"`` attributes are stripped from the response so
+        that report links navigate within the iframe instead of popping out to
+        a new browser tab. This works regardless of which version of index.html
+        the reporter has written to the output directory.
+        """
         if self._reports_dir is None:
             return self._json_response(404, {"error": "reports directory not configured"})
         index = self._reports_dir / "index.html"
         if not index.exists():
             return self._json_response(404, {"error": "reports index not found"})
-        return 200, {"Content-Type": "text/html; charset=utf-8"}, index.read_bytes()
+        content = index.read_bytes().replace(b' target="_blank"', b"")
+        return 200, {"Content-Type": "text/html; charset=utf-8"}, content
 
     def _serve_report_file(self, filename: str) -> tuple[int, dict[str, str], bytes]:
         """Serve a single file from the reports directory.

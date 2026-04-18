@@ -162,7 +162,7 @@
         '<td>' + (r.total_import_kwh !== undefined ? r.total_import_kwh.toFixed(3) : '—') + '</td>' +
         '<td>' + (r.total_export_kwh !== undefined ? r.total_export_kwh.toFixed(3) : '—') + '</td>' +
         '<td>' + (r.self_sufficiency_pct !== undefined ? r.self_sufficiency_pct.toFixed(1) + '%' : '—') + '</td>' +
-        '<td><a href="' + r.file + '">open</a></td>';
+        '<td><a href="' + r.file + '" target="_blank">open</a></td>';
       tbody.appendChild(tr);
     });
   }
