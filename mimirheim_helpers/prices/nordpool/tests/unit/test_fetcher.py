@@ -32,7 +32,9 @@ def _make_day_data(entries: list) -> MagicMock:
 def _make_periods_data(days: list) -> MagicMock:
     """Build a mock DeliveryPeriodsData."""
     periods = MagicMock()
-    periods.entries = days
+    # pynordpool 0.4.0: entries is dict[date, DeliveryPeriodData], keyed by delivery date.
+    # The fetcher iterates .values(), so the keys are irrelevant for these tests.
+    periods.entries = {i: day for i, day in enumerate(days)}
     return periods
 
 
