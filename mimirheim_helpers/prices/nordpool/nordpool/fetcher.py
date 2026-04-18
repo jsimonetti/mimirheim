@@ -87,7 +87,7 @@ async def fetch_prices(
         raise FetchError(f"Nordpool API error: {exc}") from exc
 
     steps: list[dict[str, Any]] = []
-    for day_data in data.entries:
+    for day_data in data.entries.values():
         for entry in day_data.entries:
             if entry.start < now:
                 # Skip hours that have already started or passed.
@@ -162,7 +162,7 @@ async def fetch_prices(
         raise FetchError(f"Nordpool API error: {exc}") from exc
 
     steps: list[dict[str, Any]] = []
-    for day_data in data.entries:
+    for day_data in data.entries.values():
         for entry in day_data.entries:
             if entry.start < now:
                 # Skip hours that have already started or passed.
