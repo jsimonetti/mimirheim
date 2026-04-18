@@ -34,11 +34,74 @@ let gConfig = {};
 /** @type {Object} MQTT fields set by the HA Supervisor via env vars. Empty when running plain Docker. */
 let gMqttEnv = {};
 
+/** @type {boolean} Whether the reports directory is configured and has a reports index. */
+let gReportsAvailable = false;
+
+/** @type {'config'|'reports'} Current top-level display mode. */
+let gMode = 'config';
+
 /** @type {boolean} Whether the user has enabled the MQTT override in the General tab. */
 let gMqttOverride = false;
 
 /** @type {Array<{label: string, render: function}>} Registered tabs */
 const gTabs = [];
+
+// ---------------------------------------------------------------------------
+// Top-level mode switcher (Reports / Config)
+// ---------------------------------------------------------------------------
+
+/**
+ * Switch the UI between Reports mode (full-height iframe) and Config mode
+ * (tab bar + content pane + save bar).
+ *
+ * In Reports mode the save bar and config sub-tabs are hidden so the iframe
+ * can occupy the full remaining viewport height.
+ *
+ * @param {'config'|'reports'} mode
+ */
+function setMode(mode) {
+  gMode = mode;
+
+  const reportsPane  = document.getElementById('reports-pane');
+  const tabBar       = document.getElementById('tab-bar');
+  const contentPane  = document.getElementById('content-pane');
+  const saveBar      = document.getElementById('save-bar');
+
+  document.getElementById('mode-btn-reports').classList.toggle('active', mode === 'reports');
+  document.getElementById('mode-btn-config').classList.toggle('active', mode === 'config');
+
+  if (mode === 'reports') {
+    tabBar.style.display      = 'none';
+    contentPane.style.display = 'none';
+    saveBar.style.display     = 'none';
+    reportsPane.style.display = 'block';
+
+    // Size the pane to fill the remaining viewport below the header.
+    const headerH = document.querySelector('header').offsetHeight;
+    reportsPane.style.height = `calc(100vh - ${headerH}px)`;
+
+    reportsPane.innerHTML = '';
+    if (gReportsAvailable) {
+      const iframe = document.createElement('iframe');
+      iframe.id  = 'reports-frame';
+      iframe.src = '/reports/';
+      reportsPane.appendChild(iframe);
+    } else {
+      const msg = document.createElement('p');
+      msg.className   = 'reports-unavailable';
+      msg.innerHTML   = 'No reports available. '
+        + 'Set <code>reports_dir</code> in <code>config-editor.yaml</code> '
+        + 'to the reporter <code>reporting.output_dir</code> and restart the config editor.';
+      reportsPane.appendChild(msg);
+    }
+  } else {
+    reportsPane.style.display = 'none';
+    reportsPane.innerHTML     = '';
+    tabBar.style.display      = '';
+    contentPane.style.display = '';
+    saveBar.style.display     = '';
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Utility: resolve a $ref like "#/$defs/BatteryConfig" to its schema object
@@ -1491,6 +1554,7 @@ async function init() {
   const configData = await configResp.json();
   gConfig = configData.config || {};
   gMqttEnv = configData.mqtt_env || {};
+  gReportsAvailable = configData.reports_available || false;
   gHelperConfigs = await helperConfigsResp.json();
   gHelperSchemas = await helperSchemasResp.json();
 
@@ -1518,8 +1582,25 @@ async function init() {
 
   // Build tab bar and activate the hash tab (or first).
   buildTabBar();
-  const activeLabel = location.hash.slice(1) || gTabs[0]?.label;
-  activateTab(activeLabel);
+  const activeHash = location.hash.slice(1) || (gReportsAvailable ? 'reports' : gTabs[0]?.label);
+  if (activeHash === 'reports') {
+    setMode('reports');
+  } else {
+    setMode('config');
+    activateTab(activeHash || gTabs[0]?.label);
+  }
+
+  // Wire mode buttons.
+  document.getElementById('mode-btn-reports').addEventListener('click', () => {
+    location.hash = 'reports';
+    setMode('reports');
+  });
+  document.getElementById('mode-btn-config').addEventListener('click', () => {
+    const firstTab = gTabs[0]?.label || '';
+    location.hash = firstTab;
+    setMode('config');
+    activateTab(firstTab);
+  });
 
   // Wire save button.
   document.getElementById("save-btn").addEventListener("click", saveConfig);
@@ -1530,7 +1611,13 @@ async function init() {
 }
 
 window.addEventListener("hashchange", () => {
-  activateTab(location.hash.slice(1));
+  const hash = location.hash.slice(1);
+  if (hash === 'reports') {
+    setMode('reports');
+  } else {
+    if (gMode !== 'config') setMode('config');
+    activateTab(hash);
+  }
 });
 
 init().catch(err => {

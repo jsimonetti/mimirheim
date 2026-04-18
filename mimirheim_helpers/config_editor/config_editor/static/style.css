@@ -36,6 +36,12 @@ header {
   border-bottom: 1px solid var(--color-border);
 }
 
+#header-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
 header h1 {
   margin: 0;
   font-size: 1.1rem;
@@ -46,6 +52,53 @@ header h1 {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+}
+
+/* Mode switcher (Reports / Config) */
+#mode-bar {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.mode-btn {
+  padding: 0.25rem 0.75rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--color-muted);
+}
+
+.mode-btn:hover {
+  background: var(--color-bg);
+  color: #212529;
+}
+
+.mode-btn.active {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+/* Reports pane — full-height iframe container */
+#reports-pane {
+  display: none;
+  overflow: hidden;
+}
+
+#reports-pane iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+}
+
+.reports-unavailable {
+  padding: 2rem 1.5rem;
+  color: var(--color-muted);
+  font-size: 0.9rem;
 }
 
 #save-status {

@@ -41,6 +41,9 @@ logger = logging.getLogger(__name__)
 # Only these extensions are served from the static directory.
 _ALLOWED_STATIC_EXTENSIONS = {".js", ".css", ".html"}
 
+# Only these extensions are served from the reports directory.
+_ALLOWED_REPORT_EXTENSIONS = {".html", ".js"}
+
 # Path to the static files bundled with this package.
 _STATIC_DIR = Path(__file__).parent / "static"
 
@@ -143,9 +146,15 @@ class ConfigEditorServer:
             (useful in tests).
     """
 
-    def __init__(self, config_dir: Path, port: int, allowed_ip: str | None = None) -> None:
+    def __init__(
+        self,
+        config_dir: Path,
+        port: int,
+        allowed_ip: str | None = None,
+    ) -> None:
         self._config_dir = Path(config_dir)
         self._allowed_ip = allowed_ip
+        self._reports_dir: Path | None = self._detect_reports_dir()
         self._schema: dict[str, Any] = MimirheimConfig.model_json_schema()
 
         # Load helper model registry. Dict maps filename → (model_cls, competitors).
@@ -198,6 +207,25 @@ class ConfigEditorServer:
         """Return the actual TCP port the server is bound to."""
         return self._httpd.server_address[1]
 
+    def _detect_reports_dir(self) -> Path | None:
+        """Read reporter.yaml from the config directory and return reporting.output_dir.
+
+        Returns None if reporter.yaml is absent, cannot be parsed, or does not
+        contain a reporting.output_dir value. The caller uses None to mean
+        "reports tab not available".
+        """
+        reporter_yaml = self._config_dir / "reporter.yaml"
+        if not reporter_yaml.exists():
+            return None
+        try:
+            raw = yaml.safe_load(reporter_yaml.read_text()) or {}
+        except yaml.YAMLError:
+            return None
+        output_dir = (raw.get("reporting") or {}).get("output_dir")
+        if not output_dir:
+            return None
+        return Path(output_dir)
+
     def serve_forever(self) -> None:
         """Start serving requests. Blocks until shutdown() is called."""
         logger.info("Config editor listening on port %d", self.server_port)
@@ -236,6 +264,10 @@ class ConfigEditorServer:
             return self._serve_index()
         if method == "GET" and path.startswith("/static/"):
             return self._serve_static(path)
+        if method == "GET" and path in ("/reports", "/reports/"):
+            return self._serve_reports_index()
+        if method == "GET" and path.startswith("/reports/"):
+            return self._serve_report_file(path[len("/reports/"):])
         if method == "GET" and path == "/api/schema":
             return self._api_get_schema()
         if method == "GET" and path == "/api/config":
@@ -261,6 +293,47 @@ class ConfigEditorServer:
         if not index.exists():
             return self._json_response(404, {"error": "index.html not found"})
         return 200, {"Content-Type": "text/html; charset=utf-8"}, index.read_bytes()
+
+    def _serve_reports_index(self) -> tuple[int, dict[str, str], bytes]:
+        """Serve the reports index.html from the configured reports directory."""
+        if self._reports_dir is None:
+            return self._json_response(404, {"error": "reports directory not configured"})
+        index = self._reports_dir / "index.html"
+        if not index.exists():
+            return self._json_response(404, {"error": "reports index not found"})
+        return 200, {"Content-Type": "text/html; charset=utf-8"}, index.read_bytes()
+
+    def _serve_report_file(self, filename: str) -> tuple[int, dict[str, str], bytes]:
+        """Serve a single file from the reports directory.
+
+        Only flat filenames are accepted — no path separators or traversal
+        components. Allowed extensions: .html, .js.
+
+        Args:
+            filename: Bare filename extracted from the request path.
+
+        Returns:
+            A three-tuple of (status, headers, body).
+        """
+        if self._reports_dir is None:
+            return self._json_response(404, {"error": "reports directory not configured"})
+        if not filename or "/" in filename or ".." in filename:
+            return self._json_response(403, {"error": "forbidden"})
+        suffix = Path(filename).suffix
+        if suffix not in _ALLOWED_REPORT_EXTENSIONS:
+            return self._json_response(403, {"error": "forbidden"})
+        file_path = self._reports_dir / filename
+        try:
+            resolved = file_path.resolve()
+            reports_resolved = self._reports_dir.resolve()
+        except OSError:
+            return self._json_response(403, {"error": "forbidden"})
+        if not str(resolved).startswith(str(reports_resolved) + "/") and resolved != reports_resolved:
+            return self._json_response(403, {"error": "forbidden"})
+        if not resolved.exists():
+            return self._json_response(404, {"error": "not found"})
+        content_type = mimetypes.types_map.get(suffix, "application/octet-stream")
+        return 200, {"Content-Type": content_type}, resolved.read_bytes()
 
     def _serve_static(self, path: str) -> tuple[int, dict[str, str], bytes]:
         """Serve a file from the static directory with path traversal protection.
@@ -329,17 +402,30 @@ class ConfigEditorServer:
             file is present.
         """
         mqtt_env = self._mqtt_env()
+        reports_available = (
+            self._reports_dir is not None
+            and (self._reports_dir / "index.html").exists()
+        )
         yaml_path = self._config_dir / "mimirheim.yaml"
         if not yaml_path.exists():
-            return self._json_response(200, {"exists": False, "config": {}, "mqtt_env": mqtt_env})
+            return self._json_response(
+                200,
+                {"exists": False, "config": {}, "mqtt_env": mqtt_env, "reports_available": reports_available},
+            )
 
         try:
             raw = yaml.safe_load(yaml_path.read_text()) or {}
         except yaml.YAMLError as exc:
             logger.warning("Failed to parse mimirheim.yaml: %s", exc)
-            return self._json_response(200, {"exists": True, "config": {}, "mqtt_env": mqtt_env})
+            return self._json_response(
+                200,
+                {"exists": True, "config": {}, "mqtt_env": mqtt_env, "reports_available": reports_available},
+            )
 
-        return self._json_response(200, {"exists": True, "config": raw, "mqtt_env": mqtt_env})
+        return self._json_response(
+            200,
+            {"exists": True, "config": raw, "mqtt_env": mqtt_env, "reports_available": reports_available},
+        )
 
     def _api_post_config(self, body: bytes) -> tuple[int, dict[str, str], bytes]:
         """Validate a JSON config body and write it to mimirheim.yaml.

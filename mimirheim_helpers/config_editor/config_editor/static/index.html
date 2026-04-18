@@ -8,7 +8,13 @@
 </head>
 <body>
   <header>
-    <h1>mimirheim config editor</h1>
+    <div id="header-left">
+      <h1>mimirheim</h1>
+      <nav id="mode-bar">
+        <button class="mode-btn" id="mode-btn-reports" type="button">Reports</button>
+        <button class="mode-btn active" id="mode-btn-config" type="button">Config</button>
+      </nav>
+    </div>
     <div id="save-bar">
       <span id="save-status"></span>
       <button id="save-btn" type="button">Save</button>
@@ -18,6 +24,10 @@
   <nav id="tab-bar">
     <!-- Tab buttons are injected by app.js -->
   </nav>
+
+  <div id="reports-pane">
+    <!-- Filled by app.js when switching to reports mode -->
+  </div>
 
   <main id="content-pane">
     <!-- Active tab content is rendered here by app.js -->
