@@ -52,7 +52,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           token: ${{ secrets.COMMIT_PAT_ACTION }}
           ref: ${{ github.ref_name }}
 
@@ -106,4 +106,6 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add hassio-repository/mimirheim/config.yaml
           git diff --cached --quiet || git commit -m "chore: bump stable version to ${GITHUB_REF_NAME}"
+          git fetch origin main
+          git rebase origin/main
           git push origin HEAD:main
