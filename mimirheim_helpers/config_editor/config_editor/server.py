@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 _ALLOWED_STATIC_EXTENSIONS = {".js", ".css", ".html"}
 
 # Only these extensions are served from the reports directory.
-_ALLOWED_REPORT_EXTENSIONS = {".html", ".js"}
+_ALLOWED_REPORT_EXTENSIONS = {".html", ".js", ".css"}
 
 # Path to the static files bundled with this package.
 _STATIC_DIR = Path(__file__).parent / "static"
