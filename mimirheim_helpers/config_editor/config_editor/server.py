@@ -44,6 +44,10 @@ _ALLOWED_STATIC_EXTENSIONS = {".js", ".css", ".html"}
 # Only these extensions are served from the reports directory.
 _ALLOWED_REPORT_EXTENSIONS = {".html", ".js", ".css"}
 
+# Only these suffixes are served from the dump directory.
+_ALLOWED_DUMP_SUFFIXES = ("_input.json", "_output.json")
+
+
 # Path to the static files bundled with this package.
 _STATIC_DIR = Path(__file__).parent / "static"
 
@@ -155,6 +159,7 @@ class ConfigEditorServer:
         self._config_dir = Path(config_dir)
         self._allowed_ip = allowed_ip
         self._reports_dir: Path | None = self._detect_reports_dir()
+        self._dump_dir: Path | None = self._detect_dump_dir()
         self._schema: dict[str, Any] = MimirheimConfig.model_json_schema()
 
         # Load helper model registry. Dict maps filename → (model_cls, competitors).
@@ -207,24 +212,28 @@ class ConfigEditorServer:
         """Return the actual TCP port the server is bound to."""
         return self._httpd.server_address[1]
 
-    def _detect_reports_dir(self) -> Path | None:
-        """Read reporter.yaml from the config directory and return reporting.output_dir.
+    def _read_reporter_yaml(self) -> dict:
+        """Read and parse reporter.yaml from the config directory.
 
-        Returns None if reporter.yaml is absent, cannot be parsed, or does not
-        contain a reporting.output_dir value. The caller uses None to mean
-        "reports tab not available".
+        Returns an empty dict if the file is absent or cannot be parsed.
         """
         reporter_yaml = self._config_dir / "reporter.yaml"
         if not reporter_yaml.exists():
-            return None
+            return {}
         try:
-            raw = yaml.safe_load(reporter_yaml.read_text()) or {}
+            return yaml.safe_load(reporter_yaml.read_text()) or {}
         except yaml.YAMLError:
-            return None
-        output_dir = (raw.get("reporting") or {}).get("output_dir")
-        if not output_dir:
-            return None
-        return Path(output_dir)
+            return {}
+
+    def _detect_reports_dir(self) -> Path | None:
+        """Return reporting.output_dir from reporter.yaml, or None if absent."""
+        output_dir = (self._read_reporter_yaml().get("reporting") or {}).get("output_dir")
+        return Path(output_dir) if output_dir else None
+
+    def _detect_dump_dir(self) -> Path | None:
+        """Return reporting.dump_dir from reporter.yaml, or None if absent."""
+        dump_dir = (self._read_reporter_yaml().get("reporting") or {}).get("dump_dir")
+        return Path(dump_dir) if dump_dir else None
 
     def serve_forever(self) -> None:
         """Start serving requests. Blocks until shutdown() is called."""
@@ -266,6 +275,8 @@ class ConfigEditorServer:
             return self._serve_static(path)
         if method == "GET" and path in ("/reports", "/reports/"):
             return self._serve_reports_index()
+        if method == "GET" and path.startswith("/reports/dumps/"):
+            return self._serve_dump_file(path[len("/reports/dumps/"):])
         if method == "GET" and path.startswith("/reports/"):
             return self._serve_report_file(path[len("/reports/"):])
         if method == "GET" and path == "/api/schema":
@@ -341,6 +352,48 @@ class ConfigEditorServer:
             return self._json_response(404, {"error": "not found"})
         content_type = mimetypes.types_map.get(suffix, "application/octet-stream")
         return 200, {"Content-Type": content_type}, resolved.read_bytes()
+
+    def _serve_dump_file(self, filename: str) -> tuple[int, dict[str, str], bytes]:
+        """Serve a dump JSON file from the reporter's dump directory.
+
+        Only flat filenames ending in ``_input.json`` or ``_output.json`` are
+        served. Path separators and traversal components are rejected with 403.
+
+        Download links in the report index use the relative path ``dumps/<filename>``
+        so they work through the config editor proxy. When the report index is opened
+        directly from the filesystem, these links will 404 — users who need
+        direct-file access can add a web server alias or symlink themselves.
+
+        Args:
+            filename: Bare filename extracted from the request path.
+
+        Returns:
+            A three-tuple of (status, headers, body).
+        """
+        if self._dump_dir is None:
+            return self._json_response(404, {"error": "dump directory not configured"})
+        if not filename or "/" in filename or ".." in filename:
+            return self._json_response(403, {"error": "forbidden"})
+        if not any(filename.endswith(s) for s in _ALLOWED_DUMP_SUFFIXES):
+            return self._json_response(403, {"error": "forbidden"})
+        file_path = self._dump_dir / filename
+        try:
+            resolved = file_path.resolve()
+            dump_resolved = self._dump_dir.resolve()
+        except OSError:
+            return self._json_response(403, {"error": "forbidden"})
+        if not str(resolved).startswith(str(dump_resolved) + "/") and resolved != dump_resolved:
+            return self._json_response(403, {"error": "forbidden"})
+        if not resolved.exists():
+            return self._json_response(404, {"error": "not found"})
+        return (
+            200,
+            {
+                "Content-Type": "application/json",
+                "Content-Disposition": f'attachment; filename="{filename}"',
+            },
+            resolved.read_bytes(),
+        )
 
     def _serve_static(self, path: str) -> tuple[int, dict[str, str], bytes]:
         """Serve a file from the static directory with path traversal protection.

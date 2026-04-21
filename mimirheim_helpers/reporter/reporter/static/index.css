@@ -108,6 +108,16 @@ h1 {
 
 #reports-table td a:hover { text-decoration: underline; }
 
+.dump-links {
+  font-size: 0.8em;
+  color: #666;
+  white-space: nowrap;
+}
+
+.dump-links a {
+  color: #666;
+}
+
 footer {
   margin-top: 14px;
   font-size: 0.8rem;
