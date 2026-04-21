@@ -75,7 +75,7 @@ _HA_STATUS_TOPIC = "homeassistant/status"
 
 def _ingest_pv_actuals_from_ha(
     array_cfg: ArrayConfig,
-    ha_db_path: str,
+    ha_db_url: str,
     start_ts: int,
 ) -> list:
     """Read new PV actuals for one array from the HA database.
@@ -86,14 +86,15 @@ def _ingest_pv_actuals_from_ha(
     Args:
         array_cfg: Configuration for the array being ingested (provides
             entity IDs and the exclusion sensor list).
-        ha_db_path: Path to the Home Assistant SQLite database.
+        ha_db_url: SQLAlchemy connection URL for the Home Assistant recorder
+            database (e.g. ``sqlite:////config/home-assistant_v2.db``).
         start_ts: Return only hours strictly after this timestamp.
 
     Returns:
         List of ``PvActualRow`` objects with ``array_name`` set to
         ``array_cfg.name``.
     """
-    ha_engine = build_ha_engine(ha_db_path)
+    ha_engine = build_ha_engine(ha_db_url)
     with ha_engine.connect() as ha_conn:
         return compute_hourly_kwh(
             ha_conn,
@@ -453,7 +454,7 @@ class PvLearnerDaemon(MqttDaemon):
             start_ts = latest_actuals if latest_actuals is not None else 0
 
             pv_rows = _ingest_pv_actuals_from_ha(
-                array_cfg, cfg.homeassistant.db_path, start_ts
+                array_cfg, cfg.homeassistant.db_url, start_ts
             )
             with self._engine.begin() as conn:
                 n = upsert_pv_actuals(conn, pv_rows)

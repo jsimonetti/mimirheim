@@ -30,27 +30,35 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def build_ha_engine(db_path: str) -> sa.Engine:
-    """Build a read-only SQLAlchemy engine for the HA SQLite database.
+def build_ha_engine(db_url: str) -> sa.Engine:
+    """Build a SQLAlchemy engine for the Home Assistant recorder database.
 
-    Opens the database in read-only mode using SQLite URI syntax. This
-    prevents accidental writes even if the calling code has a bug.
+    Accepts any SQLAlchemy URL. For SQLite URLs the engine is configured for
+    read-only access and multi-thread safety. For all other backends (PostgreSQL,
+    MySQL) no special connection arguments are applied; access control is the
+    responsibility of the database server.
 
     Args:
-        db_path: Filesystem path to the HA SQLite database file.
+        db_url: Full SQLAlchemy connection URL. Examples:
+            ``sqlite:////config/home-assistant_v2.db``,
+            ``postgresql+psycopg2://user:pass@host/homeassistant``,
+            ``mysql+pymysql://user:pass@host/homeassistant``.
 
     Returns:
-        A SQLAlchemy ``Engine`` connected to the HA database in read-only mode.
+        A SQLAlchemy ``Engine`` connected to the HA database.
     """
-    # Encode the path into a SQLite URI with mode=ro (read-only).
-    # check_same_thread=False is required for use from multiple threads
-    # (the apscheduler ingest job runs on a background thread).
-    encoded_path = db_path.replace(" ", "%20")
-    url = f"sqlite:///file:{encoded_path}?uri=true&mode=ro"
-    return sa.create_engine(
-        url,
-        connect_args={"check_same_thread": False},
-    )
+    if db_url.startswith("sqlite"):
+        # check_same_thread=False is required because the ingest job runs on a
+        # background APScheduler thread, not the main thread that created the engine.
+        connect_args: dict = {"check_same_thread": False}
+        if "?uri=true" not in db_url and "file:" not in db_url:
+            # Plain sqlite:////path form — convert to read-only URI syntax.
+            # mode=ro prevents accidental writes even if calling code has a bug.
+            path = db_url[len("sqlite:///"):]
+            encoded = path.replace(" ", "%20")
+            db_url = f"sqlite:///file:{encoded}?uri=true&mode=ro"
+        return sa.create_engine(db_url, connect_args=connect_args)
+    return sa.create_engine(db_url)
 
 
 # ---------------------------------------------------------------------------

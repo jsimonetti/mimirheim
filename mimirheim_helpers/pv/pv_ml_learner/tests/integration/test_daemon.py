@@ -134,7 +134,7 @@ def _make_config(
             api_key="test-key", latitude=52.1, longitude=5.2,
             forecast_horizon_hours=48,
         ),
-        homeassistant=HomeAssistantConfig(db_path="/config/home-assistant_v2.db"),
+        homeassistant=HomeAssistantConfig(db_url="sqlite:////config/home-assistant_v2.db"),
         arrays=arrays,
         storage=StorageConfig(db_path=str(tmp_path / "pv_ml_learner.db")),
         training=TrainingConfig(

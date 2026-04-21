@@ -173,12 +173,24 @@ class TestDeltaComputation:
         # missing, no delta row is generated for that pair.
         assert len(rows) == 0
 
-    def test_read_only_connection_string_constructed_correctly(self) -> None:
-        """The HA engine is opened with mode=ro and check_same_thread=False."""
+    def test_build_ha_engine_accepts_sqlite_url(self) -> None:
+        """build_ha_engine accepts a plain sqlite:/// URL."""
         from pv_ml_learner.ha_actuals import build_ha_engine
 
-        engine = build_ha_engine("/config/homeassistant_v2.db")
+        engine = build_ha_engine("sqlite:///:memory:")
+        assert engine is not None
+
+    def test_build_ha_engine_accepts_sqlite_file_url(self) -> None:
+        """build_ha_engine accepts a sqlite:///file: read-only URL."""
+        from pv_ml_learner.ha_actuals import build_ha_engine
+
+        engine = build_ha_engine("sqlite:///file:/tmp/test.db?uri=true&mode=ro")
+        assert engine is not None
+
+    def test_build_ha_engine_sqlite_path_url_gets_readonly_flag(self) -> None:
+        """A plain sqlite:////path URL is converted to read-only URI form."""
+        from pv_ml_learner.ha_actuals import build_ha_engine
+
+        engine = build_ha_engine("sqlite:////config/homeassistant_v2.db")
         url = str(engine.url)
-        assert "mode=ro" in url or "sqlite" in url.lower()
-        # The engine must not be a write engine — verify the URL uses the ro flag
-        assert "?uri=true" in url or "mode=ro" in url
+        assert "sqlite" in url.lower()

@@ -41,6 +41,12 @@ pv-ml-learner = [
     "joblib>=1.3",
     "pandas>=2.2",
 ]
+pv-ml-learner-postgres = [
+    "psycopg2-binary>=2.9",
+]
+pv-ml-learner-mysql = [
+    "pymysql>=1.1",
+]
 baseload-ha = [
     "httpx>=0.27",
 ]

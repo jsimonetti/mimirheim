@@ -31,7 +31,7 @@ def _valid_config() -> dict:
             "forecast_horizon_hours": 48,
         },
         "homeassistant": {
-            "db_path": "/config/home-assistant_v2.db",
+            "db_url": "sqlite:////config/home-assistant_v2.db",
         },
         "arrays": [
             {
@@ -143,6 +143,51 @@ class TestRejectedConfig:
         cfg = PvLearnerConfig.model_validate(raw)
         assert cfg.signal_mimir is True
         assert cfg.mimir_trigger_topic == "mimir/input/trigger"
+
+
+class TestHomeAssistantDbUrl:
+    def test_homeassistant_accepts_sqlite_url(self) -> None:
+        """A sqlite:/// URL is accepted."""
+        from pv_ml_learner.config import PvLearnerConfig
+
+        raw = _valid_config()
+        raw["homeassistant"] = {"db_url": "sqlite:////config/home-assistant_v2.db"}
+        cfg = PvLearnerConfig.model_validate(raw)
+        assert cfg.homeassistant.db_url == "sqlite:////config/home-assistant_v2.db"
+
+    def test_homeassistant_accepts_postgres_url(self) -> None:
+        """A postgresql:// URL is accepted."""
+        from pv_ml_learner.config import PvLearnerConfig
+
+        raw = _valid_config()
+        raw["homeassistant"] = {"db_url": "postgresql+psycopg2://user:pass@host/ha"}
+        PvLearnerConfig.model_validate(raw)
+
+    def test_homeassistant_accepts_mysql_url(self) -> None:
+        """A mysql:// URL is accepted."""
+        from pv_ml_learner.config import PvLearnerConfig
+
+        raw = _valid_config()
+        raw["homeassistant"] = {"db_url": "mysql+pymysql://user:pass@host/ha"}
+        PvLearnerConfig.model_validate(raw)
+
+    def test_homeassistant_rejects_bare_path(self) -> None:
+        """A bare filesystem path without a scheme raises ValidationError."""
+        from pv_ml_learner.config import PvLearnerConfig
+
+        raw = _valid_config()
+        raw["homeassistant"] = {"db_url": "/config/home-assistant_v2.db"}
+        with pytest.raises(ValidationError):
+            PvLearnerConfig.model_validate(raw)
+
+    def test_homeassistant_rejects_old_db_path_field(self) -> None:
+        """The removed db_path field is rejected by extra='forbid'."""
+        from pv_ml_learner.config import PvLearnerConfig
+
+        raw = _valid_config()
+        raw["homeassistant"] = {"db_path": "/config/home-assistant_v2.db"}
+        with pytest.raises(ValidationError):
+            PvLearnerConfig.model_validate(raw)
 
     def test_unknown_field_rejected(self) -> None:
         from pv_ml_learner.config import PvLearnerConfig
