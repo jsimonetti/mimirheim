@@ -399,6 +399,21 @@ class DeviceSetpoint(BaseModel):
             enabled. True when the load-balance mode is asserted for this step.
             False when the mode is explicitly de-asserted. None when the device
             has no load-balance capability configured.
+        pv_is_curtailed: For PV devices with any controllable capability
+            (staged, ``capabilities.power_limit``, or ``capabilities.on_off``).
+            True when mimirheim is actively limiting PV output below the
+            available forecast at this step. False when the inverter is free
+            to produce as much as the sun provides. None for fixed-mode PV
+            arrays (no capability configured) and for all non-PV devices.
+
+            This is a mode-agnostic signal: its meaning is consistent across
+            all three controllable modes. In staged mode, True means the
+            chosen stage register value is below the forecast. In
+            ``power_limit`` mode, True means the solver chose a value
+            strictly below the forecast. In ``on_off`` mode, True means the
+            array has been switched off.
+
+            Maps to the ``outputs.is_curtailed`` MQTT topic.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -409,6 +424,7 @@ class DeviceSetpoint(BaseModel):
     zero_exchange_active: bool | None = None
     on_off_active: bool | None = None
     loadbalance_active: bool | None = None
+    pv_is_curtailed: bool | None = None
 
 
 class ScheduleStep(BaseModel):

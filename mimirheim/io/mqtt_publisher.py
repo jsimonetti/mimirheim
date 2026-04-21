@@ -143,7 +143,7 @@ class MqttPublisher:
                     continue
 
                 if (
-                    pv_cfg.capabilities.power_limit
+                    (pv_cfg.capabilities.power_limit or pv_cfg.production_stages is not None)
                     and pv_cfg.outputs.power_limit_kw is not None
                     and setpoint.power_limit_kw is not None
                 ):
@@ -179,6 +179,21 @@ class MqttPublisher:
                     self._client.publish(
                         pv_cfg.outputs.on_off_mode,
                         "true" if setpoint.on_off_active else "false",
+                        qos=1,
+                        retain=True,
+                    )
+
+                if (
+                    pv_cfg.outputs.is_curtailed is not None
+                    and setpoint.pv_is_curtailed is not None
+                ):
+                    # Mode-agnostic curtailment signal. True means mimirheim is
+                    # actively holding PV output below the available forecast.
+                    # Published for staged, power_limit, and on_off modes.
+                    # Not published for fixed-mode arrays (pv_is_curtailed is None).
+                    self._client.publish(
+                        pv_cfg.outputs.is_curtailed,
+                        "true" if setpoint.pv_is_curtailed else "false",
                         qos=1,
                         retain=True,
                     )

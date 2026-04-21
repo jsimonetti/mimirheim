@@ -682,6 +682,70 @@ def test_pv_on_off_mode_binary_sensor_published() -> None:
     assert entity["platform"] == "binary_sensor"
 
 
+def test_pv_is_curtailed_binary_sensor_published_for_staged() -> None:
+    """is_curtailed binary_sensor is published for a staged PV array."""
+    config = MimirheimConfig.model_validate({
+        "mqtt": {"host": "localhost", "port": 1883, "client_id": "mimir-test", "topic_prefix": "mimir"},
+        "outputs": {
+            "schedule": "mimir/schedule", "current": "mimir/current",
+            "last_solve": "mimir/status/last_solve", "availability": "mimir/status/availability",
+        },
+        "homeassistant": {"enabled": True, "device_name": "Test mimirheim"},
+        "grid": {"import_limit_kw": 10.0, "export_limit_kw": 5.0},
+        "pv_arrays": {
+            "roof_pv": {
+                "max_power_kw": 4.5,
+                "topic_forecast": "mimir/input/pv_forecast",
+                "production_stages": [0.0, 1.5, 3.0, 4.5],
+                "outputs": {"is_curtailed": "mimir/output/roof_pv/is_curtailed"},
+            },
+        },
+    })
+    components = _publish_and_get_components(config)
+    matching = {k: v for k, v in components.items() if "roof_pv_is_curtailed" in k}
+    assert len(matching) == 1
+    entity = next(iter(matching.values()))
+    assert entity["state_topic"] == "mimir/output/roof_pv/is_curtailed"
+    assert entity["payload_on"] == "true"
+    assert entity["payload_off"] == "false"
+    assert entity["device_class"] == "problem"
+    assert entity["platform"] == "binary_sensor"
+
+
+def test_pv_is_curtailed_binary_sensor_published_for_power_limit() -> None:
+    """is_curtailed binary_sensor is published for a power_limit PV array."""
+    config = MimirheimConfig.model_validate({
+        "mqtt": {"host": "localhost", "port": 1883, "client_id": "mimir-test", "topic_prefix": "mimir"},
+        "outputs": {
+            "schedule": "mimir/schedule", "current": "mimir/current",
+            "last_solve": "mimir/status/last_solve", "availability": "mimir/status/availability",
+        },
+        "homeassistant": {"enabled": True, "device_name": "Test mimirheim"},
+        "grid": {"import_limit_kw": 10.0, "export_limit_kw": 5.0},
+        "pv_arrays": {
+            "roof_pv": {
+                "max_power_kw": 6.0,
+                "topic_forecast": "mimir/input/pv_forecast",
+                "capabilities": {"power_limit": True},
+                "outputs": {"is_curtailed": "mimir/output/roof_pv/is_curtailed"},
+            },
+        },
+    })
+    components = _publish_and_get_components(config)
+    matching = {k: v for k, v in components.items() if "roof_pv_is_curtailed" in k}
+    assert len(matching) == 1
+    entity = next(iter(matching.values()))
+    assert entity["state_topic"] == "mimir/output/roof_pv/is_curtailed"
+    assert entity["device_class"] == "problem"
+    assert entity["platform"] == "binary_sensor"
+
+
+def test_pv_is_curtailed_not_published_for_fixed_mode() -> None:
+    """is_curtailed is not published for a fixed-mode PV array (no capabilities)."""
+    components = _publish_and_get_components(_make_config())
+    assert not any("is_curtailed" in k for k in components)
+
+
 # ---------------------------------------------------------------------------
 # Battery output topics: zero_exchange
 # ---------------------------------------------------------------------------

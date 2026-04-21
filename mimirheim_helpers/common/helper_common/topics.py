@@ -535,6 +535,21 @@ def pv_on_off_topic(prefix: str, name: str) -> str:
     return f"{prefix}/output/pv/{name}/on_off_mode"
 
 
+def pv_is_curtailed_topic(prefix: str, name: str) -> str:
+    """Return the topic for the PV array curtailment status signal.
+
+    Corresponds to ``pv_arrays.{name}.outputs.is_curtailed``.
+
+    Args:
+        prefix: The ``mqtt.topic_prefix`` value from mimirheim config.
+        name: The PV array device name.
+
+    Returns:
+        e.g. ``"mimir/output/pv/roof_pv/is_curtailed"``.
+    """
+    return f"{prefix}/output/pv/{name}/is_curtailed"
+
+
 def deferrable_recommended_start_topic(prefix: str, name: str) -> str:
     """Return the topic where mimirheim publishes the recommended start time.
 

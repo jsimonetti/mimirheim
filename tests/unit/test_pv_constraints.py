@@ -462,3 +462,188 @@ def test_staged_pv_chosen_stage_kw_is_stage_not_effective_output() -> None:
         f"Expected effective output=2.2 (forecast cap), got {effective_output:.4f}"
     )
 
+
+# ---------------------------------------------------------------------------
+# Staged mode tie-breaking: prefer highest equivalent stage (Plan fix)
+# ---------------------------------------------------------------------------
+
+
+def test_staged_pv_tie_break_prefers_highest_stage_when_indifferent() -> None:
+    """When multiple stages produce identical effective output, the solver must
+    choose the highest stage register value.
+
+    With stages [0.0, 1.5, 3.0, 4.5] and a forecast of 0.5 kW, every stage
+    with kW >= 0.5 produces the same effective output (0.5 kW). Without a
+    tie-breaking objective term, the solver may pick any of them (1.5, 3.0,
+    4.5) arbitrarily. With tie-breaking, it must pick 4.5, matching the
+    semantics of "free-running at max capacity".
+    """
+    ctx = _make_ctx(horizon=1)
+    grid = Grid(config=GridConfig(import_limit_kw=20.0, export_limit_kw=10.0))
+    pv = PvDevice(name="pv", config=_config_staged(stages=[0.0, 1.5, 3.0, 4.5], max_power_kw=4.5))
+
+    grid.add_variables(ctx)
+    grid.add_constraints(ctx, inputs=None)
+    pv.add_variables(ctx)
+    pv.add_constraints(ctx, inputs=PvInputs(forecast_kw=[0.5]))
+
+    for t in ctx.T:
+        ctx.solver.add_constraint(grid.net_power(t) + pv.net_power(t) == 0)
+
+    # Include tie-breaking term. Export price is positive so the solver wants
+    # the full 0.5 kW, but is indifferent among stages 1.5, 3.0, 4.5.
+    export_price = 0.10
+    import_price = 0.25
+    obj = import_price * grid.import_[0] - export_price * grid.export_[0]
+    obj = obj + pv.objective_terms(0)
+    ctx.solver.set_objective_minimize(obj)
+    ctx.solver.solve()
+
+    stage = pv.chosen_stage_kw(0)
+    assert abs(stage - 4.5) < 1e-4, (
+        f"Expected tie-breaking to select highest stage (4.5 kW), got {stage:.4f}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# is_curtailed() — mode-agnostic curtailment signal (Plan fix)
+# ---------------------------------------------------------------------------
+
+
+def test_pv_staged_is_curtailed_false_when_free_running() -> None:
+    """is_curtailed() returns False when the solver picks a stage >= forecast.
+
+    With a positive export price the solver has no reason to curtail; it selects
+    the highest stage, which is above the forecast. is_curtailed must return False.
+    """
+    ctx = _make_ctx(horizon=1)
+    grid = Grid(config=GridConfig(import_limit_kw=20.0, export_limit_kw=10.0))
+    pv = PvDevice(name="pv", config=_config_staged(stages=[0.0, 1.5, 3.0, 4.5], max_power_kw=4.5))
+
+    grid.add_variables(ctx)
+    grid.add_constraints(ctx, inputs=None)
+    pv.add_variables(ctx)
+    pv.add_constraints(ctx, inputs=PvInputs(forecast_kw=[2.0]))
+
+    for t in ctx.T:
+        ctx.solver.add_constraint(grid.net_power(t) + pv.net_power(t) == 0)
+
+    obj = 0.25 * grid.import_[0] - 0.10 * grid.export_[0] + pv.objective_terms(0)
+    ctx.solver.set_objective_minimize(obj)
+    ctx.solver.solve()
+
+    assert pv.is_curtailed(0) is False
+
+
+def test_pv_staged_is_curtailed_true_when_stage_below_forecast() -> None:
+    """is_curtailed() returns True when solver selects stage 0 (off) to avoid
+    exporting at a negative price.
+
+    The chosen stage kW (0.0) is below the forecast (2.0 kW), so the inverter
+    register is limiting output below what the sun could deliver.
+    """
+    ctx = _make_ctx(horizon=1)
+    grid = Grid(config=GridConfig(import_limit_kw=20.0, export_limit_kw=10.0))
+    pv = PvDevice(name="pv", config=_config_staged(stages=[0.0, 1.5, 3.0, 4.5], max_power_kw=4.5))
+
+    grid.add_variables(ctx)
+    grid.add_constraints(ctx, inputs=None)
+    pv.add_variables(ctx)
+    pv.add_constraints(ctx, inputs=PvInputs(forecast_kw=[2.0]))
+
+    for t in ctx.T:
+        ctx.solver.add_constraint(grid.net_power(t) + pv.net_power(t) == 0)
+
+    # Strongly negative export price: exporting costs money, so solver turns off PV.
+    obj = 0.25 * grid.import_[0] - (-0.20) * grid.export_[0] + pv.objective_terms(0)
+    ctx.solver.set_objective_minimize(obj)
+    ctx.solver.solve()
+
+    assert pv.is_curtailed(0) is True
+
+
+def test_pv_power_limit_is_curtailed_false_when_at_forecast() -> None:
+    """is_curtailed() returns False in power_limit mode when solver produces the full forecast."""
+    ctx = _make_ctx(horizon=1)
+    grid = Grid(config=GridConfig(import_limit_kw=20.0, export_limit_kw=10.0))
+    pv = PvDevice(name="pv", config=_config_power_limit(forecast_kw=3.0))
+
+    grid.add_variables(ctx)
+    grid.add_constraints(ctx, inputs=None)
+    pv.add_variables(ctx)
+    pv.add_constraints(ctx, inputs=PvInputs(forecast_kw=[3.0]))
+
+    for t in ctx.T:
+        ctx.solver.add_constraint(grid.net_power(t) + pv.net_power(t) == 0)
+
+    obj = 0.25 * grid.import_[0] - 0.10 * grid.export_[0]
+    ctx.solver.set_objective_minimize(obj)
+    ctx.solver.solve()
+
+    assert pv.is_curtailed(0) is False
+
+
+def test_pv_power_limit_is_curtailed_true_when_curtailed() -> None:
+    """is_curtailed() returns True in power_limit mode when solver chose below forecast."""
+    ctx = _make_ctx(horizon=1)
+    grid = Grid(config=GridConfig(import_limit_kw=20.0, export_limit_kw=10.0))
+    pv = PvDevice(name="pv", config=_config_power_limit(forecast_kw=3.0))
+
+    grid.add_variables(ctx)
+    grid.add_constraints(ctx, inputs=None)
+    pv.add_variables(ctx)
+    pv.add_constraints(ctx, inputs=PvInputs(forecast_kw=[3.0]))
+
+    for t in ctx.T:
+        ctx.solver.add_constraint(grid.net_power(t) + pv.net_power(t) == 0)
+
+    # Strongly negative export price: solver drives pv_kw to 0.
+    obj = 0.25 * grid.import_[0] - (-0.20) * grid.export_[0]
+    ctx.solver.set_objective_minimize(obj)
+    ctx.solver.solve()
+
+    assert pv.is_curtailed(0) is True
+
+
+def test_pv_on_off_is_curtailed_false_when_on() -> None:
+    """is_curtailed() returns False in on_off mode when the array is switched on."""
+    ctx = _make_ctx(horizon=1)
+    grid = Grid(config=GridConfig(import_limit_kw=20.0, export_limit_kw=10.0))
+    pv = PvDevice(name="pv", config=_config_on_off(forecast_kw=3.0))
+
+    grid.add_variables(ctx)
+    grid.add_constraints(ctx, inputs=None)
+    pv.add_variables(ctx)
+    pv.add_constraints(ctx, inputs=PvInputs(forecast_kw=[3.0]))
+
+    for t in ctx.T:
+        ctx.solver.add_constraint(grid.net_power(t) + pv.net_power(t) == 0)
+
+    obj = 0.25 * grid.import_[0] - 0.10 * grid.export_[0] + pv.objective_terms(0)
+    ctx.solver.set_objective_minimize(obj)
+    ctx.solver.solve()
+
+    assert pv.is_curtailed(0) is False
+
+
+def test_pv_on_off_is_curtailed_true_when_off() -> None:
+    """is_curtailed() returns True in on_off mode when the array is switched off."""
+    ctx = _make_ctx(horizon=1)
+    grid = Grid(config=GridConfig(import_limit_kw=20.0, export_limit_kw=10.0))
+    pv = PvDevice(name="pv", config=_config_on_off(forecast_kw=3.0))
+
+    grid.add_variables(ctx)
+    grid.add_constraints(ctx, inputs=None)
+    pv.add_variables(ctx)
+    pv.add_constraints(ctx, inputs=PvInputs(forecast_kw=[3.0]))
+
+    for t in ctx.T:
+        ctx.solver.add_constraint(grid.net_power(t) + pv.net_power(t) == 0)
+
+    # Strongly negative export price: solver switches off PV.
+    obj = 0.25 * grid.import_[0] - (-0.20) * grid.export_[0] + pv.objective_terms(0)
+    ctx.solver.set_objective_minimize(obj)
+    ctx.solver.solve()
+
+    assert pv.is_curtailed(0) is True
+

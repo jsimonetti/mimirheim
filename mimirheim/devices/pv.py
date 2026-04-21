@@ -227,20 +227,30 @@ class PvDevice:
         return self._net_power[t]
 
     def objective_terms(self, t: int) -> Any:
-        """Return a negligible curtailment penalty to break solver ties.
+        """Return negligible penalty terms to break solver ties.
 
-        When ``capabilities.on_off`` is enabled, this returns
-        ``1e-6 * pv_curtailed[t]``. This tiny weight gives the solver
-        a reason to prefer ``pv_curtailed=0`` (array running) whenever
-        the binary variable is otherwise free — most notably when the
-        forecast is zero and curtailment has no effect on the power balance
-        or the real cost objective.
+        For ``on_off`` mode: returns ``1e-6 * pv_curtailed[t]``. This tiny
+        weight gives the solver a reason to prefer ``pv_curtailed=0`` (array
+        running) whenever the binary is otherwise free — most notably when the
+        forecast is zero and curtailment has no effect on the power balance or
+        the real cost objective.
+
+        For staged mode: returns a sum of ``1e-6 * (max_stage_kw - stage_kw[s])
+        * stage_active[t, s]`` over all stages. The penalty is zero for the
+        highest stage and increases for lower stages. This pushes the solver to
+        prefer the highest stage whenever multiple stages produce the same
+        effective output — which happens whenever the forecast is below the
+        stage value (all such stages give ``min(forecast, stage_kw) ==
+        forecast``). Without this term the solver may pick an arbitrary stage
+        among them, writing a lower register value to the inverter than
+        necessary. The hardware would then cap output if the sun produces more
+        than the register during the next interval before a re-solve.
 
         The weight (1e-6 EUR per kW-step) is five to six orders of magnitude
         smaller than any real electricity price term and cannot influence
         economically meaningful decisions.
 
-        When on_off is not enabled, returns 0.
+        When neither on_off nor staged mode is enabled, returns 0.
 
         Args:
             t: Time step index within ``ctx.T``.
@@ -249,7 +259,16 @@ class PvDevice:
             A solver linear expression or 0.
         """
         if t in self._pv_curtailed:
+            # on_off mode: penalise curtailment so the solver defaults to on.
             return 1e-6 * self._pv_curtailed[t]
+        if self._stage_kw:
+            # Staged mode: penalise choosing a lower stage register value than
+            # necessary. max_stage is the top of the list (stages are ascending).
+            max_stage = self._stage_kw[-1]
+            return sum(
+                1e-6 * (max_stage - self._stage_kw[s]) * self._stage_active[(t, s)]
+                for s in range(len(self._stage_kw))
+            )
         return 0
 
     def is_on(self, t: int) -> bool:
@@ -314,3 +333,62 @@ class PvDevice:
         # Fallback: return stage 0 (off). Reached only if no variable rounded to 1,
         # which indicates a solver issue (e.g. fractional binary due to gap tolerance).
         return self._stage_kw[0]
+
+    def is_curtailed(self, t: int) -> bool:
+        """Return True if PV output is being limited below the available forecast.
+
+        This is a mode-agnostic curtailment signal. Its meaning is consistent
+        across all three controllable modes:
+
+        - Staged mode: True when ``chosen_stage_kw(t) < forecast[t]``. The
+          inverter register is set to a value below what the sun could deliver.
+        - Continuous ``power_limit`` mode: True when the solver chose to produce
+          below the forecast (i.e. ``pv_kw[t] < forecast[t] - tolerance``).
+        - ``on_off`` mode: True when the array has been switched off.
+
+        In all cases, False means the inverter is free to produce as much as
+        the sun provides (up to ``max_power_kw``). True means mimirheim is
+        intentionally limiting output, typically to avoid exporting at an
+        unfavourable price.
+
+        When the forecast is zero, this method always returns False in every
+        mode: the hardware cannot produce more than zero regardless of the
+        register value, so no curtailment is occurring.
+
+        Must only be called after the solver has run and only when the device
+        has a controllable capability (staged, power_limit, or on_off).
+
+        Args:
+            t: Time step index within ``ctx.T``.
+
+        Returns:
+            True when the solver is limiting PV output below the forecast,
+            False when the inverter is running freely.
+
+        Raises:
+            RuntimeError: If called before ``add_constraints`` has run, or on
+                a fixed-mode device (no controllable capability configured).
+        """
+        if self._ctx is None:
+            raise RuntimeError(
+                f"is_curtailed called on PvDevice '{self.name}' before add_constraints."
+            )
+        f = max(0.0, self._forecast[t])
+        if self.config.production_stages is not None:
+            # Staged mode: the chosen stage register value may be below the
+            # forecast, meaning the inverter would cap actual output if the
+            # solar resource exceeds the register.
+            return self.chosen_stage_kw(t) < f - 1e-4
+        if t in self._pv_curtailed:
+            # on_off mode: the array is either fully on or fully off.
+            return not self.is_on(t)
+        if t in self._pv_kw:
+            # Continuous power_limit mode: curtailed when the solver chose
+            # a value strictly below the forecast upper bound.
+            val = self._ctx.solver.var_value(self._pv_kw[t])
+            return val < f - 1e-4
+        raise RuntimeError(
+            f"is_curtailed called on PvDevice '{self.name}' in fixed mode "
+            "(no controllable capability configured). This method is only valid "
+            "for staged, power_limit, or on_off devices."
+        )

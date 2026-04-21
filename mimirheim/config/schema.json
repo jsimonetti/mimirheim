@@ -1689,6 +1689,22 @@
           "ui_group": "advanced",
           "ui_label": "On/off mode topic",
           "ui_placeholder": "{mqtt.topic_prefix}/output/pv/{name}/on_off_mode"
+        },
+        "is_curtailed": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "MQTT topic for the curtailment status boolean. Published once per solve cycle. Payload \"true\" means mimirheim is actively limiting PV output below the forecast; \"false\" means the inverter is free to produce at full capacity. Valid for staged, power_limit, and on_off modes. None for fixed-mode arrays. Defaults to '{mqtt.topic_prefix}/output/pv/{name}/is_curtailed' when not set.",
+          "title": "Is Curtailed",
+          "ui_group": "advanced",
+          "ui_label": "Is curtailed topic",
+          "ui_placeholder": "{mqtt.topic_prefix}/output/pv/{name}/is_curtailed"
         }
       },
       "title": "PvOutputsConfig",

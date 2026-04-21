@@ -281,11 +281,15 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
 
     # --- PV output sensors ---
     # These sensors mirror the control outputs mimirheim publishes to PV inverters:
-    # the production power limit (kW), zero-export mode, and on/off mode.
+    # the production power limit (kW), zero-export mode, on/off mode, and
+    # the mode-agnostic curtailment status.
     # They are solver outputs, not hardware measurements, so no state_class.
 
     for name, pv_cfg in config.pv_arrays.items():
-        if pv_cfg.capabilities.power_limit and pv_cfg.outputs.power_limit_kw is not None:
+        if (
+            (pv_cfg.capabilities.power_limit or pv_cfg.production_stages is not None)
+            and pv_cfg.outputs.power_limit_kw is not None
+        ):
             _add(f"{device_id}_{name}_power_limit_kw", "sensor", {
                 "name": f"{name} power limit",
                 "state_topic": pv_cfg.outputs.power_limit_kw,
@@ -307,6 +311,19 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
                 "payload_on": "true",
                 "payload_off": "false",
                 "device_class": "running",
+            })
+        is_controllable = (
+            pv_cfg.production_stages is not None
+            or pv_cfg.capabilities.power_limit
+            or pv_cfg.capabilities.on_off
+        )
+        if is_controllable and pv_cfg.outputs.is_curtailed is not None:
+            _add(f"{device_id}_{name}_is_curtailed", "binary_sensor", {
+                "name": f"{name} is curtailed",
+                "state_topic": pv_cfg.outputs.is_curtailed,
+                "payload_on": "true",
+                "payload_off": "false",
+                "device_class": "problem",
             })
 
     # --- EV charger output sensors ---

@@ -1437,6 +1437,17 @@ class PvOutputsConfig(BaseModel):
         ),
         json_schema_extra={"ui_label": "On/off mode topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/output/pv/{name}/on_off_mode"},
     )
+    is_curtailed: str | None = Field(
+        default=None,
+        description=(
+            "MQTT topic for the curtailment status boolean. Published once per solve cycle. "
+            "Payload \"true\" means mimirheim is actively limiting PV output below the "
+            "forecast; \"false\" means the inverter is free to produce at full capacity. "
+            "Valid for staged, power_limit, and on_off modes. None for fixed-mode arrays. "
+            "Defaults to '{mqtt.topic_prefix}/output/pv/{name}/is_curtailed' when not set."
+        ),
+        json_schema_extra={"ui_label": "Is curtailed topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/output/pv/{name}/is_curtailed"},
+    )
 
 class PvConfig(BaseModel):
     """Configuration for a PV array.
@@ -2485,6 +2496,8 @@ class MimirheimConfig(BaseModel):
                 cfg.outputs.zero_export_mode = _topics.pv_zero_export_topic(p, name)
             if cfg.outputs.on_off_mode is None:
                 cfg.outputs.on_off_mode = _topics.pv_on_off_topic(p, name)
+            if cfg.outputs.is_curtailed is None:
+                cfg.outputs.is_curtailed = _topics.pv_is_curtailed_topic(p, name)
 
         for name, cfg in self.static_loads.items():
             if cfg.topic_forecast is None:
