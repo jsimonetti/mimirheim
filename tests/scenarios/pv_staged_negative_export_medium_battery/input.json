@@ -3,7 +3,7 @@
   "solve_time_utc": "2026-04-07T13:00:00Z",
   "horizon_prices": [
     0.25,
-    0.24,
+    0.25,
     0.25,
     0.25
   ],
@@ -21,9 +21,9 @@
   ],
   "pv_forecast": [
     4.0,
-    4.0,
-    4.0,
-    4.0
+    0.0,
+    0.0,
+    0.0
   ],
   "base_load_forecast": [
     0.05,
@@ -33,7 +33,7 @@
   ],
   "battery_inputs": {
     "bat": {
-      "soc_kwh": 4.8
+      "soc_kwh": 4.3
     }
   },
   "ev_inputs": {},
