@@ -152,6 +152,13 @@
       if (r.dispatch_suppressed) tr.className = 'suppressed';
       var eff = r.effective_cost_eur;
       var effStr = (eff !== undefined && eff !== null) ? eff.toFixed(4) : '—';
+      var dumpLinks = '';
+      if (r.input_file || r.output_file) {
+        var parts = [];
+        if (r.input_file) parts.push('<a href="dumps/' + r.input_file + '" download title="Download input dump JSON">input</a>');
+        if (r.output_file) parts.push('<a href="dumps/' + r.output_file + '" download title="Download output dump JSON">output</a>');
+        dumpLinks = ' <span class="dump-links">(' + parts.join(' ') + ')</span>';
+      }
       tr.innerHTML =
         '<td>' + localTime(r.ts) + '</td>' +
         '<td>' + (r.strategy || '—') + '</td>' +
@@ -162,7 +169,7 @@
         '<td>' + (r.total_import_kwh !== undefined ? r.total_import_kwh.toFixed(3) : '—') + '</td>' +
         '<td>' + (r.total_export_kwh !== undefined ? r.total_export_kwh.toFixed(3) : '—') + '</td>' +
         '<td>' + (r.self_sufficiency_pct !== undefined ? r.self_sufficiency_pct.toFixed(1) + '%' : '—') + '</td>' +
-        '<td><a href="' + r.file + '" target="_blank">open</a></td>';
+        '<td><a href="' + r.file + '" target="_blank">open</a>' + dumpLinks + '</td>';
       tbody.appendChild(tr);
     });
   }

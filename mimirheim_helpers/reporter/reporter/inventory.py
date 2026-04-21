@@ -134,9 +134,15 @@ def _build_entry(
         else 0.0
     )
 
+    # Derive the dump filenames from the report filename. The stem before
+    # "_report.html" is the safe_ts used for all three files in the dump pair.
+    dump_base = report_file[: -len("_report.html")] if report_file.endswith("_report.html") else report_file
+
     return {
         "ts": ts,
         "file": report_file,
+        "input_file": f"{dump_base}_input.json",
+        "output_file": f"{dump_base}_output.json",
         "strategy": out.get("strategy", ""),
         "solve_status": out.get("solve_status", ""),
         "horizon_steps": len(schedule),
