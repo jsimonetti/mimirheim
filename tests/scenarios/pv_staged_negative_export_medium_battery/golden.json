@@ -1,11 +1,11 @@
 {
   "strategy": "minimize_cost",
-  "objective_value": -4.997122758749999,
+  "objective_value": -4.9471905087499985,
   "solve_status": "optimal",
   "dispatch_suppressed": false,
   "naive_cost_eur": 0.395,
-  "optimised_cost_eur": 0.0004234375000001273,
-  "soc_credit_eur": 0.050277265625000116,
+  "optimised_cost_eur": 0.0004065000000001222,
+  "soc_credit_eur": 0.04977449296875011,
   "schedule": [
     {
       "t": 0,
@@ -13,7 +13,7 @@
       "grid_export_kw": 0.0,
       "devices": {
         "bat": {
-          "kw": -0.22999999999999998,
+          "kw": -0.42999999999999994,
           "type": "battery",
           "power_limit_kw": null,
           "zero_exchange_active": null,
@@ -22,9 +22,9 @@
           "pv_is_curtailed": null
         },
         "solar_roof": {
-          "kw": 0.28,
+          "kw": 0.48,
           "type": "pv",
-          "power_limit_kw": 0.28,
+          "power_limit_kw": 0.48,
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
@@ -81,7 +81,7 @@
       "grid_export_kw": 0.0,
       "devices": {
         "bat": {
-          "kw": -0.42999999999999994,
+          "kw": -0.22999999999999998,
           "type": "battery",
           "power_limit_kw": null,
           "zero_exchange_active": null,
@@ -90,9 +90,9 @@
           "pv_is_curtailed": null
         },
         "solar_roof": {
-          "kw": 0.48,
+          "kw": 0.28,
           "type": "pv",
-          "power_limit_kw": 0.48,
+          "power_limit_kw": 0.28,
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
