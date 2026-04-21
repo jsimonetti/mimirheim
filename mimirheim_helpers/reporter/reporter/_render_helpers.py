@@ -1069,6 +1069,7 @@ def _build_data_table(
     pv_has_power_limit: set[str] = set()
     pv_has_on_off: set[str] = set()
     pv_has_zex: set[str] = set()
+    pv_has_curtailed: set[str] = set()
     for _step in schedule:
         for _name, _sp in _step.get("devices", {}).items():
             if _sp.get("type") == "pv":
@@ -1080,6 +1081,8 @@ def _build_data_table(
                     pv_has_on_off.add(_name)
                 if _sp.get("zero_exchange_active") is not None:
                     pv_has_zex.add(_name)
+                if _sp.get("pv_is_curtailed") is not None:
+                    pv_has_curtailed.add(_name)
 
     for name in dl_names:
         headers += [f"{name}<br>kW", f"{name}<br>kWh"]
@@ -1091,6 +1094,8 @@ def _build_data_table(
             headers.append(f"{name}<br>on/off")
         if name in pv_has_zex:
             headers.append(f"{name}<br>ZEX")
+        if name in pv_has_curtailed:
+            headers.append(f"{name}<br>curt")
     headers += ["Grid imp<br>kW", "Grid exp<br>kW"]
 
     # Build column data lists.
@@ -1123,13 +1128,14 @@ def _build_data_table(
     }
     # Per-array PV scheduled output columns.
     pv_sched_cols: dict[str, dict[str, list]] = {
-        name: {"kw": [], "kwh": [], "lim_kw": [], "on_off": [], "zex": []}
+        name: {"kw": [], "kwh": [], "lim_kw": [], "on_off": [], "zex": [], "is_curtailed": []}
         for name in pv_names
     }
     # Cell fill colours for PV flag columns: non-empty string when the flag
     # is active so the row-fill fallback logic can apply the right colour.
     pv_on_off_fill: dict[str, list[str]] = {n: [] for n in pv_has_on_off}
     pv_zex_fill: dict[str, list[str]] = {n: [] for n in pv_has_zex}
+    pv_curtailed_fill: dict[str, list[str]] = {n: [] for n in pv_has_curtailed}
 
     # Per-column cell fill colours for R4 flag columns.
     # These are populated per-row for each device.
@@ -1253,6 +1259,14 @@ def _build_data_table(
                 pv_zex_fill[pv_name].append("#c8e6c9" if zex_val else "")
                 if zex_val:
                     any_closed_loop = True
+            if pv_name in pv_has_curtailed:
+                curt_val = pv_entry.get("pv_is_curtailed")
+                # pv_is_curtailed is None for fixed-mode arrays (never reached
+                # here because fixed arrays are excluded from pv_has_curtailed).
+                # True means mimirheim is limiting output; False means free.
+                is_curt = bool(curt_val)
+                pv_sched_cols[pv_name]["is_curtailed"].append("yes" if is_curt else "no")
+                pv_curtailed_fill[pv_name].append("#ffcdd2" if is_curt else "")
 
         g_imp = step.get("grid_import_kw", 0.0)
         g_exp = step.get("grid_export_kw", 0.0)
@@ -1341,6 +1355,13 @@ def _build_data_table(
                 for i in range(len(row_fill))
             ]
             col_fills.append(zex_col_fill)
+        if name in pv_has_curtailed:
+            cells_data.append(pv_sched_cols[name]["is_curtailed"])
+            curt_col_fill = [
+                pv_curtailed_fill[name][i] if pv_curtailed_fill[name][i] else row_fill[i]
+                for i in range(len(row_fill))
+            ]
+            col_fills.append(curt_col_fill)
 
     cells_data += [col_grid_imp, col_grid_exp]
     col_fills += [row_fill, row_fill]

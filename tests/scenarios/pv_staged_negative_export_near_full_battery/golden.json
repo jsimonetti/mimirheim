@@ -1,24 +1,25 @@
 {
   "strategy": "minimize_cost",
-  "objective_value": -4.99440740625,
+  "objective_value": -4.994389886249999,
   "solve_status": "optimal",
   "dispatch_suppressed": false,
   "naive_cost_eur": 0.395,
-  "optimised_cost_eur": 0.001201875000000056,
-  "soc_credit_eur": 0.013770546874999864,
+  "optimised_cost_eur": 0.001201875000000045,
+  "soc_credit_eur": 0.013770546874999885,
   "schedule": [
     {
       "t": 0,
       "grid_import_kw": 0.0,
-      "grid_export_kw": 0.048075000000002234,
+      "grid_export_kw": 0.0480750000000018,
       "devices": {
         "bat": {
-          "kw": 0.09807500000000223,
+          "kw": 0.0980750000000018,
           "type": "battery",
           "power_limit_kw": null,
           "zero_exchange_active": null,
           "on_off_active": null,
-          "loadbalance_active": null
+          "loadbalance_active": null,
+          "pv_is_curtailed": null
         },
         "solar_roof": {
           "kw": 0.0,
@@ -26,7 +27,8 @@
           "power_limit_kw": 0.0,
           "zero_exchange_active": null,
           "on_off_active": null,
-          "loadbalance_active": null
+          "loadbalance_active": null,
+          "pv_is_curtailed": true
         },
         "house": {
           "kw": -0.05,
@@ -34,7 +36,8 @@
           "power_limit_kw": null,
           "zero_exchange_active": null,
           "on_off_active": null,
-          "loadbalance_active": null
+          "loadbalance_active": null,
+          "pv_is_curtailed": null
         }
       }
     },
@@ -49,7 +52,8 @@
           "power_limit_kw": null,
           "zero_exchange_active": null,
           "on_off_active": null,
-          "loadbalance_active": null
+          "loadbalance_active": null,
+          "pv_is_curtailed": null
         },
         "solar_roof": {
           "kw": 0.0,
@@ -57,7 +61,8 @@
           "power_limit_kw": 0.0,
           "zero_exchange_active": null,
           "on_off_active": null,
-          "loadbalance_active": null
+          "loadbalance_active": null,
+          "pv_is_curtailed": true
         },
         "house": {
           "kw": -0.05,
@@ -65,7 +70,8 @@
           "power_limit_kw": null,
           "zero_exchange_active": null,
           "on_off_active": null,
-          "loadbalance_active": null
+          "loadbalance_active": null,
+          "pv_is_curtailed": null
         }
       }
     },
@@ -80,7 +86,8 @@
           "power_limit_kw": null,
           "zero_exchange_active": null,
           "on_off_active": null,
-          "loadbalance_active": null
+          "loadbalance_active": null,
+          "pv_is_curtailed": null
         },
         "solar_roof": {
           "kw": 0.0,
@@ -88,7 +95,8 @@
           "power_limit_kw": 0.0,
           "zero_exchange_active": null,
           "on_off_active": null,
-          "loadbalance_active": null
+          "loadbalance_active": null,
+          "pv_is_curtailed": true
         },
         "house": {
           "kw": -0.05,
@@ -96,7 +104,8 @@
           "power_limit_kw": null,
           "zero_exchange_active": null,
           "on_off_active": null,
-          "loadbalance_active": null
+          "loadbalance_active": null,
+          "pv_is_curtailed": null
         }
       }
     },
@@ -106,12 +115,13 @@
       "grid_export_kw": 0.0,
       "devices": {
         "bat": {
-          "kw": -0.42999999999999994,
+          "kw": -0.4299999999999999,
           "type": "battery",
           "power_limit_kw": null,
           "zero_exchange_active": null,
           "on_off_active": null,
-          "loadbalance_active": null
+          "loadbalance_active": null,
+          "pv_is_curtailed": null
         },
         "solar_roof": {
           "kw": 0.48,
@@ -119,7 +129,8 @@
           "power_limit_kw": 0.48,
           "zero_exchange_active": null,
           "on_off_active": null,
-          "loadbalance_active": null
+          "loadbalance_active": null,
+          "pv_is_curtailed": true
         },
         "house": {
           "kw": -0.05,
@@ -127,7 +138,8 @@
           "power_limit_kw": null,
           "zero_exchange_active": null,
           "on_off_active": null,
-          "loadbalance_active": null
+          "loadbalance_active": null,
+          "pv_is_curtailed": null
         }
       }
     }

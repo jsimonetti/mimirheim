@@ -47,7 +47,6 @@ _ALLOWED_REPORT_EXTENSIONS = {".html", ".js", ".css"}
 # Only these suffixes are served from the dump directory.
 _ALLOWED_DUMP_SUFFIXES = ("_input.json", "_output.json")
 
-
 # Path to the static files bundled with this package.
 _STATIC_DIR = Path(__file__).parent / "static"
 

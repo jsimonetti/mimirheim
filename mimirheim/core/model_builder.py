@@ -417,12 +417,23 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
             # at this step; False when it chose to switch it off. None when the
             # device has no on/off capability configured.
             on_off_active = pv.is_on(t) if caps.on_off else None
+            # pv_is_curtailed: True when mimirheim is actively limiting PV output
+            # below what the solar resource could deliver. Published for all
+            # controllable modes (staged, power_limit, on_off). None for fixed
+            # mode arrays, where the forecast is always used as-is.
+            is_controllable = (
+                pv.config.production_stages is not None
+                or caps.power_limit
+                or caps.on_off
+            )
+            pv_is_curtailed = pv.is_curtailed(t) if is_controllable else None
             device_setpoints[pv.name] = DeviceSetpoint(
                 kw=pv_kw,
                 type="pv",
                 power_limit_kw=power_limit_kw,
                 zero_exchange_active=zero_exchange_active,
                 on_off_active=on_off_active,
+                pv_is_curtailed=pv_is_curtailed,
             )
         for ev in ev_devices:
             # zero_exchange_active: initialise to False (not in closed-loop mode)

@@ -51,6 +51,7 @@ _REPORTER_DISPLAYED_FIELDS: frozenset[str] = frozenset(
         "zero_exchange_active",
         "on_off_active",
         "loadbalance_active",
+        "pv_is_curtailed",
     }
 )
 
