@@ -79,12 +79,43 @@ class HomeAssistantConfig(BaseModel):
     connection details.
 
     Attributes:
-        db_path: Path to the Home Assistant SQLite database file.
+        db_url: SQLAlchemy connection URL for the Home Assistant recorder
+            database. Accepts any backend supported by SQLAlchemy. Examples:
+
+            SQLite (most common for local HA installs):
+                sqlite:////config/home-assistant_v2.db
+
+            PostgreSQL (external HA database):
+                postgresql+psycopg2://user:pass@host/homeassistant
+
+            MariaDB / MySQL:
+                mysql+pymysql://user:pass@host/homeassistant
+
+            Note: bare filesystem paths (``/config/...``) are not accepted.
+            The ``sqlite:///`` scheme prefix is required even for local files.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    db_path: str = Field(description="Path to the HA SQLite database file.", json_schema_extra={"ui_label": "HA DB path", "ui_group": "basic"})
+    db_url: str = Field(
+        description=(
+            "SQLAlchemy connection URL for the HA recorder database. "
+            "Examples: sqlite:////config/home-assistant_v2.db, "
+            "postgresql+psycopg2://user:pass@host/homeassistant, "
+            "mysql+pymysql://user:pass@host/homeassistant."
+        ),
+        json_schema_extra={"ui_label": "HA DB URL", "ui_group": "basic"},
+    )
+
+    @model_validator(mode="after")
+    def _validate_db_url_has_scheme(self) -> HomeAssistantConfig:
+        if "://" not in self.db_url:
+            raise ValueError(
+                f"homeassistant.db_url must be a full SQLAlchemy URL "
+                f"(e.g. sqlite:////config/home-assistant_v2.db), "
+                f"not a bare path. Got: {self.db_url!r}"
+            )
+        return self
 
 
 class ArrayConfig(BaseModel):

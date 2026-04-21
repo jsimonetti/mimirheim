@@ -677,6 +677,12 @@ pv-ml-learner = [
     { name = "sqlalchemy" },
     { name = "xgboost" },
 ]
+pv-ml-learner-mysql = [
+    { name = "pymysql" },
+]
+pv-ml-learner-postgres = [
+    { name = "psycopg2-binary" },
+]
 reporter = [
     { name = "plotly" },
 ]
@@ -715,8 +721,10 @@ requires-dist = [
     { name = "plotly", marker = "extra == 'helpers'", specifier = ">=6.7.0" },
     { name = "plotly", marker = "extra == 'reporter'", specifier = ">=6.7.0" },
     { name = "psycopg2-binary", marker = "extra == 'baseload-ha-db-postgres'", specifier = ">=2.9" },
+    { name = "psycopg2-binary", marker = "extra == 'pv-ml-learner-postgres'", specifier = ">=2.9" },
     { name = "pydantic", specifier = ">=2.13.2" },
     { name = "pymysql", marker = "extra == 'baseload-ha-db-mysql'", specifier = ">=1.1" },
+    { name = "pymysql", marker = "extra == 'pv-ml-learner-mysql'", specifier = ">=1.1" },
     { name = "pynordpool", marker = "extra == 'helpers'", specifier = ">=0.4.0" },
     { name = "pynordpool", marker = "extra == 'nordpool'", specifier = ">=0.4.0" },
     { name = "pyyaml", specifier = ">=6.0" },
@@ -729,7 +737,7 @@ requires-dist = [
     { name = "xgboost", marker = "extra == 'helpers'", specifier = ">=2.0" },
     { name = "xgboost", marker = "extra == 'pv-ml-learner'", specifier = ">=2.0" },
 ]
-provides-extras = ["scheduler", "nordpool", "pv-fetcher", "pv-ml-learner", "baseload-ha", "baseload-ha-db", "baseload-ha-db-postgres", "baseload-ha-db-mysql", "reporter", "config-editor", "helpers"]
+provides-extras = ["scheduler", "nordpool", "pv-fetcher", "pv-ml-learner", "pv-ml-learner-postgres", "pv-ml-learner-mysql", "baseload-ha", "baseload-ha-db", "baseload-ha-db-postgres", "baseload-ha-db-mysql", "reporter", "config-editor", "helpers"]
 
 [package.metadata.requires-dev]
 dev = [
