@@ -89,6 +89,7 @@ def run(
             CronTrigger.from_crontab(cron_expr, timezone="UTC"),
             args=[client, topic],
             id=job_id,
+            name=topic,
             coalesce=True,
             max_instances=1,
         )
