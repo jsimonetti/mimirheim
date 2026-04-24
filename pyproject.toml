@@ -42,7 +42,7 @@ pv-ml-learner = [
     "pandas>=2.2",
 ]
 pv-ml-learner-postgres = [
-    "psycopg2-binary>=2.9",
+    "psycopg2-binary>=2.9.12",
 ]
 pv-ml-learner-mysql = [
     "pymysql>=1.1",
@@ -54,7 +54,7 @@ baseload-ha-db = [
     "sqlalchemy>=2.0",
 ]
 baseload-ha-db-postgres = [
-    "psycopg2-binary>=2.9",
+    "psycopg2-binary>=2.9.12",
 ]
 baseload-ha-db-mysql = [
     "pymysql>=1.1",
