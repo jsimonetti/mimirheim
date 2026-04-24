@@ -75,7 +75,9 @@ class PriceStep(BaseModel):
     Attributes:
         ts: UTC datetime when this price period begins.
         import_eur_per_kwh: Cost of importing 1 kWh from the grid in EUR.
-            Must be non-negative (grid never pays you to consume).
+            May be negative during periods of excess generation when the market
+            pays consumers to absorb power (common in day-ahead markets during
+            high renewable output).
         export_eur_per_kwh: Revenue for exporting 1 kWh to the grid in EUR.
             May be negative in markets that charge for export.
         confidence: Forecast confidence in [0, 1]. For confirmed day-ahead
@@ -86,7 +88,7 @@ class PriceStep(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     ts: datetime
-    import_eur_per_kwh: float = Field(ge=0, description="Import price in EUR/kWh.")
+    import_eur_per_kwh: float = Field(description="Import price in EUR/kWh. May be negative.")
     export_eur_per_kwh: float = Field(description="Export price in EUR/kWh. May be negative.")
     confidence: float = Field(ge=0.0, le=1.0, default=1.0, description="Forecast confidence [0, 1].")
 
