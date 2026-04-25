@@ -1,5 +1,5 @@
 name: Mimirheim
-version: v0.1.3
+version: v0.1.4
 slug: mimirheim
 description: >-
   MILP energy optimiser for home battery, PV, and EV scheduling against dynamic
