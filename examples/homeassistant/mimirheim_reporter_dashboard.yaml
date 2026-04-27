@@ -205,3 +205,332 @@ content: >
   | Self-sufficiency | {{ state_attr('sensor.hioo_reporter_summary', 'self_sufficiency_pct') }}% |
   | Grid import | {{ state_attr('sensor.hioo_reporter_summary', 'grid_import_kwh') | round(3) }} kWh |
   | Grid export | {{ state_attr('sensor.hioo_reporter_summary', 'grid_export_kwh') | round(3) }} kWh |
+
+---
+
+# ===========================================================================
+# PREDICTION ACCURACY TRACKING
+# ===========================================================================
+#
+# The cards below compare mimirheim's predictions against actual sensor
+# measurements from your inverter, battery, and meter. This helps you:
+#
+# - Validate forecast accuracy (PV, price, load predictions)
+# - Tune model parameters if predictions drift
+# - Understand when predictions work well and when they don't
+#
+# REQUIREMENTS:
+# 1. Actual measurement sensors in Home Assistant (adjust entity IDs below):
+#    - sensor.grid_power_import (from your meter/inverter)
+#    - sensor.battery_state_of_charge (from battery BMS)
+#    - sensor.solar_power (from PV inverter)
+#
+# 2. Template sensors defined in configuration.yaml (see below)
+#
+# 3. apexcharts-card custom component
+#
+# ---------------------------------------------------------------------------
+# Template Sensors (add to configuration.yaml or templates.yaml)
+# ---------------------------------------------------------------------------
+#
+# template:
+#   - sensor:
+#       # Extract current step (t=0) predictions from mimirheim schedule
+#       - name: "mimirheim Predicted Grid Import"
+#         unique_id: mimir_predicted_grid_import
+#         unit_of_measurement: "kW"
+#         device_class: power
+#         state_class: measurement
+#         state: >
+#           {{ state_attr('sensor.hioo_grid_import_forecast', 'grid_import_kw') | float(0) }}
+#       
+#       - name: "mimirheim Predicted Battery SOC"
+#         unique_id: mimir_predicted_battery_soc
+#         unit_of_measurement: "kWh"
+#         device_class: energy_storage
+#         state_class: measurement
+#         state: >
+#           {{ state_attr('sensor.hioo_battery_soc_forecast', 'soc_kwh') | float(0) }}
+#       
+#       - name: "mimirheim Predicted PV"
+#         unique_id: mimir_predicted_pv
+#         unit_of_measurement: "kW"
+#         device_class: power
+#         state_class: measurement
+#         state: >
+#           {{ state_attr('sensor.hioo_pv_forecast', 'kw') | float(0) }}
+#       
+#       # Prediction error sensors
+#       - name: "Grid Import Prediction Error"
+#         unique_id: grid_import_prediction_error
+#         unit_of_measurement: "kW"
+#         device_class: power
+#         state: >
+#           {% set predicted = states('sensor.mimirheim_predicted_grid_import') | float(0) %}
+#           {% set actual = states('sensor.grid_power_import') | float(0) %}
+#           {{ (predicted - actual) | round(2) }}
+#         attributes:
+#           absolute_error: >
+#             {{ (states('sensor.grid_import_prediction_error') | float(0)) | abs | round(2) }}
+#           percentage_error: >
+#             {% set actual = states('sensor.grid_power_import') | float(0) %}
+#             {% if actual > 0.1 %}
+#               {{ ((states('sensor.grid_import_prediction_error') | float(0) / actual) * 100) | round(1) }}
+#             {% else %}
+#               0
+#             {% endif %}
+#       
+#       - name: "Battery SOC Prediction Error"
+#         unique_id: battery_soc_prediction_error
+#         unit_of_measurement: "kWh"
+#         device_class: energy_storage
+#         state: >
+#           {% set predicted = states('sensor.mimirheim_predicted_battery_soc') | float(0) %}
+#           {% set actual = states('sensor.battery_state_of_charge') | float(0) %}
+#           {{ (predicted - actual) | round(2) }}
+#         attributes:
+#           absolute_error: >
+#             {{ (states('sensor.battery_soc_prediction_error') | float(0)) | abs | round(2) }}
+#       
+#       - name: "PV Prediction Error"
+#         unique_id: pv_prediction_error
+#         unit_of_measurement: "kW"
+#         device_class: power
+#         state: >
+#           {% set predicted = states('sensor.mimirheim_predicted_pv') | float(0) %}
+#           {% set actual = states('sensor.solar_power') | float(0) %}
+#           {{ (predicted - actual) | round(2) }}
+#         attributes:
+#           absolute_error: >
+#             {{ (states('sensor.pv_prediction_error') | float(0)) | abs | round(2) }}
+#
+# ---------------------------------------------------------------------------
+
+---
+
+# ---------------------------------------------------------------------------
+# Card 4 — Grid Import: Predicted vs Actual
+# ---------------------------------------------------------------------------
+
+type: custom:apexcharts-card
+header:
+  title: Grid Import - Predicted vs Actual (24h)
+  show: true
+graph_span: 24h
+span:
+  start: day
+yaxis:
+  - id: power
+    min: 0
+    apex_config:
+      title:
+        text: Power (kW)
+series:
+  # Predicted grid import (from mimirheim schedule sensor)
+  - entity: sensor.mimirheim_predicted_grid_import
+    name: Predicted
+    color: '#0066cc'
+    stroke_width: 2
+    type: line
+    extend_to: false
+    
+  # Actual grid import (from your meter/inverter)
+  - entity: sensor.grid_power_import
+    name: Actual
+    color: '#cc0000'
+    stroke_width: 2
+    type: line
+    extend_to: false
+    
+  # Prediction error magnitude (shaded area)
+  - entity: sensor.grid_import_prediction_error
+    name: Error (absolute)
+    color: '#ff9900'
+    opacity: 0.3
+    type: area
+    extend_to: false
+    yaxis_id: power
+    transform: "return Math.abs(x);"
+
+---
+
+# ---------------------------------------------------------------------------
+# Card 5 — Battery SOC: Predicted vs Actual
+# ---------------------------------------------------------------------------
+
+type: custom:apexcharts-card
+header:
+  title: Battery SOC - Predicted vs Actual (24h)
+  show: true
+graph_span: 24h
+span:
+  start: day
+yaxis:
+  - id: soc
+    min: 0
+    apex_config:
+      title:
+        text: SOC (kWh)
+series:
+  # Predicted SOC trajectory (from mimirheim)
+  - entity: sensor.mimirheim_predicted_battery_soc
+    name: Predicted SOC
+    color: '#0066cc'
+    stroke_width: 2
+    type: line
+    extend_to: false
+    
+  # Actual SOC (from battery BMS)
+  - entity: sensor.battery_state_of_charge
+    name: Actual SOC
+    color: '#00aa00'
+    stroke_width: 2
+    type: line
+    extend_to: false
+    
+  # SOC prediction error
+  - entity: sensor.battery_soc_prediction_error
+    name: Error
+    color: '#ff9900'
+    opacity: 0.3
+    type: area
+    extend_to: false
+    yaxis_id: soc
+    transform: "return Math.abs(x);"
+
+---
+
+# ---------------------------------------------------------------------------
+# Card 6 — PV Generation: Predicted vs Actual
+# ---------------------------------------------------------------------------
+
+type: custom:apexcharts-card
+header:
+  title: PV Generation - Forecast vs Actual (24h)
+  show: true
+graph_span: 24h
+span:
+  start: day
+yaxis:
+  - id: power
+    min: 0
+    apex_config:
+      title:
+        text: Power (kW)
+series:
+  # PV forecast (from mimirheim)
+  - entity: sensor.mimirheim_predicted_pv
+    name: Forecast
+    color: '#ffcc00'
+    stroke_width: 2
+    type: line
+    extend_to: false
+    
+  # Actual PV generation (from inverter)
+  - entity: sensor.solar_power
+    name: Actual
+    color: '#ff6600'
+    stroke_width: 2
+    type: line
+    extend_to: false
+    
+  # Forecast error
+  - entity: sensor.pv_prediction_error
+    name: Error
+    color: '#cc0000'
+    opacity: 0.3
+    type: area
+    extend_to: false
+    yaxis_id: power
+    transform: "return Math.abs(x);"
+
+---
+
+# ---------------------------------------------------------------------------
+# Card 7 — Current Prediction Accuracy Statistics
+# ---------------------------------------------------------------------------
+
+type: entities
+title: Prediction Accuracy (Current)
+entities:
+  - entity: sensor.grid_import_prediction_error
+    name: Grid Import Error
+    icon: mdi:transmission-tower
+    secondary_info: last-changed
+    
+  - type: attribute
+    entity: sensor.grid_import_prediction_error
+    attribute: percentage_error
+    name: Grid Error %
+    suffix: "%"
+    
+  - entity: sensor.battery_soc_prediction_error
+    name: Battery SOC Error
+    icon: mdi:battery
+    
+  - type: attribute
+    entity: sensor.battery_soc_prediction_error
+    attribute: absolute_error
+    name: SOC Error (absolute)
+    suffix: " kWh"
+    
+  - entity: sensor.pv_prediction_error
+    name: PV Generation Error
+    icon: mdi:solar-power
+    
+  - type: attribute
+    entity: sensor.pv_prediction_error
+    attribute: absolute_error
+    name: PV Error (absolute)
+    suffix: " kW"
+
+---
+
+# ---------------------------------------------------------------------------
+# Card 8 — Prediction Accuracy Trend (7 days)
+# ---------------------------------------------------------------------------
+
+type: custom:apexcharts-card
+header:
+  title: Prediction Accuracy Trend (7 days, hourly mean)
+  show: true
+graph_span: 7d
+yaxis:
+  - id: error
+    min: 0
+    apex_config:
+      title:
+        text: Mean Absolute Error
+series:
+  - entity: sensor.grid_import_prediction_error
+    name: Grid Import MAE (kW)
+    color: '#cc0000'
+    type: line
+    stroke_width: 2
+    transform: "return Math.abs(x);"
+    statistics:
+      type: mean
+      period: hour
+      align: start
+      
+  - entity: sensor.battery_soc_prediction_error
+    name: Battery SOC MAE (kWh)
+    color: '#0066cc'
+    type: line
+    stroke_width: 2
+    transform: "return Math.abs(x);"
+    statistics:
+      type: mean
+      period: hour
+      align: start
+      
+  - entity: sensor.pv_prediction_error
+    name: PV MAE (kW)
+    color: '#ffcc00'
+    type: line
+    stroke_width: 2
+    transform: "return Math.abs(x);"
+    statistics:
+      type: mean
+      period: hour
+      align: start

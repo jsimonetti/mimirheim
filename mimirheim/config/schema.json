@@ -1185,6 +1185,22 @@
       "title": "HomeAssistantConfig",
       "type": "object"
     },
+    "HybridInverterCapabilitiesConfig": {
+      "additionalProperties": false,
+      "description": "Hardware capability flags for a hybrid inverter.\n\nAttributes:\n    zero_exchange: True if the inverter supports a closed-loop zero-exchange\n        firmware mode triggered by a boolean register. When True, the\n        inverter uses its own current transformers to continuously hold grid\n        exchange near zero until the flag is cleared. mimirheim decides\n        *whether* to assert this mode per 15-minute step; the inverter\n        performs the real-time enforcement autonomously. Default False.",
+      "properties": {
+        "zero_exchange": {
+          "default": false,
+          "description": "Inverter supports a closed-loop zero-exchange firmware mode. When True, the inverter autonomously holds grid exchange near zero using local CT measurements.",
+          "title": "Zero Exchange",
+          "type": "boolean",
+          "ui_group": "advanced",
+          "ui_label": "Zero-exchange mode"
+        }
+      },
+      "title": "HybridInverterCapabilitiesConfig",
+      "type": "object"
+    },
     "HybridInverterConfig": {
       "additionalProperties": false,
       "description": "Configuration for a DC-coupled hybrid inverter.\n\nA hybrid inverter integrates a PV MPPT input, a battery DC bus, and an AC\ngrid connection into a single unit. Use this device class when PV and\nbattery share a DC bus inside the inverter. Use separate ``PvConfig`` and\n``BatteryConfig`` for AC-coupled systems where each device has its own\ndedicated inverter.\n\nThe key difference from AC-coupled systems is the DC bus power balance:\nPV can charge the battery directly without going through AC conversion, and\nthe inverter applies a single conversion efficiency for both import and\nexport directions.\n\nAttributes:\n    capacity_kwh: Usable battery capacity in kWh.\n    min_soc_kwh: Minimum battery SOC the solver may dispatch to, in kWh.\n    max_charge_kw: Maximum DC charge power delivered to the battery cells,\n        in kW. This is the DC bus side limit; the AC import limit is\n        derived as ``max_charge_kw / inverter_efficiency``.\n    max_discharge_kw: Maximum DC discharge power drawn from the battery\n        cells, in kW.\n    battery_charge_efficiency: Fraction of DC bus power that reaches the\n        battery cells during charging. Accounts for BMS and cell losses.\n        Must be in (0, 1].\n    battery_discharge_efficiency: Fraction of battery cell energy that\n        appears on the DC bus during discharge. Must be in (0, 1].\n    inverter_efficiency: Round-trip AC-to-DC (and DC-to-AC) conversion\n        efficiency of the shared inverter stage. Applied symmetrically to\n        both import and export directions. Must be in (0, 1].\n    max_pv_kw: Peak PV power at the MPPT input in kW. Used to clip\n        unreasonably large forecast values that may indicate sensor errors.\n    wear_cost_eur_per_kwh: Battery degradation cost per kWh of DC\n        throughput (charge + discharge). In EUR.\n    topic_pv_forecast: MQTT topic publishing the per-step PV DC power\n        forecast in kW for this inverter's MPPT input.\n    inputs: Optional MQTT input topic configuration for live battery\n        state readings (SOC). When None, the solver uses the initial SOC\n        from the previous step.",
@@ -1297,6 +1313,130 @@
           "description": "MQTT input topic configuration for live battery SOC readings. Defaults to an empty model so topics are derived with percent unit. Set to null to opt out of MQTT inputs entirely.",
           "ui_group": "advanced",
           "ui_label": "Input topics"
+        },
+        "optimal_lower_soc_kwh": {
+          "default": 0.0,
+          "description": "Preferred minimum state of charge in kWh. When the SOC falls below this level, the solver accrues a penalty proportional to the deficit. Acts as a soft lower bound: the solver may still dispatch below this level when the price spread justifies it. Must be >= min_soc_kwh and <= capacity_kwh.",
+          "minimum": 0.0,
+          "title": "Optimal Lower Soc Kwh",
+          "type": "number",
+          "ui_group": "advanced",
+          "ui_label": "Preferred minimum SOC (kWh)"
+        },
+        "soc_low_penalty_eur_per_kwh_h": {
+          "default": 0.0,
+          "description": "Penalty rate for SOC below optimal_lower_soc_kwh, in EUR per kWh of deficit per hour. Set to 0.0 (default) to disable.",
+          "minimum": 0.0,
+          "title": "Soc Low Penalty Eur Per Kwh H",
+          "type": "number",
+          "ui_group": "advanced",
+          "ui_label": "Low SOC penalty (\u20ac/kWh\u00b7h)"
+        },
+        "reduce_charge_above_soc_kwh": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "SOC level in kWh above which max charge power begins to decrease linearly to reduce_charge_min_kw at capacity_kwh. Must be strictly between min_soc_kwh and capacity_kwh. Must be set together with reduce_charge_min_kw.",
+          "title": "Reduce Charge Above Soc Kwh",
+          "ui_group": "advanced",
+          "ui_label": "Derate charge above SOC (kWh)"
+        },
+        "reduce_charge_min_kw": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Max charge power in kW at full capacity (capacity_kwh). The charge power limit decreases linearly from max_charge_kw at reduce_charge_above_soc_kwh to this value at capacity_kwh. Must be set together with reduce_charge_above_soc_kwh.",
+          "title": "Reduce Charge Min Kw",
+          "ui_group": "advanced",
+          "ui_label": "Derated charge minimum (kW)"
+        },
+        "reduce_discharge_below_soc_kwh": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "SOC level in kWh below which max discharge power begins to decrease linearly to reduce_discharge_min_kw at min_soc_kwh. Must be strictly between min_soc_kwh and capacity_kwh. Must be set together with reduce_discharge_min_kw.",
+          "title": "Reduce Discharge Below Soc Kwh",
+          "ui_group": "advanced",
+          "ui_label": "Derate discharge below SOC (kWh)"
+        },
+        "reduce_discharge_min_kw": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Max discharge power in kW at minimum SOC (min_soc_kwh). The discharge power limit decreases linearly from max_discharge_kw at reduce_discharge_below_soc_kwh to this value at min_soc_kwh. Must be set together with reduce_discharge_below_soc_kwh.",
+          "title": "Reduce Discharge Min Kw",
+          "ui_group": "advanced",
+          "ui_label": "Derated discharge minimum (kW)"
+        },
+        "min_charge_kw": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Minimum DC charge power in kW when the inverter is actively charging. The inverter either charges at this power or above, or stays idle. Default None = no floor applied.",
+          "title": "Min Charge Kw",
+          "ui_group": "advanced",
+          "ui_label": "Minimum charge power (kW)"
+        },
+        "min_discharge_kw": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Minimum DC discharge power in kW when the inverter is actively discharging. Default None = no floor applied.",
+          "title": "Min Discharge Kw",
+          "ui_group": "advanced",
+          "ui_label": "Minimum discharge power (kW)"
+        },
+        "capabilities": {
+          "$ref": "#/$defs/HybridInverterCapabilitiesConfig",
+          "description": "Hardware capability flags.",
+          "ui_group": "advanced",
+          "ui_label": "Hardware capabilities"
+        },
+        "outputs": {
+          "$ref": "#/$defs/HybridInverterOutputsConfig",
+          "description": "MQTT output topic configuration for hybrid inverter control signals.",
+          "ui_group": "advanced",
+          "ui_label": "Output topics"
         }
       },
       "required": [
@@ -1308,6 +1448,30 @@
       "title": "HybridInverterConfig",
       "type": "object",
       "ui_instance_name_description": "A short identifier for this hybrid inverter used in MQTT topics and automations. For example: 'hybrid_inv' or 'solis_hybrid'."
+    },
+    "HybridInverterOutputsConfig": {
+      "additionalProperties": false,
+      "description": "MQTT output topic configuration for a hybrid inverter.\n\nAttributes:\n    exchange_mode: Topic to publish the closed-loop zero-exchange mode flag\n        (``\"true\"`` or ``\"false\"``). Published only when\n        ``capabilities.zero_exchange`` is True. Defaults to None (not\n        published).",
+      "properties": {
+        "exchange_mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "MQTT topic for the closed-loop zero-exchange mode boolean flag. Defaults to '{mqtt.topic_prefix}/output/hybrid/{name}/exchange_mode' when not set.",
+          "title": "Exchange Mode",
+          "ui_group": "advanced",
+          "ui_label": "Exchange mode topic",
+          "ui_placeholder": "{mqtt.topic_prefix}/output/hybrid/{name}/exchange_mode"
+        }
+      },
+      "title": "HybridInverterOutputsConfig",
+      "type": "object"
     },
     "InputsConfig": {
       "additionalProperties": false,
