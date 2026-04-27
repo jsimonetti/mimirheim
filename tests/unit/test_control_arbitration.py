@@ -41,8 +41,15 @@ from mimirheim.config.schema import (
     PvOutputsConfig,
     StaticLoadConfig,
 )
+from mimirheim.config.schema import HybridInverterCapabilitiesConfig, HybridInverterConfig, HybridInverterOutputsConfig
 from mimirheim.core.bundle import DeviceSetpoint, EvInputs, ScheduleStep, SolveBundle, SolveResult
-from mimirheim.core.control_arbitration import assign_control_authority
+from mimirheim.core.control_arbitration import (
+    _TYPE_PRIORITY,
+    _collect_zex_capable,
+    _efficiency_at_power,
+    _max_charge_kw,
+    assign_control_authority,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -694,3 +701,250 @@ def test_infeasible_result_returned_unchanged() -> None:
     )
     result = assign_control_authority(infeasible, bundle, config)
     assert result is infeasible
+
+
+# ---------------------------------------------------------------------------
+# Hybrid inverter arbitration (Plan 55)
+# ---------------------------------------------------------------------------
+
+
+def _config_with_hybrid_zex(
+    max_charge_kw: float = 5.0,
+    inverter_efficiency: float = 0.97,
+    wear_cost: float = 0.0,
+) -> MimirheimConfig:
+    """MimirheimConfig with a hybrid inverter that has zero_exchange enabled."""
+    raw = _minimal_config_dict()
+    raw["hybrid_inverters"] = {
+        "hi": {
+            "capacity_kwh": 10.0,
+            "max_charge_kw": max_charge_kw,
+            "max_discharge_kw": 5.0,
+            "max_pv_kw": 6.0,
+            "wear_cost_eur_per_kwh": wear_cost,
+            "inverter_efficiency": inverter_efficiency,
+            "capabilities": {"zero_exchange": True},
+            "outputs": {"exchange_mode": "mimir/hi/exchange_mode"},
+        }
+    }
+    return MimirheimConfig.model_validate(raw)
+
+
+def _config_with_battery_and_hybrid_zex(
+    bat_wear_cost: float = 0.05,
+    hi_wear_cost: float = 0.05,
+) -> MimirheimConfig:
+    """MimirheimConfig with both a battery and a hybrid inverter, both zero_exchange capable."""
+    raw = _minimal_config_dict()
+    raw["batteries"] = {
+        "bat": {
+            "capacity_kwh": 10.0,
+            "charge_segments": [{"power_max_kw": 5.0, "efficiency": 0.95}],
+            "discharge_segments": [{"power_max_kw": 5.0, "efficiency": 0.95}],
+            "wear_cost_eur_per_kwh": bat_wear_cost,
+            "capabilities": {"zero_exchange": True},
+            "outputs": {"exchange_mode": "mimir/bat/exchange_mode"},
+        }
+    }
+    raw["hybrid_inverters"] = {
+        "hi": {
+            "capacity_kwh": 10.0,
+            "max_charge_kw": 5.0,
+            "max_discharge_kw": 5.0,
+            "max_pv_kw": 6.0,
+            "inverter_efficiency": 0.95,
+            "wear_cost_eur_per_kwh": hi_wear_cost,
+            "capabilities": {"zero_exchange": True},
+            "outputs": {"exchange_mode": "mimir/hi/exchange_mode"},
+        }
+    }
+    return MimirheimConfig.model_validate(raw)
+
+
+def test_hybrid_inverter_included_in_zex_capable() -> None:
+    """A hybrid inverter with zero_exchange=True appears in _collect_zex_capable."""
+    config = _config_with_hybrid_zex()
+    capable = _collect_zex_capable(config)
+    assert "hi" in capable
+
+
+def test_hybrid_inverter_not_in_zex_capable_when_flag_false() -> None:
+    """A hybrid inverter with zero_exchange=False is absent from _collect_zex_capable."""
+    raw = _minimal_config_dict()
+    raw["hybrid_inverters"] = {
+        "hi": {
+            "capacity_kwh": 10.0,
+            "max_charge_kw": 5.0,
+            "max_discharge_kw": 5.0,
+            "max_pv_kw": 6.0,
+            "capabilities": {"zero_exchange": False},
+        }
+    }
+    config = MimirheimConfig.model_validate(raw)
+    capable = _collect_zex_capable(config)
+    assert "hi" not in capable
+
+
+def test_hybrid_inverter_max_charge_kw_uses_ac_side() -> None:
+    """_max_charge_kw for a hybrid_inverter returns max_charge_kw / inverter_efficiency.
+
+    The AC-side import limit is the DC charge limit divided by inverter efficiency.
+    DeviceSetpoint.kw is net AC power, so the headroom calculation must use the
+    AC limit, not the DC-bus limit.
+    """
+    config = _config_with_hybrid_zex(max_charge_kw=5.0, inverter_efficiency=0.97)
+    expected_ac_limit = 5.0 / 0.97
+    result = _max_charge_kw("hi", "hybrid_inverter", config)
+    assert abs(result - expected_ac_limit) < 1e-9
+
+
+def test_hybrid_inverter_max_charge_kw_unknown_name_returns_zero() -> None:
+    """_max_charge_kw returns 0.0 for an unknown hybrid inverter name."""
+    config = _config_with_hybrid_zex()
+    assert _max_charge_kw("nonexistent", "hybrid_inverter", config) == 0.0
+
+
+def test_hybrid_inverter_efficiency_uses_inverter_efficiency() -> None:
+    """_efficiency_at_power for a hybrid_inverter returns config.inverter_efficiency."""
+    config = _config_with_hybrid_zex(inverter_efficiency=0.97)
+    result = _efficiency_at_power("hi", "hybrid_inverter", power_kw=3.0, config=config)
+    assert abs(result - 0.97) < 1e-9
+
+
+def test_hybrid_inverter_type_priority_equals_ev() -> None:
+    """_TYPE_PRIORITY["hybrid_inverter"] == 2 (same as ev_charger, above pv)."""
+    assert _TYPE_PRIORITY.get("hybrid_inverter") == 2
+    assert _TYPE_PRIORITY.get("hybrid_inverter") > _TYPE_PRIORITY.get("pv", 1)
+
+
+def test_hybrid_inverter_selected_as_enforcer_when_only_candidate() -> None:
+    """assign_control_authority sets zero_exchange_active=True on a near-zero-exchange
+    step when the hybrid inverter is the only capable device and has sufficient headroom.
+    """
+    config = _config_with_hybrid_zex(max_charge_kw=5.0, inverter_efficiency=0.97)
+    bundle = _minimal_bundle_no_ev()
+    # Hybrid inverter at 0 kW AC: headroom = max_charge_kw / η = ~5.15 kW (above margin).
+    step = _step(
+        t=0,
+        grid_import_kw=0.0,
+        grid_export_kw=0.0,
+        devices={"hi": DeviceSetpoint(kw=0.0, type="hybrid_inverter", zero_exchange_active=False)},
+    )
+    result = assign_control_authority(_result([step]), bundle, config)
+    assert result.schedule[0].devices["hi"].zero_exchange_active is True
+
+
+def test_hybrid_inverter_not_selected_on_nonzero_exchange_step() -> None:
+    """zero_exchange_active remains False on non-zero-exchange steps."""
+    config = _config_with_hybrid_zex()
+    bundle = _minimal_bundle_no_ev()
+    step = _step(
+        t=0,
+        grid_import_kw=2.0,
+        grid_export_kw=0.0,
+        devices={"hi": DeviceSetpoint(kw=-1.0, type="hybrid_inverter", zero_exchange_active=False)},
+    )
+    result = assign_control_authority(_result([step]), bundle, config)
+    assert result.schedule[0].devices["hi"].zero_exchange_active is False
+
+
+def test_battery_preferred_over_hybrid_inverter_same_efficiency() -> None:
+    """When a battery and hybrid inverter have identical efficiency and headroom,
+    the battery wins because its type priority (3) > hybrid inverter (2).
+
+    To produce a true tie at levels 1 (efficiency) and 2 (headroom), the AC-side
+    charge limit for both devices must be equal. The hybrid inverter's AC limit
+    is max_charge_kw / inverter_efficiency; setting that equal to the battery's
+    segment sum (5.0 kW) requires max_charge_kw = 5.0 * 0.95 = 4.75 kW.
+    """
+    raw = _minimal_config_dict()
+    raw["batteries"] = {
+        "bat": {
+            "capacity_kwh": 10.0,
+            "charge_segments": [{"power_max_kw": 5.0, "efficiency": 0.95}],
+            "discharge_segments": [{"power_max_kw": 5.0, "efficiency": 0.95}],
+            "capabilities": {"zero_exchange": True},
+            "outputs": {"exchange_mode": "mimir/bat/exchange_mode"},
+        }
+    }
+    raw["hybrid_inverters"] = {
+        "hi": {
+            "capacity_kwh": 10.0,
+            # max_charge_kw / inverter_efficiency = 4.75 / 0.95 = 5.0 kW (AC),
+            # matching the battery's 5.0 kW segment sum exactly.
+            "max_charge_kw": 4.75,
+            "max_discharge_kw": 5.0,
+            "max_pv_kw": 6.0,
+            "inverter_efficiency": 0.95,
+            "capabilities": {"zero_exchange": True},
+            "outputs": {"exchange_mode": "mimir/hi/exchange_mode"},
+        }
+    }
+    config = MimirheimConfig.model_validate(raw)
+    bundle = _minimal_bundle_no_ev()
+    step = _step(
+        t=0,
+        grid_import_kw=0.0,
+        grid_export_kw=0.0,
+        devices={
+            "bat": DeviceSetpoint(kw=0.0, type="battery", zero_exchange_active=False),
+            "hi": DeviceSetpoint(kw=0.0, type="hybrid_inverter", zero_exchange_active=False),
+        },
+    )
+    result = assign_control_authority(_result([step]), bundle, config)
+    # Battery type priority (3) > hybrid inverter (2): battery wins.
+    assert result.schedule[0].devices["bat"].zero_exchange_active is True
+    assert result.schedule[0].devices["hi"].zero_exchange_active is False
+
+
+def test_hybrid_inverter_wear_cost_penalises_selection() -> None:
+    """When a battery has lower wear cost than a hybrid inverter, and headroom is
+    equal, the battery wins because lower wear cost produces a higher wear_penalty
+    value (level 3), and the battery also has higher type priority (level 4).
+
+    Equal headroom requires matching AC-side charge limits:
+        battery: 5.0 kW (segment sum)
+        hybrid:  max_charge_kw / inverter_efficiency = 4.75 / 0.95 = 5.0 kW AC
+
+    Efficiency scores are equal (0.95 for both), so the win is decided at
+    wear_penalty (level 3): battery (0.02) beats hybrid (0.10).
+    """
+    raw = _minimal_config_dict()
+    raw["batteries"] = {
+        "bat": {
+            "capacity_kwh": 10.0,
+            "charge_segments": [{"power_max_kw": 5.0, "efficiency": 0.95}],
+            "discharge_segments": [{"power_max_kw": 5.0, "efficiency": 0.95}],
+            "wear_cost_eur_per_kwh": 0.02,
+            "capabilities": {"zero_exchange": True},
+            "outputs": {"exchange_mode": "mimir/bat/exchange_mode"},
+        }
+    }
+    raw["hybrid_inverters"] = {
+        "hi": {
+            "capacity_kwh": 10.0,
+            "max_charge_kw": 4.75,
+            "max_discharge_kw": 5.0,
+            "max_pv_kw": 6.0,
+            "inverter_efficiency": 0.95,
+            "wear_cost_eur_per_kwh": 0.10,
+            "capabilities": {"zero_exchange": True},
+            "outputs": {"exchange_mode": "mimir/hi/exchange_mode"},
+        }
+    }
+    config = MimirheimConfig.model_validate(raw)
+    bundle = _minimal_bundle_no_ev()
+    step = _step(
+        t=0,
+        grid_import_kw=0.0,
+        grid_export_kw=0.0,
+        devices={
+            "bat": DeviceSetpoint(kw=0.0, type="battery", zero_exchange_active=False),
+            "hi": DeviceSetpoint(kw=0.0, type="hybrid_inverter", zero_exchange_active=False),
+        },
+    )
+    result = assign_control_authority(_result([step]), bundle, config)
+    # Battery wear cost (0.02) < hybrid wear cost (0.10): battery wins.
+    assert result.schedule[0].devices["bat"].zero_exchange_active is True
+    assert result.schedule[0].devices["hi"].zero_exchange_active is False
+

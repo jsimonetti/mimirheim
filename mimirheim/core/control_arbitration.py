@@ -35,7 +35,7 @@ logger = logging.getLogger("mimirheim.control_arbitration")
 # Type-priority constants used as the final tiebreak level. Higher number wins
 # in the descending sort. Battery has the widest regulation bandwidth; PV
 # curtailment is always the last resort because it forfeits free generation.
-_TYPE_PRIORITY: dict[str, int] = {"battery": 3, "ev_charger": 2, "pv": 1}
+_TYPE_PRIORITY: dict[str, int] = {"battery": 3, "hybrid_inverter": 2, "ev_charger": 2, "pv": 1}
 
 
 @dataclass
@@ -110,6 +110,14 @@ def _max_charge_kw(name: str, sp_type: str, config: MimirheimConfig) -> float:
         if ev_cfg is None:
             return 0.0
         return sum(s.power_max_kw for s in ev_cfg.charge_segments)
+    if sp_type == "hybrid_inverter":
+        hi_cfg = config.hybrid_inverters.get(name)
+        if hi_cfg is None:
+            return 0.0
+        # The DeviceSetpoint.kw for a hybrid inverter is net AC power. The
+        # maximum AC-side import (charge) power is the DC-bus charge limit
+        # divided by the inverter efficiency (AC → DC conversion loss).
+        return hi_cfg.max_charge_kw / hi_cfg.inverter_efficiency
     return 0.0
 
 
@@ -216,6 +224,14 @@ def _efficiency_at_power(name: str, sp_type: str, power_kw: float, config: Mimir
                 return seg.efficiency
         return ev_cfg.charge_segments[-1].efficiency
 
+    if sp_type == "hybrid_inverter":
+        hi_cfg = config.hybrid_inverters.get(name)
+        if hi_cfg is None:
+            return 0.0
+        # A hybrid inverter operates at a single inverter efficiency regardless
+        # of power level (no per-segment curve). Return the flat efficiency.
+        return hi_cfg.inverter_efficiency
+
     return 0.0
 
 
@@ -292,6 +308,10 @@ def _build_candidates(
             bat_cfg = config.batteries.get(name)
             if bat_cfg is not None:
                 wear_cost = bat_cfg.wear_cost_eur_per_kwh
+        elif sp.type == "hybrid_inverter":
+            hi_cfg = config.hybrid_inverters.get(name)
+            if hi_cfg is not None:
+                wear_cost = hi_cfg.wear_cost_eur_per_kwh
         # PV and EV have no wear_cost config field; treat as 0.0.
 
         candidates.append(
@@ -332,6 +352,9 @@ def _collect_zex_capable(config: MimirheimConfig) -> frozenset[str]:
             capable.add(name)
     for name, pv_cfg in config.pv_arrays.items():
         if pv_cfg.capabilities.zero_export:
+            capable.add(name)
+    for name, hi_cfg in config.hybrid_inverters.items():
+        if hi_cfg.capabilities.zero_exchange:
             capable.add(name)
     return frozenset(capable)
 

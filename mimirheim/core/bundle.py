@@ -438,6 +438,12 @@ class ScheduleStep(BaseModel):
         grid_import_kw: Power imported from the grid in kW. Non-negative.
         grid_export_kw: Power exported to the grid in kW. Non-negative.
         devices: Per-device setpoints for this step, keyed by device name.
+        device_soc_kwh: Terminal state of charge in kWh for each storage device
+            at the end of this time step, keyed by device name. Only storage
+            devices (batteries, hybrid inverters, EVs) populate this field;
+            non-storage devices are absent. Used by post-solve helpers such as
+            ``_compute_soc_credit`` to read terminal SOC without walking the
+            solver model again.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -446,6 +452,7 @@ class ScheduleStep(BaseModel):
     grid_import_kw: float
     grid_export_kw: float
     devices: dict[str, DeviceSetpoint]
+    device_soc_kwh: dict[str, float] = Field(default_factory=dict)
 
 
 class SolveResult(BaseModel):

@@ -6,7 +6,7 @@ a solver. All tests must fail before the implementation exists (TDD).
 
 from datetime import datetime, timezone
 
-from mimirheim.core.bundle import SolveBundle
+from mimirheim.core.bundle import DeviceSetpoint, ScheduleStep, SolveBundle
 from mimirheim.core.model_builder import _compute_naive_cost
 
 
@@ -116,3 +116,32 @@ def test_naive_cost_does_not_use_old_max_zero_clip() -> None:
         "naive_cost used the old max(0, ...) clip: result is 0 but should be negative"
     )
     assert result < 0
+
+
+# ---------------------------------------------------------------------------
+# ScheduleStep.device_soc_kwh field (Plan 55 — F3)
+# ---------------------------------------------------------------------------
+
+
+def test_schedule_step_device_soc_kwh_defaults_to_empty_dict() -> None:
+    """ScheduleStep.device_soc_kwh is an empty dict when not provided."""
+    step = ScheduleStep(
+        t=0,
+        grid_import_kw=0.0,
+        grid_export_kw=0.0,
+        devices={},
+    )
+    assert step.device_soc_kwh == {}
+
+
+def test_schedule_step_device_soc_kwh_accepts_mapping() -> None:
+    """ScheduleStep.device_soc_kwh stores a float mapping when provided."""
+    step = ScheduleStep(
+        t=0,
+        grid_import_kw=0.0,
+        grid_export_kw=0.0,
+        devices={},
+        device_soc_kwh={"hi": 5.5, "bat": 3.2},
+    )
+    assert step.device_soc_kwh["hi"] == 5.5
+    assert step.device_soc_kwh["bat"] == 3.2

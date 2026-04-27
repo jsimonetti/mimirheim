@@ -35,7 +35,7 @@ logger = logging.getLogger("mimirheim.post_process")
 # Device types whose kw setpoint is set to zero in an idle schedule. PV and
 # static_load setpoints are derived from forecasts and are independent of the
 # dispatch decision; they are preserved unchanged.
-_CONTROLLABLE_TYPES: frozenset[str] = frozenset({"battery", "ev_charger", "deferrable_load"})
+_CONTROLLABLE_TYPES: frozenset[str] = frozenset({"battery", "ev_charger", "deferrable_load", "hybrid_inverter"})
 
 # Strategies for which the gain threshold is meaningful. The threshold compares
 # EUR costs, so it is only applicable when the objective involves EUR. The

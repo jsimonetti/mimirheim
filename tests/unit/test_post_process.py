@@ -336,3 +336,77 @@ def test_idle_schedule_has_same_length_as_original() -> None:
     out = apply_gain_threshold(res, _bundle(), config)
 
     assert len(out.schedule) == len(res.schedule)
+
+
+# ---------------------------------------------------------------------------
+# Hybrid inverter in idle schedule (Plan 55 — F2)
+# ---------------------------------------------------------------------------
+
+
+def _result_with_hybrid(
+    naive_cost: float,
+    optimised_cost: float,
+    hi_kw: float = 2.0,
+) -> SolveResult:
+    """Build a SolveResult whose schedule includes a hybrid inverter setpoint."""
+    step = ScheduleStep(
+        t=0,
+        grid_import_kw=0.0,
+        grid_export_kw=1.0,
+        devices={
+            "bat": DeviceSetpoint(kw=-2.0, type="battery"),
+            "hi": DeviceSetpoint(kw=hi_kw, type="hybrid_inverter"),
+            "pv": DeviceSetpoint(kw=2.0, type="pv"),
+            "load": DeviceSetpoint(kw=-3.0, type="static_load"),
+        },
+    )
+    return SolveResult(
+        strategy="minimize_cost",
+        objective_value=-0.1,
+        solve_status="optimal",
+        naive_cost_eur=naive_cost,
+        optimised_cost_eur=optimised_cost,
+        schedule=[step] * 4,
+    )
+
+
+def test_hybrid_inverter_zeroed_in_idle_schedule() -> None:
+    """When dispatch is suppressed, the hybrid inverter kW is set to 0.0
+    in the idle schedule.
+    """
+    config = _make_config(threshold=0.10)
+    res = _result_with_hybrid(naive_cost=1.00, optimised_cost=0.97, hi_kw=3.0)
+
+    out = apply_gain_threshold(res, _bundle(), config)
+
+    assert out.dispatch_suppressed
+    for step in out.schedule:
+        assert step.devices["hi"].kw == pytest.approx(0.0)
+        assert step.devices["hi"].type == "hybrid_inverter"
+
+
+def test_idle_schedule_grid_balance_correct_with_hybrid_inverter() -> None:
+    """The grid_import_kw / grid_export_kw in the idle schedule are computed from
+    the correct power balance when a hybrid inverter is present.
+
+    Schedule before suppression:
+        battery = -2.0 kW (charging, consuming from AC bus)
+        hybrid  =  3.0 kW (discharging, producing to AC bus)
+        pv      =  2.0 kW (producing)
+        load    = -3.0 kW (consuming)
+
+    After suppression (battery and hybrid zeroed):
+        net = pv + load = 2.0 - 3.0 = -1.0 kW
+        grid_import = 1.0, grid_export = 0.0
+    """
+    config = _make_config(threshold=0.10)
+    res = _result_with_hybrid(naive_cost=1.00, optimised_cost=0.97, hi_kw=3.0)
+
+    out = apply_gain_threshold(res, _bundle(), config)
+
+    assert out.dispatch_suppressed
+    for step in out.schedule:
+        # pv=+2.0, load=-3.0, battery zeroed, hybrid zeroed → net = -1.0 → import 1.0
+        assert step.grid_import_kw == pytest.approx(1.0)
+        assert step.grid_export_kw == pytest.approx(0.0)
+

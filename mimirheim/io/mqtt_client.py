@@ -63,6 +63,11 @@ logger = logging.getLogger("mimirheim.mqtt")
 # Reference: https://www.home-assistant.io/integrations/mqtt/#birth-and-last-will-messages
 _HA_STATUS_TOPIC = "homeassistant/status"
 
+# Minimum interval between accepted trigger messages. Rapid trigger bursts
+# (e.g. when multiple input topics publish simultaneously) would queue
+# redundant solves. Only the first trigger in each burst is acted on.
+_DEBOUNCE_SECONDS: float = 5.0
+
 
 class MqttClient:
     """Paho wrapper that routes incoming MQTT messages to the mimirheim pipeline.
@@ -164,7 +169,7 @@ class MqttClient:
     # Private: paho callbacks
     # ------------------------------------------------------------------
 
-    def _on_connect(self, client: Any, userdata: Any, connect_flags: Any, reason_code: Any, properties: Any) -> None:
+    def _on_connect(self, client: Any, userdata: Any, _connect_flags: Any, reason_code: Any, properties: Any) -> None:
         """Called by paho when the broker connection is established or restored.
 
         Subscribes to all expected input topics and asks the publisher to
@@ -174,7 +179,9 @@ class MqttClient:
         Args:
             client: The paho client instance.
             userdata: Unused.
-            connect_flags: Connection flags from the broker.
+            _connect_flags: Connection flags from the broker (unused; prefixed with
+                underscore to signal that this argument is part of the paho callback
+                signature but not used by this implementation).
             reason_code: A ``ReasonCode`` object; ``is_failure`` is True when
                 the connection was refused.
             properties: MQTT v5 properties (unused in v3.1.1 connections).
@@ -269,7 +276,7 @@ class MqttClient:
             now_mono = time.monotonic()
             if (
                 self._last_trigger_at is not None
-                and now_mono - self._last_trigger_at < 5.0
+                and now_mono - self._last_trigger_at < _DEBOUNCE_SECONDS
             ):
                 logger.debug(
                     "Trigger on %r debounced (%.1f s since last trigger).",
