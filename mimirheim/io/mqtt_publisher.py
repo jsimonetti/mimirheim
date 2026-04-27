@@ -253,7 +253,28 @@ class MqttPublisher:
                         retain=True,
                     )
 
-            # 7. Deferrable load recommended-start output topics.
+            # 7. Hybrid inverter exchange_mode output topic.
+            # Published when capabilities.zero_exchange is True and
+            # outputs.exchange_mode topic is configured.
+            for device_name, setpoint in current.devices.items():
+                if setpoint.type != "hybrid_inverter":
+                    continue
+                hi_cfg = self._config.hybrid_inverters.get(device_name)
+                if hi_cfg is None:
+                    continue
+                if (
+                    hi_cfg.capabilities.zero_exchange
+                    and hi_cfg.outputs.exchange_mode is not None
+                    and setpoint.zero_exchange_active is not None
+                ):
+                    self._client.publish(
+                        hi_cfg.outputs.exchange_mode,
+                        "true" if setpoint.zero_exchange_active else "false",
+                        qos=1,
+                        retain=True,
+                    )
+
+            # 8. Deferrable load recommended-start output topics.
             self._publish_deferrable_recommended_starts(result)
 
     def _publish_deferrable_recommended_starts(self, result: SolveResult) -> None:

@@ -360,3 +360,250 @@ def test_hybrid_inverter_net_power_ac_sign_convention() -> None:
     else:
         net_b = ctx_b.solver.var_value(net_b_expr)
     assert net_b > 1e-4, f"When exporting (dc_to_ac=2), expected net_power > 0, got {net_b:.4f}"
+
+
+# ---------------------------------------------------------------------------
+# Plan 54 — feature parity tests
+# ---------------------------------------------------------------------------
+
+
+def _config_plan54(
+    capacity_kwh: float = 10.0,
+    min_soc_kwh: float = 0.0,
+    max_charge_kw: float = 6.0,
+    max_discharge_kw: float = 6.0,
+    max_pv_kw: float = 6.0,
+    optimal_lower_soc_kwh: float = 0.0,
+    soc_low_penalty_eur_per_kwh_h: float = 0.0,
+    reduce_charge_above_soc_kwh: float | None = None,
+    reduce_charge_min_kw: float | None = None,
+    reduce_discharge_below_soc_kwh: float | None = None,
+    reduce_discharge_min_kw: float | None = None,
+    min_charge_kw: float | None = None,
+    min_discharge_kw: float | None = None,
+) -> HybridInverterConfig:
+    return HybridInverterConfig(
+        capacity_kwh=capacity_kwh,
+        min_soc_kwh=min_soc_kwh,
+        max_charge_kw=max_charge_kw,
+        max_discharge_kw=max_discharge_kw,
+        battery_charge_efficiency=1.0,
+        battery_discharge_efficiency=1.0,
+        inverter_efficiency=1.0,
+        max_pv_kw=max_pv_kw,
+        optimal_lower_soc_kwh=optimal_lower_soc_kwh,
+        soc_low_penalty_eur_per_kwh_h=soc_low_penalty_eur_per_kwh_h,
+        reduce_charge_above_soc_kwh=reduce_charge_above_soc_kwh,
+        reduce_charge_min_kw=reduce_charge_min_kw,
+        reduce_discharge_below_soc_kwh=reduce_discharge_below_soc_kwh,
+        reduce_discharge_min_kw=reduce_discharge_min_kw,
+        min_charge_kw=min_charge_kw,
+        min_discharge_kw=min_discharge_kw,
+    )
+
+
+def test_terminal_soc_var_returns_last_step_variable() -> None:
+    """terminal_soc_var(ctx) returns the soc variable at the last time step."""
+    ctx = _make_ctx(horizon=4)
+    cfg = _config_plan54()
+    device = HybridInverterDevice(name="inv", config=cfg)
+    device.add_variables(ctx)
+    var = device.terminal_soc_var(ctx)
+    assert var is not None, "terminal_soc_var should return a solver variable"
+    assert var is device.soc[3], "terminal_soc_var should be soc at the last step"
+
+
+def test_soc_low_absent_when_optimal_lower_soc_zero() -> None:
+    """When optimal_lower_soc_kwh == 0.0, no soc_low variables are created."""
+    ctx = _make_ctx(horizon=4)
+    cfg = _config_plan54(optimal_lower_soc_kwh=0.0)
+    device = HybridInverterDevice(name="inv", config=cfg)
+    device.add_variables(ctx)
+    assert len(device._soc_low) == 0
+
+
+def test_soc_low_present_when_optimal_lower_soc_configured() -> None:
+    """When optimal_lower_soc_kwh > min_soc_kwh, soc_low[t] variables are created."""
+    ctx = _make_ctx(horizon=4)
+    cfg = _config_plan54(min_soc_kwh=0.0, optimal_lower_soc_kwh=5.0)
+    device = HybridInverterDevice(name="inv", config=cfg)
+    device.add_variables(ctx)
+    assert len(device._soc_low) == 4
+
+
+def test_soc_low_constraint_active_when_soc_below_optimal() -> None:
+    """soc_low[t] equals the SOC deficit when SOC is below optimal_lower_soc_kwh."""
+    ctx = _make_ctx(horizon=1)
+    cfg = _config_plan54(capacity_kwh=10.0, min_soc_kwh=0.0, optimal_lower_soc_kwh=5.0)
+    device = HybridInverterDevice(name="inv", config=cfg)
+    device.add_variables(ctx)
+    device.add_constraints(ctx, inputs=_inputs(soc_kwh=3.0, pv_forecast=[0.0], horizon=1))
+
+    ctx.solver.add_constraint(device.bat_charge_dc[0] == 0.0)
+    ctx.solver.add_constraint(device.bat_discharge_dc[0] == 0.0)
+    ctx.solver.add_constraint(device.ac_to_dc[0] == 0.0)
+    ctx.solver.add_constraint(device.dc_to_ac[0] == 0.0)
+
+    ctx.solver.set_objective_minimize(device._soc_low[0])
+    ctx.solver.solve()
+
+    soc_low_val = ctx.solver.var_value(device._soc_low[0])
+    assert abs(soc_low_val - 2.0) < 1e-4, (
+        f"Expected soc_low=2.0 (deficit below optimal 5.0), got {soc_low_val:.4f}"
+    )
+
+
+def test_soc_low_zero_when_soc_above_optimal() -> None:
+    """soc_low[t] is zero when SOC >= optimal_lower_soc_kwh."""
+    ctx = _make_ctx(horizon=1)
+    cfg = _config_plan54(capacity_kwh=10.0, min_soc_kwh=0.0, optimal_lower_soc_kwh=5.0)
+    device = HybridInverterDevice(name="inv", config=cfg)
+    device.add_variables(ctx)
+    device.add_constraints(ctx, inputs=_inputs(soc_kwh=8.0, pv_forecast=[0.0], horizon=1))
+
+    ctx.solver.add_constraint(device.bat_charge_dc[0] == 0.0)
+    ctx.solver.add_constraint(device.bat_discharge_dc[0] == 0.0)
+    ctx.solver.add_constraint(device.ac_to_dc[0] == 0.0)
+    ctx.solver.add_constraint(device.dc_to_ac[0] == 0.0)
+
+    ctx.solver.set_objective_minimize(device._soc_low[0])
+    ctx.solver.solve()
+
+    soc_low_val = ctx.solver.var_value(device._soc_low[0])
+    assert soc_low_val < 1e-4, (
+        f"Expected soc_low=0 (SOC above optimal), got {soc_low_val:.4f}"
+    )
+
+
+def test_min_charge_floor_enforced() -> None:
+    """bat_charge_dc[t] >= min_charge_kw when mode[t]=1 (charging)."""
+    ctx = _make_ctx(horizon=1)
+    cfg = _config_plan54(max_charge_kw=6.0, min_charge_kw=2.0, capacity_kwh=10.0)
+    device = HybridInverterDevice(name="inv", config=cfg)
+    device.add_variables(ctx)
+    device.add_constraints(ctx, inputs=_inputs(soc_kwh=5.0, pv_forecast=[0.0], horizon=1))
+
+    ctx.solver.add_constraint(device.mode[0] == 1)
+    ctx.solver.add_constraint(device.bat_discharge_dc[0] == 0.0)
+    ctx.solver.add_constraint(device.dc_to_ac[0] == 0.0)
+    ctx.solver.add_constraint(device.ac_to_dc[0] >= 2.0)
+
+    ctx.solver.set_objective_minimize(device.bat_charge_dc[0])
+    ctx.solver.solve()
+
+    charge = ctx.solver.var_value(device.bat_charge_dc[0])
+    assert charge >= 2.0 - 1e-4, (
+        f"Expected bat_charge_dc >= min_charge_kw=2.0, got {charge:.4f}"
+    )
+
+
+def test_min_discharge_floor_enforced() -> None:
+    """bat_discharge_dc[t] >= min_discharge_kw when mode[t]=0 (discharging)."""
+    ctx = _make_ctx(horizon=1)
+    cfg = _config_plan54(max_discharge_kw=6.0, min_discharge_kw=1.5, capacity_kwh=10.0)
+    device = HybridInverterDevice(name="inv", config=cfg)
+    device.add_variables(ctx)
+    device.add_constraints(ctx, inputs=_inputs(soc_kwh=5.0, pv_forecast=[0.0], horizon=1))
+
+    ctx.solver.add_constraint(device.mode[0] == 0)
+    ctx.solver.add_constraint(device.bat_charge_dc[0] == 0.0)
+    ctx.solver.add_constraint(device.ac_to_dc[0] == 0.0)
+    ctx.solver.add_constraint(device.dc_to_ac[0] >= 1.5)
+
+    ctx.solver.set_objective_minimize(device.bat_discharge_dc[0])
+    ctx.solver.solve()
+
+    discharge = ctx.solver.var_value(device.bat_discharge_dc[0])
+    assert discharge >= 1.5 - 1e-4, (
+        f"Expected bat_discharge_dc >= min_discharge_kw=1.5, got {discharge:.4f}"
+    )
+
+
+def test_charge_derating_limits_power_near_capacity() -> None:
+    """bat_charge_dc is limited below max_charge_kw when SOC is near capacity.
+
+    Two-point linear derating from (7.0 kWh, 6.0 kW) to (10.0 kWh, 1.0 kW).
+    At soc_prev=9.0 kWh the limit is 6.0 + (1.0-6.0)/(10.0-7.0)*(9.0-7.0) ≈ 2.67 kW.
+    """
+    ctx = _make_ctx(horizon=1)
+    cfg = _config_plan54(
+        capacity_kwh=10.0,
+        min_soc_kwh=0.0,
+        max_charge_kw=6.0,
+        reduce_charge_above_soc_kwh=7.0,
+        reduce_charge_min_kw=1.0,
+    )
+    device = HybridInverterDevice(name="inv", config=cfg)
+    device.add_variables(ctx)
+    device.add_constraints(ctx, inputs=_inputs(soc_kwh=9.0, pv_forecast=[0.0], horizon=1))
+
+    # Freeze discharge and export paths; maximise charge to probe the derating bound.
+    ctx.solver.add_constraint(device.bat_discharge_dc[0] == 0.0)
+    ctx.solver.add_constraint(device.dc_to_ac[0] == 0.0)
+    ctx.solver.set_objective_minimize(-device.bat_charge_dc[0])
+    ctx.solver.solve()
+
+    charge = ctx.solver.var_value(device.bat_charge_dc[0])
+    assert charge < 6.0 - 1e-4, (
+        f"Expected charge < 6.0 due to derating, got {charge:.4f}"
+    )
+
+
+def test_discharge_derating_limits_power_near_min_soc() -> None:
+    """bat_discharge_dc is limited below max_discharge_kw when SOC is near min_soc_kwh.
+
+    Two-point linear derating from (3.0 kWh, 6.0 kW) to (0.0 kWh, 1.0 kW).
+    At soc_prev=1.0 kWh the limit ≈ 2.67 kW.
+    """
+    ctx = _make_ctx(horizon=1)
+    cfg = _config_plan54(
+        capacity_kwh=10.0,
+        min_soc_kwh=0.0,
+        max_discharge_kw=6.0,
+        reduce_discharge_below_soc_kwh=3.0,
+        reduce_discharge_min_kw=1.0,
+    )
+    device = HybridInverterDevice(name="inv", config=cfg)
+    device.add_variables(ctx)
+    device.add_constraints(ctx, inputs=_inputs(soc_kwh=1.0, pv_forecast=[0.0], horizon=1))
+
+    # Freeze charge and import paths; maximise discharge to probe the derating bound.
+    ctx.solver.add_constraint(device.bat_charge_dc[0] == 0.0)
+    ctx.solver.add_constraint(device.ac_to_dc[0] == 0.0)
+    ctx.solver.set_objective_minimize(-device.bat_discharge_dc[0])
+    ctx.solver.solve()
+
+    discharge = ctx.solver.var_value(device.bat_discharge_dc[0])
+    assert discharge < 6.0 - 1e-4, (
+        f"Expected discharge < 6.0 due to derating, got {discharge:.4f}"
+    )
+
+
+def test_objective_terms_includes_soc_low_penalty() -> None:
+    """objective_terms returns a non-trivial expression when soc_low_penalty is configured."""
+    ctx = _make_ctx(horizon=1)
+    cfg = _config_plan54(
+        capacity_kwh=10.0,
+        min_soc_kwh=0.0,
+        optimal_lower_soc_kwh=5.0,
+        soc_low_penalty_eur_per_kwh_h=1.0,
+    )
+    device = HybridInverterDevice(name="inv", config=cfg)
+    device.add_variables(ctx)
+    device.add_constraints(ctx, inputs=_inputs(soc_kwh=3.0, pv_forecast=[0.0], horizon=1))
+
+    ctx.solver.add_constraint(device.bat_charge_dc[0] == 0.0)
+    ctx.solver.add_constraint(device.bat_discharge_dc[0] == 0.0)
+    ctx.solver.add_constraint(device.ac_to_dc[0] == 0.0)
+    ctx.solver.add_constraint(device.dc_to_ac[0] == 0.0)
+
+    terms = device.objective_terms(0)
+    assert terms, "Expected non-empty objective_terms when soc_low_penalty is configured"
+
+    ctx.solver.set_objective_minimize(terms[0])
+    ctx.solver.solve()
+
+    soc_low_val = ctx.solver.var_value(device._soc_low[0])
+    assert abs(soc_low_val - 2.0) < 1e-4, (
+        f"Expected soc_low=2.0, got {soc_low_val:.4f}"
+    )

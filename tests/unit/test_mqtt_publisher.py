@@ -15,6 +15,7 @@ from mimirheim.config.schema import (
     BatteryConfig,
     EfficiencySegment,
     GridConfig,
+    HybridInverterConfig,
     MimirheimConfig,
     MqttConfig,
     OutputsConfig,
@@ -988,3 +989,128 @@ def test_deferrable_recommended_start_not_published_when_load_not_scheduled() ->
         if "recommended_start" in c.args[0]
     ]
     assert len(calls) == 0
+
+
+# ---------------------------------------------------------------------------
+# Hybrid inverter exchange_mode publishing (plan 54)
+# ---------------------------------------------------------------------------
+
+
+def _make_config_with_hybrid_exchange_mode(exchange_mode_topic: str | None) -> MimirheimConfig:
+    """Config with a hybrid inverter that has zero_exchange capability."""
+    from mimirheim.config.schema import (
+        HybridInverterCapabilitiesConfig,
+        HybridInverterOutputsConfig,
+    )
+
+    return MimirheimConfig(
+        mqtt=MqttConfig(host="localhost", client_id="test", topic_prefix="mimir"),
+        outputs=OutputsConfig(
+            schedule="mimir/strategy/schedule",
+            current="mimir/strategy/current",
+            last_solve="mimir/status/last_solve",
+            availability="mimir/status/availability",
+        ),
+        grid=GridConfig(import_limit_kw=10.0, export_limit_kw=5.0),
+        hybrid_inverters={
+            "hybrid": HybridInverterConfig(
+                capacity_kwh=10.0,
+                min_soc_kwh=0.0,
+                max_charge_kw=5.0,
+                max_discharge_kw=5.0,
+                max_pv_kw=6.0,
+                capabilities=HybridInverterCapabilitiesConfig(
+                    zero_exchange=exchange_mode_topic is not None,
+                ),
+                outputs=HybridInverterOutputsConfig(
+                    exchange_mode=exchange_mode_topic,
+                ),
+            )
+        },
+    )
+
+
+def _make_result_with_hybrid_exchange_mode(
+    zero_exchange_active: bool | None = True,
+) -> SolveResult:
+    step = ScheduleStep(
+        t=0,
+        grid_import_kw=1.0,
+        grid_export_kw=0.0,
+        devices={
+            "hybrid": DeviceSetpoint(
+                kw=2.0,
+                type="hybrid_inverter",
+                zero_exchange_active=zero_exchange_active,
+            )
+        },
+    )
+    return SolveResult(
+        strategy="minimize_cost",
+        objective_value=0.1,
+        solve_status="optimal",
+        schedule=[step] * 96,
+    )
+
+
+def test_hybrid_exchange_mode_published_when_zero_exchange_true() -> None:
+    """When hybrid zero_exchange_active=True, publish 'true' to exchange_mode topic."""
+    mock_client = MagicMock()
+    config = _make_config_with_hybrid_exchange_mode("mimir/hybrid/hybrid/exchange_mode")
+    publisher = MqttPublisher(client=mock_client, config=config)
+
+    publisher.publish_result(_make_result_with_hybrid_exchange_mode(zero_exchange_active=True))
+
+    em_calls = [
+        c for c in mock_client.publish.call_args_list
+        if c.args[0] == "mimir/hybrid/hybrid/exchange_mode"
+    ]
+    assert len(em_calls) == 1
+    assert em_calls[0].args[1] == "true"
+
+
+def test_hybrid_exchange_mode_published_false_when_not_active() -> None:
+    """When hybrid zero_exchange_active=False, publish 'false' to exchange_mode topic."""
+    mock_client = MagicMock()
+    config = _make_config_with_hybrid_exchange_mode("mimir/hybrid/hybrid/exchange_mode")
+    publisher = MqttPublisher(client=mock_client, config=config)
+
+    publisher.publish_result(_make_result_with_hybrid_exchange_mode(zero_exchange_active=False))
+
+    em_calls = [
+        c for c in mock_client.publish.call_args_list
+        if c.args[0] == "mimir/hybrid/hybrid/exchange_mode"
+    ]
+    assert len(em_calls) == 1
+    assert em_calls[0].args[1] == "false"
+
+
+def test_hybrid_exchange_mode_not_published_when_capability_false() -> None:
+    """When capabilities.zero_exchange=False, exchange_mode topic is not published."""
+    mock_client = MagicMock()
+    # Passing None as topic → capability is set to False by the helper.
+    config = _make_config_with_hybrid_exchange_mode(None)
+    publisher = MqttPublisher(client=mock_client, config=config)
+
+    publisher.publish_result(_make_result_with_hybrid_exchange_mode(zero_exchange_active=True))
+
+    em_calls = [
+        c for c in mock_client.publish.call_args_list
+        if "exchange_mode" in c.args[0]
+    ]
+    assert len(em_calls) == 0
+
+
+def test_hybrid_exchange_mode_not_published_when_zero_exchange_active_none() -> None:
+    """When zero_exchange_active is None (no capability), no exchange_mode publish."""
+    mock_client = MagicMock()
+    config = _make_config_with_hybrid_exchange_mode("mimir/hybrid/hybrid/exchange_mode")
+    publisher = MqttPublisher(client=mock_client, config=config)
+
+    publisher.publish_result(_make_result_with_hybrid_exchange_mode(zero_exchange_active=None))
+
+    em_calls = [
+        c for c in mock_client.publish.call_args_list
+        if c.args[0] == "mimir/hybrid/hybrid/exchange_mode"
+    ]
+    assert len(em_calls) == 0

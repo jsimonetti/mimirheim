@@ -22,6 +22,7 @@ from mimirheim.config.schema import (
     EvInputsConfig,
     EvOutputsConfig,
     GridConfig,
+    HybridInverterConfig,
     MimirheimConfig,
     MqttConfig,
     ObjectivesConfig,
@@ -2363,3 +2364,105 @@ def test_mqtt_unknown_field_rejected() -> None:
         MqttConfig.model_validate(
             {"host": "localhost", "client_id": "mimirheim", "enable_ssl": True}
         )
+
+
+# ---------------------------------------------------------------------------
+# HybridInverterConfig — new fields added in plan 54
+# ---------------------------------------------------------------------------
+
+
+def _minimal_hybrid(**overrides) -> dict:
+    base = {
+        "capacity_kwh": 10.0,
+        "min_soc_kwh": 1.0,
+        "max_charge_kw": 5.0,
+        "max_discharge_kw": 5.0,
+        "max_pv_kw": 6.0,
+    }
+    base.update(overrides)
+    return base
+
+
+class TestHybridInverterConfigPlan54:
+    def test_minimal_config_accepted(self) -> None:
+        """Existing minimal config with no new fields parses correctly."""
+        cfg = HybridInverterConfig.model_validate(_minimal_hybrid())
+        assert cfg.capacity_kwh == 10.0
+
+    def test_optimal_lower_soc_kwh_accepted(self) -> None:
+        """optimal_lower_soc_kwh between min_soc_kwh and capacity_kwh is accepted."""
+        cfg = HybridInverterConfig.model_validate(
+            _minimal_hybrid(optimal_lower_soc_kwh=5.0)
+        )
+        assert cfg.optimal_lower_soc_kwh == 5.0
+
+    def test_optimal_lower_soc_kwh_below_min_rejected(self) -> None:
+        """optimal_lower_soc_kwh < min_soc_kwh raises ValidationError."""
+        with pytest.raises(ValidationError):
+            HybridInverterConfig.model_validate(
+                _minimal_hybrid(min_soc_kwh=3.0, optimal_lower_soc_kwh=2.0)
+            )
+
+    def test_optimal_lower_soc_kwh_above_capacity_rejected(self) -> None:
+        """optimal_lower_soc_kwh > capacity_kwh raises ValidationError."""
+        with pytest.raises(ValidationError):
+            HybridInverterConfig.model_validate(
+                _minimal_hybrid(capacity_kwh=10.0, optimal_lower_soc_kwh=11.0)
+            )
+
+    def test_derating_fields_accepted_when_paired(self) -> None:
+        """reduce_charge_above_soc_kwh + reduce_charge_min_kw accepted together."""
+        cfg = HybridInverterConfig.model_validate(
+            _minimal_hybrid(
+                reduce_charge_above_soc_kwh=7.0,
+                reduce_charge_min_kw=1.0,
+            )
+        )
+        assert cfg.reduce_charge_above_soc_kwh == 7.0
+
+    def test_derating_only_one_charge_field_rejected(self) -> None:
+        """reduce_charge_above_soc_kwh without reduce_charge_min_kw raises."""
+        with pytest.raises(ValidationError):
+            HybridInverterConfig.model_validate(
+                _minimal_hybrid(reduce_charge_above_soc_kwh=7.0)
+            )
+
+    def test_derating_charge_soc_out_of_range_rejected(self) -> None:
+        """reduce_charge_above_soc_kwh outside (min_soc, capacity) raises."""
+        with pytest.raises(ValidationError):
+            HybridInverterConfig.model_validate(
+                _minimal_hybrid(
+                    min_soc_kwh=1.0,
+                    capacity_kwh=10.0,
+                    # Equal to capacity_kwh — not strictly inside.
+                    reduce_charge_above_soc_kwh=10.0,
+                    reduce_charge_min_kw=1.0,
+                )
+            )
+
+    def test_min_charge_kw_accepted(self) -> None:
+        """min_charge_kw >= 0 is accepted."""
+        cfg = HybridInverterConfig.model_validate(_minimal_hybrid(min_charge_kw=1.5))
+        assert cfg.min_charge_kw == 1.5
+
+    def test_min_discharge_kw_accepted(self) -> None:
+        """min_discharge_kw >= 0 is accepted."""
+        cfg = HybridInverterConfig.model_validate(_minimal_hybrid(min_discharge_kw=0.5))
+        assert cfg.min_discharge_kw == 0.5
+
+    def test_capabilities_defaults(self) -> None:
+        """HybridInverterConfig.capabilities has zero_exchange=False by default."""
+        cfg = HybridInverterConfig.model_validate(_minimal_hybrid())
+        assert cfg.capabilities.zero_exchange is False
+
+    def test_outputs_defaults(self) -> None:
+        """HybridInverterConfig.outputs has exchange_mode=None by default."""
+        cfg = HybridInverterConfig.model_validate(_minimal_hybrid())
+        assert cfg.outputs.exchange_mode is None
+
+    def test_unknown_field_rejected(self) -> None:
+        """extra='forbid' rejects unknown fields."""
+        with pytest.raises(ValidationError):
+            HybridInverterConfig.model_validate(
+                _minimal_hybrid(nonexistent_field=True)
+            )

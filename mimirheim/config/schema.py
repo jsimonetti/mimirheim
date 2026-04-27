@@ -1570,6 +1570,58 @@ class PvConfig(BaseModel):
 # Hybrid inverter (integrated PV + battery DC bus)
 # ---------------------------------------------------------------------------
 
+class HybridInverterCapabilitiesConfig(BaseModel):
+    """Hardware capability flags for a hybrid inverter.
+
+    Attributes:
+        zero_exchange: True if the inverter supports a closed-loop zero-exchange
+            firmware mode triggered by a boolean register. When True, the
+            inverter uses its own current transformers to continuously hold grid
+            exchange near zero until the flag is cleared. mimirheim decides
+            *whether* to assert this mode per 15-minute step; the inverter
+            performs the real-time enforcement autonomously. Default False.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    zero_exchange: bool = Field(
+        default=False,
+        description=(
+            "Inverter supports a closed-loop zero-exchange firmware mode. "
+            "When True, the inverter autonomously holds grid exchange near zero "
+            "using local CT measurements."
+        ),
+        json_schema_extra={"ui_label": "Zero-exchange mode", "ui_group": "advanced"},
+    )
+
+
+class HybridInverterOutputsConfig(BaseModel):
+    """MQTT output topic configuration for a hybrid inverter.
+
+    Attributes:
+        exchange_mode: Topic to publish the closed-loop zero-exchange mode flag
+            (``"true"`` or ``"false"``). Published only when
+            ``capabilities.zero_exchange`` is True. Defaults to None (not
+            published).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    exchange_mode: str | None = Field(
+        default=None,
+        description=(
+            "MQTT topic for the closed-loop zero-exchange mode boolean flag. "
+            "Defaults to '{mqtt.topic_prefix}/output/hybrid/{name}/exchange_mode' "
+            "when not set."
+        ),
+        json_schema_extra={
+            "ui_label": "Exchange mode topic",
+            "ui_group": "advanced",
+            "ui_placeholder": "{mqtt.topic_prefix}/output/hybrid/{name}/exchange_mode",
+        },
+    )
+
+
 class HybridInverterConfig(BaseModel):
     """Configuration for a DC-coupled hybrid inverter.
 
@@ -1672,6 +1724,152 @@ class HybridInverterConfig(BaseModel):
         description="MQTT input topic configuration for live battery SOC readings. Defaults to an empty model so topics are derived with percent unit. Set to null to opt out of MQTT inputs entirely.",
         json_schema_extra={"ui_label": "Input topics", "ui_group": "advanced"},
     )
+    optimal_lower_soc_kwh: float = Field(
+        default=0.0,
+        ge=0.0,
+        description=(
+            "Preferred minimum state of charge in kWh. When the SOC falls below "
+            "this level, the solver accrues a penalty proportional to the deficit. "
+            "Acts as a soft lower bound: the solver may still dispatch below this "
+            "level when the price spread justifies it. Must be >= min_soc_kwh and "
+            "<= capacity_kwh."
+        ),
+        json_schema_extra={"ui_label": "Preferred minimum SOC (kWh)", "ui_group": "advanced"},
+    )
+    soc_low_penalty_eur_per_kwh_h: float = Field(
+        default=0.0,
+        ge=0.0,
+        description=(
+            "Penalty rate for SOC below optimal_lower_soc_kwh, in EUR per kWh of "
+            "deficit per hour. Set to 0.0 (default) to disable."
+        ),
+        json_schema_extra={"ui_label": "Low SOC penalty (\u20ac/kWh\u00b7h)", "ui_group": "advanced"},
+    )
+    reduce_charge_above_soc_kwh: float | None = Field(
+        default=None,
+        description=(
+            "SOC level in kWh above which max charge power begins to decrease "
+            "linearly to reduce_charge_min_kw at capacity_kwh. Must be strictly "
+            "between min_soc_kwh and capacity_kwh. Must be set together with "
+            "reduce_charge_min_kw."
+        ),
+        json_schema_extra={"ui_label": "Derate charge above SOC (kWh)", "ui_group": "advanced"},
+    )
+    reduce_charge_min_kw: float | None = Field(
+        default=None,
+        ge=0.0,
+        description=(
+            "Max charge power in kW at full capacity (capacity_kwh). The charge "
+            "power limit decreases linearly from max_charge_kw at "
+            "reduce_charge_above_soc_kwh to this value at capacity_kwh. Must be "
+            "set together with reduce_charge_above_soc_kwh."
+        ),
+        json_schema_extra={"ui_label": "Derated charge minimum (kW)", "ui_group": "advanced"},
+    )
+    reduce_discharge_below_soc_kwh: float | None = Field(
+        default=None,
+        description=(
+            "SOC level in kWh below which max discharge power begins to decrease "
+            "linearly to reduce_discharge_min_kw at min_soc_kwh. Must be strictly "
+            "between min_soc_kwh and capacity_kwh. Must be set together with "
+            "reduce_discharge_min_kw."
+        ),
+        json_schema_extra={"ui_label": "Derate discharge below SOC (kWh)", "ui_group": "advanced"},
+    )
+    reduce_discharge_min_kw: float | None = Field(
+        default=None,
+        ge=0.0,
+        description=(
+            "Max discharge power in kW at minimum SOC (min_soc_kwh). The discharge "
+            "power limit decreases linearly from max_discharge_kw at "
+            "reduce_discharge_below_soc_kwh to this value at min_soc_kwh. Must be "
+            "set together with reduce_discharge_below_soc_kwh."
+        ),
+        json_schema_extra={"ui_label": "Derated discharge minimum (kW)", "ui_group": "advanced"},
+    )
+    min_charge_kw: float | None = Field(
+        default=None,
+        ge=0.0,
+        description=(
+            "Minimum DC charge power in kW when the inverter is actively charging. "
+            "The inverter either charges at this power or above, or stays idle. "
+            "Default None = no floor applied."
+        ),
+        json_schema_extra={"ui_label": "Minimum charge power (kW)", "ui_group": "advanced"},
+    )
+    min_discharge_kw: float | None = Field(
+        default=None,
+        ge=0.0,
+        description=(
+            "Minimum DC discharge power in kW when the inverter is actively discharging. "
+            "Default None = no floor applied."
+        ),
+        json_schema_extra={"ui_label": "Minimum discharge power (kW)", "ui_group": "advanced"},
+    )
+    capabilities: HybridInverterCapabilitiesConfig = Field(
+        default_factory=HybridInverterCapabilitiesConfig,
+        description="Hardware capability flags.",
+        json_schema_extra={"ui_label": "Hardware capabilities", "ui_group": "advanced"},
+    )
+    outputs: HybridInverterOutputsConfig = Field(
+        default_factory=HybridInverterOutputsConfig,
+        description="MQTT output topic configuration for hybrid inverter control signals.",
+        json_schema_extra={"ui_label": "Output topics", "ui_group": "advanced"},
+    )
+
+    @model_validator(mode="after")
+    def _validate_soc_levels(self) -> "HybridInverterConfig":
+        if self.optimal_lower_soc_kwh == 0.0:
+            return self
+        if self.optimal_lower_soc_kwh < self.min_soc_kwh:
+            raise ValueError(
+                f"optimal_lower_soc_kwh ({self.optimal_lower_soc_kwh}) must be "
+                f">= min_soc_kwh ({self.min_soc_kwh})"
+            )
+        if self.optimal_lower_soc_kwh > self.capacity_kwh:
+            raise ValueError(
+                f"optimal_lower_soc_kwh ({self.optimal_lower_soc_kwh}) must be "
+                f"<= capacity_kwh ({self.capacity_kwh})"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_derating(self) -> "HybridInverterConfig":
+        """Validate that derating field pairs are set together and within valid ranges."""
+        charge_set = (
+            self.reduce_charge_above_soc_kwh is not None,
+            self.reduce_charge_min_kw is not None,
+        )
+        if charge_set[0] != charge_set[1]:
+            raise ValueError(
+                "reduce_charge_above_soc_kwh and reduce_charge_min_kw must be "
+                "set together or both left as None."
+            )
+        if self.reduce_charge_above_soc_kwh is not None:
+            if not (self.min_soc_kwh < self.reduce_charge_above_soc_kwh < self.capacity_kwh):
+                raise ValueError(
+                    f"reduce_charge_above_soc_kwh ({self.reduce_charge_above_soc_kwh}) "
+                    f"must be strictly between min_soc_kwh ({self.min_soc_kwh}) and "
+                    f"capacity_kwh ({self.capacity_kwh})."
+                )
+
+        discharge_set = (
+            self.reduce_discharge_below_soc_kwh is not None,
+            self.reduce_discharge_min_kw is not None,
+        )
+        if discharge_set[0] != discharge_set[1]:
+            raise ValueError(
+                "reduce_discharge_below_soc_kwh and reduce_discharge_min_kw must be "
+                "set together or both left as None."
+            )
+        if self.reduce_discharge_below_soc_kwh is not None:
+            if not (self.min_soc_kwh < self.reduce_discharge_below_soc_kwh < self.capacity_kwh):
+                raise ValueError(
+                    f"reduce_discharge_below_soc_kwh ({self.reduce_discharge_below_soc_kwh}) "
+                    f"must be strictly between min_soc_kwh ({self.min_soc_kwh}) and "
+                    f"capacity_kwh ({self.capacity_kwh})."
+                )
+        return self
 
 # ---------------------------------------------------------------------------
 # Loads

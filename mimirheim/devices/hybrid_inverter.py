@@ -68,6 +68,9 @@ class HybridInverterDevice:
         self.mode: dict[int, Any] = {}
         # inv_mode[t] = 1 → inverter imports AC→DC; = 0 → inverter exports DC→AC.
         self.inv_mode: dict[int, Any] = {}
+        # soc_low[t] = SOC deficit below optimal_lower_soc_kwh at step t, in kWh.
+        # Populated only when optimal_lower_soc_kwh > min_soc_kwh.
+        self._soc_low: dict[int, Any] = {}
 
         self._dt: float = 0.25  # set from ctx in add_variables
 
@@ -148,6 +151,34 @@ class HybridInverterDevice:
 
             # Binary: inverter direction (1=AC→DC import, 0=DC→AC export).
             self.inv_mode[t] = ctx.solver.add_var(lb=0.0, ub=1.0, integer=True)
+
+        # soc_low[t] is the SOC deficit below optimal_lower_soc_kwh at step t,
+        # in kWh. It is zero when soc[t] >= optimal_lower_soc_kwh and equals
+        # the deficit otherwise. Used by the soft lower-bound penalty in
+        # objective_terms. Not created when optimal_lower_soc_kwh == 0 (the
+        # default) to keep the variable count identical to the pre-plan-54
+        # behaviour for most users.
+        soc_low_ub = self.config.optimal_lower_soc_kwh - self.config.min_soc_kwh
+        if soc_low_ub > 0.0:
+            for t in ctx.T:
+                self._soc_low[t] = ctx.solver.add_var(lb=0.0, ub=soc_low_ub)
+
+    def terminal_soc_var(self, ctx: ModelContext) -> Any | None:
+        """Return the solver variable for the battery SOC at the last step.
+
+        Used by ``ObjectiveBuilder._terminal_soc_terms`` to attach a terminal
+        value to stored energy. Without this, the solver treats kWh remaining
+        at the end of the horizon as worthless and drains the battery every
+        cycle.
+
+        Args:
+            ctx: The current solve context. Used to identify the last step.
+
+        Returns:
+            The solver variable ``soc[T-1]``, or ``None`` if ``add_variables``
+            has not been called yet.
+        """
+        return self.soc.get(ctx.T[-1])
 
     def add_constraints(self, ctx: ModelContext, inputs: HybridInverterInputs) -> None:
         """Add all MILP constraints for this hybrid inverter.
@@ -295,6 +326,85 @@ class HybridInverterDevice:
                 self.dc_to_ac[t] <= max_ac_export_kw * (1 - self.inv_mode[t])
             )
 
+            # --- Soft SOC lower bound ---
+            # soc_low[t] is the amount by which soc[t] falls below
+            # optimal_lower_soc_kwh. Rearranging: soc_low[t] >= optimal - soc[t].
+            # The solver will minimise soc_low through the penalty in
+            # objective_terms, so it will only violate the soft bound when the
+            # economic gain from discharging outweighs the penalty.
+            if self._soc_low:
+                ctx.solver.add_constraint(
+                    self._soc_low[t] >= cfg.optimal_lower_soc_kwh - self.soc[t]
+                )
+
+            # --- Minimum charge power floor ---
+            # When the battery is charging (mode[t]=1), the DC charge power must
+            # be at least min_charge_kw. This models inverters that cannot operate
+            # at arbitrarily low charge rates. The Big-M on the right pins the
+            # constraint inactive when mode[t]=0 (discharging).
+            if cfg.min_charge_kw is not None:
+                ctx.solver.add_constraint(
+                    self.bat_charge_dc[t] >= cfg.min_charge_kw * self.mode[t]
+                )
+
+            # --- Minimum discharge power floor ---
+            # Symmetric to the charge floor: when the battery is discharging
+            # (mode[t]=0, so 1 - mode[t]=1) the discharge power must be at least
+            # min_discharge_kw. The Big-M pins the constraint inactive during charging.
+            if cfg.min_discharge_kw is not None:
+                ctx.solver.add_constraint(
+                    self.bat_discharge_dc[t] >= cfg.min_discharge_kw * (1 - self.mode[t])
+                )
+
+        # --- Charge derating ---
+        # At high SOC, many batteries cannot sustain peak charge power. This
+        # block enforces a linear derating: charge power falls from max_charge_kw
+        # at reduce_charge_above_soc_kwh to reduce_charge_min_kw at capacity_kwh.
+        #
+        # The constraint is: bat_charge_dc[t] <= slope_c * soc_prev + intercept_c
+        # where soc_prev is the SOC at the start of step t. This is a linear
+        # relationship between the SOC state variable and the charge power limit.
+        #
+        # Derivation of slope_c and intercept_c:
+        #   At soc_prev = reduce_charge_above_soc_kwh: limit = max_charge_kw
+        #   At soc_prev = capacity_kwh:                limit = reduce_charge_min_kw
+        #   slope_c = (min_kw - max_kw) / (capacity - threshold)  [negative]
+        #   intercept_c = max_kw - slope_c * threshold
+        if cfg.reduce_charge_above_soc_kwh is not None and cfg.reduce_charge_min_kw is not None:
+            slope_c = (cfg.reduce_charge_min_kw - cfg.max_charge_kw) / (
+                cfg.capacity_kwh - cfg.reduce_charge_above_soc_kwh
+            )
+            rhs_c = cfg.max_charge_kw - slope_c * cfg.reduce_charge_above_soc_kwh
+            for t in ctx.T:
+                soc_prev = inputs.soc_kwh if t == 0 else self.soc[t - 1]
+                ctx.solver.add_constraint(
+                    self.bat_charge_dc[t] - slope_c * soc_prev <= rhs_c
+                )
+
+        # --- Discharge derating ---
+        # At low SOC, the battery may not sustain peak discharge power. This
+        # enforces a linear derating: discharge power falls from max_discharge_kw
+        # at reduce_discharge_below_soc_kwh to reduce_discharge_min_kw at min_soc_kwh.
+        #
+        # slope_d is positive (power increases as SOC increases).
+        #   At soc_prev = min_soc_kwh:                     limit = reduce_discharge_min_kw
+        #   At soc_prev = reduce_discharge_below_soc_kwh:  limit = max_discharge_kw
+        #   slope_d = (max_kw - min_kw) / (threshold - min_soc_kwh)
+        #   intercept_d = max_kw - slope_d * threshold
+        if (
+            cfg.reduce_discharge_below_soc_kwh is not None
+            and cfg.reduce_discharge_min_kw is not None
+        ):
+            slope_d = (cfg.max_discharge_kw - cfg.reduce_discharge_min_kw) / (
+                cfg.reduce_discharge_below_soc_kwh - cfg.min_soc_kwh
+            )
+            rhs_d = cfg.max_discharge_kw - slope_d * cfg.reduce_discharge_below_soc_kwh
+            for t in ctx.T:
+                soc_prev = inputs.soc_kwh if t == 0 else self.soc[t - 1]
+                ctx.solver.add_constraint(
+                    self.bat_discharge_dc[t] - slope_d * soc_prev <= rhs_d
+                )
+
     def net_power(self, t: int) -> Any:
         """Net AC power contribution to the home bus at step t, in kW.
 
@@ -317,23 +427,48 @@ class HybridInverterDevice:
     def objective_terms(self, t: int) -> list[Any]:
         """Return objective cost terms for time step t.
 
-        The only cost term is the battery wear cost, which penalises DC
-        throughput (charge + discharge power × dt) to discourage unnecessary
-        cycling when the price spread does not justify the degradation.
+        Two optional penalty terms may be included:
 
-        When ``wear_cost_eur_per_kwh`` is zero (the default), this method
-        returns an empty list and contributes nothing to the objective.
+        **Wear cost**: penalises AC-side energy throughput (ac_to_dc + dc_to_ac)
+        multiplied by the configured cost per kWh. Using AC power means the
+        wear cost scales with the energy actually exchanged with the grid and
+        home, capturing both battery degradation and inverter losses. Prior to
+        plan 54 this used DC-side power; the change aligns the cost basis with
+        the Battery device.
+
+        **Soft SOC lower bound**: when ``soc_low_penalty_eur_per_kwh_h`` > 0,
+        accrues a penalty proportional to the SOC deficit below
+        ``optimal_lower_soc_kwh``. The penalty is denominated in
+        EUR·kWh⁻¹·h⁻¹, so multiplying by ``_dt`` (hours per step) converts to
+        EUR per step.
 
         Args:
             t: Zero-based time step index.
 
         Returns:
-            List containing zero or one solver expressions.
+            List of zero to two solver expressions.
         """
-        if self.config.wear_cost_eur_per_kwh <= 0.0:
-            return []
-        return [
-            self.config.wear_cost_eur_per_kwh
-            * (self.bat_charge_dc[t] + self.bat_discharge_dc[t])
-            * self._dt
-        ]
+        terms: list[Any] = []
+
+        # Wear cost: penalises AC-side energy throughput.
+        # ac_to_dc[t] is the AC power drawn from the grid/home for charging, in kW.
+        # dc_to_ac[t] is the AC power delivered to the grid/home from discharge or PV, in kW.
+        # Multiplying by _dt converts power (kW) to energy (kWh) for the step.
+        if self.config.wear_cost_eur_per_kwh > 0.0:
+            terms.append(
+                self.config.wear_cost_eur_per_kwh
+                * (self.ac_to_dc[t] + self.dc_to_ac[t])
+                * self._dt
+            )
+
+        # Soft SOC penalty: penalises SOC deficit below optimal_lower_soc_kwh.
+        # soc_low[t] holds the deficit in kWh. Multiplying by dt converts to kWh·h
+        # (energy-time), consistent with the eur_per_kwh_h unit.
+        if self._soc_low and self.config.soc_low_penalty_eur_per_kwh_h > 0.0:
+            terms.append(
+                self.config.soc_low_penalty_eur_per_kwh_h
+                * self._soc_low[t]
+                * self._dt
+            )
+
+        return terms

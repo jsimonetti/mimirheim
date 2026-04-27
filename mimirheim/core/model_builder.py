@@ -461,9 +461,15 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
                 type="static_load",
             )
         for hi in hybrid_inverters:
+            hi_cfg = config.hybrid_inverters[hi.name]
+            # zero_exchange_active is False (explicitly disabled) when the inverter
+            # supports the zero-export/import constraint, and None when the
+            # capability is absent (field left unset in the setpoint).
+            hi_zea = False if hi_cfg.capabilities.zero_exchange else None
             device_setpoints[hi.name] = DeviceSetpoint(
                 kw=_eval_net_power(ctx, hi.net_power(t)),
                 type="hybrid_inverter",
+                zero_exchange_active=hi_zea,
             )
         for tb in thermal_boilers:
             device_setpoints[tb.name] = DeviceSetpoint(
