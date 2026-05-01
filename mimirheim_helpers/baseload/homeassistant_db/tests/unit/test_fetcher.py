@@ -15,6 +15,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from freezegun import freeze_time
 from sqlalchemy import create_engine, text
 
 from baseload_ha_db.fetcher import FetchError, fetch_entity_units, fetch_statistics
@@ -138,6 +139,7 @@ def db_url(tmp_path: pytest.TempPathFactory) -> str:
     return url
 
 
+@freeze_time("2026-03-30")
 class TestFetchStatisticsPowerSensors:
     def test_power_sensor_returns_kwh_per_hour_values(self, db_url: str) -> None:
         """Power sensor mean values are converted to kWh/h (W * 0.001)."""
@@ -208,6 +210,7 @@ class TestFetchStatisticsPowerSensors:
             fetch_statistics(db_url=url, entity_ids=["sensor.p"], lookback_days=7)
 
 
+@freeze_time("2026-03-30")
 class TestFetchStatisticsEnergySensors:
     def test_energy_sensor_uses_sum_deltas(self, tmp_path) -> None:
         """An entity with unit kWh returns sum-delta kWh values."""
@@ -303,6 +306,7 @@ class TestFetchStatisticsEnergySensors:
         assert result["sensor.e_mwh"][0]["mean"] == pytest.approx(3.0)
 
 
+@freeze_time("2026-03-30")
 class TestOutlierDetection:
     def _make_power_db_with_outlier(self, tmp_path, *, outlier_w: float) -> str:
         """30 normal 1000 W readings plus one outlier."""

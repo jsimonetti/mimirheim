@@ -146,6 +146,162 @@ def test_post_config_atomic_write(tmp_path: Path) -> None:
     assert loaded["mqtt"]["host"] == "original"
 
 
+def test_post_config_preserves_yaml_comments(tmp_path: Path) -> None:
+    """POST /api/config preserves YAML comments in the existing file.
+    
+    This test verifies the round-trip comment preservation behavior:
+    1. Create a config file with inline comments
+    2. Edit a field value via the API
+    3. Verify comments are still present in the written file
+    """
+    yaml_path = tmp_path / "mimirheim.yaml"
+    
+    # Write initial config with comments
+    initial_yaml = """# Main grid connection
+mqtt:
+  host: localhost
+  client_id: mimir
+
+grid:
+  import_limit_kw: 25.0  # Utility meter limit
+  export_limit_kw: 10.0  # Contract restriction
+
+batteries:
+  home_battery:
+    capacity_kwh: 10.0  # Tesla Powerwall 2
+    # Charge efficiency degrades above 0.8 SOC
+    charge_segments:
+      - power_max_kw: 5.0
+        efficiency: 0.95
+    discharge_segments:
+      - power_max_kw: 5.0
+        efficiency: 0.95
+
+objectives: {}
+outputs:
+  schedule: mimir/schedule
+  current: mimir/current
+  last_solve: mimir/last_solve
+  availability: mimir/availability
+"""
+    yaml_path.write_text(initial_yaml)
+    
+    server = _make_server(tmp_path)
+    
+    # Edit via API: change only capacity_kwh
+    edited_config = {
+        "mqtt": {"host": "localhost", "client_id": "mimir"},
+        "grid": {"import_limit_kw": 25.0, "export_limit_kw": 10.0},
+        "batteries": {
+            "home_battery": {
+                "capacity_kwh": 12.0,  # Changed from 10.0
+                "charge_segments": [{"power_max_kw": 5.0, "efficiency": 0.95}],
+                "discharge_segments": [{"power_max_kw": 5.0, "efficiency": 0.95}],
+            }
+        },
+        "objectives": {},
+        "outputs": {
+            "schedule": "mimir/schedule",
+            "current": "mimir/current",
+            "last_solve": "mimir/last_solve",
+            "availability": "mimir/availability",
+        },
+    }
+    
+    status, headers, body = _dispatch_post(server, "/api/config", edited_config)
+    assert status == 200
+    data = json.loads(body)
+    assert data["ok"] is True
+    
+    # Read back and verify comments are preserved
+    result = yaml_path.read_text()
+    assert "# Main grid connection" in result
+    assert "# Utility meter limit" in result
+    assert "# Contract restriction" in result
+    assert "# Tesla Powerwall 2" in result
+    assert "# Charge efficiency degrades above 0.8 SOC" in result
+    
+    # Verify the value was updated
+    assert "capacity_kwh: 12.0" in result or "capacity_kwh: 12" in result
+
+
+def test_post_config_removes_deleted_list_items(tmp_path: Path) -> None:
+    """POST /api/config removes items deleted from lists.
+    
+    When the GUI sends a config with fewer items in a list (e.g., removed
+    a battery, removed a charge segment), those items should be removed
+    from the file.
+    """
+    yaml_path = tmp_path / "mimirheim.yaml"
+    
+    # Initial config with 2 batteries
+    initial_yaml = """mqtt:
+  host: localhost
+  client_id: mimir
+
+grid:
+  import_limit_kw: 25.0
+  export_limit_kw: 10.0
+
+batteries:
+  home_battery:  # Keep this one
+    capacity_kwh: 10.0
+    charge_segments:
+      - power_max_kw: 5.0
+        efficiency: 0.95
+    discharge_segments:
+      - power_max_kw: 5.0
+        efficiency: 0.95
+  garage_battery:  # Remove this one
+    capacity_kwh: 5.0
+    charge_segments:
+      - power_max_kw: 2.0
+        efficiency: 0.90
+    discharge_segments:
+      - power_max_kw: 2.0
+        efficiency: 0.90
+
+objectives: {}
+outputs:
+  schedule: mimir/schedule
+  current: mimir/current
+  last_solve: mimir/last_solve
+  availability: mimir/availability
+"""
+    yaml_path.write_text(initial_yaml)
+    
+    server = _make_server(tmp_path)
+    
+    # Edit via API: remove garage_battery by not including it
+    edited_config = {
+        "mqtt": {"host": "localhost", "client_id": "mimir"},
+        "grid": {"import_limit_kw": 25.0, "export_limit_kw": 10.0},
+        "batteries": {
+            "home_battery": {
+                "capacity_kwh": 10.0,
+                "charge_segments": [{"power_max_kw": 5.0, "efficiency": 0.95}],
+                "discharge_segments": [{"power_max_kw": 5.0, "efficiency": 0.95}],
+            }
+            # garage_battery intentionally omitted
+        },
+        "objectives": {},
+        "outputs": {
+            "schedule": "mimir/schedule",
+            "current": "mimir/current",
+            "last_solve": "mimir/last_solve",
+            "availability": "mimir/availability",
+        },
+    }
+    
+    status, headers, body = _dispatch_post(server, "/api/config", edited_config)
+    assert status == 200
+    
+    # Read back and verify garage_battery is gone
+    result = yaml_path.read_text()
+    assert "home_battery" in result
+    assert "garage_battery" not in result
+
+
 # ---------------------------------------------------------------------------
 # Static file serving
 # ---------------------------------------------------------------------------

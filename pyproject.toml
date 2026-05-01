@@ -62,7 +62,9 @@ baseload-ha-db-mysql = [
 reporter = [
     "plotly>=6.7.0",
 ]
-config-editor = []
+config-editor = [
+    "ruamel.yaml>=0.18",
+]
 # Meta-extra: installs every helper's runtime dependencies in one shot.
 # Used by the container build and by full developer environments.
 helpers = [
