@@ -33,6 +33,7 @@ from typing import Any
 
 import yaml
 from pydantic import ValidationError as PydanticValidationError
+from ruamel.yaml import YAML
 
 from mimirheim.config.schema import MimirheimConfig
 
@@ -49,6 +50,91 @@ _ALLOWED_DUMP_SUFFIXES = ("_input.json", "_output.json")
 
 # Path to the static files bundled with this package.
 _STATIC_DIR = Path(__file__).parent / "static"
+
+
+def _write_yaml_preserving_comments(
+    data: dict[str, Any], file_path: Path
+) -> str:
+    """Write YAML file while preserving existing comments and formatting.
+
+    If the file exists, loads it with ruamel.yaml to preserve comments,
+    updates values in-place, then writes back. If the file doesn't exist,
+    creates a new formatted YAML file.
+
+    Args:
+        data: Dictionary to write as YAML.
+        file_path: Path where the YAML file will be written.
+
+    Returns:
+        The YAML string that was written.
+    """
+    yaml_handler = YAML()
+    yaml_handler.default_flow_style = False
+    yaml_handler.preserve_quotes = True
+    yaml_handler.width = 4096  # Prevent line wrapping
+
+    if file_path.exists():
+        # Load existing file to preserve comments and structure
+        try:
+            with file_path.open("r") as f:
+                existing = yaml_handler.load(f)
+        except Exception:
+            # File is malformed or unreadable: write fresh
+            existing = None
+        
+        if existing is not None:
+            # Deep merge: update existing structure with new values
+            def deep_merge(target: Any, source: dict) -> None:
+                """Recursively update target dict with values from source.
+                
+                Updates values, adds new keys, and removes keys not in source.
+                """
+                if not isinstance(target, dict) or not isinstance(source, dict):
+                    return
+                
+                # Remove keys that are in target but not in source
+                keys_to_remove = [k for k in target.keys() if k not in source]
+                for key in keys_to_remove:
+                    del target[key]
+                
+                # Update or add keys from source
+                for key, value in source.items():
+                    if key in target and isinstance(target[key], dict) and isinstance(value, dict):
+                        deep_merge(target[key], value)
+                    else:
+                        target[key] = value
+            
+            deep_merge(existing, data)
+            merged = existing
+        else:
+            # File was empty or malformed
+            merged = data
+    else:
+        # New file: just use the provided data
+        merged = data
+
+    # Write to string first to get the output for logging
+    import io
+    stream = io.StringIO()
+    yaml_handler.dump(merged, stream)
+    yaml_str = stream.getvalue()
+    
+    # Now write atomically to disk
+    fd, tmp_path = tempfile.mkstemp(
+        dir=file_path.parent, suffix=".yaml.tmp"
+    )
+    try:
+        with os.fdopen(fd, "w") as fh:
+            fh.write(yaml_str)
+        os.replace(tmp_path, file_path)
+    except OSError:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+    
+    return yaml_str
 
 
 # ---------------------------------------------------------------------------
@@ -532,22 +618,8 @@ class ConfigEditorServer:
         except PydanticValidationError as exc:
             return self._json_response(422, {"ok": False, "errors": exc.errors()})
 
-        yaml_str = yaml.dump(data, default_flow_style=False, allow_unicode=True)
         yaml_path = self._config_dir / "mimirheim.yaml"
-
-        # Atomic write: write to a temp file then rename.
-        fd, tmp_path = tempfile.mkstemp(dir=self._config_dir, suffix=".yaml.tmp")
-        try:
-            with os.fdopen(fd, "w") as fh:
-                fh.write(yaml_str)
-            os.replace(tmp_path, yaml_path)
-        except OSError:
-            # Clean up the temp file if rename fails.
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-            raise
+        yaml_str = _write_yaml_preserving_comments(data, yaml_path)
 
         logger.info("Wrote mimirheim.yaml (%d bytes)", len(yaml_str))
         return self._json_response(200, {"ok": True})
@@ -644,18 +716,7 @@ class ConfigEditorServer:
         except PydanticValidationError as exc:
             return self._json_response(422, {"ok": False, "errors": exc.errors()})
 
-        yaml_str = yaml.dump(config_dict, default_flow_style=False, allow_unicode=True)
-        fd, tmp_path = tempfile.mkstemp(dir=self._config_dir, suffix=".yaml.tmp")
-        try:
-            with os.fdopen(fd, "w") as fh:
-                fh.write(yaml_str)
-            os.replace(tmp_path, fpath)
-        except OSError:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-            raise
+        yaml_str = _write_yaml_preserving_comments(config_dict, fpath)
 
         # Delete mutually-exclusive variants (baseload only).
         for competing_fname in competitors:
