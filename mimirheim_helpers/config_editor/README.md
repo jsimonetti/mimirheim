@@ -52,6 +52,44 @@ Config files are written atomically: the new content is first written to a
 temporary file in the same directory, then renamed into place. This ensures
 the previous config file is never partially overwritten.
 
+### Comment preservation
+
+config-editor uses **ruamel.yaml** for round-trip YAML editing, which preserves
+comments, formatting, and key ordering when saving configuration files. This
+means you can maintain inline documentation in your YAML files and continue
+using the GUI editor without losing those comments.
+
+**Example:**
+
+Your `mimirheim.yaml` with comments:
+```yaml
+batteries:
+  home_battery:
+    capacity_kwh: 10.0  # Tesla Powerwall 2
+    # Charge efficiency degrades above 0.8 SOC
+    charge_segments:
+      - power_max_kw: 5.0
+        efficiency: 0.95
+```
+
+After editing `capacity_kwh` to `12.0` in the GUI, your file becomes:
+```yaml
+batteries:
+  home_battery:
+    capacity_kwh: 12.0  # Tesla Powerwall 2
+    # Charge efficiency degrades above 0.8 SOC
+    charge_segments:
+      - power_max_kw: 5.0
+        efficiency: 0.95
+```
+
+All comments are preserved, and only the edited value is updated.
+
+**Limitations:**
+- New devices or sections added via the GUI initially have no comments (you can
+  add them manually afterward)
+- Comments attached to deleted items are removed along with the item
+
 ---
 
 ## 3. Configuration
