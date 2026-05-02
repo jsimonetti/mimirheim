@@ -88,7 +88,7 @@ def _safe_join(base: Path, filename: str) -> Path | None:
     if Path(filename).name != filename:
         return None
     base_dir = base.resolve()
-    fpath = (base_dir / filename).resolve()
+    fpath = (base_dir / Path(filename).name).resolve()
     try:
         fpath.relative_to(base_dir)
     except ValueError:
