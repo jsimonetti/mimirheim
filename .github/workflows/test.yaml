@@ -18,6 +18,8 @@ jobs:
   test:
     name: Run pytest
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
@@ -37,6 +39,8 @@ jobs:
   integration-test:
     name: Run integration tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout

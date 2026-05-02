@@ -431,7 +431,7 @@ class ConfigEditorServer:
             reports_resolved = self._reports_dir.resolve()
         except OSError:
             return self._json_response(403, {"error": "forbidden"})
-        if not str(resolved).startswith(str(reports_resolved) + "/") and resolved != reports_resolved:
+        if not resolved.is_relative_to(reports_resolved):
             return self._json_response(403, {"error": "forbidden"})
         if not resolved.exists():
             return self._json_response(404, {"error": "not found"})
@@ -467,15 +467,19 @@ class ConfigEditorServer:
             dump_resolved = self._dump_dir.resolve()
         except OSError:
             return self._json_response(403, {"error": "forbidden"})
-        if not str(resolved).startswith(str(dump_resolved) + "/") and resolved != dump_resolved:
+        if not resolved.is_relative_to(dump_resolved):
             return self._json_response(403, {"error": "forbidden"})
         if not resolved.exists():
             return self._json_response(404, {"error": "not found"})
+        # Use resolved.name (the final path component after symlink resolution)
+        # rather than the raw URL filename to prevent HTTP response splitting via
+        # newline injection in the Content-Disposition header value.
+        safe_name = resolved.name
         return (
             200,
             {
                 "Content-Type": "application/json",
-                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Disposition": f'attachment; filename="{safe_name}"',
             },
             resolved.read_bytes(),
         )
@@ -511,7 +515,7 @@ class ConfigEditorServer:
         except OSError:
             return self._json_response(403, {"error": "forbidden"})
 
-        if not str(resolved).startswith(str(static_resolved)):
+        if not resolved.is_relative_to(static_resolved):
             return self._json_response(403, {"error": "forbidden"})
 
         if not resolved.exists():
@@ -687,6 +691,10 @@ class ConfigEditorServer:
 
         enabled = data.get("enabled", True)
         fpath = self._config_dir / filename
+
+        # Defensive check: ensure the resolved path stays inside _config_dir.
+        if self._config_dir.resolve() not in fpath.resolve().parents:
+            return self._json_response(400, {"ok": False, "error": "invalid filename"})
 
         if not enabled:
             # Disable: delete the file if it exists.
