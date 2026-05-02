@@ -52,14 +52,17 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /build
 
-# Step 1: manifests only — resolved before source is present.
-# This layer only rebuilds when pyproject.toml or uv.lock change, not on
-# source edits, keeping third-party dependency installation cached separately.
+# Step 1: manifests only — install all third-party dependencies before any
+# source is present. This layer rebuilds only when pyproject.toml or uv.lock
+# change, not on source edits, so the expensive pip downloads stay cached.
 COPY pyproject.toml uv.lock ./
 
-RUN uv venv /app/.venv --python python${PYTHON_VERSION}
+RUN uv venv /app/.venv --python python${PYTHON_VERSION} && \
+    UV_PROJECT_ENVIRONMENT=/app/.venv uv sync --all-extras --frozen --no-install-project && \
+    /app/.venv/bin/python -m compileall -q -b /app/.venv
 
-# Step 2: source files — install the project wheel (no deps, already done).
+# Step 2: source files — build and install the project wheels. Dependencies
+# are already in the venv so this step only compiles the local packages.
 COPY mimirheim/ ./mimirheim/
 COPY mimirheim_helpers/ ./mimirheim_helpers/
 
