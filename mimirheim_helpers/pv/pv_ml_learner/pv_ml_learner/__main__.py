@@ -74,6 +74,7 @@ _HA_STATUS_TOPIC = "homeassistant/status"
 
 
 def _ingest_pv_actuals_from_ha(
+    array_name: str,
     array_cfg: ArrayConfig,
     ha_db_url: str,
     start_ts: int,
@@ -92,7 +93,7 @@ def _ingest_pv_actuals_from_ha(
 
     Returns:
         List of ``PvActualRow`` objects with ``array_name`` set to
-        ``array_cfg.name``.
+        ``array_name``.
     """
     ha_engine = build_ha_engine(ha_db_url)
     with ha_engine.connect() as ha_conn:
@@ -101,7 +102,7 @@ def _ingest_pv_actuals_from_ha(
             entity_ids=array_cfg.sum_entity_ids,
             start_ts=start_ts,
             exclude_limiting_entity_ids=array_cfg.exclude_limiting_entity_ids or None,
-            array_name=array_cfg.name,
+            array_name=array_name,
         )
 
 
@@ -217,9 +218,11 @@ class PvLearnerDaemon(MqttDaemon):
         self._publish_discovery(client)
 
         # Startup: attempt training for any array that has no model yet.
-        missing_models = [a for a in cfg.arrays if not Path(a.model_path).exists()]
+        missing_models = [
+            (name, a) for name, a in cfg.arrays.items() if not Path(a.model_path).exists()
+        ]
         if missing_models:
-            names = [a.name for a in missing_models]
+            names = [name for name, _ in missing_models]
             logger.info(
                 "No trained model found for array(s) %s; attempting immediate training.",
                 names,
@@ -378,8 +381,8 @@ class PvLearnerDaemon(MqttDaemon):
         #    Must happen before the KNMI step so the KNMI fetch start can
         #    be aligned to the PV actuals history.
         # -----------------------------------------------------------------
-        for array_cfg in cfg.arrays:
-            self._ingest_array_actuals(array_cfg)
+        for array_name, array_cfg in cfg.arrays.items():
+            self._ingest_array_actuals(array_name, array_cfg)
 
         # -----------------------------------------------------------------
         # 2. Fetch KNMI observations for the range not yet stored.
@@ -429,15 +432,15 @@ class PvLearnerDaemon(MqttDaemon):
         # 3. Retrain each array using the combined KNMI + PV actuals now in
         #    the database.
         # -----------------------------------------------------------------
-        for array_cfg in cfg.arrays:
-            self._retrain_array(array_cfg, now_ts)
+        for array_name, array_cfg in cfg.arrays.items():
+            self._retrain_array(array_name, array_cfg, now_ts)
 
         # -----------------------------------------------------------------
         # 4. Publish fresh forecasts using the new (or unchanged) models.
         # -----------------------------------------------------------------
         return self.run_inference_cycle(client)
 
-    def _ingest_array_actuals(self, array_cfg: ArrayConfig) -> None:
+    def _ingest_array_actuals(self, array_name: str, array_cfg: ArrayConfig) -> None:
         """Ingest new PV actuals from HA for a single array into local storage.
 
         Reads only hours not yet stored (those after the latest known actuals
@@ -445,28 +448,29 @@ class PvLearnerDaemon(MqttDaemon):
         daemon continues so that the remaining arrays are not affected.
 
         Args:
+            array_name: The array's key from the ``arrays`` map.
             array_cfg: Configuration for the array to ingest.
         """
         cfg = self._config
         try:
             with self._engine.connect() as conn:
-                latest_actuals = get_latest_actuals_ts(conn, array_cfg.name)
+                latest_actuals = get_latest_actuals_ts(conn, array_name)
             start_ts = latest_actuals if latest_actuals is not None else 0
 
             pv_rows = _ingest_pv_actuals_from_ha(
-                array_cfg, cfg.homeassistant.db_url, start_ts
+                array_name, array_cfg, cfg.homeassistant.db_url, start_ts
             )
             with self._engine.begin() as conn:
                 n = upsert_pv_actuals(conn, pv_rows)
-            logger.info("Array %s: upserted %d PV actual rows.", array_cfg.name, n)
+            logger.info("Array %s: upserted %d PV actual rows.", array_name, n)
         except Exception:
             logger.error(
                 "Array %s: HA actuals ingest failed; continuing with existing data.\n%s",
-                array_cfg.name,
+                array_name,
                 traceback.format_exc(),
             )
 
-    def _retrain_array(self, array_cfg: ArrayConfig, now_ts: int) -> None:
+    def _retrain_array(self, array_name: str, array_cfg: ArrayConfig, now_ts: int) -> None:
         """Retrain the model for a single array using data already in local storage.
 
         Queries the full KNMI and PV actuals history from the database (no I/O),
@@ -475,6 +479,7 @@ class PvLearnerDaemon(MqttDaemon):
         skipped and the existing model file (if any) is left unchanged.
 
         Args:
+            array_name: The array's key from the ``arrays`` map.
             array_cfg: Configuration for the array to retrain.
             now_ts: Current Unix timestamp used as the upper bound for data queries.
         """
@@ -482,12 +487,12 @@ class PvLearnerDaemon(MqttDaemon):
         try:
             with self._engine.connect() as conn:
                 knmi_all = get_knmi_range(conn, 0, now_ts)
-                pv_all = get_pv_actuals_range(conn, array_cfg.name, 0, now_ts)
+                pv_all = get_pv_actuals_range(conn, array_name, 0, now_ts)
 
             training_rows = build_training_rows(knmi_all, pv_all)
             logger.info(
                 "Array %s: built %d training rows from %d KNMI + %d PV actuals.",
-                array_cfg.name,
+                array_name,
                 len(training_rows),
                 len(knmi_all),
                 len(pv_all),
@@ -499,14 +504,14 @@ class PvLearnerDaemon(MqttDaemon):
                 array_cfg.model_path,
                 array_cfg.metadata_path,
             )
-            logger.info("Array %s: model training complete.", array_cfg.name)
+            logger.info("Array %s: model training complete.", array_name)
 
         except InsufficientDataError as exc:
-            logger.warning("Array %s: skipping training: %s", array_cfg.name, exc)
+            logger.warning("Array %s: skipping training: %s", array_name, exc)
         except Exception:
             logger.error(
                 "Array %s: training failed.\n%s",
-                array_cfg.name,
+                array_name,
                 traceback.format_exc(),
             )
 
@@ -554,8 +559,8 @@ class PvLearnerDaemon(MqttDaemon):
             prune_meteoserver(conn)
 
         max_steps: int | None = None
-        for array_cfg in cfg.arrays:
-            n = self._run_array_inference(client, array_cfg, mc_rows)
+        for array_name, array_cfg in cfg.arrays.items():
+            n = self._run_array_inference(client, array_name, array_cfg, mc_rows)
             if n is not None and (max_steps is None or n > max_steps):
                 max_steps = n
 
@@ -569,6 +574,7 @@ class PvLearnerDaemon(MqttDaemon):
     def _run_array_inference(
         self,
         client: mqtt.Client,
+        array_name: str,
         array_cfg: ArrayConfig,
         mc_rows: list,
     ) -> int | None:
@@ -576,6 +582,7 @@ class PvLearnerDaemon(MqttDaemon):
 
         Args:
             client: Connected paho MQTT client.
+            array_name: The array's key from the ``arrays`` map.
             array_cfg: Configuration for the array to predict and publish.
             mc_rows: Meteoserver forecast rows fetched this cycle.
 
@@ -595,14 +602,14 @@ class PvLearnerDaemon(MqttDaemon):
         except ModelNotReadyError as exc:
             logger.warning(
                 "Array %s: model not ready; skipping forecast publish. %s",
-                array_cfg.name,
+                array_name,
                 exc,
             )
             return None
         except Exception:
             logger.error(
                 "Array %s: inference failed.\n%s",
-                array_cfg.name,
+                array_name,
                 traceback.format_exc(),
             )
             return None
@@ -616,7 +623,7 @@ class PvLearnerDaemon(MqttDaemon):
         )
         logger.info(
             "Array %s: published %d forecast steps to %s.",
-            array_cfg.name,
+            array_name,
             len(steps),
             array_cfg.output_topic,
         )

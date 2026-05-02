@@ -281,6 +281,13 @@ header h1 {
   margin-top: 0.2rem;
 }
 
+.field-row .topic-derived-hint {
+  font-size: 0.8rem;
+  color: var(--color-muted);
+  font-style: italic;
+  margin-top: 0.15rem;
+}
+
 .field-row .field-unit {
   font-size: 0.8rem;
   color: var(--color-muted);

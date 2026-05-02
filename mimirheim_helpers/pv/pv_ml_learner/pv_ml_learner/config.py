@@ -125,13 +125,17 @@ class ArrayConfig(BaseModel):
     model storage paths. Multiple arrays can be configured when the
     installation has more than one inverter or independently metered array.
 
+    The entry key in the ``arrays`` map is the array identifier. It is used
+    in log messages, to key actuals rows in the database, and to derive the
+    default output topic matching the mimirheim ``pv_arrays`` device name.
+
     Attributes:
-        name: Short identifier for this array. Must be unique across all
-            arrays. Used in log messages and to distinguish actuals rows
-            in the database.
         peak_power_kwp: Installed peak power in kWp. Predictions above
             peak_power_kwp * 1.1 are clamped to that ceiling.
         output_topic: MQTT topic on which the forecast is published (retained).
+            When not set, derived as
+            ``'{mimir_topic_prefix}/input/pv/{array_key}/forecast'`` where
+            ``array_key`` is the ``arrays`` map key for this entry.
         sum_entity_ids: One or more HA energy sensor entity IDs whose hourly
             production is summed for this array.
         model_path: Path where the trained XGBoost model is serialised.
@@ -144,10 +148,6 @@ class ArrayConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    name: str = Field(
-        description="Unique identifier for this array.",
-        json_schema_extra={"ui_label": "Array name", "ui_group": "basic"},
-    )
     peak_power_kwp: float = Field(
         gt=0,
         description="Installed PV peak power in kWp.",
@@ -157,9 +157,9 @@ class ArrayConfig(BaseModel):
         default=None,
         description=(
             "MQTT topic for the retained forecast payload. "
-            "Defaults to '{mimir_topic_prefix}/input/pv/{name}/forecast' when not set."
+            "Defaults to '{mimir_topic_prefix}/input/pv/{array_key}/forecast' when not set."
         ),
-        json_schema_extra={"ui_label": "Output topic", "ui_group": "advanced", "ui_placeholder": "{mimir_topic_prefix}/input/pv/{name}/forecast"},
+        json_schema_extra={"ui_label": "Output topic", "ui_group": "advanced", "ui_placeholder": "{mimir_topic_prefix}/input/pv/{array_key}/forecast", "ui_source": "pv_arrays"},
     )
     sum_entity_ids: list[str] = Field(
         min_length=1,
@@ -324,9 +324,9 @@ class PvLearnerConfig(BaseModel):
     knmi: KnmiConfig = Field(description="KNMI weather station configuration.", json_schema_extra={"ui_label": "KNMI", "ui_group": "basic"})
     meteoserver: MeteoserverConfig = Field(description="Meteoserver API configuration.", json_schema_extra={"ui_label": "Meteoserver", "ui_group": "basic"})
     homeassistant: HomeAssistantConfig = Field(description="Home Assistant database configuration.", json_schema_extra={"ui_label": "Home Assistant", "ui_group": "basic"})
-    arrays: list[ArrayConfig] = Field(
+    arrays: dict[str, ArrayConfig] = Field(
         min_length=1,
-        description="One or more PV array configurations.",
+        description="Named map of PV array configurations. The key is used as the array identifier and mimirheim device name.",
         json_schema_extra={"ui_label": "PV arrays", "ui_group": "basic"},
     )
     storage: StorageConfig = Field(description="Shared SQLite storage configuration.", json_schema_extra={"ui_label": "Storage", "ui_group": "basic"})
@@ -343,26 +343,15 @@ class PvLearnerConfig(BaseModel):
         """Fill in mimirheim-side topics that were not explicitly set.
 
         Derives ``output_topic`` for each array that has not set one explicitly,
-        using the array ``name`` as the mimirheim ``pv_arrays`` device name. Also
-        derives the default ``mimir_trigger_topic``.
+        using the ``arrays`` map key as the mimirheim ``pv_arrays`` device name.
+        Also derives the default ``mimir_trigger_topic``.
         """
         p = self.mimir_topic_prefix
-        for arr in self.arrays:
+        for key, arr in self.arrays.items():
             if arr.output_topic is None:
-                arr.output_topic = _topics.pv_forecast_topic(p, arr.name)
+                arr.output_topic = _topics.pv_forecast_topic(p, key)
         if self.mimir_trigger_topic is None:
             self.mimir_trigger_topic = _topics.trigger_topic(p)
-        return self
-
-    @model_validator(mode="after")
-    def _check_unique_array_names(self) -> "PvLearnerConfig":
-        """Raise if two arrays share the same name."""
-        names = [a.name for a in self.arrays]
-        if len(names) != len(set(names)):
-            duplicates = {n for n in names if names.count(n) > 1}
-            raise ValueError(
-                f"Array names must be unique; duplicates found: {sorted(duplicates)}"
-            )
         return self
 
     @model_validator(mode="after")

@@ -114,9 +114,8 @@ def _make_config(
 
     from helper_common.config import MqttConfig as _MqttConfig
 
-    arrays = [
-        ArrayConfig(
-            name=name,
+    arrays = {
+        name: ArrayConfig(
             peak_power_kwp=5.0,
             output_topic=f"mimir/input/pv_forecast/{name}",
             sum_entity_ids=[f"sensor.pv_{name}_energy"],
@@ -124,7 +123,7 @@ def _make_config(
             metadata_path=str(tmp_path / f"metadata_{name}.json"),
         )
         for name in array_names
-    ]
+    }
 
     return PvLearnerConfig(
         mqtt=_MqttConfig(host="localhost", port=1883, client_id="pv-learner"),
@@ -180,7 +179,7 @@ class TestTrainingCycle:
         ):
             daemon.run_training_cycle(client)
 
-        assert Path(cfg.arrays[0].model_path).exists()
+        assert Path(cfg.arrays["main"].model_path).exists()
 
     def test_insufficient_data_does_not_raise(self, tmp_path: Path) -> None:
         """run_training_cycle logs a warning but does not raise when data is sparse."""
@@ -210,7 +209,7 @@ class TestTrainingCycle:
             daemon.run_training_cycle(client)
 
         # Model file must not exist — training was skipped due to insufficient data.
-        assert not Path(cfg.arrays[0].model_path).exists()
+        assert not Path(cfg.arrays["main"].model_path).exists()
 
     def test_multi_array_training_creates_all_model_files(
         self, tmp_path: Path
@@ -226,8 +225,8 @@ class TestTrainingCycle:
         east_pv = _synthetic_pv_rows(n_months=3, array_name="east")
         west_pv = _synthetic_pv_rows(n_months=3, array_name="west")
 
-        def _fake_ingest(array_cfg, ha_db_path, start_ts):
-            return east_pv if array_cfg.name == "east" else west_pv
+        def _fake_ingest(array_name, array_cfg, ha_db_path, start_ts):
+            return east_pv if array_name == "east" else west_pv
 
         mc_rows = _synthetic_mc_rows()
 
@@ -245,9 +244,9 @@ class TestTrainingCycle:
         ):
             daemon.run_training_cycle(client)
 
-        for array_cfg in cfg.arrays:
+        for array_name, array_cfg in cfg.arrays.items():
             assert Path(array_cfg.model_path).exists(), (
-                f"Model file missing for array {array_cfg.name}"
+                f"Model file missing for array {array_name}"
             )
 
 
@@ -264,8 +263,8 @@ class TestInferenceCycle:
 
         # Pre-train models for both arrays so inference can proceed.
         knmi_rows = _synthetic_knmi_rows(n_months=3)
-        for array_cfg in cfg.arrays:
-            pv_rows = _synthetic_pv_rows(n_months=3, array_name=array_cfg.name)
+        for array_name, array_cfg in cfg.arrays.items():
+            pv_rows = _synthetic_pv_rows(n_months=3, array_name=array_name)
             training_rows = build_training_rows(knmi_rows, pv_rows)
             train_model(
                 training_rows,
@@ -289,7 +288,7 @@ class TestInferenceCycle:
         ):
             daemon.run_inference_cycle(client)
 
-        expected = {a.output_topic for a in cfg.arrays}
+        expected = {a.output_topic for a in cfg.arrays.values()}
         assert set(published_topics) == expected
 
     def test_meteoserver_failure_skips_publishing(self, tmp_path: Path) -> None:
@@ -324,7 +323,7 @@ class TestInferenceCycle:
 
         # Only train the "east" array; "west" has no model.
         knmi_rows = _synthetic_knmi_rows(n_months=3)
-        east_cfg = cfg.arrays[0]
+        east_cfg = cfg.arrays["east"]
         east_pv = _synthetic_pv_rows(n_months=3, array_name="east")
         training_rows = build_training_rows(knmi_rows, east_pv)
         train_model(

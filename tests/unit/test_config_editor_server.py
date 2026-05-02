@@ -569,3 +569,55 @@ def test_post_helper_config_valid_when_mqtt_provided_by_env(
     assert data["ok"] is True
     loaded = yaml.safe_load((tmp_path / "nordpool.yaml").read_text())
     assert loaded.get("mqtt", {}).get("host") is None
+
+
+# ---------------------------------------------------------------------------
+# ui_source metadata in helper schemas (Phase 3 acceptance tests)
+# ---------------------------------------------------------------------------
+
+def _get_helper_schemas(tmp_path: Path) -> dict[str, Any]:
+    """Return the parsed helper-schemas response dict."""
+    server = _make_server(tmp_path)
+    status, _, body = _dispatch_get(server, "/api/helper-schemas")
+    assert status == 200
+    return json.loads(body)
+
+
+def test_baseload_static_mimir_static_load_name_has_ui_source(tmp_path: Path) -> None:
+    """baseload-static schema exposes ui_source='static_loads' on mimir_static_load_name."""
+    schemas = _get_helper_schemas(tmp_path)
+    props = schemas["baseload-static.yaml"]["properties"]
+    field = props["mimir_static_load_name"]
+    assert field.get("ui_source") == "static_loads"
+
+
+def test_baseload_ha_mimir_static_load_name_has_ui_source(tmp_path: Path) -> None:
+    """baseload-ha schema exposes ui_source='static_loads' on mimir_static_load_name."""
+    schemas = _get_helper_schemas(tmp_path)
+    props = schemas["baseload-ha.yaml"]["properties"]
+    field = props["mimir_static_load_name"]
+    assert field.get("ui_source") == "static_loads"
+
+
+def test_baseload_ha_db_mimir_static_load_name_has_ui_source(tmp_path: Path) -> None:
+    """baseload-ha-db schema exposes ui_source='static_loads' on mimir_static_load_name."""
+    schemas = _get_helper_schemas(tmp_path)
+    props = schemas["baseload-ha-db.yaml"]["properties"]
+    field = props["mimir_static_load_name"]
+    assert field.get("ui_source") == "static_loads"
+
+
+def test_pv_fetcher_array_output_topic_has_ui_source(tmp_path: Path) -> None:
+    """pv-fetcher ArrayConfig.output_topic exposes ui_source='pv_arrays'."""
+    schemas = _get_helper_schemas(tmp_path)
+    array_config = schemas["pv-fetcher.yaml"]["$defs"]["ArrayConfig"]
+    field = array_config["properties"]["output_topic"]
+    assert field.get("ui_source") == "pv_arrays"
+
+
+def test_pv_ml_learner_array_output_topic_has_ui_source(tmp_path: Path) -> None:
+    """pv-ml-learner ArrayConfig.output_topic exposes ui_source='pv_arrays'."""
+    schemas = _get_helper_schemas(tmp_path)
+    array_config = schemas["pv-ml-learner.yaml"]["$defs"]["ArrayConfig"]
+    field = array_config["properties"]["output_topic"]
+    assert field.get("ui_source") == "pv_arrays"
