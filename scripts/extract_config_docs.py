@@ -324,7 +324,8 @@ def _build_targets(root: Path) -> list[Target]:
                 "edit the source schema and run the script to regenerate.\n\n"
                 "Each section corresponds to a Pydantic model. Fields marked "
                 "*(required)* have no default and must be set explicitly. "
-                "Start with [Configuration](../Configuration) for the narrative guide."
+                "Start with [Configuration](Configuration) for the narrative guide "
+                "and [Devices](Devices) for conceptual explanations of each device type."
             ),
         ),
         Target(
@@ -335,7 +336,7 @@ def _build_targets(root: Path) -> list[Target]:
             intro=(
                 "Auto-generated from `helper_common/config.py`. "
                 "These models are shared by all mimirheim helper tools.\n\n"
-                "See [Helpers/Common](../Helpers/Common) for the narrative guide."
+                "See [Common](Common) for the narrative guide."
             ),
         ),
         Target(
@@ -345,7 +346,7 @@ def _build_targets(root: Path) -> list[Target]:
             title="baseload_static — Configuration Reference",
             intro=(
                 "Auto-generated from `baseload_static/config.py`. "
-                "See [Helpers/Baseload-Static](../Helpers/Baseload-Static) for the guide."
+                "See [Baseload-Static](Baseload-Static) for the guide."
             ),
         ),
         Target(
@@ -355,7 +356,7 @@ def _build_targets(root: Path) -> list[Target]:
             title="baseload_ha — Configuration Reference",
             intro=(
                 "Auto-generated from `baseload_ha/config.py`. "
-                "See [Helpers/Baseload-HA](../Helpers/Baseload-HA) for the guide."
+                "See [Baseload-HA](Baseload-HA) for the guide."
             ),
         ),
         Target(
@@ -365,7 +366,7 @@ def _build_targets(root: Path) -> list[Target]:
             title="baseload_ha_db — Configuration Reference",
             intro=(
                 "Auto-generated from `baseload_ha_db/config.py`. "
-                "See [Helpers/Baseload-HA-DB](../Helpers/Baseload-HA-DB) for the guide."
+                "See [Baseload-HA-DB](Baseload-HA-DB) for the guide."
             ),
         ),
         Target(
@@ -375,7 +376,7 @@ def _build_targets(root: Path) -> list[Target]:
             title="nordpool — Configuration Reference",
             intro=(
                 "Auto-generated from `nordpool/config.py`. "
-                "See [Helpers/Nordpool](../Helpers/Nordpool) for the guide."
+                "See [Nordpool](Nordpool) for the guide."
             ),
         ),
         Target(
@@ -385,7 +386,7 @@ def _build_targets(root: Path) -> list[Target]:
             title="pv_fetcher (forecast.solar) — Configuration Reference",
             intro=(
                 "Auto-generated from `pv_fetcher/config.py`. "
-                "See [Helpers/PV-Fetcher](../Helpers/PV-Fetcher) for the guide."
+                "See [PV-Fetcher](PV-Fetcher) for the guide."
             ),
         ),
         Target(
@@ -395,7 +396,7 @@ def _build_targets(root: Path) -> list[Target]:
             title="pv_ml_learner — Configuration Reference",
             intro=(
                 "Auto-generated from `pv_ml_learner/config.py`. "
-                "See [Helpers/PV-ML-Learner](../Helpers/PV-ML-Learner) for the guide."
+                "See [PV-ML-Learner](PV-ML-Learner) for the guide."
             ),
         ),
         Target(
@@ -405,7 +406,7 @@ def _build_targets(root: Path) -> list[Target]:
             title="reporter — Configuration Reference",
             intro=(
                 "Auto-generated from `reporter/config.py`. "
-                "See [Helpers/Reporter](../Helpers/Reporter) for the guide."
+                "See [Reporter](Reporter) for the guide."
             ),
         ),
         Target(
@@ -415,7 +416,7 @@ def _build_targets(root: Path) -> list[Target]:
             title="scheduler — Configuration Reference",
             intro=(
                 "Auto-generated from `scheduler/config.py`. "
-                "See [Helpers/Scheduler](../Helpers/Scheduler) for the guide."
+                "See [Scheduler](Scheduler) for the guide."
             ),
         ),
     ]
