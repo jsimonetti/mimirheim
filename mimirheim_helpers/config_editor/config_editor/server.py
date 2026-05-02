@@ -52,6 +52,33 @@ _ALLOWED_DUMP_SUFFIXES = ("_input.json", "_output.json")
 _STATIC_DIR = Path(__file__).parent / "static"
 
 
+def _safe_join(base: Path, filename: str) -> Path | None:
+    """Resolve ``filename`` relative to ``base`` and verify containment.
+
+    Resolves both ``base`` and the joined path to absolute paths, then calls
+    ``relative_to`` to confirm the result is inside ``base``. Returns the
+    resolved path on success, or ``None`` if the resolved path escapes
+    ``base`` (e.g. via ``..`` components or symlinks pointing outside).
+
+    This pattern is recognised by CodeQL as a path-traversal sanitizer because
+    taint on ``filename`` is consumed by ``relative_to`` before any I/O occurs.
+
+    Args:
+        base: The directory that the result must stay inside.
+        filename: A bare filename from an HTTP request or config key.
+
+    Returns:
+        Resolved ``Path`` inside ``base``, or ``None`` if containment fails.
+    """
+    base_dir = base.resolve()
+    fpath = (base_dir / filename).resolve()
+    try:
+        fpath.relative_to(base_dir)
+    except ValueError:
+        return None
+    return fpath
+
+
 def _write_yaml_preserving_comments(
     data: dict[str, Any], file_path: Path
 ) -> str:
@@ -425,13 +452,8 @@ class ConfigEditorServer:
         suffix = Path(filename).suffix
         if suffix not in _ALLOWED_REPORT_EXTENSIONS:
             return self._json_response(403, {"error": "forbidden"})
-        file_path = self._reports_dir / filename
-        try:
-            resolved = file_path.resolve()
-            reports_resolved = self._reports_dir.resolve()
-        except OSError:
-            return self._json_response(403, {"error": "forbidden"})
-        if not resolved.is_relative_to(reports_resolved):
+        resolved = _safe_join(self._reports_dir, filename)
+        if resolved is None:
             return self._json_response(403, {"error": "forbidden"})
         if not resolved.exists():
             return self._json_response(404, {"error": "not found"})
@@ -461,25 +483,19 @@ class ConfigEditorServer:
             return self._json_response(403, {"error": "forbidden"})
         if not any(filename.endswith(s) for s in _ALLOWED_DUMP_SUFFIXES):
             return self._json_response(403, {"error": "forbidden"})
-        file_path = self._dump_dir / filename
-        try:
-            resolved = file_path.resolve()
-            dump_resolved = self._dump_dir.resolve()
-        except OSError:
-            return self._json_response(403, {"error": "forbidden"})
-        if not resolved.is_relative_to(dump_resolved):
+        resolved = _safe_join(self._dump_dir, filename)
+        if resolved is None:
             return self._json_response(403, {"error": "forbidden"})
         if not resolved.exists():
             return self._json_response(404, {"error": "not found"})
-        # Use resolved.name (the final path component after symlink resolution)
-        # rather than the raw URL filename to prevent HTTP response splitting via
-        # newline injection in the Content-Disposition header value.
-        safe_name = resolved.name
         return (
             200,
             {
                 "Content-Type": "application/json",
-                "Content-Disposition": f'attachment; filename="{safe_name}"',
+                # resolved.name is the final path component after symlink
+                # resolution and containment verification — safe for use in
+                # the Content-Disposition header.
+                "Content-Disposition": f'attachment; filename="{resolved.name}"',
             },
             resolved.read_bytes(),
         )
@@ -499,23 +515,12 @@ class ConfigEditorServer:
         # Strip the /static/ prefix.
         relative = path[len("/static/"):]
 
-        # Reject path traversal attempts.
-        if ".." in relative.split("/"):
-            return self._json_response(403, {"error": "forbidden"})
-
         suffix = Path(relative).suffix
         if suffix not in _ALLOWED_STATIC_EXTENSIONS:
             return self._json_response(403, {"error": "forbidden"})
 
-        file_path = _STATIC_DIR / relative
-        # Resolve and confirm the resolved path is inside _STATIC_DIR.
-        try:
-            resolved = file_path.resolve()
-            static_resolved = _STATIC_DIR.resolve()
-        except OSError:
-            return self._json_response(403, {"error": "forbidden"})
-
-        if not resolved.is_relative_to(static_resolved):
+        resolved = _safe_join(_STATIC_DIR, relative)
+        if resolved is None:
             return self._json_response(403, {"error": "forbidden"})
 
         if not resolved.exists():
@@ -690,10 +695,8 @@ class ConfigEditorServer:
             return self._json_response(400, {"ok": False, "errors": str(exc)})
 
         enabled = data.get("enabled", True)
-        fpath = self._config_dir / filename
-
-        # Defensive check: ensure the resolved path stays inside _config_dir.
-        if self._config_dir.resolve() not in fpath.resolve().parents:
+        fpath = _safe_join(self._config_dir, filename)
+        if fpath is None:
             return self._json_response(400, {"ok": False, "error": "invalid filename"})
 
         if not enabled:
@@ -728,7 +731,10 @@ class ConfigEditorServer:
 
         # Delete mutually-exclusive variants (baseload only).
         for competing_fname in competitors:
-            competing_path = self._config_dir / competing_fname
+            competing_path = _safe_join(self._config_dir, competing_fname)
+            if competing_path is None:
+                logger.warning("Skipping invalid competing filename %s", competing_fname)
+                continue
             if competing_path.exists():
                 try:
                     competing_path.unlink()
