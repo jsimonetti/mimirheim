@@ -26,6 +26,7 @@ import json
 import logging
 import mimetypes
 import os
+import re
 import tempfile
 import threading
 from pathlib import Path
@@ -47,6 +48,9 @@ _ALLOWED_REPORT_EXTENSIONS = {".html", ".js", ".css"}
 
 # Only these suffixes are served from the dump directory.
 _ALLOWED_DUMP_SUFFIXES = ("_input.json", "_output.json")
+
+# Strict allowlist for flat filenames (no separators, no spaces).
+_SAFE_FILENAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 # Path to the static files bundled with this package.
 _STATIC_DIR = Path(__file__).parent / "static"
@@ -84,6 +88,11 @@ def _safe_join(base: Path, filename: str) -> Path | None:
     # Using os.path.basename makes the sanitization explicit to analyzers.
     safe_name = os.path.basename(filename)
     if safe_name != filename:
+        return None
+    # Reject dot-segments and anything outside our strict filename allowlist.
+    if safe_name in {".", ".."}:
+        return None
+    if _SAFE_FILENAME_RE.fullmatch(safe_name) is None:
         return None
     base_dir = base.resolve()
     fpath = (base_dir / safe_name).resolve()
