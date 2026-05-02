@@ -80,15 +80,13 @@ def _safe_join(base: Path, filename: str) -> Path | None:
     # Reject backslashes (Windows path separator).
     if "\\" in filename:
         return None
-    # Reject anything that is not already its own final path component.
-    # Path(filename).name strips leading directory parts on every platform;
-    # if the result differs from the input, the filename contained a directory
-    # prefix. CodeQL recognises this comparison as a sanitizer because after
-    # this guard the analyser can infer filename == Path(filename).name.
-    if Path(filename).name != filename:
+    # Keep only the final path component and require exact match.
+    # Using os.path.basename makes the sanitization explicit to analyzers.
+    safe_name = os.path.basename(filename)
+    if safe_name != filename:
         return None
     base_dir = base.resolve()
-    fpath = (base_dir / Path(filename).name).resolve()
+    fpath = (base_dir / safe_name).resolve()
     try:
         fpath.relative_to(base_dir)
     except ValueError:
