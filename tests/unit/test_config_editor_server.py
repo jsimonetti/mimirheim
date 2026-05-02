@@ -306,11 +306,11 @@ outputs:
 # Static file serving
 # ---------------------------------------------------------------------------
 
-def test_static_path_traversal_returns_403(tmp_path: Path) -> None:
-    """GET /static/../config.py must return 403, not 404 or 200."""
+def test_static_path_traversal_returns_400(tmp_path: Path) -> None:
+    """GET /static/../config.py must return 400 (rejected before routing)."""
     server = _make_server(tmp_path)
     status, headers, body = _dispatch_get(server, "/static/../config.py")
-    assert status == 403
+    assert status == 400
 
 
 # ---------------------------------------------------------------------------
