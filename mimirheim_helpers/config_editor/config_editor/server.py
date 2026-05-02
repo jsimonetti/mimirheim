@@ -52,24 +52,40 @@ _ALLOWED_DUMP_SUFFIXES = ("_input.json", "_output.json")
 _STATIC_DIR = Path(__file__).parent / "static"
 
 
+def _is_plain_filename(filename: str) -> bool:
+    """Return True when ``filename`` is a plain filename with no path components.
+
+    Checks that ``filename`` is non-empty, contains no path separators, and
+    is identical to its own ``Path.name`` (i.e. it has no leading directory
+    parts on any platform). After this guard passes, CodeQL can infer that
+    ``filename == Path(filename).name``, which breaks the taint chain from the
+    HTTP request into subsequent path constructions.
+
+    Args:
+        filename: A raw filename string from an HTTP request or config key.
+
+    Returns:
+        True if the filename is safe to use as a bare file component.
+    """
+    return bool(filename) and "/" not in filename and "\\" not in filename and Path(filename).name == filename
+
+
 def _safe_join(base: Path, filename: str) -> Path | None:
     """Resolve ``filename`` relative to ``base`` and verify containment.
 
-    Resolves both ``base`` and the joined path to absolute paths, then calls
-    ``relative_to`` to confirm the result is inside ``base``. Returns the
-    resolved path on success, or ``None`` if the resolved path escapes
-    ``base`` (e.g. via ``..`` components or symlinks pointing outside).
-
-    This pattern is recognised by CodeQL as a path-traversal sanitizer because
-    taint on ``filename`` is consumed by ``relative_to`` before any I/O occurs.
+    First validates that ``filename`` is a plain filename (no directory
+    components), then resolves the joined path and calls ``relative_to`` to
+    confirm containment inside ``base``. Returns ``None`` on any failure.
 
     Args:
         base: The directory that the result must stay inside.
         filename: A bare filename from an HTTP request or config key.
 
     Returns:
-        Resolved ``Path`` inside ``base``, or ``None`` if containment fails.
+        Resolved ``Path`` inside ``base``, or ``None`` if validation fails.
     """
+    if not _is_plain_filename(filename):
+        return None
     base_dir = base.resolve()
     fpath = (base_dir / filename).resolve()
     try:
@@ -447,8 +463,6 @@ class ConfigEditorServer:
         """
         if self._reports_dir is None:
             return self._json_response(404, {"error": "reports directory not configured"})
-        if not filename or "/" in filename or ".." in filename:
-            return self._json_response(403, {"error": "forbidden"})
         suffix = Path(filename).suffix
         if suffix not in _ALLOWED_REPORT_EXTENSIONS:
             return self._json_response(403, {"error": "forbidden"})
@@ -479,8 +493,6 @@ class ConfigEditorServer:
         """
         if self._dump_dir is None:
             return self._json_response(404, {"error": "dump directory not configured"})
-        if not filename or "/" in filename or ".." in filename:
-            return self._json_response(403, {"error": "forbidden"})
         if not any(filename.endswith(s) for s in _ALLOWED_DUMP_SUFFIXES):
             return self._json_response(403, {"error": "forbidden"})
         resolved = _safe_join(self._dump_dir, filename)
