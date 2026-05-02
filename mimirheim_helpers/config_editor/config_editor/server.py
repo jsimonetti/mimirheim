@@ -325,9 +325,17 @@ class ConfigEditorServer:
                 self._send(status, headers, body)
 
             def _send(self, status: int, headers: dict[str, str], body: bytes) -> None:
+                def _sanitize_header_component(component: str) -> str:
+                    # Prevent HTTP response splitting by stripping CR and LF
+                    # characters from header names and values before they are
+                    # written to the wire.
+                    return component.replace("\r", "").replace("\n", "")
+
                 self.send_response(status)
                 for key, value in headers.items():
-                    self.send_header(key, value)
+                    safe_key = _sanitize_header_component(str(key))
+                    safe_value = _sanitize_header_component(str(value))
+                    self.send_header(safe_key, safe_value)
                 self.end_headers()
                 self.wfile.write(body)
 
