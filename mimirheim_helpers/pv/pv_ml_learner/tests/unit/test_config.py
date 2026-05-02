@@ -33,16 +33,15 @@ def _valid_config() -> dict:
         "homeassistant": {
             "db_url": "sqlite:////config/home-assistant_v2.db",
         },
-        "arrays": [
-            {
-                "name": "main",
+        "arrays": {
+            "main": {
                 "peak_power_kwp": 5.2,
                 "output_topic": "mimir/input/pv_forecast/main",
                 "sum_entity_ids": ["sensor.solaredge_energy_today"],
                 "model_path": "/data/pv_ml_learner_main.joblib",
                 "metadata_path": "/data/pv_ml_learner_main_meta.json",
             }
-        ],
+        },
         "storage": {
             "db_path": "/data/pv_ml_learner.db",
         },
@@ -72,17 +71,17 @@ class TestValidConfig:
         from pv_ml_learner.config import PvLearnerConfig
 
         cfg = PvLearnerConfig.model_validate(_valid_config())
-        assert cfg.arrays[0].exclude_limiting_entity_ids == []
+        assert cfg.arrays["main"].exclude_limiting_entity_ids == []
 
     def test_exclude_limiting_entity_ids_present_parses(self) -> None:
         from pv_ml_learner.config import PvLearnerConfig
 
         raw = _valid_config()
-        raw["arrays"][0]["exclude_limiting_entity_ids"] = [
+        raw["arrays"]["main"]["exclude_limiting_entity_ids"] = [
             "binary_sensor.solaredge_export_limited"
         ]
         cfg = PvLearnerConfig.model_validate(raw)
-        assert cfg.arrays[0].exclude_limiting_entity_ids == [
+        assert cfg.arrays["main"].exclude_limiting_entity_ids == [
             "binary_sensor.solaredge_export_limited"
         ]
 
@@ -117,20 +116,7 @@ class TestRejectedConfig:
         from pv_ml_learner.config import PvLearnerConfig
 
         raw = _valid_config()
-        raw["arrays"][0]["sum_entity_ids"] = []
-        with pytest.raises(ValidationError):
-            PvLearnerConfig.model_validate(raw)
-
-    def test_duplicate_array_names_rejected(self) -> None:
-        from pv_ml_learner.config import PvLearnerConfig
-
-        raw = _valid_config()
-        second_array = dict(raw["arrays"][0])
-        second_array["output_topic"] = "mimir/input/pv_forecast/second"
-        second_array["model_path"] = "/data/second.joblib"
-        second_array["metadata_path"] = "/data/second_meta.json"
-        # Both arrays share the same name "main" — must be rejected.
-        raw["arrays"].append(second_array)
+        raw["arrays"]["main"]["sum_entity_ids"] = []
         with pytest.raises(ValidationError):
             PvLearnerConfig.model_validate(raw)
 
@@ -204,9 +190,9 @@ class TestHiooTopicDerivation:
         from pv_ml_learner.config import PvLearnerConfig
 
         raw = _valid_config()
-        del raw["arrays"][0]["output_topic"]
+        del raw["arrays"]["main"]["output_topic"]
         cfg = PvLearnerConfig.model_validate(raw)
-        assert cfg.arrays[0].output_topic == "mimir/input/pv/main/forecast"
+        assert cfg.arrays["main"].output_topic == "mimir/input/pv/main/forecast"
 
     def test_array_output_topic_derived_custom_prefix(self) -> None:
         """Derivation respects a custom mimir_topic_prefix."""
@@ -214,9 +200,9 @@ class TestHiooTopicDerivation:
 
         raw = _valid_config()
         raw["mimir_topic_prefix"] = "mymimir"
-        del raw["arrays"][0]["output_topic"]
+        del raw["arrays"]["main"]["output_topic"]
         cfg = PvLearnerConfig.model_validate(raw)
-        assert cfg.arrays[0].output_topic == "mymimir/input/pv/main/forecast"
+        assert cfg.arrays["main"].output_topic == "mymimir/input/pv/main/forecast"
 
     def test_explicit_output_topic_not_overwritten(self) -> None:
         """An explicitly set output_topic is not overwritten by derivation."""
@@ -225,7 +211,7 @@ class TestHiooTopicDerivation:
         raw = _valid_config()
         # output_topic is explicitly set in _valid_config
         cfg = PvLearnerConfig.model_validate(raw)
-        assert cfg.arrays[0].output_topic == "mimir/input/pv_forecast/main"
+        assert cfg.arrays["main"].output_topic == "mimir/input/pv_forecast/main"
 
     def test_mimir_trigger_topic_derived_from_prefix(self) -> None:
         """mimir_trigger_topic is derived from mimir_topic_prefix when not set."""

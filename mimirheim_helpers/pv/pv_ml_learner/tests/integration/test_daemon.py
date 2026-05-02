@@ -114,9 +114,8 @@ def _make_config(
 
     from helper_common.config import MqttConfig as _MqttConfig
 
-    arrays = [
-        ArrayConfig(
-            name=name,
+    arrays = {
+        name: ArrayConfig(
             peak_power_kwp=5.0,
             output_topic=f"mimir/input/pv_forecast/{name}",
             sum_entity_ids=[f"sensor.pv_{name}_energy"],
@@ -124,7 +123,7 @@ def _make_config(
             metadata_path=str(tmp_path / f"metadata_{name}.json"),
         )
         for name in array_names
-    ]
+    }
 
     return PvLearnerConfig(
         mqtt=_MqttConfig(host="localhost", port=1883, client_id="pv-learner"),
@@ -180,7 +179,7 @@ class TestTrainingCycle:
         ):
             daemon.run_training_cycle(client)
 
-        assert Path(cfg.arrays[0].model_path).exists()
+        assert Path(cfg.arrays["main"].model_path).exists()
 
     def test_insufficient_data_does_not_raise(self, tmp_path: Path) -> None:
         """run_training_cycle logs a warning but does not raise when data is sparse."""

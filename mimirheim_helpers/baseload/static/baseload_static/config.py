@@ -101,7 +101,7 @@ class BaseloadConfig(BaseModel):
     mimir_static_load_name: str = Field(
         default="base_load",
         description="mimirheim static_loads device name. Used to derive the default output_topic.",
-        json_schema_extra={"ui_label": "mimirheim static load name", "ui_group": "advanced"},
+        json_schema_extra={"ui_label": "mimirheim static load name", "ui_group": "advanced", "ui_source": "static_loads"},
     )
     trigger_topic: str = Field(description="MQTT topic that triggers a publish cycle.", json_schema_extra={"ui_label": "Trigger topic", "ui_group": "advanced"})
     output_topic: str | None = Field(

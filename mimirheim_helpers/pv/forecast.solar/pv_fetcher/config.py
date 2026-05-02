@@ -71,7 +71,7 @@ class ArrayConfig(BaseModel):
             "MQTT topic for the forecast payload. Retained. "
             "Defaults to '{mimir_topic_prefix}/input/pv/{array_key}/forecast' when not set."
         ),
-        json_schema_extra={"ui_label": "Output topic", "ui_group": "advanced", "ui_placeholder": "{mimir_topic_prefix}/input/pv/{array_key}/forecast"},
+        json_schema_extra={"ui_label": "Output topic", "ui_group": "advanced", "ui_placeholder": "{mimir_topic_prefix}/input/pv/{array_key}/forecast", "ui_source": "pv_arrays"},
     )
     latitude: float = Field(description="Site latitude in decimal degrees.", json_schema_extra={"ui_label": "Latitude", "ui_group": "basic"})
     longitude: float = Field(description="Site longitude in decimal degrees.", json_schema_extra={"ui_label": "Longitude", "ui_group": "basic"})

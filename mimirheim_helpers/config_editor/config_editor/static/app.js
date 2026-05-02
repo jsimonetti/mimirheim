@@ -157,6 +157,162 @@ function getDef(defName) {
 }
 
 // ---------------------------------------------------------------------------
+// Phase 1 — Placeholder resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve a ui_placeholder template to a concrete topic string using the
+ * current mimirheim config and a per-field context.
+ *
+ * Supported substitutions:
+ *   {mimir_topic_prefix} / {mqtt.topic_prefix}  — mqtt.topic_prefix from gConfig
+ *   {array_key} / {mimir_array_key} / {name} / {mimir_static_load_name}
+ *                                               — device name from ctx.deviceName
+ *
+ * Returns null if the template contains a substitution that cannot be
+ * resolved (e.g. no deviceName was supplied).
+ *
+ * @param {string}      template   The ui_placeholder string.
+ * @param {{deviceName?: string}} ctx  Resolution context.
+ * @returns {string|null}
+ */
+function resolvePlaceholder(template, ctx) {
+  const prefix = (gConfig.mqtt && gConfig.mqtt.topic_prefix)
+    ? gConfig.mqtt.topic_prefix
+    : (gMqttEnv.topic_prefix || "mimir");
+
+  let result = template
+    .replace(/\{mimir_topic_prefix\}/g, prefix)
+    .replace(/\{mqtt\.topic_prefix\}/g, prefix);
+
+  const deviceName = ctx && ctx.deviceName;
+  if (deviceName) {
+    result = result
+      .replace(/\{array_key\}/g, deviceName)
+      .replace(/\{mimir_array_key\}/g, deviceName)
+      .replace(/\{name\}/g, deviceName)
+      .replace(/\{mimir_static_load_name\}/g, deviceName);
+  }
+
+  // If any template variables remain unresolved, return null.
+  if (/\{[^}]+\}/.test(result)) return null;
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 — Helper prefix synchronisation
+// ---------------------------------------------------------------------------
+
+/**
+ * The MQTT topic prefix from the last time topic_prefix was changed by the
+ * user during this session. Used by syncHelperPrefixes to detect which
+ * helpers were tracking the previous prefix (vs. intentionally diverged).
+ */
+let gLastKnownPrefix = null;
+
+/**
+ * Sync mimir_topic_prefix in all helper configs that are still tracking the
+ * old prefix (i.e. their value matches oldPrefix). Helpers where the user
+ * has already set a different custom prefix are left untouched.
+ *
+ * Updates gHelperConfigs in memory. The user must save each helper
+ * individually to persist the change.
+ *
+ * Displays a dismissible banner below the MQTT section listing which helpers
+ * were updated and which were skipped (diverged).
+ *
+ * @param {string} oldPrefix  The previous value of mqtt.topic_prefix.
+ * @param {string} newPrefix  The new value of mqtt.topic_prefix.
+ * @param {HTMLElement} bannerContainer  Element to render the banner into.
+ */
+function syncHelperPrefixes(oldPrefix, newPrefix, bannerContainer) {
+  if (!gHelperConfigs || oldPrefix === newPrefix) return;
+
+  // Helpers that carry mimir_topic_prefix at the root level.
+  const prefixHelpers = [
+    "nordpool.yaml",
+    "pv-fetcher.yaml",
+    "pv-ml-learner.yaml",
+    "baseload-static.yaml",
+    "baseload-ha.yaml",
+    "baseload-ha-db.yaml",
+    "reporter.yaml",
+  ];
+
+  const updated = [];
+  const skipped = [];
+
+  for (const fname of prefixHelpers) {
+    const state = gHelperConfigs[fname];
+    if (!state || !state.enabled) continue;
+    const cfg = state.config || {};
+    const helperPrefix = cfg.mimir_topic_prefix;
+    if (helperPrefix === undefined || helperPrefix === oldPrefix) {
+      // This helper was tracking the mimirheim prefix. Update it.
+      if (!gHelperConfigs[fname].config) gHelperConfigs[fname].config = {};
+      gHelperConfigs[fname].config.mimir_topic_prefix = newPrefix;
+      updated.push(fname.replace(".yaml", ""));
+    } else {
+      // This helper has a custom (diverged) prefix. Leave it alone.
+      skipped.push(fname.replace(".yaml", ""));
+    }
+  }
+
+  // Render the banner.
+  bannerContainer.innerHTML = "";
+  if (updated.length === 0 && skipped.length === 0) return;
+
+  const banner = document.createElement("div");
+  banner.className = "info-banner prefix-sync-banner";
+
+  let msg = "";
+  if (updated.length > 0) {
+    msg += `Topic prefix synced in: <strong>${updated.join(", ")}</strong>. "
+      + "Save each helper to persist.`;
+  }
+  if (skipped.length > 0) {
+    if (msg) msg += " ";
+    msg += `Skipped (custom prefix): <strong>${skipped.join(", ")}</strong>.`;
+  }
+  banner.innerHTML = msg;
+
+  const dismiss = document.createElement("button");
+  dismiss.type = "button";
+  dismiss.textContent = "\u00d7";
+  dismiss.style.cssText = "float:right;background:none;border:none;cursor:pointer;font-size:1.1rem;line-height:1;";
+  dismiss.addEventListener("click", () => { bannerContainer.innerHTML = ""; });
+  banner.prepend(dismiss);
+
+  bannerContainer.appendChild(banner);
+}
+
+/**
+ * Wire a topic_prefix change listener on an MQTT form.
+ * When the user changes the topic_prefix field, calls syncHelperPrefixes()
+ * and dispatches "mimirPrefixChanged" so that all open topic-derived-hint
+ * elements re-evaluate.
+ *
+ * @param {HTMLElement} mqttForm        The form element built by buildForm("MqttConfig", …).
+ * @param {HTMLElement} bannerContainer Element to render the sync banner into.
+ */
+function _wirePrefixSync(mqttForm, bannerContainer) {
+  const prefixInput = mqttForm.querySelector("input[name='mqtt.topic_prefix']");
+  if (!prefixInput) return;
+
+  // Record the initial prefix so we can detect changes.
+  gLastKnownPrefix = prefixInput.value.trim() || prefixInput.placeholder || "mimir";
+
+  prefixInput.addEventListener("input", () => {
+    const newPrefix = prefixInput.value.trim() || prefixInput.placeholder || "mimir";
+    if (newPrefix === gLastKnownPrefix) return;
+    syncHelperPrefixes(gLastKnownPrefix, newPrefix, bannerContainer);
+    gLastKnownPrefix = newPrefix;
+    // Notify all topic-derived-hint elements to re-evaluate.
+    window.dispatchEvent(new CustomEvent("mimirPrefixChanged"));
+  });
+}
+
+// ---------------------------------------------------------------------------
 // FormBuilder
 // ---------------------------------------------------------------------------
 
@@ -274,7 +430,88 @@ function buildFieldRow(fieldName, fieldSchema, value, bindPath, parentData) {
                      resolvedSchema.anyOf?.some(s => s.type === "null");
 
   let input;
+  let uiSourceRendered = false;
 
+  // ui_source: when the schema declares which gConfig section provides valid
+  // device names for this field, render a <select> populated from those keys.
+  // Falls back to a plain text input when gConfig has no entries in that
+  // section (e.g. the user has not yet configured any pv_arrays).
+  if (fieldSchema.ui_source && (effectiveSchema.type === "string" || isNullable)) {
+    const deviceMap = (gConfig && gConfig[fieldSchema.ui_source]) || {};
+    const deviceKeys = Object.keys(deviceMap);
+    if (deviceKeys.length > 0) {
+      const sel = document.createElement("select");
+      sel.name = bindPath;
+      sel.id = `field-${bindPath}`;
+
+      // For nullable topic fields: an "(auto-derived)" first option that
+      // clears the field so the runtime validator fills it in.
+      if (isNullable) {
+        const emptyOpt = document.createElement("option");
+        emptyOpt.value = "";
+        emptyOpt.textContent = "(auto-derived)";
+        if (value === null || value === undefined || value === "") emptyOpt.selected = true;
+        sel.appendChild(emptyOpt);
+      }
+
+      for (const key of deviceKeys) {
+        const opt = document.createElement("option");
+        if (fieldSchema.ui_placeholder) {
+          // Topic-type field: the option value is the resolved full topic
+          // string; the label shows the device name for readability.
+          const resolved = resolvePlaceholder(fieldSchema.ui_placeholder, { deviceName: key });
+          opt.value = resolved || key;
+          opt.textContent = resolved ? `${key}  (${resolved})` : key;
+          if (opt.value === value) opt.selected = true;
+        } else {
+          // Device-name field: the option value is the device key itself.
+          opt.value = key;
+          opt.textContent = key;
+          if (key === value) opt.selected = true;
+        }
+        sel.appendChild(opt);
+      }
+
+      // Power-user escape hatch: selecting this option reveals a text input.
+      const customOpt = document.createElement("option");
+      customOpt.value = "__custom__";
+      customOpt.textContent = "Custom value\u2026";
+      // Select "Custom" when the current value matches none of the options.
+      const knownValues = Array.from(sel.options).map(o => o.value);
+      if (value !== null && value !== undefined && value !== "" && !knownValues.includes(String(value))) {
+        customOpt.selected = true;
+      }
+      sel.appendChild(customOpt);
+
+      // Text input shown only when "Custom value" is selected.
+      const customInput = document.createElement("input");
+      customInput.type = "text";
+      // Same name so collectFormData picks up the typed value when visible.
+      customInput.name = bindPath;
+      customInput.style.cssText = "margin-top:0.3rem;display:none;width:100%;box-sizing:border-box;";
+      customInput.placeholder = placeholderText || "";
+      if (customOpt.selected) {
+        customInput.value = value || "";
+        customInput.style.display = "";
+      }
+
+      sel.addEventListener("change", () => {
+        if (sel.value === "__custom__") {
+          customInput.style.display = "";
+          customInput.focus();
+        } else {
+          customInput.style.display = "none";
+          customInput.value = "";
+        }
+      });
+
+      row.appendChild(sel);
+      row.appendChild(customInput);
+      uiSourceRendered = true;
+    }
+  }
+
+  if (!uiSourceRendered) {
   if (type === "boolean") {
     input = document.createElement("input");
     input.type = "checkbox";
@@ -314,6 +551,22 @@ function buildFieldRow(fieldName, fieldSchema, value, bindPath, parentData) {
   } else if (type === "array" && effectiveSchema.items) {
     // Array of objects: render a sub-list.
     input = buildSubList(effectiveSchema, value || [], bindPath);
+  } else if (type === "object" && effectiveSchema.additionalProperties && !effectiveSchema.properties) {
+    // dict[str, Model]: JSON Schema shape is { type: "object", additionalProperties: { $ref: "..." } }.
+    // The additionalProperties must reference a named $def (a model), not a primitive.
+    const ap = effectiveSchema.additionalProperties;
+    const apRef = ap?.$ref || (ap?.anyOf || []).find(s => s.$ref)?.$ref;
+    if (apRef) {
+      const defName = apRef.slice("#/$defs/".length);
+      input = buildDictOfModel(defName, value || {}, bindPath, { ...(gSchema.$defs || {}) });
+    } else {
+      // dict[str, primitive] — fall through to a plain text input.
+      input = document.createElement("input");
+      input.type = "text";
+      input.name = bindPath;
+      input.id = `field-${bindPath}`;
+      input.value = value !== undefined && value !== null ? JSON.stringify(value) : "";
+    }
   } else if (type === "object" && effectiveSchema.properties) {
     // Nested object: recurse.
     const defRef = fieldSchema.$ref || (fieldSchema.anyOf || []).find(s => s.$ref)?.["$ref"];
@@ -338,12 +591,58 @@ function buildFieldRow(fieldName, fieldSchema, value, bindPath, parentData) {
   }
 
   row.appendChild(input);
+  } // end if (!uiSourceRendered)
 
   if (fieldSchema.ui_unit) {
     const unit = document.createElement("span");
     unit.className = "field-unit";
     unit.textContent = fieldSchema.ui_unit;
     row.appendChild(unit);
+  }
+
+  // Phase 1 — derived topic hint.
+  // Only for plain text inputs (not ui_source selects, which already show
+  // the resolved value as option labels).
+  const isEmpty = value === undefined || value === null || value === "";
+  if (
+    !uiSourceRendered &&
+    fieldSchema.ui_placeholder !== undefined &&
+    (effectiveSchema.type === "string" || isNullable) &&
+    !effectiveSchema.enum &&
+    typeof input.addEventListener === "function" &&
+    input.tagName === "INPUT"
+  ) {
+    // Extract deviceName context from bindPath: last non-empty segment that
+    // is not a known property name. For helper forms the bindPath is the
+    // plain fieldName; for per-device forms it is "section.deviceName.field".
+    // We pass ctx as null here; per-device callers that know the deviceName
+    // can set input.dataset.deviceName before the hint is evaluated.
+    const hintEl = document.createElement("small");
+    hintEl.className = "field-hint topic-derived-hint";
+
+    function updateHint() {
+      const currentVal = input.value.trim();
+      if (currentVal) {
+        hintEl.textContent = "";
+        hintEl.hidden = true;
+        return;
+      }
+      const deviceName = input.dataset.deviceName || null;
+      const resolved = resolvePlaceholder(fieldSchema.ui_placeholder, { deviceName });
+      if (resolved) {
+        hintEl.textContent = `Auto-derived: ${resolved}`;
+        hintEl.hidden = false;
+      } else {
+        hintEl.textContent = "";
+        hintEl.hidden = true;
+      }
+    }
+
+    updateHint();
+    input.addEventListener("input", updateHint);
+    // Re-evaluate when the global prefix changes (Phase 2 fires this event).
+    window.addEventListener("mimirPrefixChanged", updateHint);
+    row.appendChild(hintEl);
   }
 
   if (fieldSchema.description) {
@@ -354,6 +653,168 @@ function buildFieldRow(fieldName, fieldSchema, value, bindPath, parentData) {
   }
 
   return row;
+}
+
+/**
+ * Build an editable dict-of-model widget for JSON Schema fields with shape:
+ *   { type: "object", additionalProperties: { $ref: "#/$defs/SomeModel" } }
+ *
+ * This matches the project-standard pattern for named device collections,
+ * e.g. `arrays: dict[str, ArrayConfig]`. Each entry is rendered as an
+ * editable key input (the device name) plus a `buildForm` sub-form for the
+ * model fields. Entries can be added and removed individually.
+ *
+ * The widget maintains a live `_liveData` object on the container element.
+ * `collectFormData` reads this directly, so no bracket-path parsing is needed.
+ *
+ * @param {string} defName      The $defs name of the value model (e.g. "ArrayConfig").
+ * @param {Object} data         Current dict value ({ key: modelObject, ... }).
+ * @param {string} bindPath     Dot-path used by collectFormData to locate this field.
+ * @param {Object} [defs]       Snapshot of $defs to use for lookups. Captured at
+ *                              construction time so that deferred renders (add/remove
+ *                              button handlers) still have access to the helper schema
+ *                              definitions after buildHelperForm has restored gSchema.$defs.
+ * @returns {HTMLElement}
+ */
+function buildDictOfModel(defName, data, bindPath, defs) {
+  // Capture the current $defs at construction time so that event handlers
+  // that fire after buildHelperForm restores gSchema.$defs can still resolve
+  // definitions from the helper schema.
+  const capturedDefs = defs || { ...(gSchema.$defs || {}) };
+  const container = document.createElement("div");
+  container.className = "dict-of-model-container";
+  container.dataset.bindPath = bindPath;
+
+  // liveData is the authoritative runtime state. Keys are entry names; values
+  // are plain objects matching the model schema.
+  const liveData = data ? { ...data } : {};
+  Object.defineProperty(container, "_liveData", { get: () => ({ ...liveData }) });
+
+  function renderEntries() {
+    container.innerHTML = "";
+
+    for (const [entryKey, entryData] of Object.entries(liveData)) {
+      const entryDiv = document.createElement("div");
+      entryDiv.className = "dict-entry";
+
+      // Key row: label + editable name input.
+      const keyRow = document.createElement("div");
+      keyRow.className = "dict-entry-key-row";
+
+      const keyLabel = document.createElement("label");
+      keyLabel.textContent = "Name";
+      keyRow.appendChild(keyLabel);
+
+      const keyInput = document.createElement("input");
+      keyInput.type = "text";
+      keyInput.className = "dict-entry-key-input";
+      keyInput.value = entryKey;
+      keyInput.placeholder = "device name";
+      // Rename on blur (not on input) to avoid re-renders while the user is typing.
+      keyInput.addEventListener("blur", () => {
+        const newKey = keyInput.value.trim();
+        if (!newKey || newKey === entryKey) return;
+        if (Object.prototype.hasOwnProperty.call(liveData, newKey)) {
+          keyInput.value = entryKey;  // revert — duplicate key
+          return;
+        }
+        // Preserve insertion order: rebuild liveData with the renamed key.
+        const entries = Object.entries(liveData);
+        const idx = entries.findIndex(([k]) => k === entryKey);
+        entries[idx] = [newKey, entries[idx][1]];
+        for (const k of Object.keys(liveData)) delete liveData[k];
+        for (const [k, v] of entries) liveData[k] = v;
+        renderEntries();
+        container.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      keyRow.appendChild(keyInput);
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "remove-item-btn";
+      removeBtn.textContent = "Remove";
+      removeBtn.addEventListener("click", () => {
+        delete liveData[entryKey];
+        renderEntries();
+        container.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      keyRow.appendChild(removeBtn);
+      entryDiv.appendChild(keyRow);
+
+      // Sub-form for the model fields. Bind path uses the entry key so that
+      // placeholder resolution (e.g. {array_key}) can look up the device name.
+      // Temporarily install the captured defs so getDef() resolves correctly.
+      const preBuildDefs = gSchema.$defs;
+      gSchema.$defs = capturedDefs;
+      const subForm = buildForm(defName, entryData || {}, `${bindPath}.${entryKey}`);
+      gSchema.$defs = preBuildDefs;
+      // Tag inputs in the sub-form with the device name for topic hint resolution.
+      for (const inp of subForm.querySelectorAll("input[type='text']")) {
+        inp.dataset.deviceName = entryKey;
+      }
+      // Keep liveData in sync as the user edits sub-form fields.
+      subForm.addEventListener("change", () => {
+        const collected = collectFormData(subForm);
+        // collectFormData returns an object keyed by path segments. For a
+        // sub-form built with bindPath "arrays.main", the result will have
+        // nested keys. We extract the model object from the deepest level.
+        liveData[entryKey] = _extractSubFormData(collected, bindPath, entryKey);
+        container.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+
+      entryDiv.appendChild(subForm);
+      container.appendChild(entryDiv);
+    }
+
+    // Add-entry button.
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "add-item-btn";
+    addBtn.textContent = "+ Add entry";
+    addBtn.addEventListener("click", () => {
+      // Generate a unique placeholder key.
+      let newKey = "new_entry";
+      let suffix = 1;
+      while (Object.prototype.hasOwnProperty.call(liveData, newKey)) {
+        newKey = `new_entry_${suffix++}`;
+      }
+      liveData[newKey] = {};
+      renderEntries();
+      container.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    container.appendChild(addBtn);
+  }
+
+  renderEntries();
+  return container;
+}
+
+/**
+ * Extract the model-level object from a collectFormData result for a dict-of-model entry.
+ *
+ * collectFormData returns a flat-ish structure keyed by the full dot-path. For
+ * a sub-form at bindPath "arrays.main", the result might look like:
+ *   { "arrays.main.peak_power_kwp": 5.2, "arrays.main.output_topic": "..." }
+ * This helper traverses those keys to produce { peak_power_kwp: 5.2, ... }.
+ *
+ * @param {Object} collected  Output of collectFormData.
+ * @param {string} bindPath   The dict field bind path (e.g. "arrays").
+ * @param {string} entryKey   The entry key (e.g. "main").
+ * @returns {Object}
+ */
+function _extractSubFormData(collected, bindPath, entryKey) {
+  const prefix = `${bindPath}.${entryKey}.`;
+  const result = {};
+  for (const [k, v] of Object.entries(collected)) {
+    if (k.startsWith(prefix)) {
+      result[k.slice(prefix.length)] = v;
+    } else if (typeof v === "object" && v !== null) {
+      // collectFormData may nest objects; do a shallow merge if the key
+      // matches the entry structure.
+      Object.assign(result, v);
+    }
+  }
+  return result;
 }
 
 /**
@@ -961,6 +1422,10 @@ function renderGeneralTab(container) {
     const mqttFormArea = document.createElement("div");
     mqttSection.appendChild(mqttFormArea);
 
+    // Phase 2 banner container — placed between MQTT section and rest of form.
+    const prefixSyncBanner = document.createElement("div");
+    mqttSection.appendChild(prefixSyncBanner);
+
     function renderMqttForm() {
       mqttFormArea.innerHTML = "";
       if (!overrideCheck.checked) return;
@@ -970,6 +1435,7 @@ function renderGeneralTab(container) {
       mqttForm.addEventListener("change", () => {
         gConfig.mqtt = collectFormData(mqttForm).mqtt;
       });
+      _wirePrefixSync(mqttForm, prefixSyncBanner);
     }
 
     overrideCheck.addEventListener("change", () => {
@@ -982,11 +1448,14 @@ function renderGeneralTab(container) {
   } else {
     // No env vars — show MQTT form directly. mqtt is required for mimirheim
     // to function so it must always be present in the YAML in this mode.
+    const prefixSyncBanner = document.createElement("div");
     const mqttForm = buildForm("MqttConfig", gConfig.mqtt || {}, "mqtt");
     mqttSection.appendChild(mqttForm);
+    mqttSection.appendChild(prefixSyncBanner);
     mqttForm.addEventListener("change", () => {
       gConfig.mqtt = collectFormData(mqttForm).mqtt;
     });
+    _wirePrefixSync(mqttForm, prefixSyncBanner);
   }
 
   container.appendChild(mqttSection);
