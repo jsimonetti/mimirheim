@@ -8,6 +8,8 @@
 
 mimirheim is a **pure strategist**. It never controls hardware. It reads all inputs from MQTT and publishes its schedule back to MQTT. Home Assistant, Node-RED, or any other automation platform is responsible for executing that schedule on actual devices.
 
+**New here?** See the [Quick Start guide](https://github.com/jsimonetti/mimirheim/wiki/Quick-Start) for a step-by-step setup walkthrough.
+
 ---
 
 ## Contents
