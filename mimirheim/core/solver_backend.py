@@ -26,8 +26,9 @@ class SolverBackend(Protocol):
     """Interface for the MILP solver used by mimirheim.
 
     All model-building code targets this Protocol. The concrete implementation
-    (``CBCSolverBackend``) wraps HiGHS. An alternative backend can be
-    injected via ``ModelContext`` without modifying any device or objective code.
+    (``CBCSolverBackend``) wraps CBC (COIN-OR Branch and Cut). An alternative
+    backend can be injected via ``ModelContext`` without modifying any device or
+    objective code.
 
     Variable and constraint objects returned by ``add_var`` and ``add_constraint``
     are opaque handles; callers pass them back into ``add_constraint``,
