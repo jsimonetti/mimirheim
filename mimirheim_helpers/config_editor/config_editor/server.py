@@ -52,30 +52,17 @@ _ALLOWED_DUMP_SUFFIXES = ("_input.json", "_output.json")
 _STATIC_DIR = Path(__file__).parent / "static"
 
 
-def _is_plain_filename(filename: str) -> bool:
-    """Return True when ``filename`` is a plain filename with no path components.
-
-    Checks that ``filename`` is non-empty, contains no path separators, and
-    is identical to its own ``Path.name`` (i.e. it has no leading directory
-    parts on any platform). After this guard passes, CodeQL can infer that
-    ``filename == Path(filename).name``, which breaks the taint chain from the
-    HTTP request into subsequent path constructions.
-
-    Args:
-        filename: A raw filename string from an HTTP request or config key.
-
-    Returns:
-        True if the filename is safe to use as a bare file component.
-    """
-    return bool(filename) and "/" not in filename and "\\" not in filename and Path(filename).name == filename
-
-
 def _safe_join(base: Path, filename: str) -> Path | None:
     """Resolve ``filename`` relative to ``base`` and verify containment.
 
-    First validates that ``filename`` is a plain filename (no directory
-    components), then resolves the joined path and calls ``relative_to`` to
-    confirm containment inside ``base``. Returns ``None`` on any failure.
+    Validates that ``filename`` is a plain filename with no directory components,
+    then resolves the joined path and calls ``relative_to`` to confirm it stays
+    inside ``base``. Returns ``None`` on any failure.
+
+    The individual checks are written as explicit conditionals rather than a
+    helper function so that CodeQL's taint-tracking engine can follow each
+    condition and recognise ``filename`` as sanitized before it reaches any
+    path construction or I/O.
 
     Args:
         base: The directory that the result must stay inside.
@@ -84,7 +71,21 @@ def _safe_join(base: Path, filename: str) -> Path | None:
     Returns:
         Resolved ``Path`` inside ``base``, or ``None`` if validation fails.
     """
-    if not _is_plain_filename(filename):
+    # Reject empty strings.
+    if not filename:
+        return None
+    # Reject forward slashes (Unix path separator).
+    if "/" in filename:
+        return None
+    # Reject backslashes (Windows path separator).
+    if "\\" in filename:
+        return None
+    # Reject anything that is not already its own final path component.
+    # Path(filename).name strips leading directory parts on every platform;
+    # if the result differs from the input, the filename contained a directory
+    # prefix. CodeQL recognises this comparison as a sanitizer because after
+    # this guard the analyser can infer filename == Path(filename).name.
+    if Path(filename).name != filename:
         return None
     base_dir = base.resolve()
     fpath = (base_dir / filename).resolve()
