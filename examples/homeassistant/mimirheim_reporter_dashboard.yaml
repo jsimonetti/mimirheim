@@ -25,97 +25,7 @@
 #     device_name: mimirheim Reporter
 
 # ---------------------------------------------------------------------------
-# Card 1 — Schedule time-series chart (requires apexcharts-card)
-# ---------------------------------------------------------------------------
-
-type: custom:apexcharts-card
-graph_span: 36h
-span:
-  # The mimirheim schedule is a forward-looking horizon. Start the window at
-  # the beginning of the current hour so the data fills the chart rather
-  # than piling up at the right edge.
-  start: hour
-header:
-  title: Schedule — Next 36 hours
-  show: true
-now:
-  show: true
-  label: now
-# Left axis: power in kW (grid, PV, baseload). Right axis: battery SOC in kWh.
-# The two axes prevent the SOC fill from dwarfing the power columns and vice versa.
-yaxis:
-  - id: power
-    min: auto
-    apex_config:
-      title:
-        text: Power (kW)
-  - id: soc
-    opposite: true
-    min: 0
-    apex_config:
-      title:
-        text: SOC (kWh)
-series:
-  - entity: sensor.hioo_reporter_chart_series
-    name: Battery SOC (kWh)
-    color: '#0066cc'
-    type: area
-    opacity: 0.3
-    extend_to: false
-    yaxis_id: soc
-    data_generator: |
-      // Replace 'home_battery' with your battery name as configured in mimirheim.
-      const key = 'battery__home_battery__soc_kwh';
-      return entity.attributes[key]
-        ? entity.attributes[key].map(([ts, v]) => [new Date(ts).getTime(), +v.toFixed(2)])
-        : [];
-  - entity: sensor.hioo_reporter_chart_series
-    name: Grid import (kW)
-    color: '#cc0000'
-    type: column
-    extend_to: false
-    yaxis_id: power
-    data_generator: |
-      return entity.attributes.grid_import_kw
-        ? entity.attributes.grid_import_kw.map(([ts, v]) => [new Date(ts).getTime(), +v.toFixed(2)])
-        : [];
-  - entity: sensor.hioo_reporter_chart_series
-    name: Grid export (kW)
-    color: '#00aa00'
-    type: column
-    extend_to: false
-    yaxis_id: power
-    data_generator: |
-      return entity.attributes.grid_export_kw
-        ? entity.attributes.grid_export_kw.map(([ts, v]) => [new Date(ts).getTime(), +v.toFixed(2)])
-        : [];
-  - entity: sensor.hioo_reporter_chart_series
-    name: PV forecast (kW)
-    color: '#ffcc00'
-    type: area
-    opacity: 0.4
-    extend_to: false
-    yaxis_id: power
-    data_generator: |
-      return entity.attributes.pv_kw
-        ? entity.attributes.pv_kw.map(([ts, v]) => [new Date(ts).getTime(), +v.toFixed(2)])
-        : [];
-  - entity: sensor.hioo_reporter_chart_series
-    name: Baseload (kW)
-    color: '#888888'
-    type: area
-    opacity: 0.2
-    extend_to: false
-    yaxis_id: power
-    data_generator: |
-      return entity.attributes.baseload_kw
-        ? entity.attributes.baseload_kw.map(([ts, v]) => [new Date(ts).getTime(), +v.toFixed(2)])
-        : [];
-
----
-
-# ---------------------------------------------------------------------------
-# Card 2 — Battery SOC vs Prices (dual Y-axis, requires apexcharts-card)
+# Card 1 — Battery SOC vs Prices (dual Y-axis, requires apexcharts-card)
 #
 # Left axis (yaxis_id: soc): battery SOC in kWh, filled area.
 # Right axis (yaxis_id: price): import and export prices in ct/kWh, lines.
@@ -126,28 +36,71 @@ series:
 # ---------------------------------------------------------------------------
 
 type: custom:apexcharts-card
-graph_span: 32h
+graph_span: 44h
 header:
   title: Battery SOC vs Energy Prices
   show: true
 span:
   start: hour
-# yaxis must be a top-level key, NOT nested inside apex_config. When nested,
-# apexcharts-card passes it raw to ApexCharts.js which ignores the yaxis_id
-# series bindings, causing both series to share one scale.
+  offset: "-12h"
+now:
+  show: true
+  label: ""
 yaxis:
   - id: soc
     min: 0
     apex_config:
       title:
         text: SOC (kWh)
+  - id: pv
+    opposite: true
+    show: false
   - id: price
     opposite: true
     apex_config:
       title:
         text: Price (ct/kWh)
 series:
-  - entity: sensor.hioo_reporter_hioo_chart_series
+  - entity: sensor.marstek_battery_remaining_capacity
+    name: SOC measured (kWh)
+    color: "#0066cc"
+    type: line
+    extend_to: false
+    yaxis_id: soc
+    stroke_width: 2
+    show:
+      legend_value: false
+  - entity: sensor.mimirheim_import_price
+    name: Import measured (ct/kWh)
+    color: "#ff6600"
+    type: line
+    extend_to: false
+    yaxis_id: price
+    stroke_width: 2
+    transform: return x * 100;
+    show:
+      legend_value: false
+  - entity: sensor.mimirheim_export_price
+    name: Export measured (ct/kWh)
+    color: "#009900"
+    type: line
+    extend_to: false
+    yaxis_id: price
+    stroke_width: 2
+    transform: return x * 100;
+    show:
+      legend_value: false
+  - entity: sensor.zonnepanelen_dak_power
+    name: PV measured (kW)
+    color: "#ffcc00"
+    type: area
+    opacity: 0.2
+    extend_to: false
+    yaxis_id: pv
+    stroke_width: 0
+    show:
+      legend_value: false
+  - entity: sensor.mimir_reporter_mimirheim_chart_series
     name: SOC (kWh)
     color: "#0066cc"
     type: area
@@ -155,56 +108,96 @@ series:
     extend_to: false
     yaxis_id: soc
     stroke_width: 2
+    show:
+      legend_value: false
     data_generator: |
-      // Replace 'home_battery' with your battery name as configured in mimirheim.
-      const key = 'battery__home_battery__soc_kwh';
+      const key = 'battery__Marstek__soc_kwh';
       return entity.attributes[key]
         ? entity.attributes[key].map(([ts, v]) => [new Date(ts).getTime(), +v.toFixed(2)])
         : [];
-  - entity: sensor.hioo_reporter_hioo_chart_series
+  - entity: sensor.mimirheim_prices
     name: Import (ct/kWh)
     color: "#ff6600"
     type: line
     extend_to: false
     yaxis_id: price
-    stroke_width: 1
+    stroke_width: 2
+    show:
+      legend_value: false
     data_generator: |
-      return entity.attributes.import_price
-        ? entity.attributes.import_price.map(([ts, v]) => [new Date(ts).getTime(), +(v * 100).toFixed(1)])
+      const schedule = entity.attributes.schedule;
+      return schedule
+        ? schedule.map(s => [new Date(s.ts).getTime(), +(s.import_eur_per_kwh * 100).toFixed(1)])
         : [];
-  - entity: sensor.hioo_reporter_hioo_chart_series
+  - entity: sensor.mimirheim_prices
     name: Export (ct/kWh)
     color: "#009900"
     type: line
     extend_to: false
     yaxis_id: price
-    stroke_width: 1
+    stroke_width: 2
+    show:
+      legend_value: false
     data_generator: |
-      return entity.attributes.export_price
-        ? entity.attributes.export_price.map(([ts, v]) => [new Date(ts).getTime(), +(v * 100).toFixed(1)])
+      const schedule = entity.attributes.schedule;
+      return schedule
+        ? schedule.map(s => [new Date(s.ts).getTime(), +(s.export_eur_per_kwh * 100).toFixed(1)])
+        : [];
+  - entity: sensor.mimir_reporter_mimirheim_chart_series
+    name: PV forecast (kW)
+    color: "#ffcc00"
+    type: column
+    opacity: 0.2
+    stroke_width: 0
+    yaxis_id: pv
+    show:
+      legend_value: false
+    data_generator: |
+      return entity.attributes.pv_kw
+        ? entity.attributes.pv_kw.map(([ts, v]) => [new Date(ts).getTime(), +v.toFixed(2)])
         : [];
 
 ---
 
 # ---------------------------------------------------------------------------
-# Card 3 — Economic summary (standard Markdown card, no custom component needed)
+# Card 2 — Economic summary (standard Markdown card, no custom component needed)
 # ---------------------------------------------------------------------------
 
 type: markdown
-title: mimirheim Last Solve Summary
+title: Solve Summary
 content: >
-  **Strategy:** {{ state_attr('sensor.hioo_reporter_summary', 'strategy') }}
-  | **Status:** {{ state_attr('sensor.hioo_reporter_summary', 'solve_status') }}
+  **Strategy:** {{ state_attr('sensor.mimir_reporter_mimirheim_summary',
+  'strategy') }}
 
-  | Metric | Value |
-  |---|---|
-  | Naive cost | {{ state_attr('sensor.hioo_reporter_summary', 'naive_cost_eur') | round(4) }} EUR |
-  | Effective cost | {{ state_attr('sensor.hioo_reporter_summary', 'effective_cost_eur') | round(4) }} EUR |
-  | Saving | {{ state_attr('sensor.hioo_reporter_summary', 'saving_eur') | round(4) }} EUR
-    ({{ state_attr('sensor.hioo_reporter_summary', 'saving_pct') }}%) |
-  | Self-sufficiency | {{ state_attr('sensor.hioo_reporter_summary', 'self_sufficiency_pct') }}% |
-  | Grid import | {{ state_attr('sensor.hioo_reporter_summary', 'grid_import_kwh') | round(3) }} kWh |
-  | Grid export | {{ state_attr('sensor.hioo_reporter_summary', 'grid_export_kwh') | round(3) }} kWh |
+  **Status:** {{ state_attr('sensor.mimir_reporter_mimirheim_summary',
+  'solve_status') }}
+
+
+  Current import: {{ state_attr('sensor.mimir_reporter_mimirheim_chart_series',
+  'import_price')[0][1]|round(3) }} EUR
+
+  Current export: {{ state_attr('sensor.mimir_reporter_mimirheim_chart_series',
+  'export_price')[0][1]|round(3) }} EUR
+
+
+  Naive cost: {{ state_attr('sensor.mimir_reporter_mimirheim_summary',
+  'naive_cost_eur') | round(4) }} EUR
+
+  Effective cost: {{ state_attr('sensor.mimir_reporter_mimirheim_summary',
+  'effective_cost_eur') | round(4) }} EUR 
+
+  Saving: {{ state_attr('sensor.mimir_reporter_mimirheim_summary', 'saving_eur')
+  | round(4) }} EUR ({{ state_attr('sensor.mimir_reporter_mimirheim_summary',
+  'saving_pct') }}%)
+
+  Self-sufficiency: {{ state_attr('sensor.mimir_reporter_mimirheim_summary',
+  'self_sufficiency_pct') }}%
+
+  Grid import: {{ state_attr('sensor.mimir_reporter_mimirheim_summary',
+  'grid_import_kwh') | round(3) }} kWh
+
+  Grid export: {{ state_attr('sensor.mimir_reporter_mimirheim_summary',
+  'grid_export_kwh') | round(3) }} kWh
 
 ---
 

@@ -1,0 +1,247 @@
+# Mimirheim electricity price sensors for Home Assistant
+#
+# These sensors subscribe to the retained MQTT price schedule published by
+# mimirheim's price input topic and derive current import and export prices
+# that update every minute. The price data may come from any configured price
+# source helper (e.g. nordpool, a flat-rate config, or a future provider).
+# Because the MQTT message is retained, all sensors are populated immediately
+# on Home Assistant (re)start without waiting for a new publish.
+#
+# The current-price sensors recalculate every minute so the displayed value
+# switches to the new hour's price within one minute of the hour boundary —
+# regardless of when the price source last published.
+#
+# Usage:
+#   Place this file in your config/packages/ directory (ensure packages are
+#   enabled in configuration.yaml: homeassistant: packages: !include_dir_named packages)
+#   or copy the relevant sections into your configuration.yaml directly.
+#
+# Topic:
+#   Adjust state_topic below to match the prices input topic configured in
+#   mimirheim. The default is:
+#     mimir/input/prices
+
+mqtt:
+  sensor:
+    - name: "Mimirheim Prices"
+      unique_id: mimirheim_prices
+      state_topic: "mimir/input/prices"
+
+      # State: the end of the available schedule — the start timestamp of the
+      # last price step. Displayed as a human-readable datetime in the HA UI.
+      # Because the message is retained, this is populated on HA startup.
+      value_template: >-
+        {% if value_json | length > 0 %}
+          {{ value_json[-1].ts }}
+        {% else %}
+          unknown
+        {% endif %}
+
+      # Attributes: the full hourly schedule as a list, suitable for use in
+      # ApexCharts or similar card types. Each entry has:
+      #   ts                  — ISO 8601 UTC start of the price period
+      #   import_eur_per_kwh  — all-in import price
+      #   export_eur_per_kwh  — net export price
+      #   confidence          — always 1.0 for confirmed day-ahead prices
+      json_attributes_topic: "mimir/input/prices"
+      json_attributes_template: >-
+        {{ {"schedule": value_json} | tojson }}
+
+      device_class: timestamp
+      icon: mdi:clock-time-four
+
+template:
+  # Current-price sensors — update every minute and on new schedule arrival.
+  #
+  # The time_pattern trigger is what makes these work at sub-hourly resolution.
+  # The schedule is hourly, so the price changes at most once per hour, but
+  # without the minute trigger the sensor would only recalculate when a new
+  # MQTT message arrives (a few times per day). With minutes: "/1" the template
+  # evaluates every minute and picks the correct step for the current UTC time.
+  - trigger:
+      - platform: time_pattern
+        minutes: "/1"
+      - platform: state
+        entity_id: sensor.mimirheim_prices
+
+    sensor:
+      - name: "Mimirheim Import Price"
+        unique_id: mimirheim_import_price
+        unit_of_measurement: "EUR/kWh"
+        state_class: measurement
+        icon: mdi:transmission-tower-import
+        state: >-
+          {% set schedule = state_attr('sensor.mimirheim_prices', 'schedule') %}
+          {% if schedule is none or schedule | length == 0 %}
+            {{ none }}
+          {% else %}
+            {# Walk the schedule and keep the last step whose start time is at  #}
+            {# or before now. Steps are sorted ascending, so the last match is  #}
+            {# the active hour. utcnow() is used because ts values are UTC.     #}
+            {% set t = utcnow() %}
+            {% set current = namespace(step=none) %}
+            {% for step in schedule %}
+              {% if as_datetime(step.ts) <= t %}
+                {% set current.step = step %}
+              {% endif %}
+            {% endfor %}
+            {{ current.step.import_eur_per_kwh if current.step is not none else none }}
+          {% endif %}
+
+      - name: "Mimirheim Export Price"
+        unique_id: mimirheim_export_price
+        unit_of_measurement: "EUR/kWh"
+        state_class: measurement
+        icon: mdi:transmission-tower-export
+        state: >-
+          {% set schedule = state_attr('sensor.mimirheim_prices', 'schedule') %}
+          {% if schedule is none or schedule | length == 0 %}
+            {{ none }}
+          {% else %}
+            {% set t = utcnow() %}
+            {% set current = namespace(step=none) %}
+            {% for step in schedule %}
+              {% if as_datetime(step.ts) <= t %}
+                {% set current.step = step %}
+              {% endif %}
+            {% endfor %}
+            {{ current.step.export_eur_per_kwh if current.step is not none else none }}
+          {% endif %}
+
+  # Cheapest hour today — updates when new prices arrive and at midnight when
+  # the local date rolls over (making yesterday's cheapest hour stale).
+  #
+  # State: the start timestamp of the hour with the lowest import price today
+  #   (local date, device_class: timestamp so HA formats it as a time).
+  # Attribute import_eur_per_kwh: the price at that hour, useful for displaying
+  #   "cheapest hour is 14:00 at 0.08 EUR/kWh" on a dashboard card.
+  - trigger:
+      - platform: state
+        entity_id: sensor.mimirheim_prices
+      - platform: time
+        at: "00:00:01"
+
+    sensor:
+      - name: "Mimirheim Cheapest Hour Today"
+        unique_id: mimirheim_cheapest_hour_today
+        device_class: timestamp
+        icon: mdi:clock-star-four-points
+        state: >-
+          {% set schedule = state_attr('sensor.mimirheim_prices', 'schedule') %}
+          {% if schedule is none or schedule | length == 0 %}
+            {{ none }}
+          {% else %}
+            {# Filter to today's steps using local time so the result matches  #}
+            {# the user's clock, then find the step with the lowest import     #}
+            {# price. as_local() converts the UTC ts to the HA local timezone. #}
+            {% set today = now().date() %}
+            {% set ns = namespace(best_step=none, best_price=none) %}
+            {% for step in schedule %}
+              {% if as_local(as_datetime(step.ts)).date() == today %}
+                {% if ns.best_price is none or step.import_eur_per_kwh < ns.best_price %}
+                  {% set ns.best_step = step %}
+                  {% set ns.best_price = step.import_eur_per_kwh %}
+                {% endif %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.best_step.ts if ns.best_step is not none else none }}
+          {% endif %}
+        attributes:
+          import_eur_per_kwh: >-
+            {% set schedule = state_attr('sensor.mimirheim_prices', 'schedule') %}
+            {% if schedule is none or schedule | length == 0 %}
+              {{ none }}
+            {% else %}
+              {% set today = now().date() %}
+              {% set ns = namespace(best_price=none) %}
+              {% for step in schedule %}
+                {% if as_local(as_datetime(step.ts)).date() == today %}
+                  {% if ns.best_price is none or step.import_eur_per_kwh < ns.best_price %}
+                    {% set ns.best_price = step.import_eur_per_kwh %}
+                  {% endif %}
+                {% endif %}
+              {% endfor %}
+              {{ ns.best_price }}
+            {% endif %}
+
+      - name: "Mimirheim Cheapest Hour Tomorrow"
+        unique_id: mimirheim_cheapest_hour_tomorrow
+        device_class: timestamp
+        icon: mdi:clock-star-four-points-outline
+        state: >-
+          {% set schedule = state_attr('sensor.mimirheim_prices', 'schedule') %}
+          {% if schedule is none or schedule | length == 0 %}
+            {{ none }}
+          {% else %}
+            {# Tomorrow's steps are only present once the price source has         #}
+            {# published them. If no steps for tomorrow exist, the state is none. #}
+            {% set tomorrow = (now().date() + timedelta(days=1)) %}
+            {% set ns = namespace(best_step=none, best_price=none) %}
+            {% for step in schedule %}
+              {% if as_local(as_datetime(step.ts)).date() == tomorrow %}
+                {% if ns.best_price is none or step.import_eur_per_kwh < ns.best_price %}
+                  {% set ns.best_step = step %}
+                  {% set ns.best_price = step.import_eur_per_kwh %}
+                {% endif %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.best_step.ts if ns.best_step is not none else none }}
+          {% endif %}
+        attributes:
+          import_eur_per_kwh: >-
+            {% set schedule = state_attr('sensor.mimirheim_prices', 'schedule') %}
+            {% if schedule is none or schedule | length == 0 %}
+              {{ none }}
+            {% else %}
+              {% set tomorrow = (now().date() + timedelta(days=1)) %}
+              {% set ns = namespace(best_price=none) %}
+              {% for step in schedule %}
+                {% if as_local(as_datetime(step.ts)).date() == tomorrow %}
+                  {% if ns.best_price is none or step.import_eur_per_kwh < ns.best_price %}
+                    {% set ns.best_price = step.import_eur_per_kwh %}
+                  {% endif %}
+                {% endif %}
+              {% endfor %}
+              {{ ns.best_price }}
+            {% endif %}
+
+  # Hours until cheapest price — counts down to the next cheapest hour.
+  #
+  # Uses today's cheapest hour if it is still in the future, otherwise falls
+  # back to tomorrow's cheapest hour (only available once the price source has
+  # published tomorrow's schedule). State is none when no future cheapest hour
+  # is known.
+  #
+  # Updates every minute so the countdown is current. Also updates when the
+  # cheapest-hour sensors change (new prices published or midnight rollover).
+  - trigger:
+      - platform: time_pattern
+        minutes: "/1"
+      - platform: state
+        entity_id: sensor.mimirheim_cheapest_hour_today
+      - platform: state
+        entity_id: sensor.mimirheim_cheapest_hour_tomorrow
+
+    sensor:
+      - name: "Mimirheim Hours Until Cheapest Price"
+        unique_id: mimirheim_hours_until_cheapest_price
+        unit_of_measurement: "h"
+        state_class: measurement
+        icon: mdi:timer-outline
+        state: >-
+          {# Prefer today's cheapest hour if it is still in the future.        #}
+          {# "In the future" means its start time is strictly after now, i.e.  #}
+          {# the cheap hour has not yet begun.                                  #}
+          {% set t = utcnow() %}
+          {% set today_ts = states('sensor.mimirheim_cheapest_hour_today') %}
+          {% set tomorrow_ts = states('sensor.mimirheim_cheapest_hour_tomorrow') %}
+
+          {% if today_ts not in ('unknown', 'unavailable', 'none', '') and as_datetime(today_ts) > t %}
+            {% set delta = (as_datetime(today_ts) - t).total_seconds() / 3600 %}
+            {{ delta | round(1) }}
+          {% elif tomorrow_ts not in ('unknown', 'unavailable', 'none', '') and as_datetime(tomorrow_ts) > t %}
+            {% set delta = (as_datetime(tomorrow_ts) - t).total_seconds() / 3600 %}
+            {{ delta | round(1) }}
+          {% else %}
+            {{ none }}
+          {% endif %}
