@@ -380,6 +380,16 @@ def _build_targets(root: Path) -> list[Target]:
             ),
         ),
         Target(
+            key="zonneplan",
+            source_path=helpers / "prices" / "zonneplan" / "zonneplan_prices" / "config.py",
+            output_path=ref / "Config-Zonneplan.md",
+            title="zonneplan_prices — Configuration Reference",
+            intro=(
+                "Auto-generated from `zonneplan_prices/config.py`. "
+                "See [Zonneplan](Zonneplan) for the guide."
+            ),
+        ),
+        Target(
             key="pv-fetcher",
             source_path=helpers / "pv" / "forecast.solar" / "pv_fetcher" / "config.py",
             output_path=ref / "Config-PV-Fetcher.md",
