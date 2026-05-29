@@ -9,6 +9,7 @@
 #   /config/mimirheim.yaml           — main solver (required)
 #   /config/scheduler.yaml      — cron MQTT scheduler
 #   /config/nordpool.yaml       — Nordpool day-ahead price fetcher
+#   /config/zonneplan.yaml      — Zonneplan dynamic price fetcher
 #   /config/pv-fetcher.yaml     — forecast.solar PV forecast fetcher
 #   /config/pv-ml-learner.yaml  — ML-based PV forecast learner
 #   /config/baseload-ha.yaml    — Home Assistant baseload fetcher (REST API)
@@ -21,6 +22,7 @@
 #   /app/examples/mimirheim.yaml
 #   /app/examples/scheduler.yaml
 #   /app/examples/nordpool.yaml
+#   /app/examples/zonneplan.yaml
 #   /app/examples/pv-fetcher.yaml
 #   /app/examples/pv-ml-learner.yaml
 #   /app/examples/baseload-ha.yaml
@@ -121,6 +123,7 @@ COPY --chown=root:root container/etc/ /etc/
 RUN chmod +x \
     /etc/s6-overlay/s6-rc.d/mimirheim/run \
     /etc/s6-overlay/s6-rc.d/nordpool/run \
+    /etc/s6-overlay/s6-rc.d/zonneplan/run \
     /etc/s6-overlay/s6-rc.d/pv-fetcher/run \
     /etc/s6-overlay/s6-rc.d/pv-ml-learner/run \
     /etc/s6-overlay/s6-rc.d/baseload-ha/run \

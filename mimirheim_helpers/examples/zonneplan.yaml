@@ -1,0 +1,70 @@
+mqtt:
+  host: localhost
+  port: 1883
+  client_id: zonneplan-prices
+  # username: your-mqtt-username
+  # password: your-mqtt-password
+  # tls: true
+  # tls_allow_insecure: true
+
+trigger_topic: mimir/input/tools/prices/trigger
+output_topic: mimir/input/prices
+
+# Must match mqtt.topic_prefix in the mimirheim configuration.
+# All derived topics (output_topic, mimir_trigger_topic) are computed from this value.
+# Change only when mimirheim uses a non-default topic prefix.
+# mimir_topic_prefix: mimir  # default
+
+zonneplan:
+  # Email address registered with your Zonneplan account. Used to send the
+  # activation email on first run. Click the link in the email — no other
+  # action is required. The daemon handles the rest automatically.
+  email: your@email.com
+
+  # Path to the file where OAuth tokens are stored between restarts.
+  # This path MUST be on a Docker volume. If it lives inside the container
+  # filesystem the token is lost on every restart and the email link must be
+  # clicked again each time.
+  token_file: /config/zonneplan_token.json
+
+  # import_formula computes the all-in consumer import price from the raw
+  # Zonneplan price data. The expression may use:
+  #   price          — all-in import price incl. VAT (EUR/kWh)
+  #   price_excl_tax — import price excl. VAT (EUR/kWh)
+  #   ts             — step start time as a UTC-aware datetime object
+  #
+  # Default: pass the all-in price through unchanged.
+  import_formula: "price"
+
+  # export_formula computes the net feed-in credit. Zonneplan does not publish
+  # a per-hour export price, so operators must configure their own formula or
+  # accept zero export revenue (the default).
+  #
+  # Example: 80% of the excl-tax price as feed-in credit
+  # export_formula: "price_excl_tax * 0.8"
+  export_formula: "price_excl_tax"
+
+# Set signal_mimir to true and uncomment mimir_trigger_topic to chain this tool
+# into the mimirheim solve loop after prices are published.
+# signal_mimir: true
+# mimir_trigger_topic: mimir/input/trigger
+
+# HA MQTT discovery. When enabled, the daemon publishes a retained discovery
+# payload that creates a button entity in Home Assistant. Pressing the button
+# sends a message to trigger_topic, firing one fetch cycle.
+# ha_discovery:
+#   enabled: true
+#   discovery_prefix: homeassistant
+#   device_name: Zonneplan Prices
+
+# Optional. When set, the daemon publishes a JSON stats payload to this MQTT
+# topic after every fetch cycle (success or failure). The payload contains:
+#   ts            — ISO-8601 UTC timestamp at which the cycle started
+#   success       — true on success, false if an unhandled exception occurred
+#   duration_s    — wall-clock seconds the cycle took
+#   horizon_hours — hours of data published (null if not reported by this tool)
+#   exit_code     — reserved, always null
+#   exit_message  — reserved, always null
+# When ha_discovery is also enabled, four HA sensor entities are registered
+# under the same device as the trigger button.
+# stats_topic: mimir/stats/zonneplan-prices

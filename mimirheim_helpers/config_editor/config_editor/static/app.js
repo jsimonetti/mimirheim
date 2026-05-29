@@ -231,6 +231,7 @@ function syncHelperPrefixes(oldPrefix, newPrefix, bannerContainer) {
   // Helpers that carry mimir_topic_prefix at the root level.
   const prefixHelpers = [
     "nordpool.yaml",
+    "zonneplan.yaml",
     "pv-fetcher.yaml",
     "pv-ml-learner.yaml",
     "baseload-static.yaml",
@@ -1637,6 +1638,7 @@ let gHelperSchemas = null;
  */
 const HELPER_FILE_TO_TITLE = {
   "nordpool.yaml":        "Nordpool",
+  "zonneplan.yaml":       "Zonneplan",
   "pv-fetcher.yaml":      "PV Forecast (forecast.solar)",
   "pv-ml-learner.yaml":   "PV ML Learner",
   "reporter.yaml":        "Reporter",
@@ -2040,6 +2042,7 @@ async function init() {
   // Helper tabs grouped under a single dropdown in the tab bar.
   registerGroup("Helpers", [
     { label: "Nordpool",         renderFn: (el) => renderHelperTab(el, "nordpool.yaml") },
+    { label: "Zonneplan",        renderFn: (el) => renderHelperTab(el, "zonneplan.yaml") },
     { label: "PV Forecast",      renderFn: (el) => renderHelperTab(el, "pv-fetcher.yaml") },
     { label: "PV ML",            renderFn: (el) => renderHelperTab(el, "pv-ml-learner.yaml") },
     { label: "Baseload Static",  renderFn: (el) => renderHelperTab(el, "baseload-static.yaml") },

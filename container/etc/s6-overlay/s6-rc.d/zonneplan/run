@@ -1,0 +1,17 @@
+#!/command/with-contenv sh
+exec 2>&1
+# ENABLE_ZONNEPLAN is set by cont-init.d/00-options-env.sh when running as a
+# HA add-on. When unset (plain Docker), default to true so that the existing
+# config-file-presence gate remains the only control.
+if [ "${ENABLE_ZONNEPLAN:-true}" != "true" ]; then
+    echo "zonneplan: disabled via add-on options"
+    /command/s6-svc -d /run/service/zonneplan
+    exit 0
+fi
+CONFIG=/config/zonneplan.yaml
+if [ ! -f "$CONFIG" ]; then
+    echo "zonneplan: $CONFIG not found — service disabled"
+    /command/s6-svc -d /run/service/zonneplan
+    exit 0
+fi
+exec /app/.venv/bin/python -m zonneplan_prices --config "$CONFIG"

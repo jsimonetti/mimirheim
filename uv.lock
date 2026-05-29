@@ -661,6 +661,7 @@ helpers = [
     { name = "pandas" },
     { name = "plotly" },
     { name = "pynordpool" },
+    { name = "requests" },
     { name = "scikit-learn" },
     { name = "sqlalchemy" },
     { name = "xgboost" },
@@ -691,6 +692,9 @@ reporter = [
 ]
 scheduler = [
     { name = "apscheduler" },
+]
+zonneplan = [
+    { name = "requests" },
 ]
 
 [package.dev-dependencies]
@@ -731,6 +735,8 @@ requires-dist = [
     { name = "pynordpool", marker = "extra == 'helpers'", specifier = ">=0.4.0" },
     { name = "pynordpool", marker = "extra == 'nordpool'", specifier = ">=0.4.0" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "requests", marker = "extra == 'helpers'", specifier = ">=2.32" },
+    { name = "requests", marker = "extra == 'zonneplan'", specifier = ">=2.32" },
     { name = "respx", specifier = ">=0.23.1" },
     { name = "ruamel-yaml", marker = "extra == 'config-editor'", specifier = ">=0.18" },
     { name = "scikit-learn", marker = "extra == 'helpers'", specifier = ">=1.4" },
@@ -741,7 +747,7 @@ requires-dist = [
     { name = "xgboost", marker = "extra == 'helpers'", specifier = ">=2.0" },
     { name = "xgboost", marker = "extra == 'pv-ml-learner'", specifier = ">=2.0" },
 ]
-provides-extras = ["scheduler", "nordpool", "pv-fetcher", "pv-ml-learner", "pv-ml-learner-postgres", "pv-ml-learner-mysql", "baseload-ha", "baseload-ha-db", "baseload-ha-db-postgres", "baseload-ha-db-mysql", "reporter", "config-editor", "helpers"]
+provides-extras = ["scheduler", "nordpool", "zonneplan", "pv-fetcher", "pv-ml-learner", "pv-ml-learner-postgres", "pv-ml-learner-mysql", "baseload-ha", "baseload-ha-db", "baseload-ha-db-postgres", "baseload-ha-db-mysql", "reporter", "config-editor", "helpers"]
 
 [package.metadata.requires-dev]
 dev = [

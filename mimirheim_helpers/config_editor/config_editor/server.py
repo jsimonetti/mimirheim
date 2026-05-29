@@ -191,6 +191,12 @@ def _load_helper_models() -> dict[str, tuple[Any, list[str]]]:
         pass
 
     try:
+        from zonneplan_prices.config import ZonneplanPricesConfig
+        result["zonneplan.yaml"] = (ZonneplanPricesConfig, [])
+    except ImportError:
+        pass
+
+    try:
         from pv_fetcher.config import PvFetcherConfig
         result["pv-fetcher.yaml"] = (PvFetcherConfig, [])
     except ImportError:

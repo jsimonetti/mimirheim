@@ -66,6 +66,7 @@ series:
     color: "#0066cc"
     type: line
     extend_to: false
+    fill_raw: last
     yaxis_id: soc
     stroke_width: 2
     show:

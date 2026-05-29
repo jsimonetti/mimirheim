@@ -29,6 +29,9 @@ scheduler = [
 nordpool = [
     "pynordpool>=0.4.0",
 ]
+zonneplan = [
+    "requests>=2.32",
+]
 pv-fetcher = [
     "forecast-solar>=5.0",
 ]
@@ -70,6 +73,7 @@ config-editor = [
 helpers = [
     "apscheduler>=3.10,<4.0",
     "pynordpool>=0.4.0",
+    "requests>=2.32",
     "forecast-solar>=5.0",
     "httpx>=0.27",
     "knmi-py>=0.2",
@@ -91,6 +95,7 @@ packages = [
     "mimirheim_helpers/common/helper_common",
     "mimirheim_helpers/scheduler/scheduler",
     "mimirheim_helpers/prices/nordpool/nordpool",
+    "mimirheim_helpers/prices/zonneplan/zonneplan_prices",
     "mimirheim_helpers/pv/forecast.solar/pv_fetcher",
     "mimirheim_helpers/pv/pv_ml_learner/pv_ml_learner",
     "mimirheim_helpers/baseload/homeassistant/baseload_ha",
@@ -119,6 +124,7 @@ testpaths = [
     "mimirheim_helpers/common/tests",
     "mimirheim_helpers/scheduler/tests",
     "mimirheim_helpers/prices/nordpool/tests",
+    "mimirheim_helpers/prices/zonneplan/tests",
     "mimirheim_helpers/pv/forecast.solar/tests",
     "mimirheim_helpers/pv/pv_ml_learner/tests",
     "mimirheim_helpers/baseload/homeassistant/tests",
