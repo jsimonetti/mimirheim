@@ -29,7 +29,7 @@ from reporter._render_helpers import (
     _build_device_meta,
     _build_energy_flows_traces,
     _closed_loop_shapes_and_annotations,
-    _reconstruct_soc,
+    _read_soc_from_schedule,
     _timestamps,
 )
 from reporter.metrics import compute_economic_metrics, compute_schedule_metrics
@@ -74,7 +74,7 @@ def build_report_html(inp: dict, out: dict) -> str:
         ]
 
     device_meta = _build_device_meta(inp)
-    soc_histories = _reconstruct_soc(schedule, device_meta)
+    soc_histories = _read_soc_from_schedule(schedule, device_meta)
 
     # triggered_at_utc is the wall-clock trigger time (not the floored slot
     # boundary). Use it for the human-visible label so the report title matches
