@@ -108,6 +108,8 @@ def publish_trigger_discovery(
     forecast_value_template: str = "{{ value_json[0].kw | default(0) | round(3) }}",
     forecast_unit: str = "kW",
     forecast_device_class: str | None = "power",
+    device_id: str | None = None,
+    device_label: str | None = None,
     discovery_prefix: str = "homeassistant",
 ) -> None:
     """Refresh HA MQTT discovery for this helper tool.
@@ -148,6 +150,15 @@ def publish_trigger_discovery(
         forecast_device_class: HA ``device_class`` for the forecast sensor.
             Pass ``None`` to omit the field (e.g. for price sensors).
             Defaults to ``"power"``.
+        device_id: When supplied, used as the HA device ``identifiers`` value
+            instead of ``tool_name``. Allows multiple
+            ``publish_trigger_discovery()`` calls to group their entities under
+            one HA device card. Entity topic paths continue to use
+            ``tool_name`` regardless. When ``None`` (default), falls back to
+            ``tool_name`` — preserving the existing behaviour for all
+            single-button helpers.
+        device_label: Display name for the shared HA device when ``device_id``
+            is supplied. Falls back to ``tool_label`` when not provided.
         discovery_prefix: HA MQTT discovery topic prefix. Default:
             ``"homeassistant"``.
     """
@@ -171,8 +182,8 @@ def publish_trigger_discovery(
         logger.debug("Deleted stale HA discovery topic: %s", stale_topic)
 
     device_block: dict[str, Any] = {
-        "identifiers": [tool_name],
-        "name": tool_label,
+        "identifiers": [device_id if device_id is not None else tool_name],
+        "name": device_label if device_label is not None else tool_label,
         "manufacturer": "Mimirheim",
     }
 

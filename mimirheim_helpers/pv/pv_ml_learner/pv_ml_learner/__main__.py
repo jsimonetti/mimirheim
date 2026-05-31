@@ -327,17 +327,21 @@ class PvLearnerDaemon(MqttDaemon):
         publish_trigger_discovery(
             client,
             tool_name="pv_ml_learner_train",
-            tool_label=f"{label} Train",
+            tool_label="Train",
             trigger_topic=cfg.training.train_trigger_topic,
             stats_topic=cfg.stats_topic,
+            device_id="pv_ml_learner",
+            device_label=label,
             discovery_prefix=prefix,
         )
         publish_trigger_discovery(
             client,
             tool_name="pv_ml_learner_infer",
-            tool_label=f"{label} Infer",
+            tool_label="Infer",
             trigger_topic=cfg.training.inference_trigger_topic,
             stats_topic=cfg.stats_topic,
+            device_id="pv_ml_learner",
+            device_label=label,
             discovery_prefix=prefix,
         )
         if ha.forecast_sensor:

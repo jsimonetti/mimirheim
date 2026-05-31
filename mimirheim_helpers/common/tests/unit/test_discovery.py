@@ -509,3 +509,114 @@ class TestForecastSensor:
             forecast_sensor=False,
         )
         assert f"{_PREFIX}/sensor/{_TOOL_NAME}_forecast/config" not in active
+
+
+# ---------------------------------------------------------------------------
+# Device ID parameter
+# ---------------------------------------------------------------------------
+
+
+class TestDeviceId:
+    def test_button_device_block_uses_tool_name_when_device_id_not_supplied(self) -> None:
+        """When device_id is not supplied, device identifiers == [tool_name]."""
+        client = _make_client()
+        publish_trigger_discovery(
+            client,
+            tool_name=_TOOL_NAME,
+            tool_label=_TOOL_LABEL,
+            trigger_topic=_TRIGGER_TOPIC,
+        )
+        button_call = next(c for c in client.publish.call_args_list if "/button/" in c.args[0])
+        payload = json.loads(button_call.args[1])
+        assert payload["device"]["identifiers"] == [_TOOL_NAME]
+        assert payload["device"]["name"] == _TOOL_LABEL
+
+    def test_button_device_block_uses_device_id_when_supplied(self) -> None:
+        """When device_id is supplied, device identifiers == [device_id]."""
+        client = _make_client()
+        publish_trigger_discovery(
+            client,
+            tool_name=_TOOL_NAME,
+            tool_label=_TOOL_LABEL,
+            trigger_topic=_TRIGGER_TOPIC,
+            device_id="shared_device",
+            device_label="Shared Device",
+        )
+        button_call = next(c for c in client.publish.call_args_list if "/button/" in c.args[0])
+        payload = json.loads(button_call.args[1])
+        assert payload["device"]["identifiers"] == ["shared_device"]
+        assert payload["device"]["name"] == "Shared Device"
+
+    def test_device_label_falls_back_to_tool_label_when_not_supplied(self) -> None:
+        """When device_id is supplied but device_label is not, name falls back to tool_label."""
+        client = _make_client()
+        publish_trigger_discovery(
+            client,
+            tool_name=_TOOL_NAME,
+            tool_label=_TOOL_LABEL,
+            trigger_topic=_TRIGGER_TOPIC,
+            device_id="shared_device",
+        )
+        button_call = next(c for c in client.publish.call_args_list if "/button/" in c.args[0])
+        payload = json.loads(button_call.args[1])
+        assert payload["device"]["identifiers"] == ["shared_device"]
+        assert payload["device"]["name"] == _TOOL_LABEL
+
+    def test_two_calls_with_same_device_id_produce_same_device_block(self) -> None:
+        """Two separate calls with the same device_id produce payloads whose
+        device blocks are identical — causing HA to group them under one device card."""
+        client_a = _make_client()
+        client_b = _make_client()
+        publish_trigger_discovery(
+            client_a,
+            tool_name="pv_ml_learner_train",
+            tool_label="Train",
+            trigger_topic="mimir/tools/train/trigger",
+            device_id="pv_ml_learner",
+            device_label="PV ML Learner",
+        )
+        publish_trigger_discovery(
+            client_b,
+            tool_name="pv_ml_learner_infer",
+            tool_label="Infer",
+            trigger_topic="mimir/tools/infer/trigger",
+            device_id="pv_ml_learner",
+            device_label="PV ML Learner",
+        )
+        button_a = json.loads(next(c for c in client_a.publish.call_args_list if "/button/" in c.args[0]).args[1])
+        button_b = json.loads(next(c for c in client_b.publish.call_args_list if "/button/" in c.args[0]).args[1])
+        assert button_a["device"] == button_b["device"]
+
+    def test_stats_sensor_device_block_uses_device_id_when_supplied(self) -> None:
+        """Stats sensors published with a device_id use the same device block."""
+        client = _make_client()
+        publish_trigger_discovery(
+            client,
+            tool_name=_TOOL_NAME,
+            tool_label=_TOOL_LABEL,
+            trigger_topic=_TRIGGER_TOPIC,
+            stats_topic=_STATS_TOPIC,
+            device_id="shared_device",
+            device_label="Shared Device",
+        )
+        for c in client.publish.call_args_list:
+            raw = c.args[1]
+            if raw is None:
+                continue
+            payload = json.loads(raw)
+            if "device" in payload:
+                assert payload["device"]["identifiers"] == ["shared_device"]
+
+    def test_topic_names_are_still_based_on_tool_name_not_device_id(self) -> None:
+        """The MQTT topic paths use tool_name, not device_id."""
+        client = _make_client()
+        publish_trigger_discovery(
+            client,
+            tool_name=_TOOL_NAME,
+            tool_label=_TOOL_LABEL,
+            trigger_topic=_TRIGGER_TOPIC,
+            device_id="shared_device",
+        )
+        touched_topics = {c.args[0] for c in client.publish.call_args_list}
+        assert f"{_PREFIX}/button/{_TOOL_NAME}/config" in touched_topics
+        assert f"{_PREFIX}/button/shared_device/config" not in touched_topics
