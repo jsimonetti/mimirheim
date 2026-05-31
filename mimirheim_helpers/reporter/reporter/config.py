@@ -22,15 +22,12 @@ import helper_common.topics as _topics
 
 
 class ChartPublishingConfig(BaseModel):
-    """Configuration for MQTT chart data publishing.
+    """Configuration for MQTT summary data publishing.
 
-    Controls whether the reporter publishes apex-charts-compatible series
-    data and summary statistics after each report render. Both topics are
-    independent; either or both may be set.
+    Controls whether the reporter publishes scalar economic summary statistics
+    after each report render.
 
     Attributes:
-        chart_topic: MQTT topic for the time-series chart data payload.
-            When None, no chart data is published.
         summary_topic: MQTT topic for the scalar economic summary payload.
             When None, no summary is published.
         max_payload_bytes: Maximum allowed serialised payload size in bytes.
@@ -41,7 +38,6 @@ class ChartPublishingConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    chart_topic: str | None = Field(default=None, description="MQTT topic for the time-series chart data payload.", json_schema_extra={"ui_label": "Chart topic", "ui_group": "advanced"})
     summary_topic: str | None = Field(default=None, description="MQTT topic for the scalar economic summary payload.", json_schema_extra={"ui_label": "Summary topic", "ui_group": "advanced"})
     max_payload_bytes: int = Field(default=65536, ge=0, description="Maximum serialised payload size in bytes. 0 = unlimited.", json_schema_extra={"ui_label": "Max payload bytes", "ui_group": "advanced"})
 

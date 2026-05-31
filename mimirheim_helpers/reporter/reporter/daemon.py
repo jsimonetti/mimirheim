@@ -36,7 +36,7 @@ import paho.mqtt.client as mqtt
 from helper_common.daemon import MqttDaemon
 
 from reporter import gc, inventory
-from reporter.chart_publisher import build_chart_payload, build_summary_payload
+from reporter.summary_publisher import build_summary_payload
 from reporter.config import ChartPublishingConfig, ReporterConfig
 from reporter.render import build_report_html
 
@@ -137,7 +137,7 @@ class ReporterDaemon(MqttDaemon):
         disc = self._discovery_config
         if disc is not None and disc.enabled:
             client.subscribe("homeassistant/status", qos=0)
-            self._publish_chart_discovery(client)
+            self._publish_summary_discovery(client)
 
     def _on_message(
         self,
@@ -154,7 +154,7 @@ class ReporterDaemon(MqttDaemon):
         ):
             disc = self._discovery_config
             if disc is not None and disc.enabled:
-                self._publish_chart_discovery(client)
+                self._publish_summary_discovery(client)
 
     # ------------------------------------------------------------------
     # Notification handler
@@ -227,7 +227,7 @@ class ReporterDaemon(MqttDaemon):
         else:
             self._render_and_save(ts, report_filename, report_path, inp, out)
 
-        self._publish_chart_data(inp, out)
+        self._publish_summary_data(inp, out)
 
     def _render_and_save(
         self,
@@ -267,49 +267,32 @@ class ReporterDaemon(MqttDaemon):
         logger.info("Rendered report: %s", report_path)
 
     # ------------------------------------------------------------------
-    # Chart and discovery helpers
+    # Summary and discovery helpers
     # ------------------------------------------------------------------
 
-    def _publish_chart_data(self, inp: dict[str, Any], out: dict[str, Any]) -> None:
-        """Publish chart and summary payloads to configured MQTT topics.
-
-        Skips publication if the serialised chart payload exceeds
-        ``max_payload_bytes``. Summary payloads are always published when a
-        topic is configured because they are compact scalar objects.
+    def _publish_summary_data(self, inp: dict[str, Any], out: dict[str, Any]) -> None:
+        """Publish the summary payload to the configured MQTT topic.
 
         Args:
             inp: Parsed SolveBundle JSON.
             out: Parsed SolveResult JSON.
         """
         cfg = self._chart_config
-        if cfg.chart_topic is not None:
-            payload = json.dumps(build_chart_payload(inp, out))
-            if cfg.max_payload_bytes > 0 and len(payload.encode()) > cfg.max_payload_bytes:
-                logger.warning(
-                    "Chart payload (%d bytes) exceeds max_payload_bytes=%d; skipping.",
-                    len(payload.encode()),
-                    cfg.max_payload_bytes,
-                )
-            else:
-                self._client.publish(cfg.chart_topic, payload, qos=1, retain=True)
-
         if cfg.summary_topic is not None:
             payload = json.dumps(build_summary_payload(inp, out))
             self._client.publish(cfg.summary_topic, payload, qos=1, retain=True)
 
-    def _publish_chart_discovery(self, client: Any) -> None:
+    def _publish_summary_discovery(self, client: Any) -> None:
         """Publish a single HA device JSON discovery payload for reporter sensors.
 
         Publishes to ``{discovery_prefix}/device/{device_id}/config`` with a
-        ``components`` map containing one sensor per configured topic:
+        ``components`` map containing one sensor for the configured summary topic:
 
-        - ``{device_id}_chart_series``: state from ``chart_topic``; all series
-          data available via ``json_attributes_topic``.
         - ``{device_id}_summary``: state from ``summary_topic``; all scalar
           fields available via ``json_attributes_topic``.
 
-        This method is a no-op if discovery is None or disabled, or if neither
-        chart_topic nor summary_topic is configured.
+        This method is a no-op if discovery is None or disabled, or if
+        summary_topic is not configured.
 
         Args:
             client: The connected paho MQTT client.
@@ -318,7 +301,7 @@ class ReporterDaemon(MqttDaemon):
         if disc is None or not disc.enabled:
             return
         chart_cfg = self._chart_config
-        if chart_cfg.chart_topic is None and chart_cfg.summary_topic is None:
+        if chart_cfg.summary_topic is None:
             return
 
         mqtt_cfg = self._config.mqtt
@@ -327,29 +310,16 @@ class ReporterDaemon(MqttDaemon):
 
         components: dict[str, dict[str, Any]] = {}
 
-        if chart_cfg.chart_topic is not None:
-            uid = f"{device_id}_chart_series"
-            components[uid] = {
-                "platform": "sensor",
-                "unique_id": uid,
-                "name": "mimirheim Chart Series",
-                "state_topic": chart_cfg.chart_topic,
-                "value_template": "{{ value_json.solve_time_utc }}",
-                "json_attributes_topic": chart_cfg.chart_topic,
-                "entity_category": "diagnostic",
-            }
-
-        if chart_cfg.summary_topic is not None:
-            uid = f"{device_id}_summary"
-            components[uid] = {
-                "platform": "sensor",
-                "unique_id": uid,
-                "name": "mimirheim Summary",
-                "state_topic": chart_cfg.summary_topic,
-                "value_template": "{{ value_json.solve_time_utc }}",
-                "json_attributes_topic": chart_cfg.summary_topic,
-                "entity_category": "diagnostic",
-            }
+        uid = f"{device_id}_summary"
+        components[uid] = {
+            "platform": "sensor",
+            "unique_id": uid,
+            "name": "mimirheim Summary",
+            "state_topic": chart_cfg.summary_topic,
+            "value_template": "{{ value_json.solve_time_utc }}",
+            "json_attributes_topic": chart_cfg.summary_topic,
+            "entity_category": "diagnostic",
+        }
 
         payload = {
             "device": {

@@ -124,9 +124,8 @@ from reporter.config import ChartPublishingConfig  # noqa: E402
 
 
 def test_chart_publishing_config_defaults() -> None:
-    """All fields default: chart_topic and summary_topic are None; max_payload_bytes is 65536."""
+    """All fields default: summary_topic is None; max_payload_bytes is 65536."""
     cfg = ChartPublishingConfig()
-    assert cfg.chart_topic is None
     assert cfg.summary_topic is None
     assert cfg.max_payload_bytes == 65536
 
@@ -189,12 +188,10 @@ def test_reporter_chart_publishing_in_root_config() -> None:
     raw = {
         **_MINIMAL_RAW,
         "chart_publishing": {
-            "chart_topic": "mimir/reporter/chart",
             "summary_topic": "mimir/reporter/summary",
         },
     }
     cfg = ReporterConfig.model_validate(raw)
-    assert cfg.chart_publishing.chart_topic == "mimir/reporter/chart"
     assert cfg.chart_publishing.summary_topic == "mimir/reporter/summary"
 
 
