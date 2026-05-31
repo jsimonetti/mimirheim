@@ -39,6 +39,20 @@ from mimirheim.config.schema import MimirheimConfig
 logger = logging.getLogger("mimirheim.ha_discovery")
 
 
+# Jinja2 json_attributes_template shared by both grid sensors.
+# Both sensors subscribe to outputs.schedule and expose a "forecast" attribute
+# containing one entry per solver step with grid_import_kw and grid_export_kw.
+# Using a module-level constant avoids duplicating the template string for each
+# of the two grid sensor _add() calls.
+_GRID_ATTR_TEMPLATE: str = (
+    "{%- set ns = namespace(f=[]) -%}"
+    "{%- for s in value_json.schedule -%}"
+    '{% set ns.f = ns.f + [{"grid_import_kw": s.grid_import_kw, "grid_export_kw": s.grid_export_kw}] %}'
+    "{%- endfor -%}"
+    '{{ {"forecast": ns.f} | tojson }}'
+)
+
+
 def publish_discovery(client: Any, config: MimirheimConfig) -> None:
     """Publish a single HA MQTT device JSON discovery payload for all mimirheim entities.
 
@@ -100,6 +114,8 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
         "unit_of_measurement": "kW",
         "device_class": "power",
         "entity_category": "diagnostic",
+        "json_attributes_topic": config.outputs.schedule,
+        "json_attributes_template": _GRID_ATTR_TEMPLATE,
     })
 
     _add(f"{device_id}_grid_export_kw", "sensor", {
@@ -109,6 +125,8 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
         "unit_of_measurement": "kW",
         "device_class": "power",
         "entity_category": "diagnostic",
+        "json_attributes_topic": config.outputs.schedule,
+        "json_attributes_template": _GRID_ATTR_TEMPLATE,
     })
 
     _add(f"{device_id}_solve_status", "sensor", {
@@ -158,6 +176,15 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
     # --- Per-device setpoint sensors ---
     # No state_class: these values come from the solver schedule, not hardware.
     # The state_topic for each device is {prefix}/device/{name}/setpoint.
+    # json_attributes_topic and json_attributes_template expose the full
+    # per-device forecast array sourced from outputs.schedule, enabling
+    # apexcharts-card dashboards without the reporter chart_topic.
+
+    storage_device_names: set[str] = {
+        *config.batteries,
+        *config.ev_chargers,
+        *config.hybrid_inverters,
+    }
 
     all_device_names = [
         *config.batteries,
@@ -173,12 +200,31 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
 
     for device_name in all_device_names:
         unique_id = f"{device_id}_{device_name}_setpoint_kw"
+        if device_name in storage_device_names:
+            attr_template = (
+                "{%- set ns = namespace(f=[]) -%}"
+                "{%- for s in value_json.schedule -%}"
+                f'{{% set ns.f = ns.f + [{{"kw": s.devices["{device_name}"].kw, '
+                f'"soc_kwh": s.device_soc_kwh.get("{device_name}")}}] %}}'
+                "{%- endfor -%}"
+                '{{ {"forecast": ns.f} | tojson }}'
+            )
+        else:
+            attr_template = (
+                "{%- set ns = namespace(f=[]) -%}"
+                "{%- for s in value_json.schedule -%}"
+                f'{{% set ns.f = ns.f + [{{"kw": s.devices["{device_name}"].kw}}] %}}'
+                "{%- endfor -%}"
+                '{{ {"forecast": ns.f} | tojson }}'
+            )
         _add(unique_id, "sensor", {
             "name": f"{device_name} setpoint",
             "state_topic": f"{mqtt_prefix}/device/{device_name}/setpoint",
             "value_template": "{{ value_json.kw | round(2) }}",
             "unit_of_measurement": "kW",
             "device_class": "power",
+            "json_attributes_topic": config.outputs.schedule,
+            "json_attributes_template": attr_template,
         })
 
     # --- Hybrid inverter input sensors ---

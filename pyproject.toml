@@ -114,6 +114,7 @@ dev = [
     "plotly>=6.7.0",
     "freezegun>=1.4",
     "respx>=0.21",
+    "jinja2>=3.0",
 ]
 
 [tool.pytest.ini_options]

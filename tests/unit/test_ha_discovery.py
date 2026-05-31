@@ -21,6 +21,9 @@ import json
 from typing import Any
 from unittest.mock import MagicMock
 
+import jinja2
+import pytest
+
 from mimirheim.config.schema import MimirheimConfig
 from mimirheim.io.ha_discovery import publish_discovery
 
@@ -859,3 +862,352 @@ def test_deferrable_window_inputs_have_entity_category_config() -> None:
         assert entity.get("entity_category") == "config", (
             f"{suffix} must have entity_category=config: {entity}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Helpers for forecast-attribute tests (plan 61)
+# ---------------------------------------------------------------------------
+
+
+def _render_template(template_str: str, value_json: dict) -> dict:
+    """Render a Jinja2 template string as HA would, return parsed JSON.
+
+    HA evaluates json_attributes_template with ``value_json`` bound to the
+    parsed MQTT payload. This helper replicates that environment using a
+    standard jinja2.Environment with the tojson filter available.
+
+    The template is expected to produce a JSON object string. An AssertionError
+    is raised if the rendered output is not valid JSON or not a dict.
+    """
+    env = jinja2.Environment()
+    tmpl = env.from_string(template_str)
+    rendered = tmpl.render(value_json=value_json)
+    result = json.loads(rendered)
+    assert isinstance(result, dict), f"Template did not produce a JSON object: {rendered!r}"
+    return result
+
+
+def _make_mock_schedule(
+    *,
+    battery_name: str = "home_battery",
+    pv_name: str = "roof_pv",
+    load_name: str = "base_load",
+    n_steps: int = 3,
+) -> dict:
+    """Return a minimal SolveResult-shaped dict for template rendering tests."""
+    schedule = []
+    for i in range(n_steps):
+        schedule.append({
+            "t": i,
+            "grid_import_kw": float(i) * 0.5,
+            "grid_export_kw": float(i) * 0.1,
+            "devices": {
+                battery_name: {"kw": -1.0 + i * 0.5, "type": "battery"},
+                pv_name:      {"kw": 2.0 + i * 0.2, "type": "pv"},
+                load_name:    {"kw": 0.4,             "type": "static_load"},
+            },
+            "device_soc_kwh": {
+                battery_name: 5.0 + i * 0.3,
+            },
+        })
+    return {
+        "strategy": "minimize_cost",
+        "objective_value": 1.23,
+        "solve_status": "optimal",
+        "schedule": schedule,
+        "deferrable_recommended_starts": {},
+    }
+
+
+def _make_config_with_ev() -> MimirheimConfig:
+    """Config with one battery and one EV charger, for storage-type template tests."""
+    return MimirheimConfig.model_validate({
+        "mqtt": {
+            "host": "localhost",
+            "port": 1883,
+            "client_id": "mimir-test",
+            "topic_prefix": "mimir",
+        },
+        "outputs": {
+            "schedule": "mimir/schedule",
+            "current": "mimir/current",
+            "last_solve": "mimir/status/last_solve",
+            "availability": "mimir/status/availability",
+        },
+        "homeassistant": {"enabled": True, "device_name": "Test mimirheim"},
+        "grid": {"import_limit_kw": 10.0, "export_limit_kw": 5.0},
+        "batteries": {
+            "home_battery": {
+                "capacity_kwh": 10.0,
+                "charge_segments": [{"power_max_kw": 3.0, "efficiency": 0.95}],
+                "discharge_segments": [{"power_max_kw": 3.0, "efficiency": 0.95}],
+                "wear_cost_eur_per_kwh": 0.005,
+                "inputs": {"soc": {"topic": "mimir/input/bat/soc", "unit": "kwh"}},
+            },
+        },
+        "ev_chargers": {
+            "car_ev": {
+                "capacity_kwh": 60.0,
+                "charge_segments": [{"power_max_kw": 11.0, "efficiency": 0.92}],
+                "inputs": {
+                    "soc": {"topic": "mimir/input/ev/car_ev/soc", "unit": "kwh"},
+                    "plugged_in_topic": "mimir/input/ev/car_ev/plugged_in",
+                },
+            },
+        },
+    })
+
+
+# ---------------------------------------------------------------------------
+# TestForecastAttributePresence
+# ---------------------------------------------------------------------------
+
+
+class TestForecastAttributePresence:
+    """Verify that json_attributes_topic and json_attributes_template are
+    present in the correct components and reference the schedule topic."""
+
+    def test_battery_setpoint_has_json_attributes_topic(self) -> None:
+        """Battery setpoint sensor has json_attributes_topic == outputs.schedule."""
+        components = _publish_and_get_components(_make_config())
+        assert components["mimir-test_home_battery_setpoint_kw"].get(
+            "json_attributes_topic"
+        ) == "mimir/schedule"
+
+    def test_pv_setpoint_has_json_attributes_topic(self) -> None:
+        """PV setpoint sensor has json_attributes_topic == outputs.schedule."""
+        assert _publish_and_get_components(_make_config())[
+            "mimir-test_roof_pv_setpoint_kw"
+        ].get("json_attributes_topic") == "mimir/schedule"
+
+    def test_static_load_setpoint_has_json_attributes_topic(self) -> None:
+        """Static load setpoint sensor has json_attributes_topic == outputs.schedule."""
+        assert _publish_and_get_components(_make_config())[
+            "mimir-test_base_load_setpoint_kw"
+        ].get("json_attributes_topic") == "mimir/schedule"
+
+    def test_grid_import_sensor_has_json_attributes_topic(self) -> None:
+        """Grid import sensor has json_attributes_topic == outputs.schedule."""
+        assert _publish_and_get_components(_make_config())[
+            "mimir-test_grid_import_kw"
+        ].get("json_attributes_topic") == "mimir/schedule"
+
+    def test_grid_export_sensor_has_json_attributes_topic(self) -> None:
+        """Grid export sensor has json_attributes_topic == outputs.schedule."""
+        assert _publish_and_get_components(_make_config())[
+            "mimir-test_grid_export_kw"
+        ].get("json_attributes_topic") == "mimir/schedule"
+
+    def test_ev_charger_setpoint_has_json_attributes_topic(self) -> None:
+        """EV charger setpoint sensor has json_attributes_topic == outputs.schedule."""
+        components = _publish_and_get_components(_make_config_with_ev())
+        ev_uid = next(k for k in components if "car_ev" in k and "setpoint" in k)
+        assert components[ev_uid].get("json_attributes_topic") == "mimir/schedule"
+
+    def test_all_setpoint_sensors_have_json_attributes_template(self) -> None:
+        """Every setpoint sensor component has a non-empty json_attributes_template."""
+        components = _publish_and_get_components(_make_config())
+        setpoint_uids = [k for k in components if k.endswith("_setpoint_kw")]
+        assert setpoint_uids, "Expected at least one setpoint component"
+        for uid in setpoint_uids:
+            assert components[uid].get("json_attributes_template"), (
+                f"Missing or empty json_attributes_template on {uid!r}"
+            )
+
+    def test_template_output_key_is_always_forecast(self) -> None:
+        """All json_attributes_template strings produce a 'forecast' key."""
+        components = _publish_and_get_components(_make_config())
+        for uid, component in components.items():
+            if "json_attributes_template" in component:
+                assert '"forecast"' in component["json_attributes_template"], (
+                    f"Template for {uid!r} does not produce a 'forecast' key"
+                )
+
+    def test_battery_template_uses_bracket_notation(self) -> None:
+        """Battery template uses bracket notation devices["name"] not dot notation."""
+        template = _publish_and_get_components(_make_config())[
+            "mimir-test_home_battery_setpoint_kw"
+        ].get("json_attributes_template", "")
+        assert 'devices["home_battery"]' in template
+
+    def test_storage_templates_reference_soc_kwh(self) -> None:
+        """Battery and EV charger templates reference soc_kwh."""
+        components = _publish_and_get_components(_make_config_with_ev())
+        for uid in ("mimir-test_home_battery_setpoint_kw",):
+            template = components.get(uid, {}).get("json_attributes_template", "")
+            assert "soc_kwh" in template, f"Missing soc_kwh in template for {uid!r}"
+        ev_uid = next(k for k in components if "car_ev" in k and "setpoint" in k)
+        assert "soc_kwh" in components[ev_uid].get("json_attributes_template", "")
+
+    def test_non_storage_templates_do_not_reference_soc_kwh(self) -> None:
+        """PV and static load templates do not reference soc_kwh."""
+        components = _publish_and_get_components(_make_config())
+        for uid in ("mimir-test_roof_pv_setpoint_kw", "mimir-test_base_load_setpoint_kw"):
+            template = components[uid].get("json_attributes_template", "")
+            assert "soc_kwh" not in template, (
+                f"Unexpected soc_kwh in non-storage template for {uid!r}"
+            )
+
+    def test_deferrable_load_template_does_not_reference_soc_kwh(self) -> None:
+        """Deferrable load template does not reference soc_kwh."""
+        components = _publish_and_get_components(_make_config_with_deferrable_rec_start())
+        template = components["mimir-test_wash_setpoint_kw"].get("json_attributes_template", "")
+        assert "soc_kwh" not in template
+
+    def test_grid_templates_reference_both_grid_fields(self) -> None:
+        """Grid templates reference grid_import_kw and grid_export_kw."""
+        components = _publish_and_get_components(_make_config())
+        for uid in ("mimir-test_grid_import_kw", "mimir-test_grid_export_kw"):
+            template = components[uid].get("json_attributes_template", "")
+            assert "grid_import_kw" in template
+            assert "grid_export_kw" in template
+
+
+# ---------------------------------------------------------------------------
+# TestForecastTemplateRendering
+# ---------------------------------------------------------------------------
+
+
+class TestForecastTemplateRendering:
+    """Render each template against a mock schedule payload and assert on the
+    resulting JSON structure. These tests verify that the template string is
+    syntactically valid Jinja2 and produces the expected output shape."""
+
+    def test_battery_template_renders_forecast_array(self) -> None:
+        """Battery template renders to a dict with a 'forecast' list of dicts
+        each containing 'kw' and 'soc_kwh'."""
+        components = _publish_and_get_components(_make_config())
+        template_str = components["mimir-test_home_battery_setpoint_kw"]["json_attributes_template"]
+        payload = _make_mock_schedule()
+
+        result = _render_template(template_str, payload)
+
+        assert "forecast" in result
+        steps = result["forecast"]
+        assert len(steps) == 3
+        for step in steps:
+            assert "kw" in step, f"Missing 'kw' key in battery forecast step: {step}"
+            assert "soc_kwh" in step, f"Missing 'soc_kwh' key in battery forecast step: {step}"
+
+    def test_battery_template_values_match_schedule(self) -> None:
+        """Battery forecast values match the corresponding schedule entries."""
+        components = _publish_and_get_components(_make_config())
+        template_str = components["mimir-test_home_battery_setpoint_kw"]["json_attributes_template"]
+        payload = _make_mock_schedule()
+
+        result = _render_template(template_str, payload)
+        steps = result["forecast"]
+
+        for i, step in enumerate(steps):
+            expected_kw = payload["schedule"][i]["devices"]["home_battery"]["kw"]
+            expected_soc = payload["schedule"][i]["device_soc_kwh"]["home_battery"]
+            assert step["kw"] == pytest.approx(expected_kw), (
+                f"Battery kw mismatch at step {i}"
+            )
+            assert step["soc_kwh"] == pytest.approx(expected_soc), (
+                f"Battery soc_kwh mismatch at step {i}"
+            )
+
+    def test_pv_template_renders_forecast_array(self) -> None:
+        """PV template renders to a dict with a 'forecast' list of dicts
+        each containing 'kw' but not 'soc_kwh'."""
+        components = _publish_and_get_components(_make_config())
+        template_str = components["mimir-test_roof_pv_setpoint_kw"]["json_attributes_template"]
+        payload = _make_mock_schedule()
+
+        result = _render_template(template_str, payload)
+
+        assert "forecast" in result
+        for step in result["forecast"]:
+            assert "kw" in step
+            assert "soc_kwh" not in step
+
+    def test_pv_template_values_match_schedule(self) -> None:
+        """PV forecast kw values match the corresponding schedule entries."""
+        components = _publish_and_get_components(_make_config())
+        template_str = components["mimir-test_roof_pv_setpoint_kw"]["json_attributes_template"]
+        payload = _make_mock_schedule()
+
+        result = _render_template(template_str, payload)
+
+        for i, step in enumerate(result["forecast"]):
+            expected_kw = payload["schedule"][i]["devices"]["roof_pv"]["kw"]
+            assert step["kw"] == pytest.approx(expected_kw)
+
+    def test_static_load_template_renders_forecast_array(self) -> None:
+        """Static load template renders to a dict with a 'forecast' list."""
+        components = _publish_and_get_components(_make_config())
+        template_str = components["mimir-test_base_load_setpoint_kw"]["json_attributes_template"]
+        payload = _make_mock_schedule()
+
+        result = _render_template(template_str, payload)
+
+        assert "forecast" in result
+        assert len(result["forecast"]) == 3
+        for step in result["forecast"]:
+            assert "kw" in step
+            assert "soc_kwh" not in step
+
+    def test_grid_template_renders_both_series(self) -> None:
+        """Grid template renders a 'forecast' list with grid_import_kw and
+        grid_export_kw per step."""
+        components = _publish_and_get_components(_make_config())
+        template_str = components["mimir-test_grid_import_kw"]["json_attributes_template"]
+        payload = _make_mock_schedule()
+
+        result = _render_template(template_str, payload)
+
+        assert "forecast" in result
+        for i, step in enumerate(result["forecast"]):
+            assert "grid_import_kw" in step
+            assert "grid_export_kw" in step
+            assert step["grid_import_kw"] == pytest.approx(
+                payload["schedule"][i]["grid_import_kw"]
+            )
+            assert step["grid_export_kw"] == pytest.approx(
+                payload["schedule"][i]["grid_export_kw"]
+            )
+
+    def test_grid_import_and_export_sensors_share_identical_template(self) -> None:
+        """Both grid sensors use the same template string so HA groups them
+        under the same forecast array on either entity."""
+        components = _publish_and_get_components(_make_config())
+        import_tmpl = components["mimir-test_grid_import_kw"]["json_attributes_template"]
+        export_tmpl = components["mimir-test_grid_export_kw"]["json_attributes_template"]
+        assert import_tmpl == export_tmpl
+
+    def test_template_renders_correct_step_count(self) -> None:
+        """Template output contains exactly as many forecast steps as the
+        schedule contains, for a range of horizon lengths."""
+        components = _publish_and_get_components(_make_config())
+        template_str = components["mimir-test_home_battery_setpoint_kw"]["json_attributes_template"]
+
+        for n_steps in (1, 4, 96):
+            payload = _make_mock_schedule(n_steps=n_steps)
+            result = _render_template(template_str, payload)
+            assert len(result["forecast"]) == n_steps, (
+                f"Expected {n_steps} steps, got {len(result['forecast'])}"
+            )
+
+    def test_template_handles_device_name_with_underscore(self) -> None:
+        """Templates for device names containing underscores render correct values.
+        Bracket notation must be used; this test ensures actual float values
+        are produced rather than None."""
+        config = _make_config()  # home_battery contains an underscore
+        components = _publish_and_get_components(config)
+        template_str = components["mimir-test_home_battery_setpoint_kw"]["json_attributes_template"]
+        payload = _make_mock_schedule()
+        result = _render_template(template_str, payload)
+        for step in result["forecast"]:
+            assert isinstance(step["kw"], float), f"kw is not a float: {step['kw']!r}"
+            assert isinstance(step["soc_kwh"], float), f"soc_kwh is not a float: {step['soc_kwh']!r}"
+
+    def test_template_handles_empty_schedule(self) -> None:
+        """When the schedule is empty, template renders an empty forecast list."""
+        components = _publish_and_get_components(_make_config())
+        template_str = components["mimir-test_home_battery_setpoint_kw"]["json_attributes_template"]
+        payload = _make_mock_schedule(n_steps=0)
+
+        result = _render_template(template_str, payload)
+
+        assert result == {"forecast": []}
