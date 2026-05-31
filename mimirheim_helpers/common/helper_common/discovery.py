@@ -74,6 +74,7 @@ def _active_helper_discovery_topics(
     tool_name: str,
     stats_topic: str | None,
     forecast_sensor: bool = False,
+    trigger_button: bool = True,
     discovery_prefix: str = "homeassistant",
 ) -> set[str]:
     """Return the HA discovery topics that should exist given the current config.
@@ -82,12 +83,18 @@ def _active_helper_discovery_topics(
         tool_name: Stable snake_case identifier for the tool.
         stats_topic: When not None, stats sensor topics are included.
         forecast_sensor: When True, the forecast sensor topic is included.
+        trigger_button: When False, the button topic is excluded from the
+            active set and will be deleted if it exists on the broker.
+            Set to False for forecast-only registrations (e.g. per-array
+            forecast sensors that share a device with a separate trigger).
         discovery_prefix: HA MQTT discovery topic prefix.
 
     Returns:
         Set of MQTT topic strings that should currently be retained on the broker.
     """
-    topics: set[str] = {f"{discovery_prefix}/button/{tool_name}/config"}
+    topics: set[str] = set()
+    if trigger_button:
+        topics.add(f"{discovery_prefix}/button/{tool_name}/config")
     if stats_topic is not None:
         for sensor_id in _STATS_SENSOR_IDS:
             topics.add(f"{discovery_prefix}/sensor/{tool_name}_{sensor_id}/config")
@@ -101,7 +108,7 @@ def publish_trigger_discovery(
     *,
     tool_name: str,
     tool_label: str,
-    trigger_topic: str,
+    trigger_topic: str | None = None,
     stats_topic: str | None = None,
     forecast_sensor: bool = False,
     output_topic: str | None = None,
@@ -129,8 +136,12 @@ def publish_trigger_discovery(
             Example: ``"nordpool_prices"``.
         tool_label: Human-readable display name shown in the HA UI.
             Example: ``"Nordpool Prices"``.
-        trigger_topic: The MQTT topic that triggers the daemon. The button's
-            ``command_topic`` is set to this value.
+        trigger_topic: The MQTT topic that triggers the daemon. When provided,
+            a button entity is published with this as its ``command_topic``.
+            When ``None``, no button entity is published. Pass ``None`` for
+            forecast-only registrations that share a device with a separate
+            trigger button (e.g. per-array PV forecast sensors grouped under
+            the pv_ml_learner device alongside the train/infer buttons).
         stats_topic: MQTT topic where the daemon publishes per-cycle stats
             JSON. When not None, four diagnostic sensor entities are published
             under the same HA device: last run timestamp, duration, horizon
@@ -163,6 +174,7 @@ def publish_trigger_discovery(
             ``"homeassistant"``.
     """
     _forecast_active = forecast_sensor and output_topic is not None
+    _trigger_button = trigger_topic is not None
     possible = _all_possible_helper_discovery_topics(
         tool_name=tool_name,
         discovery_prefix=discovery_prefix,
@@ -171,6 +183,7 @@ def publish_trigger_discovery(
         tool_name=tool_name,
         stats_topic=stats_topic,
         forecast_sensor=_forecast_active,
+        trigger_button=_trigger_button,
         discovery_prefix=discovery_prefix,
     )
 
@@ -187,21 +200,24 @@ def publish_trigger_discovery(
         "manufacturer": "Mimirheim",
     }
 
-    # --- Trigger button ---
-    client.publish(
-        f"{discovery_prefix}/button/{tool_name}/config",
-        json.dumps({
-            "name": f"{tool_label} Trigger",
-            "unique_id": f"{tool_name}_trigger",
-            "command_topic": trigger_topic,
-            "payload_press": "",
-            "retain": False,
-            "device": device_block,
-        }),
-        qos=1,
-        retain=True,
-    )
-    logger.debug("Published HA discovery for button/%s", tool_name)
+    # --- Trigger button (only when trigger_topic is provided) ---
+    # A forecast-only registration (trigger_topic=None) is used when an entity
+    # should appear on an existing shared device without adding a new button.
+    if _trigger_button:
+        client.publish(
+            f"{discovery_prefix}/button/{tool_name}/config",
+            json.dumps({
+                "name": f"{tool_label} Trigger",
+                "unique_id": f"{tool_name}_trigger",
+                "command_topic": trigger_topic,
+                "payload_press": "",
+                "retain": False,
+                "device": device_block,
+            }),
+            qos=1,
+            retain=True,
+        )
+        logger.debug("Published HA discovery for button/%s", tool_name)
 
     # --- Stats sensors (only when stats_topic is configured) ---
     # These four sensors expose the per-cycle statistics payload as readable
@@ -267,6 +283,12 @@ def publish_trigger_discovery(
             "unique_id": forecast_sensor_id,
             "state_topic": output_topic,
             "json_attributes_topic": output_topic,
+            # HA requires json_attributes_topic to deliver a JSON object (not an
+            # array). The helper output payload is a JSON array, so this template
+            # wraps the entire array under the key "forecast". Consumers can then
+            # reference "forecast" as a JSON attribute path in apexcharts-card or
+            # HA templates.
+            "json_attributes_template": '{{ {"forecast": value_json} | tojson }}',
             "value_template": forecast_value_template,
             "unit_of_measurement": forecast_unit,
             "entity_category": "diagnostic",

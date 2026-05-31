@@ -350,13 +350,15 @@ class PvLearnerDaemon(MqttDaemon):
                 publish_trigger_discovery(
                     client,
                     tool_name=tool_name,
-                    tool_label=f"{label} {array_name.replace('_', ' ').title()} Forecast",
-                    trigger_topic=cfg.training.inference_trigger_topic,
+                    tool_label=array_name.replace("_", " ").title(),
+                    trigger_topic=None,
                     forecast_sensor=True,
                     output_topic=array_cfg.output_topic,
                     forecast_value_template="{{ value_json[0].kw | default(0) | round(3) }}",
                     forecast_unit="kW",
                     forecast_device_class="power",
+                    device_id="pv_ml_learner",
+                    device_label=label,
                     discovery_prefix=prefix,
                 )
         logger.debug("Published HA discovery for train and infer trigger buttons.")
