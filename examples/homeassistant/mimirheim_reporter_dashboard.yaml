@@ -647,7 +647,7 @@ series:
       legend_value: false
     data_generator: |
       return entity.attributes.forecast
-        ? entity.attributes.forecast.map(s => [new Date(s.t).getTime(), +s.soc_kwh.toFixed(2)])
+        ? entity.attributes.forecast.map(s => [new Date(s.ts).getTime(), +s.soc_kwh.toFixed(2)])
         : [];
   - entity: sensor.mimirheim_prices
     name: Import (ct/kWh)
