@@ -44,35 +44,41 @@ ARG S6_OVERLAY_VERSION=3.2.2.0
 ARG PYTHON_VERSION=3.12
 
 # ---------------------------------------------------------------------------
-# Stage 1: install Python dependencies into an isolated venv
+# Stage 1: deps-only venv — rebuilt only when pyproject.toml or uv.lock change.
+# Third-party packages are large; keeping them in a separate stage means a
+# source-only change never invalidates this cached layer.
 # ---------------------------------------------------------------------------
-FROM python:${PYTHON_VERSION}-slim-bookworm AS builder
+FROM python:${PYTHON_VERSION}-slim-bookworm AS deps-builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends binutils
-# Install uv — fast dependency installer.
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /build
 
-# Step 1: manifests only — install all third-party dependencies before any
-# source is present. This layer rebuilds only when pyproject.toml or uv.lock
-# change, not on source edits, so the expensive pip downloads stay cached.
 COPY pyproject.toml uv.lock ./
 
 RUN uv venv /app/.venv --python python${PYTHON_VERSION} && \
     UV_PROJECT_ENVIRONMENT=/app/.venv uv sync --all-extras --frozen --no-install-project && \
     /app/.venv/bin/python -m compileall -q -b /app/.venv
 
-# Step 2: source files — build and install the project wheels. Dependencies
-# are already in the venv so this step only compiles the local packages.
+# ---------------------------------------------------------------------------
+# Stage 2: wheel builder — rebuilt on every source change, but produces only
+# a small wheel (~2 MB). No venv needed here; uv build is self-contained.
+# ---------------------------------------------------------------------------
+FROM python:${PYTHON_VERSION}-slim-bookworm AS wheel-builder
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /build
+
+COPY pyproject.toml uv.lock ./
 COPY mimirheim/ ./mimirheim/
 COPY mimirheim_helpers/ ./mimirheim_helpers/
 
-RUN UV_PROJECT_ENVIRONMENT=/app/.venv uv sync --all-extras --frozen --no-editable && \
-    /app/.venv/bin/python -m compileall -q -b /app/.venv
+RUN uv build --wheel --out-dir /app/wheels
     
 # ---------------------------------------------------------------------------
-# Stage 2: final image
+# Stage 3: final image
 # ---------------------------------------------------------------------------
 FROM python:${PYTHON_VERSION}-slim-bookworm
 
@@ -106,8 +112,17 @@ RUN groupadd -g 1000 app && \
 COPY --from=ghcr.io/hassio-addons/base:stable /usr/lib/bashio /usr/lib/bashio
 RUN ln -s /usr/lib/bashio/bashio /usr/bin/bashio
 
-# Copy the venv from the builder stage.
-COPY --from=builder --chown=app:app /app/.venv /app/.venv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# Copy the deps-only venv — large layer (~700 MB), but cached between source-only changes.
+COPY --from=deps-builder --chown=app:app /app/.venv /app/.venv
+
+# Install the project wheel into the existing venv — small layer (~2 MB), rebuilt on
+# every source change. --no-deps ensures uv does not re-resolve or re-download anything.
+COPY --from=wheel-builder /app/wheels /app/wheels
+RUN uv pip install --python /app/.venv --no-deps /app/wheels/*.whl && \
+    /app/.venv/bin/python -m compileall -q -b /app/.venv && \
+    rm -rf /app/wheels
 
 
 # Copy example configurations so users can bootstrap their /config mount.
