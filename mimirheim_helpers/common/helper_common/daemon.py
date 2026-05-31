@@ -42,7 +42,10 @@ import paho.mqtt.client as mqtt
 
 from helper_common.config import HomeAssistantConfig, MqttConfig
 from helper_common.cycle import CycleResult
-from helper_common.discovery import publish_trigger_discovery
+from helper_common.discovery import (
+    POWER_FORECAST_ATTRIBUTES_TEMPLATE,
+    publish_trigger_discovery,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -269,12 +272,18 @@ class HelperDaemon(MqttDaemon, abc.ABC):
             Defaults to ``"kW"``.
         FORECAST_DEVICE_CLASS: HA ``device_class`` for the forecast sensor.
             Defaults to ``"power"``. Override to ``None`` for price sensors.
+        FORECAST_ATTRIBUTES_TEMPLATE: Jinja2 template for the HA
+            ``json_attributes_template`` field of the forecast sensor.
+            Reshapes and rounds the raw broker payload for HA display only.
+            Defaults to ``POWER_FORECAST_ATTRIBUTES_TEMPLATE``. Override
+            with ``PRICE_FORECAST_ATTRIBUTES_TEMPLATE`` in price-type subclasses.
     """
 
     TOOL_NAME: str  # must be overridden in each subclass
     FORECAST_VALUE_TEMPLATE: str = "{{ value_json[0].kw | default(0) | round(3) }}"
     FORECAST_UNIT: str = "kW"
     FORECAST_DEVICE_CLASS: str | None = "power"
+    FORECAST_ATTRIBUTES_TEMPLATE: str = POWER_FORECAST_ATTRIBUTES_TEMPLATE
 
     def __init__(self, config: Any) -> None:
         self._last_trigger_at: float | None = None
@@ -348,6 +357,7 @@ class HelperDaemon(MqttDaemon, abc.ABC):
             forecast_value_template=self.FORECAST_VALUE_TEMPLATE,
             forecast_unit=self.FORECAST_UNIT,
             forecast_device_class=self.FORECAST_DEVICE_CLASS,
+            forecast_attributes_template=self.FORECAST_ATTRIBUTES_TEMPLATE,
             discovery_prefix=ha.discovery_prefix,
         )
 

@@ -16,9 +16,12 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, call
 
+import jinja2
 import pytest
 
 from helper_common.discovery import (
+    POWER_FORECAST_ATTRIBUTES_TEMPLATE,
+    PRICE_FORECAST_ATTRIBUTES_TEMPLATE,
     _active_helper_discovery_topics,
     _all_possible_helper_discovery_topics,
     publish_trigger_discovery,
@@ -530,6 +533,156 @@ class TestForecastSensor:
             forecast_sensor=False,
         )
         assert f"{_PREFIX}/sensor/{_TOOL_NAME}_forecast/config" not in active
+
+
+# ---------------------------------------------------------------------------
+# Forecast attributes template
+# ---------------------------------------------------------------------------
+
+
+def _render_attributes_template(template_str: str, payload: object) -> dict:
+    """Render a Jinja2 attributes template against a payload and return the
+    parsed JSON object.
+
+    Mimics the HA rendering environment: ``value_json`` is the parsed payload.
+    """
+    env = jinja2.Environment(undefined=jinja2.StrictUndefined)
+    rendered = env.from_string(template_str).render(value_json=payload)
+    result = json.loads(rendered)
+    assert isinstance(result, dict), f"Template must render to a JSON object, got {type(result)}"
+    return result
+
+
+class TestForecastAttributesTemplate:
+    def test_default_attributes_template_is_power_template(self) -> None:
+        """The default forecast_attributes_template in publish_trigger_discovery
+        is POWER_FORECAST_ATTRIBUTES_TEMPLATE (kw + confidence fields)."""
+        client = _make_client()
+        publish_trigger_discovery(
+            client,
+            tool_name=_TOOL_NAME,
+            tool_label=_TOOL_LABEL,
+            trigger_topic=_TRIGGER_TOPIC,
+            forecast_sensor=True,
+            output_topic=_OUTPUT_TOPIC,
+        )
+        forecast_call = next(
+            c for c in client.publish.call_args_list
+            if c.args[0] == f"{_PREFIX}/sensor/{_TOOL_NAME}_forecast/config"
+        )
+        payload = json.loads(forecast_call.args[1])
+        assert payload["json_attributes_template"] == POWER_FORECAST_ATTRIBUTES_TEMPLATE
+
+    def test_custom_attributes_template_is_honoured(self) -> None:
+        """When forecast_attributes_template is supplied, it is used verbatim
+        in the discovery payload."""
+        custom = '{{ {"forecast": value_json} | tojson }}'
+        client = _make_client()
+        publish_trigger_discovery(
+            client,
+            tool_name=_TOOL_NAME,
+            tool_label=_TOOL_LABEL,
+            trigger_topic=_TRIGGER_TOPIC,
+            forecast_sensor=True,
+            output_topic=_OUTPUT_TOPIC,
+            forecast_attributes_template=custom,
+        )
+        forecast_call = next(
+            c for c in client.publish.call_args_list
+            if c.args[0] == f"{_PREFIX}/sensor/{_TOOL_NAME}_forecast/config"
+        )
+        payload = json.loads(forecast_call.args[1])
+        assert payload["json_attributes_template"] == custom
+
+    def test_power_template_rounds_kw_to_3dp(self) -> None:
+        """POWER_FORECAST_ATTRIBUTES_TEMPLATE rounds kw to three decimal places."""
+        steps = [{"kw": 3.2945311069488525, "confidence": 0.75, "ts": "2024-01-01T12:00:00"}]
+        result = _render_attributes_template(POWER_FORECAST_ATTRIBUTES_TEMPLATE, steps)
+        assert result["forecast"][0]["kw"] == 3.295
+
+    def test_power_template_renames_confidence_to_c(self) -> None:
+        """POWER_FORECAST_ATTRIBUTES_TEMPLATE renames the confidence field to c."""
+        steps = [{"kw": 1.0, "confidence": 0.746, "ts": "2024-01-01T12:00:00"}]
+        result = _render_attributes_template(POWER_FORECAST_ATTRIBUTES_TEMPLATE, steps)
+        forecast_step = result["forecast"][0]
+        assert "c" in forecast_step
+        assert "confidence" not in forecast_step
+
+    def test_power_template_rounds_confidence_to_2dp(self) -> None:
+        """POWER_FORECAST_ATTRIBUTES_TEMPLATE rounds confidence to two decimal places."""
+        steps = [{"kw": 1.0, "confidence": 0.7463414200960922, "ts": "2024-01-01T12:00:00"}]
+        result = _render_attributes_template(POWER_FORECAST_ATTRIBUTES_TEMPLATE, steps)
+        assert result["forecast"][0]["c"] == 0.75
+
+    def test_power_template_preserves_ts(self) -> None:
+        """POWER_FORECAST_ATTRIBUTES_TEMPLATE includes the ts field unchanged."""
+        ts = "2024-06-15T08:30:00"
+        steps = [{"kw": 2.0, "confidence": 0.8, "ts": ts}]
+        result = _render_attributes_template(POWER_FORECAST_ATTRIBUTES_TEMPLATE, steps)
+        assert result["forecast"][0]["ts"] == ts
+
+    def test_power_template_handles_multiple_steps(self) -> None:
+        """POWER_FORECAST_ATTRIBUTES_TEMPLATE produces one output step per input step."""
+        steps = [
+            {"kw": 1.111, "confidence": 0.9, "ts": "2024-01-01T12:00:00"},
+            {"kw": 2.222, "confidence": 0.8, "ts": "2024-01-01T13:00:00"},
+            {"kw": 3.333, "confidence": 0.7, "ts": "2024-01-01T14:00:00"},
+        ]
+        result = _render_attributes_template(POWER_FORECAST_ATTRIBUTES_TEMPLATE, steps)
+        assert len(result["forecast"]) == 3
+
+    def test_price_template_renames_import_and_export_fields(self) -> None:
+        """PRICE_FORECAST_ATTRIBUTES_TEMPLATE renames import_eur_per_kwh -> import
+        and export_eur_per_kwh -> export."""
+        steps = [{
+            "import_eur_per_kwh": 0.25,
+            "export_eur_per_kwh": 0.10,
+            "confidence": 1.0,
+            "ts": "2024-01-01T12:00:00",
+        }]
+        result = _render_attributes_template(PRICE_FORECAST_ATTRIBUTES_TEMPLATE, steps)
+        step = result["forecast"][0]
+        assert "import" in step
+        assert "export" in step
+        assert "import_eur_per_kwh" not in step
+        assert "export_eur_per_kwh" not in step
+
+    def test_price_template_renames_confidence_to_c(self) -> None:
+        """PRICE_FORECAST_ATTRIBUTES_TEMPLATE renames confidence to c."""
+        steps = [{
+            "import_eur_per_kwh": 0.25,
+            "export_eur_per_kwh": 0.10,
+            "confidence": 0.746,
+            "ts": "2024-01-01T12:00:00",
+        }]
+        result = _render_attributes_template(PRICE_FORECAST_ATTRIBUTES_TEMPLATE, steps)
+        step = result["forecast"][0]
+        assert "c" in step
+        assert "confidence" not in step
+
+    def test_price_template_rounds_prices_to_4dp(self) -> None:
+        """PRICE_FORECAST_ATTRIBUTES_TEMPLATE rounds price fields to four decimal places."""
+        steps = [{
+            "import_eur_per_kwh": 0.123456789,
+            "export_eur_per_kwh": 0.098765432,
+            "confidence": 1.0,
+            "ts": "2024-01-01T12:00:00",
+        }]
+        result = _render_attributes_template(PRICE_FORECAST_ATTRIBUTES_TEMPLATE, steps)
+        step = result["forecast"][0]
+        assert step["import"] == 0.1235
+        assert step["export"] == 0.0988
+
+    def test_price_template_rounds_confidence_to_2dp(self) -> None:
+        """PRICE_FORECAST_ATTRIBUTES_TEMPLATE rounds confidence to two decimal places."""
+        steps = [{
+            "import_eur_per_kwh": 0.25,
+            "export_eur_per_kwh": 0.10,
+            "confidence": 0.7463414200960922,
+            "ts": "2024-01-01T12:00:00",
+        }]
+        result = _render_attributes_template(PRICE_FORECAST_ATTRIBUTES_TEMPLATE, steps)
+        assert result["forecast"][0]["c"] == 0.75
 
 
 # ---------------------------------------------------------------------------

@@ -25,6 +25,7 @@ import yaml
 from helper_common.config import apply_mqtt_env_overrides
 from helper_common.cycle import CycleResult
 from helper_common.daemon import HelperDaemon
+from helper_common.discovery import PRICE_FORECAST_ATTRIBUTES_TEMPLATE
 
 from nordpool.config import NordpoolConfig
 from nordpool.fetcher import FetchError, fetch_prices
@@ -66,6 +67,7 @@ class NordpoolDaemon(HelperDaemon):
     FORECAST_VALUE_TEMPLATE = "{{ value_json[0].import_eur_per_kwh | default(0) | round(4) }}"
     FORECAST_UNIT = "EUR/kWh"
     FORECAST_DEVICE_CLASS = None
+    FORECAST_ATTRIBUTES_TEMPLATE = PRICE_FORECAST_ATTRIBUTES_TEMPLATE
 
     def _run_cycle(self, client: mqtt.Client) -> CycleResult | None:
         """Fetch current Nordpool prices and publish them.

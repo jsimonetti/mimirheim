@@ -33,6 +33,36 @@ _STATS_SENSOR_IDS = (
     "exit_message",
 )
 
+# Jinja2 templates for the ``json_attributes_template`` field of forecast sensors.
+# These reshape and round the raw MQTT payload into a compact HA-facing
+# representation. The solver reads the raw broker payload directly; these
+# templates affect only what HA stores as entity attributes.
+#
+# ``POWER_FORECAST_ATTRIBUTES_TEMPLATE``: for helpers that publish steps with
+# ``kw``, ``confidence``, and ``ts`` fields (PV, baseload, pv_ml_learner).
+# Rounds ``kw`` to three decimal places (1 W significance) and renames
+# ``confidence`` to ``c``, rounded to two decimal places.
+#
+# ``PRICE_FORECAST_ATTRIBUTES_TEMPLATE``: for helpers that publish steps with
+# ``import_eur_per_kwh``, ``export_eur_per_kwh``, ``confidence``, and ``ts``
+# fields (Nordpool, Zonneplan). Renames ``import_eur_per_kwh`` → ``import``,
+# ``export_eur_per_kwh`` → ``export``, and ``confidence`` → ``c``.
+POWER_FORECAST_ATTRIBUTES_TEMPLATE: str = (
+    "{%- set ns = namespace(f=[]) -%}"
+    "{%- for s in value_json -%}"
+    '{%- set ns.f = ns.f + [{"kw": s.kw | round(3), "c": s.confidence | round(2), "ts": s.ts}] -%}'
+    "{%- endfor -%}"
+    '{{ {"forecast": ns.f} | tojson }}'
+)
+
+PRICE_FORECAST_ATTRIBUTES_TEMPLATE: str = (
+    "{%- set ns = namespace(f=[]) -%}"
+    "{%- for s in value_json -%}"
+    '{%- set ns.f = ns.f + [{"import": s.import_eur_per_kwh | round(4), "export": s.export_eur_per_kwh | round(4), "c": s.confidence | round(2), "ts": s.ts}] -%}'
+    "{%- endfor -%}"
+    '{{ {"forecast": ns.f} | tojson }}'
+)
+
 
 def _all_possible_helper_discovery_topics(
     *,
@@ -115,6 +145,7 @@ def publish_trigger_discovery(
     forecast_value_template: str = "{{ value_json[0].kw | default(0) | round(3) }}",
     forecast_unit: str = "kW",
     forecast_device_class: str | None = "power",
+    forecast_attributes_template: str = POWER_FORECAST_ATTRIBUTES_TEMPLATE,
     device_id: str | None = None,
     device_label: str | None = None,
     discovery_prefix: str = "homeassistant",
@@ -161,6 +192,13 @@ def publish_trigger_discovery(
         forecast_device_class: HA ``device_class`` for the forecast sensor.
             Pass ``None`` to omit the field (e.g. for price sensors).
             Defaults to ``"power"``.
+        forecast_attributes_template: Jinja2 template for the
+            ``json_attributes_template`` field of the forecast sensor.
+            Reshapes and rounds the raw MQTT payload purely for HA display;
+            the solver reads the unmodified broker payload. Defaults to
+            ``POWER_FORECAST_ATTRIBUTES_TEMPLATE`` (rounds ``kw`` to 3 dp,
+            renames ``confidence`` → ``c`` rounded to 2 dp). Override with
+            ``PRICE_FORECAST_ATTRIBUTES_TEMPLATE`` for price-type helpers.
         device_id: When supplied, used as the HA device ``identifiers`` value
             instead of ``tool_name``. Allows multiple
             ``publish_trigger_discovery()`` calls to group their entities under
@@ -288,7 +326,7 @@ def publish_trigger_discovery(
             # wraps the entire array under the key "forecast". Consumers can then
             # reference "forecast" as a JSON attribute path in apexcharts-card or
             # HA templates.
-            "json_attributes_template": '{{ {"forecast": value_json} | tojson }}',
+            "json_attributes_template": forecast_attributes_template,
             "value_template": forecast_value_template,
             "unit_of_measurement": forecast_unit,
             "entity_category": "diagnostic",

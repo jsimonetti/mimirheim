@@ -31,6 +31,7 @@ import yaml
 from helper_common.config import apply_mqtt_env_overrides
 from helper_common.cycle import CycleResult
 from helper_common.daemon import HelperDaemon
+from helper_common.discovery import PRICE_FORECAST_ATTRIBUTES_TEMPLATE
 
 from zonneplan_prices.api import AuthError, FetchError, ZonneplanClient
 from zonneplan_prices.auth import attempt_auth
@@ -80,6 +81,7 @@ class ZonneplanPricesDaemon(HelperDaemon):
     FORECAST_VALUE_TEMPLATE = "{{ value_json[0].import_eur_per_kwh | default(0) | round(4) }}"
     FORECAST_UNIT = "EUR/kWh"
     FORECAST_DEVICE_CLASS = None
+    FORECAST_ATTRIBUTES_TEMPLATE = PRICE_FORECAST_ATTRIBUTES_TEMPLATE
 
     # The electricity connection UUID is discovered on the first successful
     # fetch and cached here for all subsequent cycles. The UUID is stable for
