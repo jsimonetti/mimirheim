@@ -19,7 +19,8 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 4.936842105263158
         },
         "solar_roof": {
           "kw": 0.0,
@@ -28,7 +29,8 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": true
+          "pv_is_curtailed": true,
+          "soc_kwh": null
         },
         "house": {
           "kw": -0.05,
@@ -37,11 +39,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": null
         }
-      },
-      "device_soc_kwh": {
-        "bat": 4.936842105263158
       }
     },
     {
@@ -56,7 +56,8 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 4.9239999999999995
         },
         "solar_roof": {
           "kw": 0.0,
@@ -65,7 +66,8 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": true
+          "pv_is_curtailed": true,
+          "soc_kwh": null
         },
         "house": {
           "kw": -0.05,
@@ -74,11 +76,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": null
         }
-      },
-      "device_soc_kwh": {
-        "bat": 4.9239999999999995
       }
     },
     {
@@ -93,7 +93,8 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 4.9239999999999995
         },
         "solar_roof": {
           "kw": 0.0,
@@ -102,7 +103,8 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": true
+          "pv_is_curtailed": true,
+          "soc_kwh": null
         },
         "house": {
           "kw": -0.05,
@@ -111,11 +113,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": null
         }
-      },
-      "device_soc_kwh": {
-        "bat": 4.9239999999999995
       }
     },
     {
@@ -130,7 +130,8 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         },
         "solar_roof": {
           "kw": 0.37,
@@ -139,7 +140,8 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": true
+          "pv_is_curtailed": true,
+          "soc_kwh": null
         },
         "house": {
           "kw": -0.05,
@@ -148,11 +150,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": null
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     }
   ],

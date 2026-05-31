@@ -393,6 +393,7 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
             device_setpoints[bat.name] = DeviceSetpoint(
                 kw=_eval_net_power(ctx, bat.net_power(t)),
                 type="battery",
+                soc_kwh=ctx.solver.var_value(bat.soc[t]),
             )
         for pv in pv_devices:
             pv_kw = _eval_net_power(ctx, pv.net_power(t))
@@ -449,6 +450,7 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
                 type="ev_charger",
                 zero_exchange_active=ev_zea,
                 loadbalance_active=ev_lb,
+                soc_kwh=ctx.solver.var_value(ev.soc[t]),
             )
         for dl in deferrable_loads:
             device_setpoints[dl.name] = DeviceSetpoint(
@@ -470,6 +472,7 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
                 kw=_eval_net_power(ctx, hi.net_power(t)),
                 type="hybrid_inverter",
                 zero_exchange_active=hi_zea,
+                soc_kwh=ctx.solver.var_value(hi.soc[t]),
             )
         for tb in thermal_boilers:
             device_setpoints[tb.name] = DeviceSetpoint(
@@ -487,24 +490,12 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
                 type="combi_heat_pump",
             )
 
-        # Collect the terminal SOC in kWh for each storage device at the end
-        # of this step. Used by ha_discovery.py forecast attribute templates to
-        # expose a SOC series alongside the power series for charting.
-        step_soc_kwh: dict[str, float] = {}
-        for bat in batteries:
-            step_soc_kwh[bat.name] = ctx.solver.var_value(bat.soc[t])
-        for ev in ev_devices:
-            step_soc_kwh[ev.name] = ctx.solver.var_value(ev.soc[t])
-        for hi in hybrid_inverters:
-            step_soc_kwh[hi.name] = ctx.solver.var_value(hi.soc[t])
-
         schedule.append(
             ScheduleStep(
                 t=t,
                 grid_import_kw=ctx.solver.var_value(grid.import_[t]),
                 grid_export_kw=ctx.solver.var_value(grid.export_[t]),
                 devices=device_setpoints,
-                device_soc_kwh=step_soc_kwh,
             )
         )
 

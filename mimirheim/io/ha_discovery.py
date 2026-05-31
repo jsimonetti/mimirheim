@@ -196,7 +196,7 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
                 "{%- set ns = namespace(f=[]) -%}"
                 "{%- for s in value_json.schedule -%}"
                 f'{{%- set ns.f = ns.f + [{{"kw": s.devices["{device_name}"].kw | round(3), '
-                f'"soc_kwh": s.device_soc_kwh.get("{device_name}", 0) | round(3), "ts": s.ts}}] -%}}'
+                f'"soc_kwh": s.devices["{device_name}"].soc_kwh | round(3), "ts": s.ts}}] -%}}'
                 "{%- endfor -%}"
                 '{{ {"forecast": ns.f} | tojson }}'
             )

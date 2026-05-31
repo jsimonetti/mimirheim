@@ -19,11 +19,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -38,11 +36,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -57,11 +53,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -76,11 +70,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -95,11 +87,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -114,11 +104,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -133,11 +121,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -152,11 +138,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -171,11 +155,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -190,11 +172,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -209,11 +189,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -228,11 +206,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -247,11 +223,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -266,11 +240,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -285,11 +257,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -304,11 +274,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -323,11 +291,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -342,11 +308,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -361,11 +325,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -380,11 +342,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -399,11 +359,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -418,11 +376,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -437,11 +393,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -456,11 +410,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -475,11 +427,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -494,11 +444,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -513,11 +461,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -532,11 +478,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -551,11 +495,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -570,11 +512,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -589,11 +529,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -608,11 +546,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -627,11 +563,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -646,11 +580,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -665,11 +597,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -684,11 +614,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -703,11 +631,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -722,11 +648,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -741,11 +665,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -760,11 +682,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -779,11 +699,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -798,11 +716,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -817,11 +733,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.0
       }
     },
     {
@@ -836,11 +750,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.250000000000001
         }
-      },
-      "device_soc_kwh": {
-        "bat": 5.250000000000001
       }
     },
     {
@@ -855,11 +767,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 6.437500000000001
         }
-      },
-      "device_soc_kwh": {
-        "bat": 6.437500000000001
       }
     },
     {
@@ -874,11 +784,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 7.625
         }
-      },
-      "device_soc_kwh": {
-        "bat": 7.625
       }
     },
     {
@@ -893,11 +801,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 8.8125
         }
-      },
-      "device_soc_kwh": {
-        "bat": 8.8125
       }
     },
     {
@@ -912,11 +818,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -931,11 +835,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -950,11 +852,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -969,11 +869,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -988,11 +886,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1007,11 +903,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1026,11 +920,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1045,11 +937,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1064,11 +954,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1083,11 +971,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1102,11 +988,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1121,11 +1005,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1140,11 +1022,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1159,11 +1039,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1178,11 +1056,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1197,11 +1073,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1216,11 +1090,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1235,11 +1107,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1254,11 +1124,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1273,11 +1141,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1292,11 +1158,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1311,11 +1175,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1330,11 +1192,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1349,11 +1209,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1368,11 +1226,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1387,11 +1243,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1406,11 +1260,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1425,11 +1277,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1444,11 +1294,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1463,11 +1311,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1482,11 +1328,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1501,11 +1345,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1520,11 +1362,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1539,11 +1379,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1558,11 +1396,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1577,11 +1413,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1596,11 +1430,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1615,11 +1447,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1634,11 +1464,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1653,11 +1481,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1672,11 +1498,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1691,11 +1515,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1710,11 +1532,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1729,11 +1549,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1748,11 +1566,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1767,11 +1583,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1786,11 +1600,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1805,11 +1617,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     },
     {
@@ -1824,11 +1634,9 @@
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
-          "pv_is_curtailed": null
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0
         }
-      },
-      "device_soc_kwh": {
-        "bat": 10.0
       }
     }
   ],

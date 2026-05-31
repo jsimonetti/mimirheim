@@ -902,12 +902,9 @@ def _make_mock_schedule(
             "grid_import_kw": float(i) * 0.5,
             "grid_export_kw": float(i) * 0.1,
             "devices": {
-                battery_name: {"kw": -1.0 + i * 0.5, "type": "battery"},
+                battery_name: {"kw": -1.0 + i * 0.5, "type": "battery", "soc_kwh": 5.0 + i * 0.3},
                 pv_name:      {"kw": 2.0 + i * 0.2, "type": "pv"},
                 load_name:    {"kw": 0.4,             "type": "static_load"},
-            },
-            "device_soc_kwh": {
-                battery_name: 5.0 + i * 0.3,
             },
         })
     return {
@@ -1097,7 +1094,7 @@ class TestForecastTemplateRendering:
 
         for i, step in enumerate(steps):
             expected_kw = payload["schedule"][i]["devices"]["home_battery"]["kw"]
-            expected_soc = payload["schedule"][i]["device_soc_kwh"]["home_battery"]
+            expected_soc = payload["schedule"][i]["devices"]["home_battery"]["soc_kwh"]
             assert step["kw"] == pytest.approx(expected_kw), (
                 f"Battery kw mismatch at step {i}"
             )

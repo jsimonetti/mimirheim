@@ -599,6 +599,7 @@ from pydantic import BaseModel, Field
 class DeviceSetpoint(BaseModel):
     kw: float                # net power setpoint; positive = producing, negative = consuming
     type: str                # device type derived from config section (e.g. "battery", "ev_charger")
+    soc_kwh: float | None    # terminal SOC in kWh at end of step; None for non-storage devices
 
 class ScheduleStep(BaseModel):
     t: int                   # time step index

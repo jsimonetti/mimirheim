@@ -171,7 +171,7 @@ def build_combined_figure(inp: dict, out: dict) -> go.Figure:
         ]
 
     device_meta = _build_device_meta(inp)
-    soc_histories = _reconstruct_soc(schedule, device_meta)
+    soc_histories = _read_soc_from_schedule(schedule, device_meta)
     n_soc_rows = max(1, len(device_meta))
 
     # Row layout:
@@ -289,10 +289,11 @@ def build_combined_figure(inp: dict, out: dict) -> go.Figure:
             soc_kwh_list = soc_histories[name]
             soc_pct = [
                 round(v / cap * 100.0, 1) if cap > 0 else 0.0
-                for v in soc_kwh_list[1:]
+                for v in soc_kwh_list
             ]
-            # soc_kwh_list[i+1] is the SOC after step i completes, so it
-            # belongs at xs[i+1] (the step-end boundary), not xs[i] (start).
+            # soc_kwh_list[i] is the SOC after step i completes (from the
+            # solver directly), so it belongs at xs[i+1] (the step-end
+            # boundary), not xs[i] (start).
             # Build an end-time list: xs[1:] plus one extra timestamp beyond
             # the last step.
             if xs:
@@ -1008,7 +1009,7 @@ def _build_data_table(
         schedule: List of schedule step dicts from the output.
         xs: Human-readable x-axis labels aligned to schedule steps.
         device_meta: Per-device metadata from ``_build_device_meta``.
-        soc_histories: Per-device SOC histories from ``_reconstruct_soc``.
+        soc_histories: Per-device SOC histories from ``_read_soc_from_schedule``.
 
     Returns:
         A ``go.Table`` trace ready to add to the figure.
@@ -1193,7 +1194,7 @@ def _build_data_table(
                 cell_kwh = 0.0
 
             cap = m["capacity_kwh"]
-            soc_kwh_val = soc_histories[name][i + 1]
+            soc_kwh_val = soc_histories[name][i]
             soc_pct_val = round(soc_kwh_val / cap * 100.0, 1) if cap > 0 else 0.0
 
             dev_entry = devices_at_step.get(name, {})
@@ -1473,38 +1474,37 @@ def _build_device_meta(inp: dict) -> dict[str, dict]:
     return meta
 
 
-def _reconstruct_soc(
+def _read_soc_from_schedule(
     schedule: list[dict], device_meta: dict[str, dict]
 ) -> dict[str, list[float]]:
-    """Reconstruct per-device SOC trajectory using efficiency-corrected energy.
+    """Read per-device SOC trajectory directly from the solver output.
 
-    Sign convention: positive kw = discharging (SOC decreases), negative kw =
-    charging (SOC increases).
+    Each schedule step carries a ``soc_kwh`` field on its ``DeviceSetpoint``
+    for storage devices (batteries, EV chargers, hybrid inverters). This
+    function extracts those values, which are the solver's exact computed SOC
+    at the end of each step.
+
+    When ``soc_kwh`` is absent from a step (e.g. legacy payloads or
+    non-storage devices), the value falls back to 0.0 so that callers always
+    receive a complete list of the expected length.
 
     Returns a dict of SOC lists, one entry per device. Each list has
-    ``len(schedule) + 1`` entries: the initial SOC followed by the
-    end-of-step SOC for each step.
+    ``len(schedule)`` entries: the end-of-step SOC for each step.
 
     Args:
         schedule: List of schedule step dicts from the output.
-        device_meta: Per-device metadata from ``_build_device_meta``.
+        device_meta: Per-device metadata from ``_build_device_meta``. Used
+            only to determine which device names to extract.
 
     Returns:
         A dict keyed by device name. Each value is a list of SOC values in kWh.
     """
     histories: dict[str, list[float]] = {}
-    for name, m in device_meta.items():
-        eff_c = m["charge_eff"]
-        eff_d = m["discharge_eff"]
-        soc = m["initial_soc"]
-        history = [soc]
-        for step in schedule:
-            kw = step["devices"].get(name, {}).get("kw", 0.0)
-            if kw > 0.0:
-                soc -= kw / eff_d * STEP_HOURS
-            else:
-                soc += (-kw) * eff_c * STEP_HOURS
-            history.append(soc)
+    for name in device_meta:
+        history = [
+            step.get("devices", {}).get(name, {}).get("soc_kwh") or 0.0
+            for step in schedule
+        ]
         histories[name] = history
     return histories
 

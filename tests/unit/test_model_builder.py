@@ -119,29 +119,17 @@ def test_naive_cost_does_not_use_old_max_zero_clip() -> None:
 
 
 # ---------------------------------------------------------------------------
-# ScheduleStep.device_soc_kwh field (Plan 55 — F3)
+# DeviceSetpoint.soc_kwh field
 # ---------------------------------------------------------------------------
 
 
-def test_schedule_step_device_soc_kwh_defaults_to_empty_dict() -> None:
-    """ScheduleStep.device_soc_kwh is an empty dict when not provided."""
-    step = ScheduleStep(
-        t=0,
-        grid_import_kw=0.0,
-        grid_export_kw=0.0,
-        devices={},
-    )
-    assert step.device_soc_kwh == {}
+def test_device_setpoint_soc_kwh_defaults_to_none() -> None:
+    """DeviceSetpoint.soc_kwh is None when not provided (non-storage devices)."""
+    sp = DeviceSetpoint(kw=1.0, type="static_load")
+    assert sp.soc_kwh is None
 
 
-def test_schedule_step_device_soc_kwh_accepts_mapping() -> None:
-    """ScheduleStep.device_soc_kwh stores a float mapping when provided."""
-    step = ScheduleStep(
-        t=0,
-        grid_import_kw=0.0,
-        grid_export_kw=0.0,
-        devices={},
-        device_soc_kwh={"hi": 5.5, "bat": 3.2},
-    )
-    assert step.device_soc_kwh["hi"] == 5.5
-    assert step.device_soc_kwh["bat"] == 3.2
+def test_device_setpoint_soc_kwh_accepts_float() -> None:
+    """DeviceSetpoint.soc_kwh stores the provided float for storage devices."""
+    sp = DeviceSetpoint(kw=-1.5, type="battery", soc_kwh=5.5)
+    assert sp.soc_kwh == 5.5

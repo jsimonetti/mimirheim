@@ -52,6 +52,10 @@ _REPORTER_DISPLAYED_FIELDS: frozenset[str] = frozenset(
         "on_off_active",
         "loadbalance_active",
         "pv_is_curtailed",
+        # soc_kwh is the terminal state of charge for storage devices.
+        # The reporter reads it directly from DeviceSetpoint to populate the
+        # SOC chart and SOC column in the data table (via _read_soc_from_schedule).
+        "soc_kwh",
     }
 )
 
@@ -59,9 +63,7 @@ _REPORTER_DISPLAYED_FIELDS: frozenset[str] = frozenset(
 # Each entry must have a comment explaining why.
 _REPORTER_EXPLICITLY_EXCLUDED_FIELDS: frozenset[str] = frozenset(
     {
-        # None currently. Add entries here when a DeviceSetpoint field exists
-        # for purely internal or MQTT-routing purposes that an operator does
-        # not need to see in the schedule table.
+        # None currently.
     }
 )
 
