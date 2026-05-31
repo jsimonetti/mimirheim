@@ -313,17 +313,16 @@ def test_custom_discovery_prefix() -> None:
 
 
 def test_components_contains_expected_entities() -> None:
-    """For 1 battery + 1 PV + 1 static_load, the components map has 8 entries:
-    grid_import_kw, grid_export_kw, solve_status, strategy, trigger_run,
+    """For 1 battery + 1 PV + 1 static_load, the components map has 7 entries:
+    grid_forecast, solve_status, strategy, trigger_run,
     and 3 device setpoints."""
     components = _publish_and_get_components(_make_config())
-    assert len(components) == 8, (
-        f"Expected 8 components, got {len(components)}: {list(components.keys())}"
+    assert len(components) == 7, (
+        f"Expected 7 components, got {len(components)}: {list(components.keys())}"
     )
     device_id = "mimir-test"
     for uid in (
-        f"{device_id}_grid_import_kw",
-        f"{device_id}_grid_export_kw",
+        f"{device_id}_grid_forecast",
         f"{device_id}_solve_status",
         f"{device_id}_strategy",
         f"{device_id}_trigger_run",
@@ -376,16 +375,16 @@ def test_availability_topic_matches_outputs_config() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_grid_sensors_have_no_state_class() -> None:
-    """Grid import and export sensors must not carry state_class.
+def test_grid_sensor_has_no_state_class() -> None:
+    """The grid forecast sensor must not carry state_class.
 
-    These sensors show scheduled (forecasted) power values. state_class:
-    'measurement' would cause HA to accumulate long-term statistics for
-    forecasted values, which is meaningless and unwanted.
+    It shows a scheduled (net) power value. state_class: 'measurement' would
+    cause HA to accumulate long-term statistics for a forecasted value, which
+    is meaningless and unwanted.
     """
     components = _publish_and_get_components(_make_config())
     for uid, entity in components.items():
-        if "grid_import" in uid or "grid_export" in uid:
+        if "grid_forecast" in uid:
             assert "state_class" not in entity, (
                 f"Grid sensor {uid!r} must not have state_class: {entity}"
             )
@@ -986,16 +985,10 @@ class TestForecastAttributePresence:
             "mimir-test_base_load_setpoint_kw"
         ].get("json_attributes_topic") == "mimir/schedule"
 
-    def test_grid_import_sensor_has_json_attributes_topic(self) -> None:
-        """Grid import sensor has json_attributes_topic == outputs.schedule."""
+    def test_grid_forecast_sensor_has_json_attributes_topic(self) -> None:
+        """Grid forecast sensor has json_attributes_topic == outputs.schedule."""
         assert _publish_and_get_components(_make_config())[
-            "mimir-test_grid_import_kw"
-        ].get("json_attributes_topic") == "mimir/schedule"
-
-    def test_grid_export_sensor_has_json_attributes_topic(self) -> None:
-        """Grid export sensor has json_attributes_topic == outputs.schedule."""
-        assert _publish_and_get_components(_make_config())[
-            "mimir-test_grid_export_kw"
+            "mimir-test_grid_forecast"
         ].get("json_attributes_topic") == "mimir/schedule"
 
     def test_ev_charger_setpoint_has_json_attributes_topic(self) -> None:
@@ -1054,13 +1047,15 @@ class TestForecastAttributePresence:
         template = components["mimir-test_wash_setpoint_kw"].get("json_attributes_template", "")
         assert "soc_kwh" not in template
 
-    def test_grid_templates_reference_both_grid_fields(self) -> None:
-        """Grid templates reference grid_import_kw and grid_export_kw."""
+    def test_grid_template_references_both_grid_fields(self) -> None:
+        """Grid forecast template reads grid_import_kw and grid_export_kw from
+        the raw payload and exposes them as 'import' and 'export'."""
         components = _publish_and_get_components(_make_config())
-        for uid in ("mimir-test_grid_import_kw", "mimir-test_grid_export_kw"):
-            template = components[uid].get("json_attributes_template", "")
-            assert "grid_import_kw" in template
-            assert "grid_export_kw" in template
+        template = components["mimir-test_grid_forecast"].get("json_attributes_template", "")
+        assert "grid_import_kw" in template
+        assert "grid_export_kw" in template
+        assert '"import"' in template
+        assert '"export"' in template
 
 
 # ---------------------------------------------------------------------------
@@ -1075,7 +1070,7 @@ class TestForecastTemplateRendering:
 
     def test_battery_template_renders_forecast_array(self) -> None:
         """Battery template renders to a dict with a 'forecast' list of dicts
-        each containing 'kw' and 'soc_kwh'."""
+        each containing 'kw', 'soc_kwh', and 't'."""
         components = _publish_and_get_components(_make_config())
         template_str = components["mimir-test_home_battery_setpoint_kw"]["json_attributes_template"]
         payload = _make_mock_schedule()
@@ -1088,6 +1083,7 @@ class TestForecastTemplateRendering:
         for step in steps:
             assert "kw" in step, f"Missing 'kw' key in battery forecast step: {step}"
             assert "soc_kwh" in step, f"Missing 'soc_kwh' key in battery forecast step: {step}"
+            assert "t" in step, f"Missing 't' key in battery forecast step: {step}"
 
     def test_battery_template_values_match_schedule(self) -> None:
         """Battery forecast values match the corresponding schedule entries."""
@@ -1107,10 +1103,13 @@ class TestForecastTemplateRendering:
             assert step["soc_kwh"] == pytest.approx(expected_soc), (
                 f"Battery soc_kwh mismatch at step {i}"
             )
+            assert step["t"] == payload["schedule"][i]["t"], (
+                f"Battery t mismatch at step {i}"
+            )
 
     def test_pv_template_renders_forecast_array(self) -> None:
         """PV template renders to a dict with a 'forecast' list of dicts
-        each containing 'kw' but not 'soc_kwh'."""
+        each containing 'kw' and 't', but not 'soc_kwh'."""
         components = _publish_and_get_components(_make_config())
         template_str = components["mimir-test_roof_pv_setpoint_kw"]["json_attributes_template"]
         payload = _make_mock_schedule()
@@ -1120,6 +1119,7 @@ class TestForecastTemplateRendering:
         assert "forecast" in result
         for step in result["forecast"]:
             assert "kw" in step
+            assert "t" in step
             assert "soc_kwh" not in step
 
     def test_pv_template_values_match_schedule(self) -> None:
@@ -1146,35 +1146,42 @@ class TestForecastTemplateRendering:
         assert len(result["forecast"]) == 3
         for step in result["forecast"]:
             assert "kw" in step
+            assert "t" in step
             assert "soc_kwh" not in step
 
     def test_grid_template_renders_both_series(self) -> None:
-        """Grid template renders a 'forecast' list with grid_import_kw and
-        grid_export_kw per step."""
+        """Grid forecast template renders a 'forecast' list with 'import' and
+        'export' per step, both rounded to 3 decimal places."""
         components = _publish_and_get_components(_make_config())
-        template_str = components["mimir-test_grid_import_kw"]["json_attributes_template"]
+        template_str = components["mimir-test_grid_forecast"]["json_attributes_template"]
         payload = _make_mock_schedule()
 
         result = _render_template(template_str, payload)
 
         assert "forecast" in result
         for i, step in enumerate(result["forecast"]):
-            assert "grid_import_kw" in step
-            assert "grid_export_kw" in step
-            assert step["grid_import_kw"] == pytest.approx(
-                payload["schedule"][i]["grid_import_kw"]
+            assert "import" in step
+            assert "export" in step
+            assert "t" in step
+            assert "grid_import_kw" not in step
+            assert "grid_export_kw" not in step
+            assert step["import"] == pytest.approx(
+                round(payload["schedule"][i]["grid_import_kw"], 3)
             )
-            assert step["grid_export_kw"] == pytest.approx(
-                payload["schedule"][i]["grid_export_kw"]
+            assert step["export"] == pytest.approx(
+                round(payload["schedule"][i]["grid_export_kw"], 3)
             )
+            assert step["t"] == payload["schedule"][i]["t"]
 
-    def test_grid_import_and_export_sensors_share_identical_template(self) -> None:
-        """Both grid sensors use the same template string so HA groups them
-        under the same forecast array on either entity."""
+    def test_grid_template_renders_correct_step_count(self) -> None:
+        """Grid forecast template produces exactly one output step per schedule step."""
         components = _publish_and_get_components(_make_config())
-        import_tmpl = components["mimir-test_grid_import_kw"]["json_attributes_template"]
-        export_tmpl = components["mimir-test_grid_export_kw"]["json_attributes_template"]
-        assert import_tmpl == export_tmpl
+        template_str = components["mimir-test_grid_forecast"]["json_attributes_template"]
+        payload = _make_mock_schedule(n_steps=5)
+
+        result = _render_template(template_str, payload)
+
+        assert len(result["forecast"]) == 5
 
     def test_template_renders_correct_step_count(self) -> None:
         """Template output contains exactly as many forecast steps as the

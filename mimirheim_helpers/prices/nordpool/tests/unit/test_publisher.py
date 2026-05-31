@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, call
 
 import pytest
 
-from nordpool.publisher import publish_prices
+from nordpool.publisher import _normalise_zeros, publish_prices
 
 
 _STEPS = [
@@ -77,3 +77,46 @@ class TestPublishPrices:
             publish_prices(
                 mqtt_client, "mimir/input/prices", _STEPS, signal_mimir=True
             )
+
+
+class TestNormaliseZeros:
+    def test_negative_zero_becomes_integer_zero(self) -> None:
+        """A -0.0 float value is replaced with the integer 0."""
+        result = _normalise_zeros([{"export_eur_per_kwh": -0.0}])
+        assert result[0]["export_eur_per_kwh"] == 0
+        assert isinstance(result[0]["export_eur_per_kwh"], int)
+
+    def test_positive_zero_float_becomes_integer_zero(self) -> None:
+        """A 0.0 float value is replaced with the integer 0."""
+        result = _normalise_zeros([{"export_eur_per_kwh": 0.0}])
+        assert result[0]["export_eur_per_kwh"] == 0
+        assert isinstance(result[0]["export_eur_per_kwh"], int)
+
+    def test_non_zero_floats_are_unchanged(self) -> None:
+        """Non-zero float values pass through unmodified."""
+        result = _normalise_zeros([{"import_eur_per_kwh": 0.2418, "export_eur_per_kwh": 0.1952}])
+        assert result[0]["import_eur_per_kwh"] == 0.2418
+        assert result[0]["export_eur_per_kwh"] == 0.1952
+
+    def test_non_float_values_are_unchanged(self) -> None:
+        """Non-float values (strings, ints, etc.) are not affected."""
+        result = _normalise_zeros([{"ts": "2026-01-01T00:00:00+00:00", "confidence": 1.0}])
+        assert result[0]["ts"] == "2026-01-01T00:00:00+00:00"
+        # confidence 1.0 is non-zero, so it stays as a float
+        assert result[0]["confidence"] == 1.0
+
+    def test_original_dicts_are_not_mutated(self) -> None:
+        """The input list and its dicts are not modified in place."""
+        original = [{"export_eur_per_kwh": -0.0}]
+        _ = _normalise_zeros(original)
+        # The original dict value should still be -0.0
+        import math
+        assert math.copysign(1.0, original[0]["export_eur_per_kwh"]) == -1.0
+
+    def test_normalised_zeros_serialise_as_bare_zero(self) -> None:
+        """-0.0 and 0.0 both serialise to '0' (not '-0.0' or '0.0') after normalisation."""
+        import json
+        result = _normalise_zeros([{"import_eur_per_kwh": 0.0, "export_eur_per_kwh": -0.0}])
+        serialised = json.dumps(result[0])
+        assert "-0" not in serialised
+        assert "0.0" not in serialised

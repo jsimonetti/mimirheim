@@ -14,6 +14,25 @@ import paho.mqtt.client as mqtt
 logger = logging.getLogger(__name__)
 
 
+def _normalise_zeros(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Replace any float value equal to 0.0 (including -0.0) with the integer 0.
+
+    Python's ``json.dumps`` serialises ``-0.0`` as ``"-0.0"`` and ``0.0`` as
+    ``"0.0"``, both of which look odd in dashboards. Converting them to the
+    integer ``0`` produces the cleaner ``"0"`` in the JSON output.
+
+    Args:
+        steps: List of price step dicts as built by the fetcher.
+
+    Returns:
+        A new list with the same structure; original dicts are not mutated.
+    """
+    return [
+        {k: 0 if isinstance(v, float) and v == 0.0 else v for k, v in step.items()}
+        for step in steps
+    ]
+
+
 def publish_prices(
     client: mqtt.Client,
     output_topic: str,
@@ -45,7 +64,7 @@ def publish_prices(
             "mimir_trigger_topic must be set when signal_mimir is True"
         )
 
-    payload = json.dumps(steps)
+    payload = json.dumps(_normalise_zeros(steps))
     client.publish(output_topic, payload, qos=1, retain=True)
     logger.info("Published %d price steps to %s", len(steps), output_topic)
 

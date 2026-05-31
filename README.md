@@ -1028,8 +1028,7 @@ Discovery payloads are published retained on every broker connection. The follow
 
 | Entity | HA type | State topic | Value | JSON attributes |
 |---|---|---|---|---|
-| `{device_name} Grid Import` | sensor (power) | `outputs.current` | `grid_import_kw` | `forecast` — array of `{grid_import_kw, grid_export_kw}` per step |
-| `{device_name} Grid Export` | sensor (power) | `outputs.current` | `grid_export_kw` | `forecast` — array of `{grid_import_kw, grid_export_kw}` per step |
+| `{device_name} Grid Forecast` | sensor (power) | `outputs.current` | `grid_import_kw - grid_export_kw` (net, positive = import) | `forecast` — array of `{import, export}` per step (kW, 3 dp) |
 | `{device_name} Solve Status` | sensor | `outputs.last_solve` | `status` | — |
 | `{device_name} {device_name} setpoint` | sensor (power) | `{prefix}/device/{name}/setpoint` | `kw` | `forecast` — array of `{kw}` per step (storage devices: also `soc_kwh`) |
 
@@ -1039,13 +1038,13 @@ All entities use `outputs.availability` as their `availability_topic`, so they a
 
 ### Forecast attributes for charting
 
-Every setpoint sensor and both grid sensors carry a `forecast` JSON attribute derived from `outputs.schedule`. The attribute is an array with one entry per solver time step, starting from the current step (t=0).
+Every setpoint sensor and the grid sensor carry a `forecast` JSON attribute derived from `outputs.schedule`. The attribute is an array with one entry per solver time step, starting from the current step (t=0).
 
 For battery and EV charger setpoint sensors, each entry contains:
 - `kw` — scheduled power in kW (negative = charging, positive = discharging)
 - `soc_kwh` — terminal state of charge in kWh at the end of the step
 
-For all other device setpoint sensors, each entry contains only `kw`. For the grid sensors, each entry contains `grid_import_kw` and `grid_export_kw`.
+For all other device setpoint sensors, each entry contains only `kw`. For the grid sensor, each entry contains `import` and `export` (both in kW, rounded to 3 decimal places).
 
 In `apexcharts-card`, reference the forecast array via `json_attributes_path: $.forecast`:
 

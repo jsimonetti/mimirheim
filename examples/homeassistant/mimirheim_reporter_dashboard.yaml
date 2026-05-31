@@ -528,3 +528,152 @@ series:
       type: mean
       period: hour
       align: start
+
+
+
+type: custom:apexcharts-card
+header:
+  title: Solar actual and forecast
+  show: true
+span:
+  start: hour
+  offset: "-18h"
+update_interval: 5 min
+graph_span: 48h
+now:
+  show: true
+  color: white
+yaxis:
+  - id: pv
+    min: 0
+    max: 5
+    apex_config:
+      title:
+        text: PV production (kW)
+  - id: pv2
+    min: 0
+    max: 5
+    opposite: true
+    apex_config:
+      title:
+        text: PV production (kW)
+series:
+  - entity: sensor.zonnepanelen_dak_power
+    name: PV measured (kW)
+    color: "#ffaa00"
+    type: area
+    opacity: 0.3
+    extend_to: false
+    yaxis_id: pv
+    stroke_width: 1
+    show:
+      legend_value: false
+  - entity: sensor.mimir_pv_dak_forecast_mimir_pv_dak_forecast_forecast
+    name: PV forecast (kW)
+    color: "#ffcc00"
+    type: line
+    yaxis_id: pv2
+    stroke_width: 2
+    show:
+      legend_value: false
+    data_generator: |
+      return entity.attributes.forecast
+        ? entity.attributes.forecast.map(s => [new Date(s.ts).getTime(), +s.kw.toFixed(2)])
+        : [];
+
+
+type: custom:apexcharts-card
+header:
+  title: Battery SOC vs Energy Prices
+  show: true
+span:
+  start: hour
+  offset: "-18h"
+update_interval: 5 min
+graph_span: 48h
+now:
+  show: true
+  color: white
+yaxis:
+  - id: soc
+    min: 0
+    apex_config:
+      title:
+        text: SOC (kWh)
+  - id: price
+    opposite: true
+    apex_config:
+      title:
+        text: Price (ct/kWh)
+series:
+  - entity: sensor.marstek_battery_remaining_capacity
+    name: SOC measured (kWh)
+    color: "#0066cc"
+    type: line
+    extend_to: now
+    fill_raw: last
+    yaxis_id: soc
+    stroke_width: 2
+    show:
+      legend_value: false
+  - entity: sensor.mimirheim_import_price
+    name: Import measured (ct/kWh)
+    color: "#ff6600"
+    type: line
+    extend_to: false
+    yaxis_id: price
+    stroke_width: 2
+    transform: return x * 100;
+    show:
+      legend_value: false
+  - entity: sensor.mimirheim_export_price
+    name: Export measured (ct/kWh)
+    color: "#009900"
+    type: line
+    extend_to: false
+    yaxis_id: price
+    stroke_width: 2
+    transform: return x * 100;
+    show:
+      legend_value: false
+  - entity: sensor.mimirheim_marstek_setpoint
+    name: SOC (kWh)
+    color: "#0066cc"
+    type: line
+    extend_to: false
+    yaxis_id: soc
+    stroke_width: 2
+    show:
+      legend_value: false
+    data_generator: |
+      return entity.attributes.forecast
+        ? entity.attributes.forecast.map(s => [new Date(s.t).getTime(), +s.soc_kwh.toFixed(2)])
+        : [];
+  - entity: sensor.mimirheim_prices
+    name: Import (ct/kWh)
+    color: "#ff6600"
+    type: line
+    extend_to: false
+    yaxis_id: price
+    stroke_width: 2
+    show:
+      legend_value: false
+    data_generator: |
+      const schedule = entity.attributes.schedule;
+      return schedule
+        ? schedule.map(s => [new Date(s.ts).getTime(), +(s.import_eur_per_kwh * 100).toFixed(1)])
+        : [];
+  - entity: sensor.mimirheim_prices
+    name: Export (ct/kWh)
+    color: "#009900"
+    type: line
+    extend_to: false
+    yaxis_id: price
+    stroke_width: 2
+    show:
+      legend_value: false
+    data_generator: |
+      const schedule = entity.attributes.schedule;
+      return schedule
+        ? schedule.map(s => [new Date(s.ts).getTime(), +(s.export_eur_per_kwh * 100).toFixed(1)])
+        : [];

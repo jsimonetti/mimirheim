@@ -39,15 +39,15 @@ from mimirheim.config.schema import MimirheimConfig
 logger = logging.getLogger("mimirheim.ha_discovery")
 
 
-# Jinja2 json_attributes_template shared by both grid sensors.
-# Both sensors subscribe to outputs.schedule and expose a "forecast" attribute
-# containing one entry per solver step with grid_import_kw and grid_export_kw.
-# Using a module-level constant avoids duplicating the template string for each
-# of the two grid sensor _add() calls.
+# Jinja2 json_attributes_template for the Grid Forecast sensor.
+# Produces a "forecast" attribute containing one entry per solver step with
+# "import" and "export" keys (both in kW, rounded to 3 decimal places).
+# The raw schedule payload fields are grid_import_kw and grid_export_kw; they
+# are renamed here for compactness. The MQTT payload itself is unchanged.
 _GRID_ATTR_TEMPLATE: str = (
     "{%- set ns = namespace(f=[]) -%}"
     "{%- for s in value_json.schedule -%}"
-    '{% set ns.f = ns.f + [{"grid_import_kw": s.grid_import_kw, "grid_export_kw": s.grid_export_kw}] %}'
+    '{%- set ns.f = ns.f + [{"import": s.grid_import_kw | round(3), "export": s.grid_export_kw | round(3), "t": s.t}] -%}'
     "{%- endfor -%}"
     '{{ {"forecast": ns.f} | tojson }}'
 )
@@ -102,26 +102,17 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
         entity["unique_id"] = unique_id
         components[unique_id] = entity
 
-    # --- Grid sensors (sourced from the current-step summary topic) ---
-    # No state_class: these are schedule outputs (forecasted power at step t=0),
-    # not hardware measurements. state_class: "measurement" would cause HA to
+    # --- Grid sensor (sourced from the current-step summary topic) ---
+    # Shows net grid power (import minus export) as state; carries the full
+    # per-step import/export forecast as a JSON attribute.
+    # No state_class: this is a schedule output (forecasted power at step t=0),
+    # not a hardware measurement. state_class: "measurement" would cause HA to
     # accumulate long-term statistics for forecasted values, which is unwanted.
 
-    _add(f"{device_id}_grid_import_kw", "sensor", {
-        "name": "Grid Import Forecast",
+    _add(f"{device_id}_grid_forecast", "sensor", {
+        "name": "Grid Forecast",
         "state_topic": config.outputs.current,
-        "value_template": "{{ value_json.grid_import_kw | round(2) }}",
-        "unit_of_measurement": "kW",
-        "device_class": "power",
-        "entity_category": "diagnostic",
-        "json_attributes_topic": config.outputs.schedule,
-        "json_attributes_template": _GRID_ATTR_TEMPLATE,
-    })
-
-    _add(f"{device_id}_grid_export_kw", "sensor", {
-        "name": "Grid Export Forecast",
-        "state_topic": config.outputs.current,
-        "value_template": "{{ value_json.grid_export_kw | round(2) }}",
+        "value_template": "{{ (value_json.grid_import_kw - value_json.grid_export_kw) | round(3) }}",
         "unit_of_measurement": "kW",
         "device_class": "power",
         "entity_category": "diagnostic",
@@ -205,7 +196,7 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
                 "{%- set ns = namespace(f=[]) -%}"
                 "{%- for s in value_json.schedule -%}"
                 f'{{% set ns.f = ns.f + [{{"kw": s.devices["{device_name}"].kw, '
-                f'"soc_kwh": s.device_soc_kwh.get("{device_name}")}}] %}}'
+                f'"soc_kwh": s.device_soc_kwh.get("{device_name}"), "t": s.t}}] %}}'
                 "{%- endfor -%}"
                 '{{ {"forecast": ns.f} | tojson }}'
             )
@@ -213,7 +204,7 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
             attr_template = (
                 "{%- set ns = namespace(f=[]) -%}"
                 "{%- for s in value_json.schedule -%}"
-                f'{{% set ns.f = ns.f + [{{"kw": s.devices["{device_name}"].kw}}] %}}'
+                f'{{% set ns.f = ns.f + [{{"kw": s.devices["{device_name}"].kw, "t": s.t}}] %}}'
                 "{%- endfor -%}"
                 '{{ {"forecast": ns.f} | tojson }}'
             )
