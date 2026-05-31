@@ -47,7 +47,7 @@ logger = logging.getLogger("mimirheim.ha_discovery")
 _GRID_ATTR_TEMPLATE: str = (
     "{%- set ns = namespace(f=[]) -%}"
     "{%- for s in value_json.schedule -%}"
-    '{%- set ns.f = ns.f + [{"import": s.grid_import_kw | round(3), "export": s.grid_export_kw | round(3), "t": s.t}] -%}'
+    '{%- set ns.f = ns.f + [{"import": s.grid_import_kw | round(3), "export": s.grid_export_kw | round(3), "ts": s.ts}] -%}'
     "{%- endfor -%}"
     '{{ {"forecast": ns.f} | tojson }}'
 )
@@ -195,8 +195,8 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
             attr_template = (
                 "{%- set ns = namespace(f=[]) -%}"
                 "{%- for s in value_json.schedule -%}"
-                f'{{% set ns.f = ns.f + [{{"kw": s.devices["{device_name}"].kw, '
-                f'"soc_kwh": s.device_soc_kwh.get("{device_name}"), "t": s.t}}] %}}'
+                f'{{%- set ns.f = ns.f + [{{"kw": s.devices["{device_name}"].kw | round(3), '
+                f'"soc_kwh": s.device_soc_kwh.get("{device_name}") | round(3), "ts": s.ts}}] -%}}'
                 "{%- endfor -%}"
                 '{{ {"forecast": ns.f} | tojson }}'
             )
@@ -204,7 +204,7 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
             attr_template = (
                 "{%- set ns = namespace(f=[]) -%}"
                 "{%- for s in value_json.schedule -%}"
-                f'{{% set ns.f = ns.f + [{{"kw": s.devices["{device_name}"].kw, "t": s.t}}] %}}'
+                f'{{%- set ns.f = ns.f + [{{"kw": s.devices["{device_name}"].kw | round(3), "ts": s.ts}}] -%}}'
                 "{%- endfor -%}"
                 '{{ {"forecast": ns.f} | tojson }}'
             )
@@ -323,17 +323,14 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
     # They are solver outputs, not hardware measurements, so no state_class.
 
     for name, pv_cfg in config.pv_arrays.items():
-        if (
-            (pv_cfg.capabilities.power_limit or pv_cfg.production_stages is not None)
-            and pv_cfg.outputs.power_limit_kw is not None
-        ):
+        if pv_cfg.has_power_limit_output:
             _add(f"{device_id}_{name}_power_limit_kw", "sensor", {
                 "name": f"{name} power limit",
                 "state_topic": pv_cfg.outputs.power_limit_kw,
                 "unit_of_measurement": "kW",
                 "device_class": "power",
             })
-        if pv_cfg.capabilities.zero_export and pv_cfg.outputs.zero_export_mode is not None:
+        if pv_cfg.has_zero_export_output:
             _add(f"{device_id}_{name}_zero_export_mode", "binary_sensor", {
                 "name": f"{name} zero export mode",
                 "state_topic": pv_cfg.outputs.zero_export_mode,
@@ -341,7 +338,7 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
                 "payload_off": "false",
                 "device_class": "running",
             })
-        if pv_cfg.capabilities.on_off and pv_cfg.outputs.on_off_mode is not None:
+        if pv_cfg.has_on_off_output:
             _add(f"{device_id}_{name}_on_off_mode", "binary_sensor", {
                 "name": f"{name} on/off mode",
                 "state_topic": pv_cfg.outputs.on_off_mode,
@@ -349,12 +346,7 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
                 "payload_off": "false",
                 "device_class": "running",
             })
-        is_controllable = (
-            pv_cfg.production_stages is not None
-            or pv_cfg.capabilities.power_limit
-            or pv_cfg.capabilities.on_off
-        )
-        if is_controllable and pv_cfg.outputs.is_curtailed is not None:
+        if pv_cfg.has_is_curtailed_output:
             _add(f"{device_id}_{name}_is_curtailed", "binary_sensor", {
                 "name": f"{name} is curtailed",
                 "state_topic": pv_cfg.outputs.is_curtailed,
@@ -369,7 +361,7 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
     # They are solver outputs, not hardware measurements, so no state_class.
 
     for name, ev_cfg in config.ev_chargers.items():
-        if ev_cfg.capabilities.zero_exchange and ev_cfg.outputs.exchange_mode is not None:
+        if ev_cfg.has_exchange_mode_output:
             _add(f"{device_id}_{name}_exchange_mode", "binary_sensor", {
                 "name": f"{name} exchange mode",
                 "state_topic": ev_cfg.outputs.exchange_mode,
@@ -377,7 +369,7 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
                 "payload_off": "false",
                 "device_class": "running",
             })
-        if ev_cfg.capabilities.loadbalance and ev_cfg.outputs.loadbalance_cmd is not None:
+        if ev_cfg.has_loadbalance_output:
             _add(f"{device_id}_{name}_loadbalance_cmd", "binary_sensor", {
                 "name": f"{name} load balance mode",
                 "state_topic": ev_cfg.outputs.loadbalance_cmd,
@@ -392,7 +384,7 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
     # It is a solver output, not a hardware measurement, so no state_class.
 
     for name, bat_cfg in config.batteries.items():
-        if bat_cfg.capabilities.zero_exchange and bat_cfg.outputs.exchange_mode is not None:
+        if bat_cfg.has_exchange_mode_output:
             _add(f"{device_id}_{name}_exchange_mode", "binary_sensor", {
                 "name": f"{name} exchange mode",
                 "state_topic": bat_cfg.outputs.exchange_mode,

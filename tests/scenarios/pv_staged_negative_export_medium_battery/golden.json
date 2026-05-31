@@ -39,6 +39,9 @@
           "loadbalance_active": null,
           "pv_is_curtailed": null
         }
+      },
+      "device_soc_kwh": {
+        "bat": 4.881875
       }
     },
     {
@@ -73,6 +76,9 @@
           "loadbalance_active": null,
           "pv_is_curtailed": null
         }
+      },
+      "device_soc_kwh": {
+        "bat": 4.881875
       }
     },
     {
@@ -107,6 +113,9 @@
           "loadbalance_active": null,
           "pv_is_curtailed": null
         }
+      },
+      "device_soc_kwh": {
+        "bat": 4.881874999999999
       }
     },
     {
@@ -141,6 +150,9 @@
           "loadbalance_active": null,
           "pv_is_curtailed": null
         }
+      },
+      "device_soc_kwh": {
+        "bat": 4.881874999999999
       }
     }
   ],

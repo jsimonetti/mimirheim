@@ -898,6 +898,7 @@ def _make_mock_schedule(
     for i in range(n_steps):
         schedule.append({
             "t": i,
+            "ts": f"2026-05-31T{i:02d}:00:00Z",
             "grid_import_kw": float(i) * 0.5,
             "grid_export_kw": float(i) * 0.1,
             "devices": {
@@ -1070,7 +1071,7 @@ class TestForecastTemplateRendering:
 
     def test_battery_template_renders_forecast_array(self) -> None:
         """Battery template renders to a dict with a 'forecast' list of dicts
-        each containing 'kw', 'soc_kwh', and 't'."""
+        each containing 'kw', 'soc_kwh', and 'ts'."""
         components = _publish_and_get_components(_make_config())
         template_str = components["mimir-test_home_battery_setpoint_kw"]["json_attributes_template"]
         payload = _make_mock_schedule()
@@ -1083,7 +1084,7 @@ class TestForecastTemplateRendering:
         for step in steps:
             assert "kw" in step, f"Missing 'kw' key in battery forecast step: {step}"
             assert "soc_kwh" in step, f"Missing 'soc_kwh' key in battery forecast step: {step}"
-            assert "t" in step, f"Missing 't' key in battery forecast step: {step}"
+            assert "ts" in step, f"Missing 'ts' key in battery forecast step: {step}"
 
     def test_battery_template_values_match_schedule(self) -> None:
         """Battery forecast values match the corresponding schedule entries."""
@@ -1103,13 +1104,13 @@ class TestForecastTemplateRendering:
             assert step["soc_kwh"] == pytest.approx(expected_soc), (
                 f"Battery soc_kwh mismatch at step {i}"
             )
-            assert step["t"] == payload["schedule"][i]["t"], (
-                f"Battery t mismatch at step {i}"
+            assert step["ts"] == payload["schedule"][i]["ts"], (
+                f"Battery ts mismatch at step {i}"
             )
 
     def test_pv_template_renders_forecast_array(self) -> None:
         """PV template renders to a dict with a 'forecast' list of dicts
-        each containing 'kw' and 't', but not 'soc_kwh'."""
+        each containing 'kw' and 'ts', but not 'soc_kwh'."""
         components = _publish_and_get_components(_make_config())
         template_str = components["mimir-test_roof_pv_setpoint_kw"]["json_attributes_template"]
         payload = _make_mock_schedule()
@@ -1119,7 +1120,7 @@ class TestForecastTemplateRendering:
         assert "forecast" in result
         for step in result["forecast"]:
             assert "kw" in step
-            assert "t" in step
+            assert "ts" in step
             assert "soc_kwh" not in step
 
     def test_pv_template_values_match_schedule(self) -> None:
@@ -1146,7 +1147,7 @@ class TestForecastTemplateRendering:
         assert len(result["forecast"]) == 3
         for step in result["forecast"]:
             assert "kw" in step
-            assert "t" in step
+            assert "ts" in step
             assert "soc_kwh" not in step
 
     def test_grid_template_renders_both_series(self) -> None:
@@ -1162,7 +1163,7 @@ class TestForecastTemplateRendering:
         for i, step in enumerate(result["forecast"]):
             assert "import" in step
             assert "export" in step
-            assert "t" in step
+            assert "ts" in step
             assert "grid_import_kw" not in step
             assert "grid_export_kw" not in step
             assert step["import"] == pytest.approx(
@@ -1171,7 +1172,7 @@ class TestForecastTemplateRendering:
             assert step["export"] == pytest.approx(
                 round(payload["schedule"][i]["grid_export_kw"], 3)
             )
-            assert step["t"] == payload["schedule"][i]["t"]
+            assert step["ts"] == payload["schedule"][i]["ts"]
 
     def test_grid_template_renders_correct_step_count(self) -> None:
         """Grid forecast template produces exactly one output step per schedule step."""

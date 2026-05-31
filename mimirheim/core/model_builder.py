@@ -487,12 +487,24 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
                 type="combi_heat_pump",
             )
 
+        # Collect the terminal SOC in kWh for each storage device at the end
+        # of this step. Used by ha_discovery.py forecast attribute templates to
+        # expose a SOC series alongside the power series for charting.
+        step_soc_kwh: dict[str, float] = {}
+        for bat in batteries:
+            step_soc_kwh[bat.name] = ctx.solver.var_value(bat.soc[t])
+        for ev in ev_devices:
+            step_soc_kwh[ev.name] = ctx.solver.var_value(ev.soc[t])
+        for hi in hybrid_inverters:
+            step_soc_kwh[hi.name] = ctx.solver.var_value(hi.soc[t])
+
         schedule.append(
             ScheduleStep(
                 t=t,
                 grid_import_kw=ctx.solver.var_value(grid.import_[t]),
                 grid_export_kw=ctx.solver.var_value(grid.export_[t]),
                 devices=device_setpoints,
+                device_soc_kwh=step_soc_kwh,
             )
         )
 

@@ -21,7 +21,7 @@ never from ``mimirheim.io.input_parser`` or ``mimirheim.core.readiness``.
 
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from mimirheim.config.schema import MimirheimConfig
@@ -76,10 +76,29 @@ class MqttPublisher:
         """
         self._last_result = result
 
-        # 1. Full schedule blob.
+        # Compute the aligned 15-minute slot boundary once. Used both for
+        # injecting per-step ISO timestamps into the schedule blob and for
+        # the current-step summary topic.
+        now = datetime.now(UTC)
+        step_start = now.replace(
+            minute=(now.minute // 15) * 15,
+            second=0,
+            microsecond=0,
+        )
+
+        # 1. Full schedule blob with per-step ISO timestamps.
+        # result.model_dump() carries integer step indices in each step's 't'
+        # field. We inject a 'ts' key (ISO UTC string) on each step so that
+        # downstream consumers (e.g. HA json_attributes_template for apexcharts)
+        # have a time axis without needing to compute offsets themselves.
+        schedule_dict = result.model_dump(mode="json")
+        for step in schedule_dict["schedule"]:
+            step["ts"] = (
+                step_start + timedelta(minutes=15 * step["t"])
+            ).strftime("%Y-%m-%dT%H:%M:%SZ")
         self._client.publish(
             self._config.outputs.schedule,
-            result.model_dump_json(),
+            json.dumps(schedule_dict),
             qos=1,
             retain=True,
         )
@@ -87,12 +106,6 @@ class MqttPublisher:
         # 2. Current-step summary.
         if result.schedule:
             current = result.schedule[0]
-            now = datetime.now(UTC)
-            step_start = now.replace(
-                minute=(now.minute // 15) * 15,
-                second=0,
-                microsecond=0,
-            )
             # Build from model_dump so the devices dict is included automatically.
             # exclude_none=True drops optional fields (e.g. power_limit_kw) that
             # are not relevant for this device type, keeping the payload lean.
@@ -143,8 +156,7 @@ class MqttPublisher:
                     continue
 
                 if (
-                    (pv_cfg.capabilities.power_limit or pv_cfg.production_stages is not None)
-                    and pv_cfg.outputs.power_limit_kw is not None
+                    pv_cfg.has_power_limit_output
                     and setpoint.power_limit_kw is not None
                 ):
                     self._client.publish(
@@ -155,8 +167,7 @@ class MqttPublisher:
                     )
 
                 if (
-                    pv_cfg.capabilities.zero_export
-                    and pv_cfg.outputs.zero_export_mode is not None
+                    pv_cfg.has_zero_export_output
                     and setpoint.zero_exchange_active is not None
                 ):
                     self._client.publish(
@@ -167,8 +178,7 @@ class MqttPublisher:
                     )
 
                 if (
-                    pv_cfg.capabilities.on_off
-                    and pv_cfg.outputs.on_off_mode is not None
+                    pv_cfg.has_on_off_output
                     and setpoint.on_off_active is not None
                 ):
                     # Payload semantics: "true" = inverter is ON (producing);
@@ -210,8 +220,7 @@ class MqttPublisher:
                 if ev_cfg is None:
                     continue
                 if (
-                    ev_cfg.capabilities.zero_exchange
-                    and ev_cfg.outputs.exchange_mode is not None
+                    ev_cfg.has_exchange_mode_output
                     and setpoint.zero_exchange_active is not None
                 ):
                     self._client.publish(
@@ -221,8 +230,7 @@ class MqttPublisher:
                         retain=True,
                     )
                 if (
-                    ev_cfg.capabilities.loadbalance
-                    and ev_cfg.outputs.loadbalance_cmd is not None
+                    ev_cfg.has_loadbalance_output
                     and setpoint.loadbalance_active is not None
                 ):
                     self._client.publish(
@@ -242,8 +250,7 @@ class MqttPublisher:
                 if bat_cfg is None:
                     continue
                 if (
-                    bat_cfg.capabilities.zero_exchange
-                    and bat_cfg.outputs.exchange_mode is not None
+                    bat_cfg.has_exchange_mode_output
                     and setpoint.zero_exchange_active is not None
                 ):
                     self._client.publish(
@@ -263,8 +270,7 @@ class MqttPublisher:
                 if hi_cfg is None:
                     continue
                 if (
-                    hi_cfg.capabilities.zero_exchange
-                    and hi_cfg.outputs.exchange_mode is not None
+                    hi_cfg.has_exchange_mode_output
                     and setpoint.zero_exchange_active is not None
                 ):
                     self._client.publish(

@@ -2383,6 +2383,251 @@ def _minimal_hybrid(**overrides) -> dict:
     return base
 
 
+class TestOutputCapabilityProperties:
+    """Plan 63 — computed output-capability properties on device config models."""
+
+    # --- BatteryConfig.has_exchange_mode_output ---
+
+    def test_battery_has_exchange_mode_output_true_when_cap_and_topic_set(self) -> None:
+        cfg = BatteryConfig(
+            capacity_kwh=10.0,
+            charge_segments=[{"power_max_kw": 3.0, "efficiency": 0.95}],
+            discharge_segments=[{"power_max_kw": 3.0, "efficiency": 0.95}],
+            capabilities=BatteryCapabilitiesConfig(zero_exchange=True),
+            outputs={"exchange_mode": "mimir/battery/bat/exchange_mode"},
+        )
+        assert cfg.has_exchange_mode_output is True
+
+    def test_battery_has_exchange_mode_output_false_when_cap_disabled(self) -> None:
+        cfg = BatteryConfig(
+            capacity_kwh=10.0,
+            charge_segments=[{"power_max_kw": 3.0, "efficiency": 0.95}],
+            discharge_segments=[{"power_max_kw": 3.0, "efficiency": 0.95}],
+            capabilities=BatteryCapabilitiesConfig(zero_exchange=False),
+            outputs={"exchange_mode": "mimir/battery/bat/exchange_mode"},
+        )
+        assert cfg.has_exchange_mode_output is False
+
+    def test_battery_has_exchange_mode_output_false_when_topic_none(self) -> None:
+        cfg = BatteryConfig(
+            capacity_kwh=10.0,
+            charge_segments=[{"power_max_kw": 3.0, "efficiency": 0.95}],
+            discharge_segments=[{"power_max_kw": 3.0, "efficiency": 0.95}],
+            capabilities=BatteryCapabilitiesConfig(zero_exchange=True),
+        )
+        assert cfg.has_exchange_mode_output is False
+
+    # --- EvConfig.has_exchange_mode_output ---
+
+    def test_ev_has_exchange_mode_output_true_when_cap_and_topic_set(self) -> None:
+        cfg = EvConfig(
+            capacity_kwh=52.0,
+            charge_segments=[{"power_max_kw": 7.4, "efficiency": 0.92}],
+            capabilities=EvCapabilitiesConfig(zero_exchange=True, v2h=True),
+            outputs=EvOutputsConfig(exchange_mode="mimir/ev/car/exchange_mode"),
+        )
+        assert cfg.has_exchange_mode_output is True
+
+    def test_ev_has_exchange_mode_output_false_when_cap_disabled(self) -> None:
+        cfg = EvConfig(
+            capacity_kwh=52.0,
+            charge_segments=[{"power_max_kw": 7.4, "efficiency": 0.92}],
+            outputs=EvOutputsConfig(exchange_mode="mimir/ev/car/exchange_mode"),
+        )
+        assert cfg.has_exchange_mode_output is False
+
+    def test_ev_has_exchange_mode_output_false_when_topic_none(self) -> None:
+        cfg = EvConfig(
+            capacity_kwh=52.0,
+            charge_segments=[{"power_max_kw": 7.4, "efficiency": 0.92}],
+            capabilities=EvCapabilitiesConfig(zero_exchange=True, v2h=True),
+        )
+        assert cfg.has_exchange_mode_output is False
+
+    # --- EvConfig.has_loadbalance_output ---
+
+    def test_ev_has_loadbalance_output_true_when_cap_and_topic_set(self) -> None:
+        cfg = EvConfig(
+            capacity_kwh=52.0,
+            charge_segments=[{"power_max_kw": 7.4, "efficiency": 0.92}],
+            capabilities=EvCapabilitiesConfig(loadbalance=True),
+            outputs=EvOutputsConfig(loadbalance_cmd="mimir/ev/car/loadbalance_cmd"),
+        )
+        assert cfg.has_loadbalance_output is True
+
+    def test_ev_has_loadbalance_output_false_when_cap_disabled(self) -> None:
+        cfg = EvConfig(
+            capacity_kwh=52.0,
+            charge_segments=[{"power_max_kw": 7.4, "efficiency": 0.92}],
+            outputs=EvOutputsConfig(loadbalance_cmd="mimir/ev/car/loadbalance_cmd"),
+        )
+        assert cfg.has_loadbalance_output is False
+
+    def test_ev_has_loadbalance_output_false_when_topic_none(self) -> None:
+        cfg = EvConfig(
+            capacity_kwh=52.0,
+            charge_segments=[{"power_max_kw": 7.4, "efficiency": 0.92}],
+            capabilities=EvCapabilitiesConfig(loadbalance=True),
+        )
+        assert cfg.has_loadbalance_output is False
+
+    # --- PvConfig.is_controllable ---
+
+    def test_pv_is_controllable_true_for_production_stages(self) -> None:
+        cfg = PvConfig(
+            max_power_kw=4.0,
+            production_stages=[0.0, 2.0, 4.0],
+        )
+        assert cfg.is_controllable is True
+
+    def test_pv_is_controllable_true_for_power_limit(self) -> None:
+        cfg = PvConfig(
+            max_power_kw=4.0,
+            capabilities=PvCapabilitiesConfig(power_limit=True),
+        )
+        assert cfg.is_controllable is True
+
+    def test_pv_is_controllable_true_for_on_off(self) -> None:
+        cfg = PvConfig(
+            max_power_kw=4.0,
+            capabilities=PvCapabilitiesConfig(on_off=True),
+        )
+        assert cfg.is_controllable is True
+
+    def test_pv_is_controllable_false_for_fixed_array(self) -> None:
+        cfg = PvConfig(max_power_kw=4.0)
+        assert cfg.is_controllable is False
+
+    # --- PvConfig.has_power_limit_output ---
+
+    def test_pv_has_power_limit_output_true_when_cap_and_topic_set(self) -> None:
+        cfg = PvConfig(
+            max_power_kw=4.0,
+            capabilities=PvCapabilitiesConfig(power_limit=True),
+            outputs=PvOutputsConfig(power_limit_kw="mimir/pv/roof/power_limit_kw"),
+        )
+        assert cfg.has_power_limit_output is True
+
+    def test_pv_has_power_limit_output_true_for_staged_with_topic(self) -> None:
+        cfg = PvConfig(
+            max_power_kw=4.0,
+            production_stages=[0.0, 2.0, 4.0],
+            outputs=PvOutputsConfig(power_limit_kw="mimir/pv/roof/power_limit_kw"),
+        )
+        assert cfg.has_power_limit_output is True
+
+    def test_pv_has_power_limit_output_false_when_cap_disabled(self) -> None:
+        cfg = PvConfig(
+            max_power_kw=4.0,
+            outputs=PvOutputsConfig(power_limit_kw="mimir/pv/roof/power_limit_kw"),
+        )
+        assert cfg.has_power_limit_output is False
+
+    def test_pv_has_power_limit_output_false_when_topic_none(self) -> None:
+        cfg = PvConfig(
+            max_power_kw=4.0,
+            capabilities=PvCapabilitiesConfig(power_limit=True),
+        )
+        assert cfg.has_power_limit_output is False
+
+    # --- PvConfig.has_zero_export_output ---
+
+    def test_pv_has_zero_export_output_true_when_cap_and_topic_set(self) -> None:
+        cfg = PvConfig(
+            max_power_kw=4.0,
+            capabilities=PvCapabilitiesConfig(zero_export=True),
+            outputs=PvOutputsConfig(zero_export_mode="mimir/pv/roof/zero_export"),
+        )
+        assert cfg.has_zero_export_output is True
+
+    def test_pv_has_zero_export_output_false_when_cap_disabled(self) -> None:
+        cfg = PvConfig(
+            max_power_kw=4.0,
+            outputs=PvOutputsConfig(zero_export_mode="mimir/pv/roof/zero_export"),
+        )
+        assert cfg.has_zero_export_output is False
+
+    def test_pv_has_zero_export_output_false_when_topic_none(self) -> None:
+        cfg = PvConfig(
+            max_power_kw=4.0,
+            capabilities=PvCapabilitiesConfig(zero_export=True),
+        )
+        assert cfg.has_zero_export_output is False
+
+    # --- PvConfig.has_on_off_output ---
+
+    def test_pv_has_on_off_output_true_when_cap_and_topic_set(self) -> None:
+        cfg = PvConfig(
+            max_power_kw=4.0,
+            capabilities=PvCapabilitiesConfig(on_off=True),
+            outputs=PvOutputsConfig(on_off_mode="mimir/pv/roof/on_off_mode"),
+        )
+        assert cfg.has_on_off_output is True
+
+    def test_pv_has_on_off_output_false_when_cap_disabled(self) -> None:
+        cfg = PvConfig(
+            max_power_kw=4.0,
+            outputs=PvOutputsConfig(on_off_mode="mimir/pv/roof/on_off_mode"),
+        )
+        assert cfg.has_on_off_output is False
+
+    def test_pv_has_on_off_output_false_when_topic_none(self) -> None:
+        cfg = PvConfig(
+            max_power_kw=4.0,
+            capabilities=PvCapabilitiesConfig(on_off=True),
+        )
+        assert cfg.has_on_off_output is False
+
+    # --- PvConfig.has_is_curtailed_output ---
+
+    def test_pv_has_is_curtailed_output_true_when_controllable_and_topic_set(self) -> None:
+        cfg = PvConfig(
+            max_power_kw=4.0,
+            capabilities=PvCapabilitiesConfig(power_limit=True),
+            outputs=PvOutputsConfig(is_curtailed="mimir/pv/roof/is_curtailed"),
+        )
+        assert cfg.has_is_curtailed_output is True
+
+    def test_pv_has_is_curtailed_output_false_when_fixed_array(self) -> None:
+        cfg = PvConfig(
+            max_power_kw=4.0,
+            outputs=PvOutputsConfig(is_curtailed="mimir/pv/roof/is_curtailed"),
+        )
+        assert cfg.has_is_curtailed_output is False
+
+    def test_pv_has_is_curtailed_output_false_when_topic_none(self) -> None:
+        cfg = PvConfig(
+            max_power_kw=4.0,
+            capabilities=PvCapabilitiesConfig(power_limit=True),
+        )
+        assert cfg.has_is_curtailed_output is False
+
+    # --- HybridInverterConfig.has_exchange_mode_output ---
+
+    def test_hybrid_has_exchange_mode_output_true_when_cap_and_topic_set(self) -> None:
+        from mimirheim.config.schema import HybridInverterCapabilitiesConfig, HybridInverterOutputsConfig
+
+        cfg = HybridInverterConfig.model_validate(
+            _minimal_hybrid(
+                capabilities={"zero_exchange": True},
+                outputs={"exchange_mode": "mimir/hybrid/inv/exchange_mode"},
+            )
+        )
+        assert cfg.has_exchange_mode_output is True
+
+    def test_hybrid_has_exchange_mode_output_false_when_cap_disabled(self) -> None:
+        cfg = HybridInverterConfig.model_validate(
+            _minimal_hybrid(outputs={"exchange_mode": "mimir/hybrid/inv/exchange_mode"})
+        )
+        assert cfg.has_exchange_mode_output is False
+
+    def test_hybrid_has_exchange_mode_output_false_when_topic_none(self) -> None:
+        cfg = HybridInverterConfig.model_validate(
+            _minimal_hybrid(capabilities={"zero_exchange": True})
+        )
+        assert cfg.has_exchange_mode_output is False
+
+
 class TestHybridInverterConfigPlan54:
     def test_minimal_config_accepted(self) -> None:
         """Existing minimal config with no new fields parses correctly."""

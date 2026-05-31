@@ -1044,6 +1044,16 @@ class BatteryConfig(BaseModel):
 
         return self
 
+    @property
+    def has_exchange_mode_output(self) -> bool:
+        """True when the zero-exchange capability is declared and an output topic is configured.
+
+        Both conditions must hold for mimirheim to publish to the exchange_mode
+        topic: the hardware must support the closed-loop mode (capability flag),
+        and an MQTT topic must be configured to receive the assertion (output topic).
+        """
+        return self.capabilities.zero_exchange and self.outputs.exchange_mode is not None
+
 # ---------------------------------------------------------------------------
 # EV charger
 # ---------------------------------------------------------------------------
@@ -1272,6 +1282,16 @@ class EvConfig(BaseModel):
         description="MQTT input topic configuration for EV state readings. Defaults to an empty model so topics are derived with percent unit. Set to null to opt out of MQTT inputs entirely.",
         json_schema_extra={"ui_label": "Input topics", "ui_group": "advanced"},
     )
+
+    @property
+    def has_exchange_mode_output(self) -> bool:
+        """True when zero-exchange is declared and an exchange_mode topic is configured."""
+        return self.capabilities.zero_exchange and self.outputs.exchange_mode is not None
+
+    @property
+    def has_loadbalance_output(self) -> bool:
+        """True when loadbalance is declared and a loadbalance_cmd topic is configured."""
+        return self.capabilities.loadbalance and self.outputs.loadbalance_cmd is not None
 
 # ---------------------------------------------------------------------------
 # PV array
@@ -1565,6 +1585,44 @@ class PvConfig(BaseModel):
             )
 
         return self
+
+    @property
+    def is_controllable(self) -> bool:
+        """True when mimirheim actively dispatches this array.
+
+        A PV array is controllable when it operates in staged, continuous
+        power-limit, or on/off mode. A fixed array (no capabilities, no stages)
+        is not controllable: mimirheim treats its output as a constant and publishes
+        no control commands to it.
+        """
+        return (
+            self.production_stages is not None
+            or self.capabilities.power_limit
+            or self.capabilities.on_off
+        )
+
+    @property
+    def has_power_limit_output(self) -> bool:
+        """True when a power-limit setpoint topic should be published each cycle."""
+        return (
+            (self.capabilities.power_limit or self.production_stages is not None)
+            and self.outputs.power_limit_kw is not None
+        )
+
+    @property
+    def has_zero_export_output(self) -> bool:
+        """True when a zero-export mode boolean topic should be published each cycle."""
+        return self.capabilities.zero_export and self.outputs.zero_export_mode is not None
+
+    @property
+    def has_on_off_output(self) -> bool:
+        """True when an on/off mode boolean topic should be published each cycle."""
+        return self.capabilities.on_off and self.outputs.on_off_mode is not None
+
+    @property
+    def has_is_curtailed_output(self) -> bool:
+        """True when a mode-agnostic curtailment status topic should be published."""
+        return self.is_controllable and self.outputs.is_curtailed is not None
 
 # ---------------------------------------------------------------------------
 # Hybrid inverter (integrated PV + battery DC bus)
@@ -1870,6 +1928,11 @@ class HybridInverterConfig(BaseModel):
                     f"capacity_kwh ({self.capacity_kwh})."
                 )
         return self
+
+    @property
+    def has_exchange_mode_output(self) -> bool:
+        """True when the zero-exchange capability is declared and an output topic is configured."""
+        return self.capabilities.zero_exchange and self.outputs.exchange_mode is not None
 
 # ---------------------------------------------------------------------------
 # Loads
