@@ -7,6 +7,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from helper_common.config import HomeAssistantConfig
 from nordpool.config import MqttConfig, NordpoolApiConfig, NordpoolConfig
 
 
@@ -108,3 +109,26 @@ class TestNordpoolConfig:
         bad = {**_VALID_CONFIG, "mqtt": {"client_id": "id"}}
         with pytest.raises(ValidationError):
             NordpoolConfig.model_validate(bad)
+
+
+class TestHomeAssistantConfig:
+    def test_forecast_sensor_defaults_to_true(self) -> None:
+        from helper_common.config import HomeAssistantConfig
+        cfg = HomeAssistantConfig()
+        assert cfg.forecast_sensor is True
+
+    def test_forecast_sensor_true_accepted(self) -> None:
+        from helper_common.config import HomeAssistantConfig
+        cfg = HomeAssistantConfig(forecast_sensor=True)
+        assert cfg.forecast_sensor is True
+
+    def test_forecast_sensor_in_full_config(self) -> None:
+        raw = {**_VALID_CONFIG, "ha_discovery": {"enabled": True, "forecast_sensor": True}}
+        cfg = NordpoolConfig.model_validate(raw)
+        assert cfg.ha_discovery is not None
+        assert cfg.ha_discovery.forecast_sensor is True
+
+    def test_ha_discovery_rejects_unknown_fields(self) -> None:
+        raw = {**_VALID_CONFIG, "ha_discovery": {"enabled": True, "bad_field": "x"}}
+        with pytest.raises(ValidationError):
+            NordpoolConfig.model_validate(raw)

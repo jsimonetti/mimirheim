@@ -77,6 +77,9 @@ class ZonneplanPricesDaemon(HelperDaemon):
     """
 
     TOOL_NAME = "zonneplan_prices"
+    FORECAST_VALUE_TEMPLATE = "{{ value_json[0].import_eur_per_kwh | default(0) | round(4) }}"
+    FORECAST_UNIT = "EUR/kWh"
+    FORECAST_DEVICE_CLASS = None
 
     # The electricity connection UUID is discovered on the first successful
     # fetch and cached here for all subsequent cycles. The UUID is stable for

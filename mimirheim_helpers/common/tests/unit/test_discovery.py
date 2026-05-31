@@ -4,6 +4,8 @@ Verifies that publish_trigger_discovery() correctly:
 - Publishes exactly one button entity when stats_topic is None.
 - Publishes button + four sensor entities when stats_topic is set.
 - Deletes previously published sensor topics when stats_topic is removed.
+- Publishes a forecast sensor entity when forecast_sensor=True.
+- Deletes the forecast sensor topic when forecast_sensor=False.
 - _all_possible_helper_discovery_topics() returns exactly the union of all
   topics that could ever be published or deleted (invariant test).
 - All payloads are retained, QoS 1.
@@ -26,6 +28,7 @@ _TOOL_NAME = "nordpool_prices"
 _TOOL_LABEL = "Nordpool Prices"
 _TRIGGER_TOPIC = "mimir/input/tools/prices/trigger"
 _STATS_TOPIC = "mimir/input/tools/prices/stats"
+_OUTPUT_TOPIC = "mimir/input/prices"
 _PREFIX = "homeassistant"
 
 
@@ -40,8 +43,9 @@ def _make_client() -> MagicMock:
 
 class TestButtonOnly:
     def test_publishes_only_button_when_stats_topic_none(self) -> None:
-        """When stats_topic is None, five calls are made: four sensor
-        topic deletions (possible - active) followed by one button publish."""
+        """When stats_topic is None and forecast_sensor is False, six calls are
+        made: five sensor topic deletions (4 stats + 1 forecast) followed by
+        one button publish."""
         client = _make_client()
         publish_trigger_discovery(
             client,
@@ -50,8 +54,8 @@ class TestButtonOnly:
             trigger_topic=_TRIGGER_TOPIC,
             stats_topic=None,
         )
-        # 4 sensor deletions + 1 button publish
-        assert client.publish.call_count == 5
+        # 4 stats sensor deletions + 1 forecast sensor deletion + 1 button publish
+        assert client.publish.call_count == 6
         topics = {c.args[0] for c in client.publish.call_args_list}
         assert f"{_PREFIX}/button/{_TOOL_NAME}/config" in topics
 
@@ -84,8 +88,8 @@ class TestButtonOnly:
 
 class TestWithStatsSensors:
     def test_five_publishes_when_stats_topic_set(self) -> None:
-        """When stats_topic is set, five payloads are published: one button
-        and four sensor entities."""
+        """When stats_topic is set but forecast_sensor is False, six calls are
+        made: one forecast sensor deletion + one button + four stats sensors."""
         client = _make_client()
         publish_trigger_discovery(
             client,
@@ -94,8 +98,8 @@ class TestWithStatsSensors:
             trigger_topic=_TRIGGER_TOPIC,
             stats_topic=_STATS_TOPIC,
         )
-        # No deletions because all possible topics are active.
-        assert client.publish.call_count == 5
+        # 1 forecast deletion + 1 button + 4 stats sensors
+        assert client.publish.call_count == 6
 
     def test_stats_sensor_topics_have_correct_structure(self) -> None:
         """The four stats sensor discovery topics follow the pattern
@@ -176,8 +180,8 @@ class TestWithStatsSensors:
 
 class TestStaleCleanup:
     def test_stale_sensors_deleted_when_stats_topic_none(self) -> None:
-        """When stats_topic is None, the four sensor topics are deleted by
-        publishing an empty retained payload to each."""
+        """When stats_topic is None, all five sensor topics are deleted:
+        four stats sensors + the forecast sensor."""
         client = _make_client()
         publish_trigger_discovery(
             client,
@@ -186,8 +190,8 @@ class TestStaleCleanup:
             trigger_topic=_TRIGGER_TOPIC,
             stats_topic=None,
         )
-        # 4 deletions + 1 button publish = 5
-        assert client.publish.call_count == 5
+        # 5 deletions + 1 button publish = 6
+        assert client.publish.call_count == 6
 
         deleted_topics = {
             c.args[0]
@@ -199,6 +203,10 @@ class TestStaleCleanup:
             assert expected in deleted_topics, (
                 f"Expected deletion of {expected!r} when stats_topic is None"
             )
+        forecast_topic = f"{_PREFIX}/sensor/{_TOOL_NAME}_forecast/config"
+        assert forecast_topic in deleted_topics, (
+            "Expected deletion of forecast sensor topic when forecast_sensor is False"
+        )
 
     def test_button_topic_not_deleted(self) -> None:
         """The button topic is always in the active set and must never be deleted."""
@@ -228,13 +236,13 @@ class TestInvariant:
     def test_all_possible_covers_publish_and_delete_targets(self) -> None:
         """_all_possible_helper_discovery_topics() returns exactly the union of
         topics that publish_trigger_discovery() would either publish or delete,
-        regardless of stats_topic setting."""
+        regardless of stats_topic or forecast_sensor setting."""
         possible = _all_possible_helper_discovery_topics(
             tool_name=_TOOL_NAME,
             discovery_prefix=_PREFIX,
         )
 
-        # Check with stats_topic set (all possible topics are published).
+        # Check with all features on (stats + forecast sensor): all possible topics published.
         client_with = _make_client()
         publish_trigger_discovery(
             client_with,
@@ -242,10 +250,12 @@ class TestInvariant:
             tool_label=_TOOL_LABEL,
             trigger_topic=_TRIGGER_TOPIC,
             stats_topic=_STATS_TOPIC,
+            forecast_sensor=True,
+            output_topic=_OUTPUT_TOPIC,
         )
         topics_when_active = {c.args[0] for c in client_with.publish.call_args_list}
 
-        # Check with stats_topic None (button published + sensors deleted).
+        # Check with all features off (button + all sensor deletions).
         client_without = _make_client()
         publish_trigger_discovery(
             client_without,
@@ -253,6 +263,7 @@ class TestInvariant:
             tool_label=_TOOL_LABEL,
             trigger_topic=_TRIGGER_TOPIC,
             stats_topic=None,
+            forecast_sensor=False,
         )
         topics_when_inactive = {c.args[0] for c in client_without.publish.call_args_list}
 
@@ -279,3 +290,222 @@ class TestInvariant:
         )
         for topic in possible:
             assert topic.startswith("custom/"), f"Expected 'custom/' prefix: {topic!r}"
+
+
+# ---------------------------------------------------------------------------
+# Forecast sensor
+# ---------------------------------------------------------------------------
+
+
+class TestForecastSensor:
+    def test_forecast_sensor_published_when_enabled(self) -> None:
+        """When forecast_sensor=True and output_topic is provided, a discovery
+        payload is published to {prefix}/sensor/{tool_name}_forecast/config."""
+        client = _make_client()
+        publish_trigger_discovery(
+            client,
+            tool_name=_TOOL_NAME,
+            tool_label=_TOOL_LABEL,
+            trigger_topic=_TRIGGER_TOPIC,
+            forecast_sensor=True,
+            output_topic=_OUTPUT_TOPIC,
+        )
+        topics = {c.args[0] for c in client.publish.call_args_list}
+        assert f"{_PREFIX}/sensor/{_TOOL_NAME}_forecast/config" in topics
+
+    def test_forecast_sensor_not_published_when_disabled(self) -> None:
+        """When forecast_sensor=False, no payload is published to the forecast topic."""
+        client = _make_client()
+        publish_trigger_discovery(
+            client,
+            tool_name=_TOOL_NAME,
+            tool_label=_TOOL_LABEL,
+            trigger_topic=_TRIGGER_TOPIC,
+            forecast_sensor=False,
+            output_topic=_OUTPUT_TOPIC,
+        )
+        published_topics = {
+            c.args[0] for c in client.publish.call_args_list if c.args[1] is not None
+        }
+        assert f"{_PREFIX}/sensor/{_TOOL_NAME}_forecast/config" not in published_topics
+
+    def test_forecast_sensor_deleted_when_disabled(self) -> None:
+        """When forecast_sensor=False, the forecast sensor topic receives a
+        None payload (stale-topic deletion)."""
+        client = _make_client()
+        publish_trigger_discovery(
+            client,
+            tool_name=_TOOL_NAME,
+            tool_label=_TOOL_LABEL,
+            trigger_topic=_TRIGGER_TOPIC,
+            forecast_sensor=False,
+        )
+        deleted_topics = {
+            c.args[0] for c in client.publish.call_args_list if c.args[1] is None
+        }
+        assert f"{_PREFIX}/sensor/{_TOOL_NAME}_forecast/config" in deleted_topics
+
+    def test_forecast_sensor_not_published_without_output_topic(self) -> None:
+        """When forecast_sensor=True but output_topic is None (not supplied),
+        no forecast payload is published."""
+        client = _make_client()
+        publish_trigger_discovery(
+            client,
+            tool_name=_TOOL_NAME,
+            tool_label=_TOOL_LABEL,
+            trigger_topic=_TRIGGER_TOPIC,
+            forecast_sensor=True,
+        )
+        published_topics = {
+            c.args[0] for c in client.publish.call_args_list if c.args[1] is not None
+        }
+        assert f"{_PREFIX}/sensor/{_TOOL_NAME}_forecast/config" not in published_topics
+
+    def test_forecast_sensor_payload_has_required_keys(self) -> None:
+        """The forecast sensor payload contains all required HA discovery keys."""
+        client = _make_client()
+        publish_trigger_discovery(
+            client,
+            tool_name=_TOOL_NAME,
+            tool_label=_TOOL_LABEL,
+            trigger_topic=_TRIGGER_TOPIC,
+            forecast_sensor=True,
+            output_topic=_OUTPUT_TOPIC,
+        )
+        forecast_call = next(
+            c for c in client.publish.call_args_list
+            if c.args[0] == f"{_PREFIX}/sensor/{_TOOL_NAME}_forecast/config"
+        )
+        payload = json.loads(forecast_call.args[1])
+        for key in (
+            "name", "unique_id", "state_topic", "json_attributes_topic",
+            "value_template", "unit_of_measurement", "entity_category",
+            "enabled_by_default", "device",
+        ):
+            assert key in payload, f"Missing key {key!r} in forecast sensor payload"
+
+    def test_forecast_sensor_state_topic_is_output_topic(self) -> None:
+        """state_topic and json_attributes_topic both equal the supplied output_topic."""
+        client = _make_client()
+        publish_trigger_discovery(
+            client,
+            tool_name=_TOOL_NAME,
+            tool_label=_TOOL_LABEL,
+            trigger_topic=_TRIGGER_TOPIC,
+            forecast_sensor=True,
+            output_topic=_OUTPUT_TOPIC,
+        )
+        forecast_call = next(
+            c for c in client.publish.call_args_list
+            if c.args[0] == f"{_PREFIX}/sensor/{_TOOL_NAME}_forecast/config"
+        )
+        payload = json.loads(forecast_call.args[1])
+        assert payload["state_topic"] == _OUTPUT_TOPIC
+        assert payload["json_attributes_topic"] == _OUTPUT_TOPIC
+
+    def test_forecast_sensor_enabled_by_default_is_true(self) -> None:
+        """The forecast sensor is enabled by default so users see it immediately."""
+        client = _make_client()
+        publish_trigger_discovery(
+            client,
+            tool_name=_TOOL_NAME,
+            tool_label=_TOOL_LABEL,
+            trigger_topic=_TRIGGER_TOPIC,
+            forecast_sensor=True,
+            output_topic=_OUTPUT_TOPIC,
+        )
+        forecast_call = next(
+            c for c in client.publish.call_args_list
+            if c.args[0] == f"{_PREFIX}/sensor/{_TOOL_NAME}_forecast/config"
+        )
+        payload = json.loads(forecast_call.args[1])
+        assert payload["enabled_by_default"] is True
+
+    def test_forecast_sensor_default_unit_is_kw(self) -> None:
+        """Default unit_of_measurement is 'kW' (for power-type helpers)."""
+        client = _make_client()
+        publish_trigger_discovery(
+            client,
+            tool_name=_TOOL_NAME,
+            tool_label=_TOOL_LABEL,
+            trigger_topic=_TRIGGER_TOPIC,
+            forecast_sensor=True,
+            output_topic=_OUTPUT_TOPIC,
+        )
+        forecast_call = next(
+            c for c in client.publish.call_args_list
+            if c.args[0] == f"{_PREFIX}/sensor/{_TOOL_NAME}_forecast/config"
+        )
+        payload = json.loads(forecast_call.args[1])
+        assert payload["unit_of_measurement"] == "kW"
+        assert payload.get("device_class") == "power"
+
+    def test_forecast_sensor_eur_per_kwh_has_no_device_class(self) -> None:
+        """When unit='EUR/kWh' and device_class=None, no device_class key is
+        present in the payload."""
+        client = _make_client()
+        publish_trigger_discovery(
+            client,
+            tool_name=_TOOL_NAME,
+            tool_label=_TOOL_LABEL,
+            trigger_topic=_TRIGGER_TOPIC,
+            forecast_sensor=True,
+            output_topic=_OUTPUT_TOPIC,
+            forecast_unit="EUR/kWh",
+            forecast_device_class=None,
+        )
+        forecast_call = next(
+            c for c in client.publish.call_args_list
+            if c.args[0] == f"{_PREFIX}/sensor/{_TOOL_NAME}_forecast/config"
+        )
+        payload = json.loads(forecast_call.args[1])
+        assert payload["unit_of_measurement"] == "EUR/kWh"
+        assert "device_class" not in payload
+
+    def test_forecast_sensor_shares_device_block_with_button(self) -> None:
+        """The forecast sensor payload references the same device block as the button."""
+        client = _make_client()
+        publish_trigger_discovery(
+            client,
+            tool_name=_TOOL_NAME,
+            tool_label=_TOOL_LABEL,
+            trigger_topic=_TRIGGER_TOPIC,
+            forecast_sensor=True,
+            output_topic=_OUTPUT_TOPIC,
+        )
+        button_call = next(c for c in client.publish.call_args_list if "/button/" in c.args[0])
+        forecast_call = next(
+            c for c in client.publish.call_args_list
+            if c.args[0] == f"{_PREFIX}/sensor/{_TOOL_NAME}_forecast/config"
+        )
+        button_device = json.loads(button_call.args[1])["device"]
+        forecast_device = json.loads(forecast_call.args[1])["device"]
+        assert button_device == forecast_device
+
+    def test_all_possible_includes_forecast_sensor_topic(self) -> None:
+        """_all_possible_helper_discovery_topics() includes the forecast sensor topic."""
+        possible = _all_possible_helper_discovery_topics(
+            tool_name=_TOOL_NAME,
+            discovery_prefix=_PREFIX,
+        )
+        assert f"{_PREFIX}/sensor/{_TOOL_NAME}_forecast/config" in possible
+
+    def test_active_includes_forecast_sensor_when_enabled(self) -> None:
+        """_active_helper_discovery_topics() includes the forecast sensor topic
+        when forecast_sensor=True."""
+        active = _active_helper_discovery_topics(
+            tool_name=_TOOL_NAME,
+            stats_topic=None,
+            forecast_sensor=True,
+        )
+        assert f"{_PREFIX}/sensor/{_TOOL_NAME}_forecast/config" in active
+
+    def test_active_excludes_forecast_sensor_when_disabled(self) -> None:
+        """_active_helper_discovery_topics() does not include the forecast sensor
+        topic when forecast_sensor=False."""
+        active = _active_helper_discovery_topics(
+            tool_name=_TOOL_NAME,
+            stats_topic=None,
+            forecast_sensor=False,
+        )
+        assert f"{_PREFIX}/sensor/{_TOOL_NAME}_forecast/config" not in active

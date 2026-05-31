@@ -65,6 +65,7 @@ def _all_possible_helper_discovery_topics(
     topics: set[str] = {f"{discovery_prefix}/button/{tool_name}/config"}
     for sensor_id in _STATS_SENSOR_IDS:
         topics.add(f"{discovery_prefix}/sensor/{tool_name}_{sensor_id}/config")
+    topics.add(f"{discovery_prefix}/sensor/{tool_name}_forecast/config")
     return topics
 
 
@@ -72,6 +73,7 @@ def _active_helper_discovery_topics(
     *,
     tool_name: str,
     stats_topic: str | None,
+    forecast_sensor: bool = False,
     discovery_prefix: str = "homeassistant",
 ) -> set[str]:
     """Return the HA discovery topics that should exist given the current config.
@@ -79,6 +81,7 @@ def _active_helper_discovery_topics(
     Args:
         tool_name: Stable snake_case identifier for the tool.
         stats_topic: When not None, stats sensor topics are included.
+        forecast_sensor: When True, the forecast sensor topic is included.
         discovery_prefix: HA MQTT discovery topic prefix.
 
     Returns:
@@ -88,6 +91,8 @@ def _active_helper_discovery_topics(
     if stats_topic is not None:
         for sensor_id in _STATS_SENSOR_IDS:
             topics.add(f"{discovery_prefix}/sensor/{tool_name}_{sensor_id}/config")
+    if forecast_sensor:
+        topics.add(f"{discovery_prefix}/sensor/{tool_name}_forecast/config")
     return topics
 
 
@@ -98,6 +103,11 @@ def publish_trigger_discovery(
     tool_label: str,
     trigger_topic: str,
     stats_topic: str | None = None,
+    forecast_sensor: bool = False,
+    output_topic: str | None = None,
+    forecast_value_template: str = "{{ value_json[0].kw | default(0) | round(3) }}",
+    forecast_unit: str = "kW",
+    forecast_device_class: str | None = "power",
     discovery_prefix: str = "homeassistant",
 ) -> None:
     """Refresh HA MQTT discovery for this helper tool.
@@ -124,9 +134,24 @@ def publish_trigger_discovery(
             under the same HA device: last run timestamp, duration, horizon
             length, and exit message.  When None, any previously published
             sensor topics are erased from the broker.
+        forecast_sensor: When True and ``output_topic`` is provided, a
+            diagnostic sensor entity is published that reads the first element
+            of the helper's forecast JSON array. Defaults to False.
+        output_topic: The MQTT topic where the helper publishes its forecast
+            payload. Used as both ``state_topic`` and
+            ``json_attributes_topic`` for the forecast sensor. Required when
+            ``forecast_sensor`` is True; ignored otherwise.
+        forecast_value_template: Jinja2 value_template for the forecast sensor
+            state. Defaults to the first element ``kw`` field (power helpers).
+        forecast_unit: ``unit_of_measurement`` for the forecast sensor.
+            Defaults to ``"kW"``.
+        forecast_device_class: HA ``device_class`` for the forecast sensor.
+            Pass ``None`` to omit the field (e.g. for price sensors).
+            Defaults to ``"power"``.
         discovery_prefix: HA MQTT discovery topic prefix. Default:
             ``"homeassistant"``.
     """
+    _forecast_active = forecast_sensor and output_topic is not None
     possible = _all_possible_helper_discovery_topics(
         tool_name=tool_name,
         discovery_prefix=discovery_prefix,
@@ -134,6 +159,7 @@ def publish_trigger_discovery(
     active = _active_helper_discovery_topics(
         tool_name=tool_name,
         stats_topic=stats_topic,
+        forecast_sensor=_forecast_active,
         discovery_prefix=discovery_prefix,
     )
 
@@ -221,4 +247,28 @@ def publish_trigger_discovery(
                 retain=True,
             )
             logger.debug("Published HA discovery for sensor/%s", sensor_id)
+
+    # --- Forecast sensor (only when enabled and output_topic is provided) ---
+    if _forecast_active:
+        forecast_sensor_id = f"{tool_name}_forecast"
+        forecast_payload: dict[str, Any] = {
+            "name": f"{tool_label} Forecast",
+            "unique_id": forecast_sensor_id,
+            "state_topic": output_topic,
+            "json_attributes_topic": output_topic,
+            "value_template": forecast_value_template,
+            "unit_of_measurement": forecast_unit,
+            "entity_category": "diagnostic",
+            "enabled_by_default": True,
+            "device": device_block,
+        }
+        if forecast_device_class is not None:
+            forecast_payload["device_class"] = forecast_device_class
+        client.publish(
+            f"{discovery_prefix}/sensor/{forecast_sensor_id}/config",
+            json.dumps(forecast_payload),
+            qos=1,
+            retain=True,
+        )
+        logger.debug("Published HA discovery for sensor/%s", forecast_sensor_id)
 

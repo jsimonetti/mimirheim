@@ -229,3 +229,31 @@ class TestHiooTopicDerivation:
         cfg = PvLearnerConfig.model_validate(raw)
         assert cfg.mimir_trigger_topic == "mymimir/input/trigger"
 
+
+class TestHaDiscoveryConfig:
+    def test_forecast_sensor_defaults_to_true(self) -> None:
+        from pv_ml_learner.config import HaDiscoveryConfig
+
+        cfg = HaDiscoveryConfig()
+        assert cfg.forecast_sensor is True
+
+    def test_forecast_sensor_true_accepted(self) -> None:
+        from pv_ml_learner.config import HaDiscoveryConfig
+
+        cfg = HaDiscoveryConfig(forecast_sensor=True)
+        assert cfg.forecast_sensor is True
+
+    def test_ha_discovery_rejects_unknown_fields(self) -> None:
+        from pv_ml_learner.config import HaDiscoveryConfig
+
+        with pytest.raises(ValidationError):
+            HaDiscoveryConfig(bad_field="x")
+
+    def test_forecast_sensor_in_full_config(self) -> None:
+        from pv_ml_learner.config import PvLearnerConfig
+
+        raw = _valid_config()
+        raw["ha_discovery"]["forecast_sensor"] = True
+        cfg = PvLearnerConfig.model_validate(raw)
+        assert cfg.ha_discovery.forecast_sensor is True
+

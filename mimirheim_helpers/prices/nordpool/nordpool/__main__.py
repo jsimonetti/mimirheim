@@ -63,6 +63,9 @@ class NordpoolDaemon(HelperDaemon):
     """
 
     TOOL_NAME = "nordpool_prices"
+    FORECAST_VALUE_TEMPLATE = "{{ value_json[0].import_eur_per_kwh | default(0) | round(4) }}"
+    FORECAST_UNIT = "EUR/kWh"
+    FORECAST_DEVICE_CLASS = None
 
     def _run_cycle(self, client: mqtt.Client) -> CycleResult | None:
         """Fetch current Nordpool prices and publish them.

@@ -262,9 +262,19 @@ class HelperDaemon(MqttDaemon, abc.ABC):
 
     Attributes:
         TOOL_NAME: Stable snake_case identifier for this tool.
+        FORECAST_VALUE_TEMPLATE: Jinja2 value_template for the forecast sensor
+            state. Defaults to the first ``kw`` field (power-type helpers).
+            Override in price-type subclasses.
+        FORECAST_UNIT: ``unit_of_measurement`` for the forecast sensor.
+            Defaults to ``"kW"``.
+        FORECAST_DEVICE_CLASS: HA ``device_class`` for the forecast sensor.
+            Defaults to ``"power"``. Override to ``None`` for price sensors.
     """
 
     TOOL_NAME: str  # must be overridden in each subclass
+    FORECAST_VALUE_TEMPLATE: str = "{{ value_json[0].kw | default(0) | round(3) }}"
+    FORECAST_UNIT: str = "kW"
+    FORECAST_DEVICE_CLASS: str | None = "power"
 
     def __init__(self, config: Any) -> None:
         self._last_trigger_at: float | None = None
@@ -333,6 +343,11 @@ class HelperDaemon(MqttDaemon, abc.ABC):
             tool_label=self._tool_label(),
             trigger_topic=self._config.trigger_topic,
             stats_topic=getattr(self._config, "stats_topic", None),
+            forecast_sensor=ha.forecast_sensor,
+            output_topic=getattr(self._config, "output_topic", None),
+            forecast_value_template=self.FORECAST_VALUE_TEMPLATE,
+            forecast_unit=self.FORECAST_UNIT,
+            forecast_device_class=self.FORECAST_DEVICE_CLASS,
             discovery_prefix=ha.discovery_prefix,
         )
 

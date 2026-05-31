@@ -19,7 +19,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic import ValidationError as PydanticValidationError
 
-from helper_common.config import MqttConfig, apply_mqtt_env_overrides
+from helper_common.config import HomeAssistantConfig as _HelperHaDiscoveryConfig, MqttConfig, apply_mqtt_env_overrides
 import helper_common.topics as _topics
 
 
@@ -266,19 +266,17 @@ class TrainingConfig(BaseModel):
     )
 
 
-class HaDiscoveryConfig(BaseModel):
-    """Home Assistant MQTT discovery configuration.
+class HaDiscoveryConfig(_HelperHaDiscoveryConfig):
+    """Home Assistant MQTT discovery configuration for pv_ml_learner.
+
+    Extends the shared ``HomeAssistantConfig`` with a device-name default
+    appropriate for the PV ML Learner. All other fields (``enabled``,
+    ``discovery_prefix``, ``forecast_sensor``) are inherited.
 
     Attributes:
-        enabled: Whether to publish HA MQTT discovery messages. Default False.
-        discovery_prefix: MQTT discovery prefix. Default 'homeassistant'.
         device_name: Device name shown in HA. Default 'MIMIRHEIM PV Learner'.
     """
 
-    model_config = ConfigDict(extra="forbid")
-
-    enabled: bool = Field(default=False, json_schema_extra={"ui_label": "Enable HA discovery", "ui_group": "advanced"})
-    discovery_prefix: str = Field(default="homeassistant", json_schema_extra={"ui_label": "Discovery prefix", "ui_group": "advanced"})
     device_name: str = Field(default="MIMIRHEIM PV Learner", json_schema_extra={"ui_label": "Device name", "ui_group": "advanced"})
 
 

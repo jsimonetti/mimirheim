@@ -110,3 +110,15 @@ class TestZonneplanPricesConfig:
     def test_stats_topic_accepted(self) -> None:
         cfg = ZonneplanPricesConfig(**{**_VALID_CONFIG, "stats_topic": "mimir/stats/prices"})
         assert cfg.stats_topic == "mimir/stats/prices"
+
+    def test_ha_discovery_forecast_sensor_defaults_true(self) -> None:
+        cfg = ZonneplanPricesConfig(**{**_VALID_CONFIG, "ha_discovery": {"enabled": True}})
+        assert cfg.ha_discovery is not None
+        assert cfg.ha_discovery.forecast_sensor is True
+
+    def test_ha_discovery_forecast_sensor_true_accepted(self) -> None:
+        cfg = ZonneplanPricesConfig(
+            **{**_VALID_CONFIG, "ha_discovery": {"enabled": True, "forecast_sensor": True}}
+        )
+        assert cfg.ha_discovery is not None
+        assert cfg.ha_discovery.forecast_sensor is True

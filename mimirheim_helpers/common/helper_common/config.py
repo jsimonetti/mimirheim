@@ -84,6 +84,11 @@ class HomeAssistantConfig(BaseModel):
         description="Display name for the HA device. Defaults to tool name.",
         json_schema_extra={"ui_label": "HA device name", "ui_group": "advanced"},
     )
+    forecast_sensor: bool = Field(
+        default=True,
+        description="Publish an additional HA sensor entity for the helper's forecast output topic.",
+        json_schema_extra={"ui_label": "Enable forecast sensor", "ui_group": "advanced"},
+    )
 
 
 def apply_mqtt_env_overrides(raw: dict) -> dict:
