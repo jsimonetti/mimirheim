@@ -39,9 +39,13 @@ _STATS_SENSOR_IDS = (
 # templates affect only what HA stores as entity attributes.
 #
 # ``POWER_FORECAST_ATTRIBUTES_TEMPLATE``: for helpers that publish steps with
-# ``kw``, ``confidence``, and ``ts`` fields (PV, baseload, pv_ml_learner).
+# ``kw``, ``confidence``, and ``ts`` fields (PV, pv_ml_learner).
 # Rounds ``kw`` to three decimal places (1 W significance) and renames
 # ``confidence`` to ``c``, rounded to two decimal places.
+#
+# ``POWER_NO_CONFIDENCE_FORECAST_ATTRIBUTES_TEMPLATE``: for helpers that
+# publish steps with ``kw`` and ``ts`` only (baseload helpers).
+# Rounds ``kw`` to three decimal places and preserves ``ts``.
 #
 # ``PRICE_FORECAST_ATTRIBUTES_TEMPLATE``: for helpers that publish steps with
 # ``import_eur_per_kwh``, ``export_eur_per_kwh``, ``confidence``, and ``ts``
@@ -51,6 +55,14 @@ POWER_FORECAST_ATTRIBUTES_TEMPLATE: str = (
     "{%- set ns = namespace(f=[]) -%}"
     "{%- for s in value_json -%}"
     '{%- set ns.f = ns.f + [{"kw": s.kw | round(3), "c": s.confidence | round(2), "ts": s.ts}] -%}'
+    "{%- endfor -%}"
+    '{{ {"forecast": ns.f} | tojson }}'
+)
+
+POWER_NO_CONFIDENCE_FORECAST_ATTRIBUTES_TEMPLATE: str = (
+    "{%- set ns = namespace(f=[]) -%}"
+    "{%- for s in value_json -%}"
+    '{%- set ns.f = ns.f + [{"kw": s.kw | round(3), "ts": s.ts}] -%}'
     "{%- endfor -%}"
     '{{ {"forecast": ns.f} | tojson }}'
 )
@@ -197,7 +209,9 @@ def publish_trigger_discovery(
             Reshapes and rounds the raw MQTT payload purely for HA display;
             the solver reads the unmodified broker payload. Defaults to
             ``POWER_FORECAST_ATTRIBUTES_TEMPLATE`` (rounds ``kw`` to 3 dp,
-            renames ``confidence`` → ``c`` rounded to 2 dp). Override with
+            renames ``confidence`` → ``c`` rounded to 2 dp), or
+            ``POWER_NO_CONFIDENCE_FORECAST_ATTRIBUTES_TEMPLATE`` for helpers
+            that publish ``kw`` + ``ts`` without confidence. Override with
             ``PRICE_FORECAST_ATTRIBUTES_TEMPLATE`` for price-type helpers.
         device_id: When supplied, used as the HA device ``identifiers`` value
             instead of ``tool_name``. Allows multiple

@@ -20,6 +20,7 @@ import jinja2
 import pytest
 
 from helper_common.discovery import (
+    POWER_NO_CONFIDENCE_FORECAST_ATTRIBUTES_TEMPLATE,
     POWER_FORECAST_ATTRIBUTES_TEMPLATE,
     PRICE_FORECAST_ATTRIBUTES_TEMPLATE,
     _active_helper_discovery_topics,
@@ -630,6 +631,25 @@ class TestForecastAttributesTemplate:
         ]
         result = _render_attributes_template(POWER_FORECAST_ATTRIBUTES_TEMPLATE, steps)
         assert len(result["forecast"]) == 3
+
+    def test_no_confidence_power_template_handles_kw_ts_payload(self) -> None:
+        """POWER_NO_CONFIDENCE_FORECAST_ATTRIBUTES_TEMPLATE supports baseload payloads.
+
+        Baseload helpers publish steps with ``kw`` and ``ts`` only (no
+        ``confidence`` field).
+        """
+        steps = [
+            {"kw": 3.2945311069488525, "ts": "2024-01-01T12:00:00"},
+            {"kw": 2.0, "ts": "2024-01-01T13:00:00"},
+        ]
+        result = _render_attributes_template(
+            POWER_NO_CONFIDENCE_FORECAST_ATTRIBUTES_TEMPLATE,
+            steps,
+        )
+        assert len(result["forecast"]) == 2
+        assert result["forecast"][0]["kw"] == 3.295
+        assert result["forecast"][0]["ts"] == "2024-01-01T12:00:00"
+        assert "c" not in result["forecast"][0]
 
     def test_price_template_renames_import_and_export_fields(self) -> None:
         """PRICE_FORECAST_ATTRIBUTES_TEMPLATE renames import_eur_per_kwh -> import

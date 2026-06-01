@@ -24,6 +24,7 @@ import yaml
 from helper_common.config import apply_mqtt_env_overrides
 from helper_common.cycle import CycleResult
 from helper_common.daemon import HelperDaemon
+from helper_common.discovery import POWER_NO_CONFIDENCE_FORECAST_ATTRIBUTES_TEMPLATE
 
 from baseload_static.config import BaseloadConfig
 from baseload_static.forecast import build_forecast
@@ -62,6 +63,7 @@ class StaticBaseloadDaemon(HelperDaemon):
     """
 
     TOOL_NAME = "baseload_static"
+    FORECAST_ATTRIBUTES_TEMPLATE = POWER_NO_CONFIDENCE_FORECAST_ATTRIBUTES_TEMPLATE
 
     def _run_cycle(self, client: mqtt.Client) -> CycleResult | None:
         """Build the static forecast and publish it.
