@@ -1,5 +1,5 @@
 name: Mimirheim (Edge)
-version: edge-202606010713
+version: edge-202606011131
 slug: mimirheim-edge
 description: >-
   MILP energy optimiser for home battery, PV, and EV scheduling against dynamic
