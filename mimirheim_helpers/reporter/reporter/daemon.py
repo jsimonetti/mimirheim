@@ -36,8 +36,7 @@ import paho.mqtt.client as mqtt
 from helper_common.daemon import MqttDaemon
 
 from reporter import gc, inventory
-from reporter.summary_publisher import build_summary_payload
-from reporter.config import ChartPublishingConfig, ReporterConfig
+from reporter.config import ReporterConfig
 from reporter.render import build_report_html
 
 logger = logging.getLogger(__name__)
@@ -79,8 +78,6 @@ class ReporterDaemon(MqttDaemon):
         """
         super().__init__(config)
         self._reporter_config = config.reporting
-        self._chart_config = config.chart_publishing
-        self._discovery_config = config.ha_discovery
 
     # ------------------------------------------------------------------
     # Public entry point (extends HelperDaemon.run)
@@ -116,28 +113,13 @@ class ReporterDaemon(MqttDaemon):
         reason_code: Any,
         properties: Any,
     ) -> None:
-        """Subscribe to the dump-available notify_topic on connect.
-
-        When HA discovery is enabled, also subscribes to
-        ``homeassistant/status`` and publishes the chart discovery payload.
-
-        Args:
-            client: The connected paho MQTT client.
-            userdata: Unused.
-            flags: Unused.
-            reason_code: MQTT connect reason code.
-            properties: Unused.
-        """
+        """Subscribe to the dump-available notify_topic on connect."""
         super()._on_connect(client, userdata, flags, reason_code, properties)
         if reason_code != 0:
             return
         notify_topic = self._reporter_config.notify_topic
         client.subscribe(notify_topic, qos=0)
         logger.info("Subscribed to dump-available notifications on %r.", notify_topic)
-        disc = self._discovery_config
-        if disc is not None and disc.enabled:
-            client.subscribe("homeassistant/status", qos=0)
-            self._publish_summary_discovery(client)
 
     def _on_message(
         self,
@@ -145,16 +127,9 @@ class ReporterDaemon(MqttDaemon):
         userdata: Any,
         message: Any,
     ) -> None:
-        """Route dump-available notifications and HA birth messages."""
+        """Route dump-available notifications."""
         if message.topic == self._reporter_config.notify_topic:
             self._on_notification(message)
-        elif (
-            message.topic == "homeassistant/status"
-            and message.payload == b"online"
-        ):
-            disc = self._discovery_config
-            if disc is not None and disc.enabled:
-                self._publish_summary_discovery(client)
 
     # ------------------------------------------------------------------
     # Notification handler
@@ -227,8 +202,6 @@ class ReporterDaemon(MqttDaemon):
         else:
             self._render_and_save(ts, report_filename, report_path, inp, out)
 
-        self._publish_summary_data(inp, out)
-
     def _render_and_save(
         self,
         ts: str,
@@ -265,79 +238,6 @@ class ReporterDaemon(MqttDaemon):
         gc.collect(cfg.output_dir, cfg.max_reports)
         self._install_index_html()
         logger.info("Rendered report: %s", report_path)
-
-    # ------------------------------------------------------------------
-    # Summary and discovery helpers
-    # ------------------------------------------------------------------
-
-    def _publish_summary_data(self, inp: dict[str, Any], out: dict[str, Any]) -> None:
-        """Publish the summary payload to the configured MQTT topic.
-
-        Args:
-            inp: Parsed SolveBundle JSON.
-            out: Parsed SolveResult JSON.
-        """
-        cfg = self._chart_config
-        if cfg.summary_topic is not None:
-            payload = json.dumps(build_summary_payload(inp, out))
-            self._client.publish(cfg.summary_topic, payload, qos=1, retain=True)
-
-    def _publish_summary_discovery(self, client: Any) -> None:
-        """Publish a single HA device JSON discovery payload for reporter sensors.
-
-        Publishes to ``{discovery_prefix}/device/{device_id}/config`` with a
-        ``components`` map containing one sensor for the configured summary topic:
-
-        - ``{device_id}_summary``: state from ``summary_topic``; all scalar
-          fields available via ``json_attributes_topic``.
-
-        This method is a no-op if discovery is None or disabled, or if
-        summary_topic is not configured.
-
-        Args:
-            client: The connected paho MQTT client.
-        """
-        disc = self._discovery_config
-        if disc is None or not disc.enabled:
-            return
-        chart_cfg = self._chart_config
-        if chart_cfg.summary_topic is None:
-            return
-
-        mqtt_cfg = self._config.mqtt
-        device_id = disc.device_id or mqtt_cfg.client_id
-        disc_prefix = disc.discovery_prefix
-
-        components: dict[str, dict[str, Any]] = {}
-
-        uid = f"{device_id}_summary"
-        components[uid] = {
-            "platform": "sensor",
-            "unique_id": uid,
-            "name": "mimirheim Summary",
-            "state_topic": chart_cfg.summary_topic,
-            "value_template": "{{ value_json.solve_time_utc }}",
-            "json_attributes_topic": chart_cfg.summary_topic,
-            "entity_category": "diagnostic",
-        }
-
-        payload = {
-            "device": {
-                "identifiers": [device_id],
-                "name": disc.device_name,
-                "manufacturer": "Mimirheim",
-            },
-            "origin": {"name": "mimirheim-reporter"},
-            "availability": [],
-            "components": components,
-        }
-        topic = f"{disc_prefix}/device/{device_id}/config"
-        client.publish(topic, json.dumps(payload), qos=1, retain=True)
-        logger.info(
-            "Published HA reporter discovery to %s with %d component(s).",
-            topic,
-            len(components),
-        )
 
     # ------------------------------------------------------------------
     # Startup helpers

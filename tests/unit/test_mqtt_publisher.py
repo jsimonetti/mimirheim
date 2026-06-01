@@ -485,6 +485,86 @@ def test_last_solve_status_includes_cost_fields() -> None:
     assert payload["soc_credit_eur"] == pytest.approx(0.12, abs=1e-4)
 
 
+def test_last_solve_status_includes_schedule_metrics_import_heavy() -> None:
+    """last_solve payload includes grid kWh totals and self-sufficiency for import-heavy schedules."""
+    mock_client = MagicMock()
+    publisher = MqttPublisher(client=mock_client, config=_make_config())
+
+    result = SolveResult(
+        strategy="minimize_cost",
+        objective_value=0.5,
+        solve_status="optimal",
+        schedule=[
+            ScheduleStep(
+                t=0,
+                grid_import_kw=2.0,
+                grid_export_kw=0.0,
+                devices={"load": DeviceSetpoint(kw=-1.0, type="static_load")},
+            ),
+            ScheduleStep(
+                t=1,
+                grid_import_kw=2.0,
+                grid_export_kw=0.0,
+                devices={"load": DeviceSetpoint(kw=-1.0, type="static_load")},
+            ),
+        ],
+    )
+
+    publisher.publish_last_solve_status(result=result, error=None)
+
+    last_solve_calls = [
+        c for c in mock_client.publish.call_args_list
+        if c.args[0] == "mimir/status/last_solve"
+    ]
+    assert len(last_solve_calls) == 1
+    payload = json.loads(last_solve_calls[0].args[1])
+    assert payload["grid_import_kwh"] == pytest.approx(1.0, abs=1e-4)
+    assert payload["grid_export_kwh"] == pytest.approx(0.0, abs=1e-4)
+    assert payload["self_sufficiency_pct"] == pytest.approx(0.0, abs=1e-4)
+
+
+def test_last_solve_status_includes_schedule_metrics_fully_local_load() -> None:
+    """self_sufficiency_pct is 100 when load is fully served without grid import."""
+    mock_client = MagicMock()
+    publisher = MqttPublisher(client=mock_client, config=_make_config())
+
+    result = SolveResult(
+        strategy="minimize_cost",
+        objective_value=0.5,
+        solve_status="optimal",
+        schedule=[
+            ScheduleStep(
+                t=0,
+                grid_import_kw=0.0,
+                grid_export_kw=0.0,
+                devices={
+                    "pv": DeviceSetpoint(kw=1.0, type="pv"),
+                    "load": DeviceSetpoint(kw=-1.0, type="static_load"),
+                },
+            ),
+            ScheduleStep(
+                t=1,
+                grid_import_kw=0.0,
+                grid_export_kw=0.0,
+                devices={
+                    "pv": DeviceSetpoint(kw=1.0, type="pv"),
+                    "load": DeviceSetpoint(kw=-1.0, type="static_load"),
+                },
+            ),
+        ],
+    )
+
+    publisher.publish_last_solve_status(result=result, error=None)
+
+    last_solve_calls = [
+        c for c in mock_client.publish.call_args_list
+        if c.args[0] == "mimir/status/last_solve"
+    ]
+    assert len(last_solve_calls) == 1
+    payload = json.loads(last_solve_calls[0].args[1])
+    assert payload["self_sufficiency_pct"] == pytest.approx(100.0, abs=1e-4)
+
+
 def test_last_solve_status_error_omits_cost_fields() -> None:
     """publish_last_solve_status() with infeasible result does not include cost fields."""
     mock_client = MagicMock()

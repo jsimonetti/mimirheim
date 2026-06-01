@@ -21,49 +21,6 @@ from helper_common.config import MqttConfig, apply_mqtt_env_overrides
 import helper_common.topics as _topics
 
 
-class ChartPublishingConfig(BaseModel):
-    """Configuration for MQTT summary data publishing.
-
-    Controls whether the reporter publishes scalar economic summary statistics
-    after each report render.
-
-    Attributes:
-        summary_topic: MQTT topic for the scalar economic summary payload.
-            When None, no summary is published.
-        max_payload_bytes: Maximum allowed serialised payload size in bytes.
-            Payloads that exceed this limit are dropped with a warning rather
-            than published, protecting brokers with low message-size settings.
-            0 means unlimited.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    summary_topic: str | None = Field(default=None, description="MQTT topic for the scalar economic summary payload.", json_schema_extra={"ui_label": "Summary topic", "ui_group": "advanced"})
-    max_payload_bytes: int = Field(default=65536, ge=0, description="Maximum serialised payload size in bytes. 0 = unlimited.", json_schema_extra={"ui_label": "Max payload bytes", "ui_group": "advanced"})
-
-
-class ReporterDiscoveryConfig(BaseModel):
-    """HA MQTT discovery settings for the reporter daemon.
-
-    When enabled, discovery payloads are published using the HA MQTT device
-    JSON format (homeassistant/device/{device_id}/config). Requires HA 2024.2
-    or later.
-
-    Attributes:
-        enabled: Enable HA MQTT discovery for reporter sensors.
-        discovery_prefix: HA MQTT discovery topic prefix.
-        device_id: HA device identifier. Defaults to mqtt.client_id when None.
-        device_name: Human-readable HA device display name.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    enabled: bool = Field(default=False, json_schema_extra={"ui_label": "Enable HA discovery", "ui_group": "advanced"})
-    discovery_prefix: str = Field(default="homeassistant", json_schema_extra={"ui_label": "Discovery prefix", "ui_group": "advanced"})
-    device_id: str | None = Field(default=None, json_schema_extra={"ui_label": "Device ID", "ui_group": "advanced"})
-    device_name: str = Field(default="mimirheim Reporter", json_schema_extra={"ui_label": "Device name", "ui_group": "advanced"})
-
-
 class ReporterReportingSection(BaseModel):
     """Reporting-specific paths and retention settings for the reporter daemon.
 
@@ -107,10 +64,6 @@ class ReporterConfig(BaseModel):
     Attributes:
         mqtt: MQTT broker connection parameters.
         reporting: Reporting paths and retention settings.
-        chart_publishing: MQTT publishing of apex-charts-compatible chart and
-            summary data. All fields default to None (disabled).
-        ha_discovery: HA MQTT discovery for chart and summary sensors. None
-            means discovery is disabled.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -124,16 +77,6 @@ class ReporterConfig(BaseModel):
     reporting: ReporterReportingSection = Field(
         description="Reporting paths and retention settings.",
         json_schema_extra={"ui_label": "Reporting", "ui_group": "basic"},
-    )
-    chart_publishing: ChartPublishingConfig = Field(
-        default_factory=ChartPublishingConfig,
-        description="MQTT publishing of apex-charts-compatible chart and summary data.",
-        json_schema_extra={"ui_label": "Chart publishing", "ui_group": "advanced"},
-    )
-    ha_discovery: ReporterDiscoveryConfig | None = Field(
-        default=None,
-        description="HA MQTT discovery for chart and summary sensors.",
-        json_schema_extra={"ui_label": "HA discovery", "ui_group": "advanced"},
     )
 
     @model_validator(mode="after")

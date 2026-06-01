@@ -25,9 +25,43 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from mimirheim.config.schema import MimirheimConfig
-from mimirheim.core.bundle import SolveResult
+from mimirheim.core.bundle import ScheduleStep, SolveResult
 
 logger = logging.getLogger("mimirheim.publisher")
+
+_STEP_HOURS: float = 15 / 60.0
+
+
+def _schedule_summary(schedule: list[ScheduleStep]) -> dict[str, float]:
+    """Compute grid and self-sufficiency metrics from a solved schedule.
+
+    Args:
+        schedule: Ordered list of ScheduleStep objects from a SolveResult.
+
+    Returns:
+        Dict with grid_import_kwh, grid_export_kwh, and self_sufficiency_pct.
+    """
+    grid_import_kwh = sum(step.grid_import_kw * _STEP_HOURS for step in schedule)
+    grid_export_kwh = sum(step.grid_export_kw * _STEP_HOURS for step in schedule)
+
+    load_total_kwh = 0.0
+    for step in schedule:
+        for setpoint in step.devices.values():
+            if setpoint.type in ("static_load", "deferrable_load"):
+                load_total_kwh += max(0.0, -setpoint.kw) * _STEP_HOURS
+
+    load_served_local = max(0.0, load_total_kwh - grid_import_kwh)
+    self_sufficiency_pct = (
+        round(load_served_local / load_total_kwh * 100.0, 1)
+        if load_total_kwh > 0.0
+        else 0.0
+    )
+
+    return {
+        "grid_import_kwh": round(grid_import_kwh, 4),
+        "grid_export_kwh": round(grid_export_kwh, 4),
+        "self_sufficiency_pct": self_sufficiency_pct,
+    }
 
 
 class MqttPublisher:
@@ -334,6 +368,7 @@ class MqttPublisher:
                 "generated_at": datetime.now(UTC).isoformat(),
             })
         else:
+            summary = _schedule_summary(result.schedule)
             payload = json.dumps({
                 "status": "ok",
                 "solve_status": result.solve_status,
@@ -341,6 +376,9 @@ class MqttPublisher:
                 "naive_cost_eur": round(result.naive_cost_eur, 4),
                 "optimised_cost_eur": round(result.optimised_cost_eur, 4),
                 "soc_credit_eur": round(result.soc_credit_eur, 4),
+                "grid_import_kwh": summary["grid_import_kwh"],
+                "grid_export_kwh": summary["grid_export_kwh"],
+                "self_sufficiency_pct": summary["self_sufficiency_pct"],
                 "generated_at": datetime.now(UTC).isoformat(),
             })
 
