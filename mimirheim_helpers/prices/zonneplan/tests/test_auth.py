@@ -85,7 +85,7 @@ class TestAttemptAuth:
 
         # Must poll the persisted UUID, not send a new email.
         client.request_login_email.assert_not_called()
-        assert client.poll_activation.call_args_list[0] == call("persisted-uuid")
+        assert client.poll_activation.call_args_list[0] == call("persisted-uuid", "user@example.com")
 
     def test_deletes_stale_pending_and_sends_new_email(self, tmp_path: Path) -> None:
         token_path = tmp_path / "token.json"
@@ -149,3 +149,19 @@ class TestAttemptAuth:
         assert result is None
         # Pending file must still exist so the next cycle can resume.
         assert pending_path.exists()
+
+    def test_uses_pending_email_when_resuming_poll(self, tmp_path: Path) -> None:
+        token_path = tmp_path / "token.json"
+        pending_path = tmp_path / "token_pending.json"
+        _write_pending(pending_path, uuid="req-uuid", email="stored@example.com", age_seconds=30)
+        client = _make_client(poll_result=None)
+
+        attempt_auth(
+            client=client,
+            email="config@example.com",
+            token_path=token_path,
+            pending_path=pending_path,
+            poll_window_seconds=1,
+        )
+
+        assert client.poll_activation.call_args_list[0] == call("req-uuid", "stored@example.com")

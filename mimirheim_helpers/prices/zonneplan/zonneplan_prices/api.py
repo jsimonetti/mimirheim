@@ -112,7 +112,7 @@ class ZonneplanClient:
         except Exception as exc:
             raise FetchError(f"POST /auth/request failed: {exc}") from exc
 
-    def poll_activation(self, uuid: str) -> dict | None:
+    def poll_activation(self, uuid: str, email: str = "") -> dict | None:
         """Check whether the user has activated the login email.
 
         This is step 3 of the OTP auth flow. Call this repeatedly (with a
@@ -122,6 +122,9 @@ class ZonneplanClient:
 
         Args:
             uuid: The auth-request UUID returned by :meth:`request_login_email`.
+            email: The email address used in the original auth request. Some
+                Zonneplan OTP exchanges require the same email to be supplied
+                alongside the one-time password.
 
         Returns:
             The OAuth token dict (with ``access_token``, ``refresh_token``,
@@ -146,7 +149,7 @@ class ZonneplanClient:
                 return None
             # Activated — exchange the one-time password for OAuth tokens.
             otp = data["password"]
-            return self._exchange_otp(otp)
+            return self._exchange_otp(otp, email)
         except FetchError:
             raise
         except Exception as exc:

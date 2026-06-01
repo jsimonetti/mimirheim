@@ -109,11 +109,12 @@ def attempt_auth(
         pending = load_pending(pending_path)
 
     uuid = pending["uuid"]  # type: ignore[index]
+    pending_email = pending.get("email", email)  # type: ignore[assignment]
 
     # Poll within the window, stopping as soon as the user activates.
     deadline = time.monotonic() + poll_window_seconds
     while time.monotonic() < deadline:
-        token = client.poll_activation(uuid)
+        token = client.poll_activation(uuid, pending_email)
         if token is not None:
             save_token(token_path, token)
             delete_pending(pending_path)

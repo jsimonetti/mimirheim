@@ -66,9 +66,26 @@ class TestPollActivation:
         })
         with patch("zonneplan_prices.api.requests.get", return_value=resp), \
              patch("zonneplan_prices.api.requests.post", return_value=token_resp):
-            result = client.poll_activation("req-uuid")
+            result = client.poll_activation("req-uuid", "user@example.com")
         assert result is not None
         assert result["access_token"] == "act"
+
+    def test_activated_exchange_includes_email_in_token_request(self) -> None:
+        client = ZonneplanClient(access_token=None)
+        otp = "one-time-pass"
+        resp = _make_response(200, {"data": {"is_activated": True, "password": otp}})
+        token_resp = _make_response(200, {
+            "access_token": "act",
+            "refresh_token": "rft",
+            "token_type": "Bearer",
+            "expires_in": 3600,
+        })
+        with patch("zonneplan_prices.api.requests.get", return_value=resp), \
+             patch("zonneplan_prices.api.requests.post", return_value=token_resp) as mock_post:
+            client.poll_activation("req-uuid", "user@example.com")
+        args, kwargs = mock_post.call_args
+        assert args[0].endswith("/oauth/token")
+        assert kwargs["json"]["email"] == "user@example.com"
 
 
 class TestGetSummary:
