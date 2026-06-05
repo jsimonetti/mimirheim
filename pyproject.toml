@@ -30,7 +30,7 @@ nordpool = [
     "pynordpool>=0.4.0",
 ]
 zonneplan = [
-    "requests>=2.32",
+    "requests>=2.34.2",
 ]
 pv-fetcher = [
     "forecast-solar>=5.0",
@@ -73,7 +73,7 @@ config-editor = [
 helpers = [
     "apscheduler>=3.10,<4.0",
     "pynordpool>=0.4.0",
-    "requests>=2.32",
+    "requests>=2.34.2",
     "forecast-solar>=5.0",
     "httpx>=0.27",
     "knmi-py>=0.2",
