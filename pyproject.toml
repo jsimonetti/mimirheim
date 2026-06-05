@@ -48,7 +48,7 @@ pv-ml-learner-postgres = [
     "psycopg2-binary>=2.9.12",
 ]
 pv-ml-learner-mysql = [
-    "pymysql>=1.1",
+    "pymysql>=1.2.0",
 ]
 baseload-ha = [
     "httpx>=0.27",
@@ -60,7 +60,7 @@ baseload-ha-db-postgres = [
     "psycopg2-binary>=2.9.12",
 ]
 baseload-ha-db-mysql = [
-    "pymysql>=1.1",
+    "pymysql>=1.2.0",
 ]
 reporter = [
     "plotly>=6.7.0",
