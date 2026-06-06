@@ -220,6 +220,15 @@ class DeferrableLoad:
         # Example: duration=2, latest_step=6 → last start = step 4 (runs 4,5).
         last_valid_start = min(latest_step - duration, horizon - duration)
 
+        # If the window no longer has room for a complete run, exclude the
+        # device from this solve. This happens near or past window_latest when
+        # no start step can both respect window_earliest and finish on time.
+        # Returning early keeps the load silent instead of constructing an
+        # empty eligible-start sum, which Python would reduce to ``0 == 1``
+        # (a plain bool) and hand to the solver as an invalid constraint.
+        if last_valid_start < earliest_step:
+            return
+
         # Declare start[t] for each eligible step and set upper bound 0 for
         # out-of-window steps so the solver cannot choose them.
         for t in ctx.T:

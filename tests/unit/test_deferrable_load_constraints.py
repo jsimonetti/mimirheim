@@ -526,3 +526,25 @@ def test_deferrable_load_completed_no_window_still_silent() -> None:
     assert len(load.start) == 0
     for t in ctx.T:
         assert load.net_power(t) == pytest.approx(0.0)
+
+
+def test_deferrable_load_window_too_short_is_excluded() -> None:
+    """When the latest allowed completion leaves no feasible start, the load is excluded.
+
+    This can happen near the end of the horizon when the machine no longer has
+    enough time to complete before ``window_latest``. The device must be
+    ignored rather than emitting an always-false boolean constraint.
+    """
+    solve_time = _now()
+    window = DeferrableWindow(
+        earliest=solve_time + timedelta(hours=1.5),
+        latest=solve_time + timedelta(hours=1.75),
+    )
+    ctx = _make_ctx(horizon=8)
+    load = DeferrableLoad(name="wash", config=_config(duration_steps=2))
+    load.add_variables(ctx)
+    load.add_constraints(ctx, window=window, solve_time_utc=solve_time)
+
+    assert len(load.start) == 0
+    for t in ctx.T:
+        assert load.net_power(t) == pytest.approx(0.0)
