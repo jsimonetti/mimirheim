@@ -1,0 +1,79 @@
+name: Build PR image and push to GHCR
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: build-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  BUILD_NAME: Mimirheim
+  BUILD_DESCRIPTION: MILP energy optimiser for home battery, PV, and EV scheduling against dynamic electricity prices.
+  BUILD_ARCH: amd64, aarch64
+  BUILD_VERSION: pr-${{ github.event.pull_request.number }}
+  BUILD_DATE: ${{ github.event.pull_request.updated_at }}
+  BUILD_REF: ${{ github.event.pull_request.head.sha }}
+
+jobs:
+  build-and-push-image:
+    name: Build PR image and push to GHCR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      pull-requests: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 1
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Buildkit
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4
+        with:
+          platforms: linux/amd64,linux/arm64
+
+      - name: GHCR Login
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=pr-${{ github.event.pull_request.number }}
+          labels: |
+            io.hass.name="${{ env.BUILD_NAME }}" \
+            io.hass.description="${{ env.BUILD_DESCRIPTION }}" \
+            io.hass.arch="${{ env.BUILD_ARCH }}" \
+            io.hass.type="addon" \
+            io.hass.version="${{ env.BUILD_VERSION }}" \
+            org.opencontainers.image.title="${{ env.BUILD_NAME }}" \
+            org.opencontainers.image.description="${{ env.BUILD_DESCRIPTION }}" \
+            org.opencontainers.image.created="${{ env.BUILD_DATE }}" \
+            org.opencontainers.image.revision="${{ env.BUILD_REF }}" \
+            org.opencontainers.image.source="https://github.com/jsimonetti/mimirheim" \
+            org.opencontainers.image.version="${{ env.BUILD_VERSION }}"
+
+      - name: Build and Push
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7
+        with:
+          push: true
+          platforms: linux/arm64,linux/amd64
+          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache,mode=max
+          context: .
+          file: container/Dockerfile
