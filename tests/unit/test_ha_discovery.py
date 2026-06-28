@@ -828,7 +828,7 @@ def test_deferrable_recommended_start_sensor_published() -> None:
 
 
 def test_deferrable_window_inputs_have_entity_category_config() -> None:
-    """Window earliest, latest, and committed start text entities have entity_category: config."""
+    """Window earliest/latest/start inputs are datetime entities marked as config."""
     config = MimirheimConfig.model_validate({
         "mqtt": {
             "host": "localhost",
@@ -858,6 +858,9 @@ def test_deferrable_window_inputs_have_entity_category_config() -> None:
         matching = {k: v for k, v in components.items() if f"wash_{suffix}" in k}
         assert len(matching) == 1, f"Expected one component for {suffix}"
         entity = next(iter(matching.values()))
+        assert entity.get("platform") == "datetime", (
+            f"{suffix} must use platform=datetime: {entity}"
+        )
         assert entity.get("entity_category") == "config", (
             f"{suffix} must have entity_category=config: {entity}"
         )

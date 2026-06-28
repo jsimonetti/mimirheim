@@ -277,24 +277,21 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
                 "entity_category": "diagnostic",
             })
 
-    # --- Deferrable load window and start-time text entities ---
-    # HA does not provide a datetime MQTT platform for MQTT discovery.
-    # The correct supported platform for a settable ISO 8601 string is
-    # "text". The user (or an automation) types an ISO 8601 UTC datetime
-    # string into the HA UI; HA retains and publishes it to the
-    # command_topic, which is the same topic mimirheim reads for that field.
+    # --- Deferrable load window and start-time datetime entities ---
+    # Use HA MQTT datetime entities so the UI provides native date/time
+    # controls while still publishing user changes via command_topic.
     # parse_datetime() in input_parser.py accepts both offset-aware and
-    # naive (UTC-assumed) strings, so any standard ISO 8601 value works.
+    # naive (UTC-assumed) ISO 8601 strings, which matches HA payload formats.
 
     for name, dl_cfg in config.deferrable_loads.items():
-        _add(f"{device_id}_{name}_window_earliest_input", "text", {
+        _add(f"{device_id}_{name}_window_earliest_input", "datetime", {
             "name": f"{name} window earliest",
             "state_topic": dl_cfg.topic_window_earliest,
             "command_topic": dl_cfg.topic_window_earliest,
             "retain": True,
             "entity_category": "config",
         })
-        _add(f"{device_id}_{name}_window_latest_input", "text", {
+        _add(f"{device_id}_{name}_window_latest_input", "datetime", {
             "name": f"{name} window latest",
             "state_topic": dl_cfg.topic_window_latest,
             "command_topic": dl_cfg.topic_window_latest,
@@ -302,7 +299,7 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
             "entity_category": "config",
         })
         if dl_cfg.topic_committed_start_time is not None:
-            _add(f"{device_id}_{name}_start_time_input", "text", {
+            _add(f"{device_id}_{name}_start_time_input", "datetime", {
                 "name": f"{name} committed start time",
                 "state_topic": dl_cfg.topic_committed_start_time,
                 "command_topic": dl_cfg.topic_committed_start_time,
