@@ -22,6 +22,13 @@ jobs:
   build-and-push-image:
     name: Build PR image and push to GHCR
     runs-on: ubuntu-latest
+    # The 'pr-image' environment has required reviewers configured in
+    # GitHub repo Settings → Environments. GitHub pauses this job until
+    # a maintainer manually approves the deployment, preventing untrusted
+    # PR code from running the build automatically.
+    # Setup: Settings → Environments → New environment → "pr-image" →
+    #        add required reviewers.
+    environment: pr-image
     permissions:
       contents: read
       packages: write
