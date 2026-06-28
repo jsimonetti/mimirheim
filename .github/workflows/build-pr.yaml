@@ -2,7 +2,7 @@ name: Build PR image and push to GHCR
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, closed]
 
 concurrency:
   group: build-pr-${{ github.event.pull_request.number }}
@@ -22,6 +22,10 @@ jobs:
   build-and-push-image:
     name: Build PR image and push to GHCR
     runs-on: ubuntu-latest
+    # Skip the build when the PR is closed or merged. The 'closed' event
+    # still enters the same concurrency group, which cancels any in-progress
+    # run before this condition causes the new run to exit immediately.
+    if: github.event.action != 'closed'
     # The 'pr-image' environment has required reviewers configured in
     # GitHub repo Settings → Environments. GitHub pauses this job until
     # a maintainer manually approves the deployment, preventing untrusted
