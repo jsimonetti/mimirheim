@@ -24,7 +24,7 @@ dependencies = [
 # ---------------------------------------------------------------------------
 [project.optional-dependencies]
 scheduler = [
-    "apscheduler>=3.10,<4.0",
+    "apscheduler>=3.11.3,<4.0",
 ]
 nordpool = [
     "pynordpool>=0.4.0",
@@ -71,7 +71,7 @@ config-editor = [
 # Meta-extra: installs every helper's runtime dependencies in one shot.
 # Used by the container build and by full developer environments.
 helpers = [
-    "apscheduler>=3.10,<4.0",
+    "apscheduler>=3.11.3,<4.0",
     "pynordpool>=0.4.0",
     "requests>=2.34.2",
     "forecast-solar>=5.0.1",
