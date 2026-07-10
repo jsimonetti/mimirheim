@@ -18,6 +18,8 @@ _SCALE = 0.0000001
 
 # A fixed "now" used throughout — always a round UTC hour.
 _NOW = datetime(2026, 5, 28, 10, 0, 0, tzinfo=timezone.utc)
+# A fixed "now" that falls mid-quarter (10:17), used for quarterly-step tests.
+_NOW_MID = datetime(2026, 5, 28, 10, 17, 0, tzinfo=timezone.utc)
 
 
 def _make_raw_entry(start_utc: datetime, price_raw: int, price_excl_raw: int) -> dict:
@@ -174,6 +176,31 @@ class TestFetchPrices:
                 import_formula="price",
                 export_formula="0.0",
             )
+
+    def test_quarterly_past_steps_excluded_mid_quarter(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Quarterly steps before the current 15-min block are excluded.
+
+        When 'now' is 10:17, floor_to_15min gives 10:15. Steps at 10:00 and
+        earlier must be excluded; the step at 10:15 (the current slot) and
+        beyond must be included.
+        """
+        monkeypatch.setattr("zonneplan_prices.fetcher.datetime", _make_datetime_mock(_NOW_MID))
+        entries = [
+            _make_raw_entry(_NOW_MID.replace(minute=0, second=0),  1_000_000, 500_000),  # 10:00 — past
+            _make_raw_entry(_NOW_MID.replace(minute=15, second=0), 1_000_000, 500_000),  # 10:15 — current
+            _make_raw_entry(_NOW_MID.replace(minute=30, second=0), 1_000_000, 500_000),  # 10:30 — future
+        ]
+        steps = fetch_prices(
+            client=_make_client(entries),
+            connection_uuid="conn-1",
+            import_formula="price",
+            export_formula="0.0",
+        )
+        tss = [s["ts"] for s in steps]
+        assert len(steps) == 2, f"Expected 2 steps (10:15 + 10:30), got: {tss}"
+        assert all("T10:1" in ts or "T10:3" in ts for ts in tss)
 
     def test_steps_sorted_by_ts(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("zonneplan_prices.fetcher.datetime", _make_datetime_mock(_NOW))

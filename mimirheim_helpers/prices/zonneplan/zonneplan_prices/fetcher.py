@@ -22,7 +22,7 @@ ensure the client's access token is valid before calling ``fetch_prices``.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 from zonneplan_prices.api import FetchError, ZonneplanClient
@@ -48,9 +48,9 @@ def fetch_prices(
     ``price_per_hour`` entry using the provided formulas, filters out steps that
     start before the current UTC hour, and returns the remainder sorted by ``ts``.
 
-    Only steps at or after the current UTC hour are included. This matches the
-    Nordpool helper's behaviour and ensures mimirheim always receives a
-    forward-looking price horizon.
+    Only steps at or after the start of the current 15-minute block are
+    included. This ensures mimirheim always receives a forward-looking price
+    horizon regardless of whether the API delivers hourly or quarterly steps.
 
     Args:
         client: A ZonneplanClient instance with a valid access token.
@@ -80,7 +80,17 @@ def fetch_prices(
     summary = client.get_summary(connection_uuid)
     raw_entries: list[dict] = summary.get("price_per_hour", [])
 
-    now = datetime.now(tz=timezone.utc).replace(minute=0, second=0, microsecond=0)
+    _now = datetime.now(tz=timezone.utc)
+    # Floor to the nearest 15-minute boundary so that already-completed
+    # quarterly slots within the current hour are excluded, not just slots
+    # from previous hours. For hourly data this is equivalent to the previous
+    # replace(minute=0) because hourly entries are always at :00.
+    _discard = timedelta(
+        minutes=_now.minute % 15,
+        seconds=_now.second,
+        microseconds=_now.microsecond,
+    )
+    now = _now - _discard
     steps: list[dict[str, Any]] = []
 
     for entry in raw_entries:
