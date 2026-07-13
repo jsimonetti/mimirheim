@@ -716,7 +716,7 @@ wheels = [
 
 [[package]]
 name = "mimirheim"
-version = "0.1.9"
+version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "mip" },
