@@ -1,11 +1,12 @@
 # zonneplan\_prices
 
-Fetches hourly electricity prices from the Zonneplan API and publishes them to
+Fetches electricity prices from the Zonneplan API and publishes them to
 an MQTT topic in the format expected by mimirheim. Intended to be used alongside
 the mimirheim solver as a drop-in replacement for the Nordpool prices helper.
 
-Zonneplan is a Dutch energy supplier that publishes dynamic (hourly) all-in
-consumer prices. Unlike Nordpool, no API key is needed — authentication uses
+Zonneplan is a Dutch energy supplier that publishes dynamic all-in consumer
+prices, either hourly or in 15-minute (quarter-hourly) blocks depending on
+configuration. Unlike Nordpool, no API key is needed — authentication uses
 an email OTP flow that the daemon handles automatically.
 
 ---
@@ -17,9 +18,10 @@ an email OTP flow that the daemon handles automatically.
 2. If no token exists, or the token has expired and cannot be refreshed, the
    daemon sends a login email to the configured address and begins polling for
    activation. **The user must click the link in the email once.**
-3. Once authenticated, the daemon fetches the `price_per_hour` list from
-   `GET /connections/{uuid}/summary`, applies the configured price formulas,
-   and publishes the result retained to the output topic.
+3. Once authenticated, the daemon fetches the configured consumer-price chart
+   (hourly or quarter-hourly, see `price_interval` below) from
+   `GET /api/consumer-prices/charts/{chart_name}`, applies the configured
+   price formulas, and publishes the result retained to the output topic.
 4. The token is persisted to disk and automatically refreshed on subsequent
    cycles — the email link is only needed once per token lifetime.
 
@@ -39,6 +41,7 @@ output_topic: mimir/input/prices   # optional; defaults to {mimir_topic_prefix}/
 zonneplan:
   email: your@email.com            # required for first-time authentication
   token_file: /data/zonneplan_token.json   # must be on a persistent volume
+  price_interval: hourly           # optional; "hourly" (default) or "quarter_hourly"
   import_formula: "price"          # optional; see Formulas section
   export_formula: "0.0"            # optional; see Formulas section
 

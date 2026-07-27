@@ -9,7 +9,7 @@ without changes to the base class.
 """
 from __future__ import annotations
 
-from typing import Callable
+from typing import Callable, Literal
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -82,6 +82,11 @@ class ZonneplanApiConfig(BaseModel):
             Same variables available as ``import_formula``. Defaults to
             ``"0.0"`` (no export revenue modelled) because Zonneplan does not
             publish a per-hour export price.
+        price_interval: Which Zonneplan consumer-price chart to fetch —
+            ``"hourly"`` or ``"quarter_hourly"``. Defaults to ``"hourly"``,
+            matching Zonneplan's current dynamic pricing. Set to
+            ``"quarter_hourly"`` once 15-minute prices are available on the
+            account.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -119,6 +124,15 @@ class ZonneplanApiConfig(BaseModel):
             "Same variables available as import_formula. Defaults to price_excl_tax."
         ),
         json_schema_extra={"ui_label": "Export price formula", "ui_group": "basic"},
+    )
+    price_interval: Literal["hourly", "quarter_hourly"] = Field(
+        default="hourly",
+        description=(
+            "Price data resolution requested from Zonneplan. 'hourly' matches "
+            "current dynamic pricing; 'quarter_hourly' requests 15-minute "
+            "prices once available on the account."
+        ),
+        json_schema_extra={"ui_label": "Price interval", "ui_group": "basic"},
     )
 
     @field_validator("import_formula", "export_formula", mode="after")
