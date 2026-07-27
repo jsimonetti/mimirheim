@@ -30,6 +30,15 @@ class TestZonneplanApiConfig:
         assert cfg.export_formula == "price_excl_tax"
         assert cfg.token_file == "zonneplan_token.json"
         assert cfg.email is None
+        assert cfg.price_interval == "hourly"
+
+    def test_price_interval_accepts_quarter_hourly(self) -> None:
+        cfg = ZonneplanApiConfig(price_interval="quarter_hourly")
+        assert cfg.price_interval == "quarter_hourly"
+
+    def test_price_interval_rejects_invalid_value(self) -> None:
+        with pytest.raises(ValidationError):
+            ZonneplanApiConfig(price_interval="daily")
 
     def test_email_accepted(self) -> None:
         cfg = ZonneplanApiConfig(email="user@example.com")

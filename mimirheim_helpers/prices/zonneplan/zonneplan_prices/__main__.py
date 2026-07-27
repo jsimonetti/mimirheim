@@ -83,12 +83,6 @@ class ZonneplanPricesDaemon(HelperDaemon):
     FORECAST_DEVICE_CLASS = None
     FORECAST_ATTRIBUTES_TEMPLATE = PRICE_FORECAST_ATTRIBUTES_TEMPLATE
 
-    # The electricity connection UUID is discovered on the first successful
-    # fetch and cached here for all subsequent cycles. The UUID is stable for
-    # the lifetime of the daemon — it identifies the account's electricity
-    # contract and never changes at runtime.
-    _connection_uuid: str | None = None
-
     def _run_cycle(self, client: mqtt.Client) -> CycleResult | None:
         """Fetch current Zonneplan prices and publish them.
 
@@ -100,8 +94,8 @@ class ZonneplanPricesDaemon(HelperDaemon):
             client: Connected paho MQTT client.
 
         Returns:
-            CycleResult with the number of price steps as horizon_hours, or
-            None if the cycle did not complete successfully.
+            CycleResult with the fetched coverage (in hours) as horizon_hours,
+            or None if the cycle did not complete successfully.
         """
         zp_config = self._config.zonneplan
         token_path = Path(zp_config.token_file)
@@ -148,26 +142,12 @@ class ZonneplanPricesDaemon(HelperDaemon):
                 # Still waiting for the user to click the activation link.
                 return None
 
-        # --- Step 4: Resolve connection UUID (discovered once, then cached). ---
+        # --- Step 4: Fetch prices. ---
         api_client = ZonneplanClient(access_token=token["access_token"])
-        if self._connection_uuid is None:
-            try:
-                self._connection_uuid = api_client.get_connection_uuid()
-                logger.info("Discovered Zonneplan connection UUID: %s", self._connection_uuid)
-            except FetchError:
-                logger.exception(
-                    "Failed to discover Zonneplan connection UUID — retaining "
-                    "existing payload on %s",
-                    output_topic,
-                )
-                return None
-        connection_uuid = self._connection_uuid
-
-        # --- Step 5: Fetch prices. ---
         try:
             steps = fetch_prices(
                 client=api_client,
-                connection_uuid=connection_uuid,
+                price_interval=zp_config.price_interval,
                 import_formula=zp_config.import_formula,
                 export_formula=zp_config.export_formula,
             )
@@ -178,7 +158,7 @@ class ZonneplanPricesDaemon(HelperDaemon):
             )
             return None
 
-        # --- Step 6: Publish. ---
+        # --- Step 5: Publish. ---
         publish_prices(
             client,
             output_topic,
@@ -186,7 +166,11 @@ class ZonneplanPricesDaemon(HelperDaemon):
             signal_mimir=self._config.signal_mimir,
             mimir_trigger_topic=self._config.mimir_trigger_topic,
         )
-        return CycleResult(horizon_hours=len(steps))
+        # Each step covers one hour in "hourly" mode or 15 minutes in
+        # "quarter_hourly" mode. len(steps) alone is a step count, not hours —
+        # it must be scaled by the step duration to report true horizon_hours.
+        step_hours = 0.25 if zp_config.price_interval == "quarter_hourly" else 1.0
+        return CycleResult(horizon_hours=len(steps) * step_hours)
 
 
 def main() -> None:

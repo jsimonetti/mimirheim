@@ -231,68 +231,34 @@ class ZonneplanClient:
         except Exception as exc:
             raise AuthError(f"Token refresh failed: {exc}") from exc
 
-    def get_connection_uuid(self) -> str:
-        """Discover the electricity connection UUID from the account.
+    def get_consumer_prices(self, chart_name: str) -> dict:
+        """Fetch a consumer price chart.
 
-        Called once when ``connection_uuid`` is not configured. The first
-        electricity connection found across all address groups is used.
-
-        Returns:
-            The UUID string of the first electricity connection.
-
-        Raises:
-            FetchError: On HTTP or network failure, or if no electricity
-                connection is found in the account.
-        """
-        try:
-            resp = requests.get(
-                f"{_BASE_URL}/user-accounts/me",
-                headers=self._auth_headers(),
-                timeout=15,
-            )
-            if resp.status_code >= 400:
-                raise FetchError(
-                    f"GET /user-accounts/me returned HTTP {resp.status_code}"
-                )
-            address_groups = resp.json()["data"]["address_groups"]
-            for group in address_groups:
-                for conn in group.get("connections", []):
-                    if conn.get("market_segment") == "electricity":
-                        return conn["uuid"]
-            raise FetchError(
-                "No electricity connection found in Zonneplan account. "
-                "Check that the account has an active electricity contract."
-            )
-        except FetchError:
-            raise
-        except Exception as exc:
-            raise FetchError(f"GET /user-accounts/me failed: {exc}") from exc
-
-    def get_summary(self, connection_uuid: str) -> dict:
-        """Fetch the price summary for a connection.
-
-        Returns the ``data`` object from the summary response, which contains
-        the ``price_per_hour`` list. The raw integer price fields in the list
-        must be multiplied by 0.0000001 to convert to EUR/kWh.
+        This endpoint is scoped to the authenticated account, not to a
+        specific connection — no connection UUID is needed or accepted.
+        Returns the ``data`` object, which contains
+        ``data["chart"]["series"]["prices"]``. The raw integer price fields
+        in that list must be multiplied by 0.0000001 to convert to EUR/kWh.
 
         Args:
-            connection_uuid: The electricity connection UUID to fetch prices for.
+            chart_name: ``"electricity-hourly"`` or
+                ``"electricity-quarter-hourly"``.
 
         Returns:
-            The ``data`` dict from the summary response.
+            The ``data`` dict from the consumer-prices response.
 
         Raises:
             FetchError: On HTTP or network failure.
         """
         try:
             resp = requests.get(
-                f"{_BASE_URL}/connections/{connection_uuid}/summary",
+                f"{_BASE_URL}/api/consumer-prices/charts/{chart_name}",
                 headers=self._auth_headers(),
                 timeout=15,
             )
             if resp.status_code >= 400:
                 raise FetchError(
-                    f"GET /connections/{connection_uuid}/summary "
+                    f"GET /api/consumer-prices/charts/{chart_name} "
                     f"returned HTTP {resp.status_code}"
                 )
             return resp.json()["data"]
@@ -300,5 +266,5 @@ class ZonneplanClient:
             raise
         except Exception as exc:
             raise FetchError(
-                f"GET /connections/{connection_uuid}/summary failed: {exc}"
+                f"GET /api/consumer-prices/charts/{chart_name} failed: {exc}"
             ) from exc

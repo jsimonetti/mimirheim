@@ -1,14 +1,15 @@
 """Transform Zonneplan API price data into the mimirheim price step format.
 
 This module contains one public function, ``fetch_prices``, which calls the
-Zonneplan API, applies the operator-configured import and export price formulas,
-filters out past steps, and returns a sorted list of step dicts in the format
-expected by the mimirheim prices input topic.
+Zonneplan consumer-prices chart endpoint, applies the operator-configured
+import and export price formulas, filters out steps that have already fully
+elapsed, and returns a sorted list of step dicts in the format expected by
+the mimirheim prices input topic.
 
 Output format per step:
 
     {
-        "ts": "2026-05-28T10:00:00+00:00",    # ISO 8601 UTC start of hour
+        "ts": "2026-05-28T10:00:00+00:00",    # ISO 8601 UTC step start
         "import_eur_per_kwh": 0.154619,        # after import_formula
         "export_eur_per_kwh": 0.0,             # after export_formula
         "confidence": 1.0                      # always 1.0 for Zonneplan
@@ -23,7 +24,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any
 
 from zonneplan_prices.api import FetchError, ZonneplanClient
 from zonneplan_prices.config import get_export_fn, get_import_fn, ZonneplanApiConfig
@@ -34,27 +35,40 @@ logger = logging.getLogger(__name__)
 # All integer price fields in the API response use this scale.
 _PRICE_SCALE = 0.0000001
 
+# Maps the operator-facing price_interval config value to the Zonneplan API's
+# chart_name path segment for GET /api/consumer-prices/charts/{chart_name}.
+_CHART_NAMES: dict[str, str] = {
+    "hourly": "electricity-hourly",
+    "quarter_hourly": "electricity-quarter-hourly",
+}
+
 
 def fetch_prices(
     *,
     client: ZonneplanClient,
-    connection_uuid: str,
+    price_interval: str,
     import_formula: str,
     export_formula: str,
 ) -> list[dict[str, Any]]:
     """Fetch price steps from Zonneplan and return the mimirheim-format list.
 
-    Calls ``GET /connections/{connection_uuid}/summary``, converts each
-    ``price_per_hour`` entry using the provided formulas, filters out steps that
-    start before the current UTC hour, and returns the remainder sorted by ``ts``.
+    Calls ``GET /api/consumer-prices/charts/{chart_name}`` (account-scoped —
+    no connection UUID is needed), converts each price entry using the
+    provided formulas, filters out steps whose interval has already fully
+    elapsed, and returns the remainder sorted by ``ts``.
 
-    Only steps at or after the current UTC hour are included. This matches the
-    Nordpool helper's behaviour and ensures mimirheim always receives a
-    forward-looking price horizon.
+    An entry is included as long as its ``end_date`` is still in the future —
+    i.e. its interval has not fully elapsed yet — regardless of how far "now"
+    currently is into that interval. This intentionally does not use a fixed
+    time-floor (e.g. truncating "now" to the current hour or 15-minute
+    block): doing so can drop the only currently-available in-progress price
+    entry before the next batch of data has arrived, leaving no price data at
+    all for a period of time.
 
     Args:
         client: A ZonneplanClient instance with a valid access token.
-        connection_uuid: The electricity connection UUID to fetch prices for.
+        price_interval: ``"hourly"`` or ``"quarter_hourly"`` — selects which
+            Zonneplan consumer-price chart to fetch.
         import_formula: Python expression for the all-in import price. Variables:
             ``price`` (incl. tax, EUR/kWh), ``price_excl_tax`` (excl. tax,
             EUR/kWh), ``ts`` (step start datetime, UTC-aware).
@@ -77,33 +91,40 @@ def fetch_prices(
     import_fn = get_import_fn(api_config)
     export_fn = get_export_fn(api_config)
 
-    summary = client.get_summary(connection_uuid)
-    raw_entries: list[dict] = summary.get("price_per_hour", [])
+    chart_name = _CHART_NAMES[price_interval]
+    data = client.get_consumer_prices(chart_name)
+    raw_entries: list[dict] = (
+        data.get("chart", {}).get("series", {}).get("prices", [])
+    )
 
-    now = datetime.now(tz=timezone.utc).replace(minute=0, second=0, microsecond=0)
+    now = datetime.now(tz=timezone.utc)
     steps: list[dict[str, Any]] = []
 
     for entry in raw_entries:
-        ts = datetime.fromisoformat(
-            entry["datetime"].replace("Z", "+00:00")
-        )
-        # Exclude steps that have already started (before the current hour).
-        if ts < now:
+        start = datetime.fromisoformat(entry["start_date"].replace("Z", "+00:00"))
+        end = datetime.fromisoformat(entry["end_date"].replace("Z", "+00:00"))
+        # Exclude entries whose interval has already fully elapsed. Using the
+        # entry's own end_date (rather than a fixed time-floor) means an
+        # in-progress entry stays available for its entire duration, however
+        # far "now" is into it — see the docstring above for why this matters.
+        if end <= now:
             continue
 
-        price = entry["electricity_price"] * _PRICE_SCALE
-        price_excl_tax = entry["electricity_price_excl_tax"] * _PRICE_SCALE
+        price = entry["price_tax_included"]["amount"] * _PRICE_SCALE
+        price_excl_tax = entry["price_tax_excluded"]["amount"] * _PRICE_SCALE
 
-        import_price = import_fn(ts, price, price_excl_tax)
-        export_price = export_fn(ts, price, price_excl_tax)
+        import_price = import_fn(start, price, price_excl_tax)
+        export_price = export_fn(start, price, price_excl_tax)
 
         steps.append({
-            "ts": ts.isoformat(),
+            "ts": start.isoformat(),
             "import_eur_per_kwh": import_price,
             "export_eur_per_kwh": export_price,
             "confidence": 1.0,
         })
 
     steps.sort(key=lambda s: s["ts"])
-    logger.debug("Fetched %d price steps from Zonneplan.", len(steps))
+    logger.debug(
+        "Fetched %d price steps from Zonneplan (%s).", len(steps), price_interval
+    )
     return steps

@@ -88,16 +88,29 @@ class TestPollActivation:
         assert kwargs["json"]["email"] == "user@example.com"
 
 
-class TestGetSummary:
-    def test_calls_correct_url_with_bearer_token(self) -> None:
+class TestGetConsumerPrices:
+    def test_calls_correct_url_with_bearer_token_hourly(self) -> None:
         client = ZonneplanClient(access_token="my-token")
-        price_data = {"price_per_hour": []}
+        price_data = {"chart": {"series": {"prices": []}}}
         resp = _make_response(200, {"data": price_data})
         with patch("zonneplan_prices.api.requests.get", return_value=resp) as mock_get:
-            result = client.get_summary("conn-uuid-abc")
+            result = client.get_consumer_prices("electricity-hourly")
         args, kwargs = mock_get.call_args
-        assert args[0] == f"{_BASE_URL}/connections/conn-uuid-abc/summary"
+        assert args[0] == f"{_BASE_URL}/api/consumer-prices/charts/electricity-hourly"
         assert kwargs["headers"]["Authorization"] == "Bearer my-token"
+        assert result == price_data
+
+    def test_calls_correct_url_with_bearer_token_quarter_hourly(self) -> None:
+        client = ZonneplanClient(access_token="my-token")
+        price_data = {"chart": {"series": {"prices": []}}}
+        resp = _make_response(200, {"data": price_data})
+        with patch("zonneplan_prices.api.requests.get", return_value=resp) as mock_get:
+            result = client.get_consumer_prices("electricity-quarter-hourly")
+        args, kwargs = mock_get.call_args
+        assert (
+            args[0]
+            == f"{_BASE_URL}/api/consumer-prices/charts/electricity-quarter-hourly"
+        )
         assert result == price_data
 
     def test_raises_fetch_error_on_http_failure(self) -> None:
@@ -105,7 +118,7 @@ class TestGetSummary:
         resp = _make_response(503, {})
         with patch("zonneplan_prices.api.requests.get", return_value=resp):
             with pytest.raises(FetchError):
-                client.get_summary("conn-uuid")
+                client.get_consumer_prices("electricity-hourly")
 
 
 class TestRefreshToken:
@@ -124,37 +137,3 @@ class TestRefreshToken:
             result = client.refresh_token("good-refresh-token")
         assert result["access_token"] == "new"
 
-
-class TestGetConnectionUuid:
-    def test_returns_first_electricity_uuid(self) -> None:
-        client = ZonneplanClient(access_token="tok")
-        account_data = {
-            "data": {
-                "address_groups": [{
-                    "connections": [
-                        {"uuid": "elec-uuid", "market_segment": "electricity"},
-                        {"uuid": "gas-uuid", "market_segment": "gas"},
-                    ]
-                }]
-            }
-        }
-        resp = _make_response(200, account_data)
-        with patch("zonneplan_prices.api.requests.get", return_value=resp):
-            uuid = client.get_connection_uuid()
-        assert uuid == "elec-uuid"
-
-    def test_raises_fetch_error_when_no_electricity_connection(self) -> None:
-        client = ZonneplanClient(access_token="tok")
-        account_data = {
-            "data": {
-                "address_groups": [{
-                    "connections": [
-                        {"uuid": "gas-uuid", "market_segment": "gas"},
-                    ]
-                }]
-            }
-        }
-        resp = _make_response(200, account_data)
-        with patch("zonneplan_prices.api.requests.get", return_value=resp):
-            with pytest.raises(FetchError, match="electricity"):
-                client.get_connection_uuid()
