@@ -94,8 +94,8 @@ class ZonneplanPricesDaemon(HelperDaemon):
             client: Connected paho MQTT client.
 
         Returns:
-            CycleResult with the number of price steps as horizon_hours, or
-            None if the cycle did not complete successfully.
+            CycleResult with the fetched coverage (in hours) as horizon_hours,
+            or None if the cycle did not complete successfully.
         """
         zp_config = self._config.zonneplan
         token_path = Path(zp_config.token_file)
@@ -166,7 +166,11 @@ class ZonneplanPricesDaemon(HelperDaemon):
             signal_mimir=self._config.signal_mimir,
             mimir_trigger_topic=self._config.mimir_trigger_topic,
         )
-        return CycleResult(horizon_hours=len(steps))
+        # Each step covers one hour in "hourly" mode or 15 minutes in
+        # "quarter_hourly" mode. len(steps) alone is a step count, not hours —
+        # it must be scaled by the step duration to report true horizon_hours.
+        step_hours = 0.25 if zp_config.price_interval == "quarter_hourly" else 1.0
+        return CycleResult(horizon_hours=len(steps) * step_hours)
 
 
 def main() -> None:
