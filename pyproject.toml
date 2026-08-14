@@ -6,7 +6,7 @@ dependencies = [
     "mip>=1.14",
     "pydantic>=2.13.4",
     "paho-mqtt>=2.0",
-    "pyyaml>=6.0",
+    "pyyaml>=6.0.3",
     "respx>=0.23.1",
 ]
 
