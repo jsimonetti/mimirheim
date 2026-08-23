@@ -20,6 +20,7 @@ import html
 from datetime import datetime, timedelta
 
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 from reporter._render_helpers import (
     STEP_HOURS,
@@ -46,8 +47,9 @@ def build_report_html(inp: dict, out: dict) -> str:
     ``include_plotlyjs="directory"`` behaviour — the script tag is emitted
     once in the page ``<head>``).
 
-    The timezone-shift script (``_TZ_SCRIPT``) is injected once at the bottom
-    of the page and applied to all Plotly graph divs in the document.
+    The timezone-shift script from ``_build_multi_div_tz_script`` is injected
+    once at the bottom of the page and applied to all Plotly graph divs in the
+    document.
 
     Args:
         inp: Parsed SolveBundle JSON (the ``*_input.json`` dump).
@@ -60,8 +62,9 @@ def build_report_html(inp: dict, out: dict) -> str:
     import_prices = inp["horizon_prices"]
     export_prices = inp["horizon_export_prices"]
 
-    # See build_combined_figure: the step timestamps come straight from the
-    # dump rather than being derived from solve_time_utc.
+    # The step timestamps come straight from the dump. Each step records an
+    # absolute ISO time, so there is no step count or spacing to assume and no
+    # way for the axis to drift from the data plotted on it.
     xs = [s["t"] for s in schedule]
 
     device_meta = _build_device_meta(inp)
@@ -188,8 +191,7 @@ def build_report_html(inp: dict, out: dict) -> str:
             else:
                 soc_xs = []
 
-            from plotly.subplots import make_subplots as _msp
-            soc_fig = _msp(specs=[[{"secondary_y": True}]])
+            soc_fig = make_subplots(specs=[[{"secondary_y": True}]])
             soc_fig.add_trace(
                 go.Scatter(
                     x=soc_xs,
@@ -571,7 +573,7 @@ def _assemble_html(title: str, sections: list[str]) -> str:
 def _build_multi_div_tz_script() -> str:
     """Return a timezone-shift script that operates on all Plotly divs in the page.
 
-    The original ``_TZ_SCRIPT`` from ``render.py`` targets a single
+    A single-figure timezone script would target one
     ``plotly-graph-div`` element (index 0). This version iterates all divs.
 
     Returns:
