@@ -10,6 +10,7 @@ Tests verify:
 - Multiple entries targeting the same topic are valid.
 - Day-of-week follows standard cron, so 7 is accepted as Sunday.
 - Restricting day-of-month and day-of-week together is rejected.
+- A schedule entry whose topic MQTT cannot publish to is rejected.
 - Default values for optional mqtt fields are applied correctly.
 """
 
@@ -178,3 +179,58 @@ def test_invalid_cron_error_names_the_entry_and_the_reason() -> None:
         SchedulerConfig.model_validate(
             _base_raw(schedules=[{"0 14 * * 9": "some/topic"}])
         )
+
+
+# ---------------------------------------------------------------------------
+# Topic validation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("topic", "reason"),
+    [
+        ("", "must not be empty"),
+        ("   ", "must not be empty"),
+        ("mimir/input/#", "wildcard"),
+        ("mimir/+/trigger", "wildcard"),
+        ("mimir/\x00/trigger", "null"),
+        ("a" * 65536, "too long"),
+    ],
+)
+def test_unpublishable_topic_rejected(topic: str, reason: str) -> None:
+    """A topic paho would refuse is rejected at startup, not at fire time."""
+    with pytest.raises(ValidationError, match=reason):
+        SchedulerConfig.model_validate(
+            _base_raw(schedules=[{"*/15 * * * *": topic}])
+        )
+
+
+def test_topic_error_names_the_entry() -> None:
+    """The message identifies which schedule entry carries the bad topic."""
+    with pytest.raises(ValidationError, match=r"schedules\[1\]"):
+        SchedulerConfig.model_validate(
+            _base_raw(
+                schedules=[
+                    {"*/15 * * * *": "mimir/input/trigger"},
+                    {"0 14 * * *": "mimir/input/#"},
+                ]
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    "topic",
+    [
+        "mimir/input/trigger",
+        "a",
+        "a" * 65535,
+        "mimir/input/tools/pv_ml_learner/infer",
+        "with spaces/inside",
+    ],
+)
+def test_valid_topics_accepted(topic: str) -> None:
+    """Anything MQTT can publish to stays acceptable, including odd but legal names."""
+    config = SchedulerConfig.model_validate(
+        _base_raw(schedules=[{"*/15 * * * *": topic}])
+    )
+    assert config.parsed_schedules()[0][1] == topic
