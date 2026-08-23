@@ -5,9 +5,11 @@ Covers load/save/expiry logic and pending-auth state file management.
 from __future__ import annotations
 
 import json
+import stat
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
 
 from zonneplan_prices.token import (
     delete_pending,
@@ -18,6 +20,14 @@ from zonneplan_prices.token import (
     save_pending,
     save_token,
 )
+
+
+_TOKEN_RESPONSE = {
+    "access_token": "AT-secret",
+    "refresh_token": "RT-secret",
+    "token_type": "Bearer",
+    "expires_in": 3600,
+}
 
 
 class TestLoadToken:
@@ -138,3 +148,104 @@ class TestIsPendingFresh:
         # 4 minutes 10 seconds ago — stale.
         requested_at = (datetime.now(tz=timezone.utc) - timedelta(minutes=4, seconds=10)).isoformat()
         assert is_pending_fresh({"requested_at": requested_at}) is False
+
+
+class TestFilePermissions:
+    """The token file holds OAuth credentials for the user's energy account.
+
+    ``Path.write_text`` creates at 0644 minus umask, so both state files were
+    world-readable: any local user or any other container sharing the volume
+    could read the refresh token, which is long-lived.
+    """
+
+    def test_token_file_is_not_readable_by_others(self, tmp_path: Path) -> None:
+        path = tmp_path / "token.json"
+        save_token(path, _TOKEN_RESPONSE)
+
+        mode = stat.S_IMODE(path.stat().st_mode)
+        assert mode == 0o600, f"expected 0o600, got {oct(mode)}"
+
+    def test_pending_file_is_not_readable_by_others(self, tmp_path: Path) -> None:
+        path = tmp_path / "pending.json"
+        save_pending(path, "uuid-1", "user@example.com")
+
+        mode = stat.S_IMODE(path.stat().st_mode)
+        assert mode == 0o600, f"expected 0o600, got {oct(mode)}"
+
+    def test_overwriting_an_open_permissioned_token_tightens_it(
+        self, tmp_path: Path
+    ) -> None:
+        """An existing 0644 file from an earlier release must be tightened."""
+        path = tmp_path / "token.json"
+        path.write_text("{}")
+        path.chmod(0o644)
+
+        save_token(path, _TOKEN_RESPONSE)
+
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+    def test_overwriting_an_open_permissioned_pending_file_tightens_it(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "pending.json"
+        path.write_text("{}")
+        path.chmod(0o644)
+
+        save_pending(path, "uuid-1", "user@example.com")
+
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
+class TestAtomicWrite:
+    """A truncate-then-write left a corrupt token file if the write was cut short.
+
+    Recovery is not automatic: an unreadable token means a fresh email-OTP
+    round trip. The repo already uses mkstemp + os.replace elsewhere.
+    """
+
+    def test_token_write_leaves_no_temporary_files_behind(self, tmp_path: Path) -> None:
+        path = tmp_path / "token.json"
+        save_token(path, _TOKEN_RESPONSE)
+
+        assert [p.name for p in tmp_path.iterdir()] == ["token.json"]
+
+    def test_pending_write_leaves_no_temporary_files_behind(self, tmp_path: Path) -> None:
+        path = tmp_path / "pending.json"
+        save_pending(path, "uuid-1", "user@example.com")
+
+        assert [p.name for p in tmp_path.iterdir()] == ["pending.json"]
+
+    def test_a_failed_token_write_leaves_the_previous_file_intact(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """If the replace step fails, the old token must still be loadable."""
+        path = tmp_path / "token.json"
+        save_token(path, _TOKEN_RESPONSE)
+        original = path.read_text()
+
+        def _boom(*args: object, **kwargs: object) -> None:
+            raise OSError("disk full")
+
+        monkeypatch.setattr("zonneplan_prices.token.os.replace", _boom)
+
+        with pytest.raises(OSError):
+            save_token(path, {**_TOKEN_RESPONSE, "access_token": "NEW"})
+
+        assert path.read_text() == original
+        assert load_token(path) is not None
+
+    def test_a_failed_token_write_cleans_up_its_temporary_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        path = tmp_path / "token.json"
+        save_token(path, _TOKEN_RESPONSE)
+
+        def _boom(*args: object, **kwargs: object) -> None:
+            raise OSError("disk full")
+
+        monkeypatch.setattr("zonneplan_prices.token.os.replace", _boom)
+
+        with pytest.raises(OSError):
+            save_token(path, {**_TOKEN_RESPONSE, "access_token": "NEW"})
+
+        assert [p.name for p in tmp_path.iterdir()] == ["token.json"]
