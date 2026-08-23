@@ -41,8 +41,8 @@ homeassistant:
   #   db_url: mysql+pymysql://ha_user:secret@db-host/homeassistant
   #
   # For PostgreSQL and MariaDB, install the matching driver extra:
-  #   uv pip install mimirheim-baseload-homeassistant-db[postgres]
-  #   uv pip install mimirheim-baseload-homeassistant-db[mysql]
+  #   uv pip install "mimirheim[baseload-ha-db-postgres]"
+  #   uv pip install "mimirheim[baseload-ha-db-mysql]"
   db_url: sqlite:////config/home-assistant_v2.db
 
   # Entities whose power consumption is summed.

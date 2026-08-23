@@ -124,8 +124,8 @@ This schema is present in all HA recorder backends (SQLite, PostgreSQL, MariaDB)
 The `db_url` config field is a standard SQLAlchemy connection URL. The SQLite driver is built into Python. PostgreSQL (`psycopg2-binary`) and MariaDB (`pymysql`) require the matching optional extra:
 
 ```bash
-uv pip install mimirheim-baseload-homeassistant-db[postgres]
-uv pip install mimirheim-baseload-homeassistant-db[mysql]
+uv pip install "mimirheim[baseload-ha-db-postgres]"
+uv pip install "mimirheim[baseload-ha-db-mysql]"
 ```
 
 All queries in `fetcher.py` are `SELECT`-only. No writes are performed.

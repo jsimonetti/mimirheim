@@ -138,8 +138,8 @@ The `db_url` field is a standard SQLAlchemy connection URL.
 | Backend | URL format | Notes |
 |---------|-----------|-------|
 | SQLite | `sqlite:////absolute/path/to/home-assistant_v2.db` | Four slashes: three for the URL scheme, one to start the absolute path. The typical path inside HA OS is `/config/home-assistant_v2.db` |
-| PostgreSQL | `postgresql+psycopg2://user:pass@host/dbname` | Requires `psycopg2-binary`. Install with `uv pip install mimirheim-baseload-homeassistant-db[postgres]` |
-| MariaDB / MySQL | `mysql+pymysql://user:pass@host/dbname` | Requires `pymysql`. Install with `uv pip install mimirheim-baseload-homeassistant-db[mysql]` |
+| PostgreSQL | `postgresql+psycopg2://user:pass@host/dbname` | Requires `psycopg2-binary`. Install with `uv pip install "mimirheim[baseload-ha-db-postgres]"` |
+| MariaDB / MySQL | `mysql+pymysql://user:pass@host/dbname` | Requires `pymysql`. Install with `uv pip install "mimirheim[baseload-ha-db-mysql]"` |
 
 SQLite is the HA default and requires no extra driver.
 
@@ -202,8 +202,8 @@ uv run python -m baseload_ha_db --config config.yaml
 For PostgreSQL or MariaDB, install the matching driver extra first:
 
 ```bash
-uv pip install mimirheim-baseload-homeassistant-db[postgres]   # PostgreSQL
-uv pip install mimirheim-baseload-homeassistant-db[mysql]      # MariaDB/MySQL
+uv pip install "mimirheim[baseload-ha-db-postgres]"   # PostgreSQL
+uv pip install "mimirheim[baseload-ha-db-mysql]"      # MariaDB/MySQL
 ```
 
 ---
