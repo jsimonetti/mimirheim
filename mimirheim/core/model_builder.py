@@ -18,6 +18,7 @@ but never from ``mimirheim.io``.
 
 import json
 import logging
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -758,6 +759,32 @@ def _round4(v: float) -> float:
     return round(v, 4)
 
 
+def _round_floats(value: Any, rounder: Callable[[float], float]) -> Any:
+    """Apply ``rounder`` to every float in a nested JSON-compatible structure.
+
+    Used to round a ``model_dump`` result without naming its fields, so that
+    the dump stays derived from the model. Dicts and lists are walked
+    recursively; every other type is returned unchanged. Booleans are safe
+    because ``bool`` is a subclass of ``int``, not ``float``.
+
+    Args:
+        value: A structure of dicts, lists and scalars, as produced by
+            ``model_dump(mode="json")``.
+        rounder: Applied to each float. Callers pass ``_round4`` for powers and
+            energies, or a 6-decimal rounder for prices and costs.
+
+    Returns:
+        A new structure with the same shape and every float rounded.
+    """
+    if isinstance(value, float):
+        return rounder(value)
+    if isinstance(value, dict):
+        return {k: _round_floats(v, rounder) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_round_floats(v, rounder) for v in value]
+    return value
+
+
 def debug_dump(
     bundle: SolveBundle,
     result: SolveResult,
@@ -842,57 +869,52 @@ def debug_dump(
     for step in result.schedule:
         t_dt = bundle.solve_time_utc + timedelta(seconds=step.t * step_seconds)
 
-        devices: dict = {}
-        for name, sp in step.devices.items():
-            entry: dict = {
-                "kw": _round4(sp.kw),
-                "type": sp.type,
-            }
-            # Omit null-only fields; include only when present. A None here
-            # means the device has no such capability, which is worth
-            # distinguishing from a real value, so the key is left out rather
-            # than written as null.
-            #
-            # Every optional field on DeviceSetpoint must appear below. The
-            # reporter reads these files, so a field missing here is invisible
-            # to it: soc_kwh was consumed by the reporter for months while this
-            # writer never emitted it, and the fallback turned the absent key
-            # into a flat zero SOC chart rather than an error.
-            # tests/unit/test_debug_dump.py fails if a field is added to the
-            # model and forgotten here.
-            if sp.power_limit_kw is not None:
-                entry["power_limit_kw"] = _round4(sp.power_limit_kw)
-            if sp.zero_exchange_active is not None:
-                entry["zero_exchange_active"] = sp.zero_exchange_active
-            if sp.on_off_active is not None:
-                entry["on_off_active"] = sp.on_off_active
-            if sp.loadbalance_active is not None:
-                entry["loadbalance_active"] = sp.loadbalance_active
-            if sp.pv_is_curtailed is not None:
-                entry["pv_is_curtailed"] = sp.pv_is_curtailed
-            if sp.soc_kwh is not None:
-                entry["soc_kwh"] = _round4(sp.soc_kwh)
-            devices[name] = entry
-
-        steps.append({
+        # Every field on the model reaches the dump, because the dump is
+        # derived from the model rather than from a hand-written list of
+        # fields to copy. A list has to be edited whenever the model gains a
+        # field, and nothing fails when it is not: soc_kwh was added to
+        # DeviceSetpoint and consumed by the reporter while this writer went on
+        # omitting it, and the reporter's fallback turned the absent key into a
+        # flat zero SOC chart rather than an error.
+        #
+        # exclude_none drops fields the device does not have, so a battery does
+        # not gain a null power_limit_kw. That keeps "no such capability"
+        # distinguishable from a real value, which several reporter code paths
+        # rely on.
+        #
+        # If a field ever needs keeping out of the dump, pass it to exclude=
+        # here, as the config dump above does for the credential-bearing mqtt
+        # section. Prefer Field(exclude=True) on the model when the field
+        # should not be published anywhere: these models are serialised whole
+        # onto MQTT as well, so excluding only here would let the two
+        # representations disagree, which is how the soc_kwh gap survived so
+        # long.
+        step_dict: dict = {
             "t": t_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "import_price_eur_per_kwh": round(bundle.horizon_prices[step.t], 6),
             "export_price_eur_per_kwh": round(bundle.horizon_export_prices[step.t], 6),
-            "grid_import_kw": _round4(step.grid_import_kw),
-            "grid_export_kw": _round4(step.grid_export_kw),
-            "devices": devices,
-        })
+        }
+        step_dict.update(
+            _round_floats(
+                step.model_dump(mode="json", exclude_none=True, exclude={"devices", "t"}),
+                _round4,
+            )
+        )
+        step_dict["devices"] = {
+            name: _round_floats(
+                sp.model_dump(mode="json", exclude_none=True), _round4
+            )
+            for name, sp in step.devices.items()
+        }
+        steps.append(step_dict)
 
-    out_dict = {
-        "strategy": result.strategy,
-        "solve_status": result.solve_status,
-        "objective_value": round(result.objective_value, 6),
-        "dispatch_suppressed": result.dispatch_suppressed,
-        "naive_cost_eur": round(result.naive_cost_eur, 6),
-        "optimised_cost_eur": round(result.optimised_cost_eur, 6),
-        "soc_credit_eur": round(result.soc_credit_eur, 6),
-        "schedule": steps,
-    }
+    # Costs and the objective keep 6 decimals; powers and energies are rounded
+    # by _round4, which also clamps solver noise below 1e-6 to zero.
+    out_dict = _round_floats(
+        result.model_dump(mode="json", exclude_none=True, exclude={"schedule"}),
+        lambda v: round(v, 6),
+    )
+    out_dict["schedule"] = steps
 
     (dump_dir / f"{ts}_output.json").write_text(
         json.dumps(out_dict, indent=2)
