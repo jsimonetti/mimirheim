@@ -8,6 +8,8 @@ Tests verify:
 - An empty schedules list is rejected.
 - Unknown top-level and mqtt fields are rejected (extra="forbid").
 - Multiple entries targeting the same topic are valid.
+- Day-of-week follows standard cron, so 7 is accepted as Sunday.
+- Restricting day-of-month and day-of-week together is rejected.
 - Default values for optional mqtt fields are applied correctly.
 """
 
@@ -152,3 +154,27 @@ def test_multiple_valid_cron_formats() -> None:
         _base_raw(schedules=[{expr: "t"} for expr in valid_exprs])
     )
     assert len(config.parsed_schedules()) == len(valid_exprs)
+
+
+def test_day_seven_is_accepted_as_sunday() -> None:
+    """Standard cron spells Sunday as 0 or 7; APScheduler alone rejects 7."""
+    config = SchedulerConfig.model_validate(
+        _base_raw(schedules=[{"0 2 * * 7": "mimir/input/trigger"}])
+    )
+    assert config.parsed_schedules() == [("0 2 * * 7", "mimir/input/trigger")]
+
+
+def test_both_day_fields_restricted_is_rejected() -> None:
+    """Standard cron ORs the two day fields, which one trigger cannot express."""
+    with pytest.raises(ValidationError, match="day-of-month and day-of-week"):
+        SchedulerConfig.model_validate(
+            _base_raw(schedules=[{"0 0 13 * fri": "some/topic"}])
+        )
+
+
+def test_invalid_cron_error_names_the_entry_and_the_reason() -> None:
+    """The validation message identifies both the bad entry and what is wrong."""
+    with pytest.raises(ValidationError, match=r"schedules\[0\].*out of range"):
+        SchedulerConfig.model_validate(
+            _base_raw(schedules=[{"0 14 * * 9": "some/topic"}])
+        )

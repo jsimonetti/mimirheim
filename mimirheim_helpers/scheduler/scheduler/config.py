@@ -16,11 +16,12 @@ import sys
 from pathlib import Path
 
 import yaml
-from apscheduler.triggers.cron import CronTrigger
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic import ValidationError as PydanticValidationError
 
 from helper_common.config import MqttConfig, apply_mqtt_env_overrides
+
+from scheduler.cron import build_trigger
 
 
 class SchedulerConfig(BaseModel):
@@ -64,10 +65,11 @@ class SchedulerConfig(BaseModel):
                 )
             cron_expr = next(iter(entry))
             try:
-                CronTrigger.from_crontab(cron_expr, timezone="UTC")
+                build_trigger(cron_expr)
             except ValueError as exc:
                 raise ValueError(
-                    f"schedules[{i}] has invalid cron expression: {cron_expr!r}"
+                    f"schedules[{i}] has invalid cron expression "
+                    f"{cron_expr!r}: {exc}"
                 ) from exc
         return v
 
