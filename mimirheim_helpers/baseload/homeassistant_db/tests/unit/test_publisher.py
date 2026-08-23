@@ -7,6 +7,8 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock
 
+import paho.mqtt.client as mqtt
+
 import pytest
 
 from baseload_ha_db.publisher import publish_forecast
@@ -20,7 +22,19 @@ _STEPS = [
 
 @pytest.fixture
 def mqtt_client() -> MagicMock:
-    return MagicMock()
+    return _mqtt_client()
+
+
+def _mqtt_client() -> MagicMock:
+    """Return a mock paho client whose publish() reports success.
+
+    publish_checked inspects the rc of the MQTTMessageInfo that publish()
+    returns. A bare MagicMock yields a mock attribute there, which is exactly
+    why no test in this suite could ever have exercised a publish failure.
+    """
+    client = MagicMock()
+    client.publish.return_value.rc = mqtt.MQTT_ERR_SUCCESS
+    return client
 
 
 class TestPublishForecast:
