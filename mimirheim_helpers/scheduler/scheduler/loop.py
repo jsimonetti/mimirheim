@@ -24,7 +24,8 @@ from typing import Any
 
 from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED, JobExecutionEvent
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
+
+from scheduler.cron import build_trigger
 
 logger = logging.getLogger("scheduler.loop")
 
@@ -86,7 +87,7 @@ def run(
         job_id = f"job_{i}"
         scheduler.add_job(
             _publish,
-            CronTrigger.from_crontab(cron_expr, timezone="UTC"),
+            build_trigger(cron_expr),
             args=[client, topic],
             id=job_id,
             name=topic,

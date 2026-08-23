@@ -75,8 +75,26 @@ Multiple entries may use the same topic with different cron expressions.
 | `0 14 * * 1-5` | 14:00 UTC Monday through Friday |
 | `5 0,12 * * *` | 00:05 and 12:05 UTC every day |
 | `0 6,9,12,15,18 * * *` | 06:00, 09:00, 12:00, 15:00, 18:00 UTC every day |
+| `0 2 * * 0` | 02:00 UTC every Sunday |
+| `30 4 1 * *` | 04:30 UTC on the first of the month |
 
 The scheduler interprets all times as **UTC**. It does not apply timezone offsets. Configure cron expressions accordingly.
+
+#### Day of week
+
+The day-of-week field follows standard cron: **0 is Sunday**, 6 is Saturday, and 7 is accepted as a second spelling of Sunday. Weekday names (`sun`, `mon`, ... `sat`) work too, in any case, and ranges such as `sun-thu` count forward from Sunday.
+
+This is worth stating explicitly because the scheduler is built on APScheduler, which numbers the same field from Monday. The scheduler translates the field so that configuration files behave the way cron does; you never write APScheduler numbering here.
+
+#### Restricting both day fields
+
+Standard cron treats day-of-month and day-of-week as alternatives: `0 0 13 * fri` runs on the 13th **and** on every Friday. That cannot be expressed as a single schedule entry, so the scheduler rejects any expression that restricts both fields, rather than silently applying one of them. Write two entries against the same topic instead:
+
+```yaml
+schedules:
+  - "0 0 13 * *":   mimir/input/tools/prices/trigger
+  - "0 0 * * fri":  mimir/input/tools/prices/trigger
+```
 
 ---
 
