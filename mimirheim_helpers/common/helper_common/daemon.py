@@ -13,7 +13,7 @@ Two classes are provided:
 
 ``HelperDaemon(MqttDaemon)``
     Extends ``MqttDaemon`` with the trigger-based cycle pattern used by all
-    data-input helpers (nordpool, baseload-*, pv-fetcher, scheduler):
+    data-input helpers (nordpool, zonneplan, baseload-*, pv-fetcher):
 
     - Subscription to the tool's trigger topic and ``homeassistant/status``.
     - Retain guard (broker-replayed messages are ignored).
@@ -269,7 +269,7 @@ class HelperDaemon(MqttDaemon, abc.ABC):
     """Abstract base class for trigger-based mimirheim helper daemons.
 
     Extends ``MqttDaemon`` with the trigger-based cycle pattern used by all
-    data-input helpers (nordpool, baseload-*, pv-fetcher, scheduler):
+    data-input helpers (nordpool, zonneplan, baseload-*, pv-fetcher):
 
     - Subscription to the tool's trigger topic and ``homeassistant/status``.
     - Retain guard (broker-replayed messages are ignored).
