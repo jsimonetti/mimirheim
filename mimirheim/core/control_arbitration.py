@@ -574,6 +574,34 @@ def assign_control_authority(
                     dwell_remaining = 0
                     current_score = -1.0
 
+                    # Reaching here means the step needs no grid exchange and
+                    # the system has hardware that could hold that closed-loop,
+                    # but none of it can regulate right now. _build_candidates
+                    # dropped every capable device for one of two reasons:
+                    #
+                    #   - an EV charger has no vehicle plugged in, or
+                    #   - absorption headroom is below
+                    #     control.headroom_margin_kw. For a battery, EV or
+                    #     hybrid inverter headroom is
+                    #     max_charge_kw - charge_kw + discharge_kw, so it
+                    #     reaches zero when the device is already scheduled to
+                    #     charge flat out. For PV it is simply the production
+                    #     at this step, so it is zero whenever the array is
+                    #     idle.
+                    #
+                    # This is a normal operating state, not a fault, which is
+                    # why it logs at DEBUG. The fallback is the assignment
+                    # below: every capable device gets zero_exchange_active
+                    # False and follows the explicit setpoint for this step
+                    # instead of regulating on its own. Dwell tracking has been
+                    # reset above, so the next near-zero-exchange step selects
+                    # an enforcer from scratch rather than inheriting one that
+                    # was already found ineligible.
+                    #
+                    # The zex_capable guard keeps the message out of the log
+                    # entirely on installations with no closed-loop hardware,
+                    # where having no enforcer is the only possible outcome and
+                    # says nothing worth reading.
                     if zex_capable:
                         logger.debug(
                             "Step %d: no eligible zero-exchange enforcer candidates; "
