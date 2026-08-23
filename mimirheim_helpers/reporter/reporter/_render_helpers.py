@@ -156,21 +156,15 @@ def build_combined_figure(inp: dict, out: dict) -> go.Figure:
         A single Plotly Figure ready to write as an HTML file.
     """
     schedule = out.get("schedule", [])
-    n_prices = len(inp["horizon_prices"])
-    times = _timestamps(inp["solve_time_utc"], n_prices)
 
     import_prices = inp["horizon_prices"]
     export_prices = inp["horizon_export_prices"]
 
-    # Build x-axis labels from the schedule step timestamps.
-    if schedule and isinstance(schedule[0].get("t"), str):
-        xs = [s["t"] for s in schedule]
-    else:
-        ts_fmt = [t.strftime("%Y-%m-%dT%H:%M:%SZ") for t in times]
-        xs = [
-            s.get("t", ts_fmt[i]) if isinstance(s.get("t"), int) else s.get("t", ts_fmt[i])
-            for i, s in enumerate(schedule)
-        ]
+    # X-axis labels are the step timestamps the dump already carries. Each
+    # step records an absolute ISO time, so there is nothing to derive: no
+    # step count to assume, no step spacing to assume, and no way for the
+    # axis to drift from the data plotted on it.
+    xs = [s["t"] for s in schedule]
 
     device_meta = _build_device_meta(inp)
     soc_histories = _read_soc_from_schedule(schedule, device_meta)
@@ -1387,21 +1381,6 @@ def _build_data_table(
 # ---------------------------------------------------------------------------
 # Shared utility helpers
 # ---------------------------------------------------------------------------
-
-
-def _timestamps(solve_time_utc: str, n_steps: int) -> list[datetime]:
-    """Build a list of UTC datetimes, one per 15-minute step.
-
-    Args:
-        solve_time_utc: ISO 8601 UTC datetime string from the input dump.
-        n_steps: Number of 15-minute steps in the horizon.
-
-    Returns:
-        A list of ``datetime`` objects, one per step, starting at
-        ``solve_time_utc``.
-    """
-    t0 = datetime.fromisoformat(solve_time_utc.replace("Z", "+00:00"))
-    return [t0 + timedelta(minutes=STEP_MINUTES * i) for i in range(n_steps)]
 
 
 def _hex_to_rgb(hex_color: str) -> str:

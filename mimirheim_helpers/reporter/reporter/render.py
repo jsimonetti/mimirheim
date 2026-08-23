@@ -29,7 +29,6 @@ from reporter._render_helpers import (
     _build_energy_flows_traces,
     _closed_loop_shapes_and_annotations,
     _read_soc_from_schedule,
-    _timestamps,
 )
 from reporter.metrics import compute_economic_metrics, compute_schedule_metrics
 
@@ -58,19 +57,12 @@ def build_report_html(inp: dict, out: dict) -> str:
         A complete HTML document string ready to write to a file.
     """
     schedule = out.get("schedule", [])
-    n_prices = len(inp["horizon_prices"])
-    times = _timestamps(inp["solve_time_utc"], n_prices)
     import_prices = inp["horizon_prices"]
     export_prices = inp["horizon_export_prices"]
 
-    if schedule and isinstance(schedule[0].get("t"), str):
-        xs = [s["t"] for s in schedule]
-    else:
-        ts_fmt = [t.strftime("%Y-%m-%dT%H:%M:%SZ") for t in times]
-        xs = [
-            s.get("t", ts_fmt[i]) if isinstance(s.get("t"), int) else s.get("t", ts_fmt[i])
-            for i, s in enumerate(schedule)
-        ]
+    # See build_combined_figure: the step timestamps come straight from the
+    # dump rather than being derived from solve_time_utc.
+    xs = [s["t"] for s in schedule]
 
     device_meta = _build_device_meta(inp)
     soc_histories = _read_soc_from_schedule(schedule, device_meta)
