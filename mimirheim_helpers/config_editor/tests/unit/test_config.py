@@ -173,6 +173,44 @@ def test_load_config_empty_env_var_treated_as_none(tmp_path: Path, monkeypatch: 
     assert cfg.allowed_ip is None
 
 
+def test_load_config_keeps_allowed_ip_from_yaml_when_env_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A configured allowed_ip must survive when the env var is not set.
+
+    Outside the HA add-on -- plain Docker, bare metal -- there is no
+    CONFIG_EDITOR_ALLOWED_IP. The value in the file is the only restriction the
+    operator has, and discarding it means the server accepts every source IP.
+    """
+    monkeypatch.delenv("CONFIG_EDITOR_ALLOWED_IP", raising=False)
+    cfg_file = tmp_path / "config-editor.yaml"
+    cfg_file.write_text("allowed_ip: 192.168.1.5\n")
+    cfg = load_config(str(cfg_file))
+    assert cfg.allowed_ip == "192.168.1.5"
+
+
+def test_load_config_env_overrides_allowed_ip_from_yaml(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When the Supervisor supplies the ingress gateway, it wins over the file."""
+    monkeypatch.setenv("CONFIG_EDITOR_ALLOWED_IP", "172.30.32.1")
+    cfg_file = tmp_path / "config-editor.yaml"
+    cfg_file.write_text("allowed_ip: 192.168.1.5\n")
+    cfg = load_config(str(cfg_file))
+    assert cfg.allowed_ip == "172.30.32.1"
+
+
+def test_load_config_keeps_allowed_ip_from_yaml_when_env_is_empty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An empty env var means "not an add-on", so the file still wins."""
+    monkeypatch.setenv("CONFIG_EDITOR_ALLOWED_IP", "")
+    cfg_file = tmp_path / "config-editor.yaml"
+    cfg_file.write_text("allowed_ip: 192.168.1.5\n")
+    cfg = load_config(str(cfg_file))
+    assert cfg.allowed_ip == "192.168.1.5"
+
+
 # ---------------------------------------------------------------------------
 # ConfigEditorConfig: disabled field
 # ---------------------------------------------------------------------------
