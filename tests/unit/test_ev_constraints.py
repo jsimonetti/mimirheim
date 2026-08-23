@@ -376,3 +376,75 @@ def test_ev_min_discharge_kw_ignored_when_no_discharge_segments() -> None:
     ctx.solver.set_objective_minimize(ev.charge_seg[0, 0])
     status = ctx.solver.solve()
     assert status != "infeasible", "charge-only EV with min_discharge_kw must be feasible"
+
+
+def test_ev_both_power_floors_allow_idle() -> None:
+    """A V2H charger with both floors set must still be able to do nothing.
+
+    Same defect as the battery: gating the charge floor on mode[t] and the
+    discharge floor on (1 - mode[t]) leaves no assignment of mode[t] under
+    which the charger can sit idle.
+    """
+    ctx = _make_ctx(horizon=1)
+    cfg = _config(
+        discharge_segs=[_seg(7.4)],
+        min_charge_kw=2.0,
+        min_discharge_kw=1.5,
+    )
+    ev = EvDevice(name="ev", config=cfg)
+    ev.add_variables(ctx)
+    ev.add_constraints(ctx, inputs=_inputs(soc_kwh=20.0), solve_time_utc=_now())
+
+    total_charge = sum(ev.charge_seg[0, i] for i in range(len(cfg.charge_segments)))
+    total_discharge = sum(
+        ev.discharge_seg[0, i] for i in range(len(cfg.discharge_segments))
+    )
+    ctx.solver.set_objective_minimize(total_charge + total_discharge)
+    assert ctx.solver.solve() in ("optimal", "feasible")
+
+    charge = ctx.solver.var_value(ev.charge_seg[0, 0])
+    discharge = ctx.solver.var_value(ev.discharge_seg[0, 0])
+    assert charge < 1e-6 and discharge < 1e-6, (
+        f"V2H charger cannot idle with both floors set: charge={charge:.4f}, "
+        f"discharge={discharge:.4f}"
+    )
+
+
+def test_ev_charge_only_honours_min_charge_kw() -> None:
+    """min_charge_kw must apply to charge-only chargers, not just V2H ones.
+
+    The floor models a hardware minimum current setpoint, which exists whether
+    or not the charger can discharge. Skipping it for charge-only chargers
+    silently ignores a configured value.
+    """
+    ctx = _make_ctx(horizon=1)
+    cfg = _config(min_charge_kw=2.0)  # no discharge_segments: charge-only
+    ev = EvDevice(name="ev", config=cfg)
+    ev.add_variables(ctx)
+    ev.add_constraints(ctx, inputs=_inputs(soc_kwh=20.0), solve_time_utc=_now())
+
+    total_charge = sum(ev.charge_seg[0, i] for i in range(len(cfg.charge_segments)))
+    ctx.solver.add_constraint(total_charge >= 0.1)
+    ctx.solver.set_objective_minimize(total_charge)
+    assert ctx.solver.solve() in ("optimal", "feasible")
+
+    charge = ctx.solver.var_value(ev.charge_seg[0, 0])
+    assert charge >= 2.0 - 1e-6, (
+        f"charge={charge:.4f} violates min_charge_kw=2.0 on a charge-only charger"
+    )
+
+
+def test_ev_charge_only_can_still_idle_with_min_charge_kw() -> None:
+    """A charge-only charger with a floor must remain able to draw nothing."""
+    ctx = _make_ctx(horizon=1)
+    cfg = _config(min_charge_kw=2.0)
+    ev = EvDevice(name="ev", config=cfg)
+    ev.add_variables(ctx)
+    ev.add_constraints(ctx, inputs=_inputs(soc_kwh=20.0), solve_time_utc=_now())
+
+    total_charge = sum(ev.charge_seg[0, i] for i in range(len(cfg.charge_segments)))
+    ctx.solver.set_objective_minimize(total_charge)
+    assert ctx.solver.solve() in ("optimal", "feasible")
+
+    charge = ctx.solver.var_value(ev.charge_seg[0, 0])
+    assert charge < 1e-6, f"charge-only charger cannot idle: charge={charge:.4f}"

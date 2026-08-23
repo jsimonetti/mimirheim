@@ -59,6 +59,11 @@ class Battery:
         # soc_low[t] represents the SOC deficit below the optimal lower level at
         # step t, in kWh. Zero when SOC >= optimal_lower_soc_kwh.
         self._soc_low: dict[int, Any] = {}
+        # Populated only when both min_charge_kw and min_discharge_kw are set.
+        # active[t] is 1 when the battery runs at step t and 0 when it is idle.
+        # See add_constraints for why the direction binary mode[t] cannot carry
+        # this information on its own.
+        self._active: dict[int, Any] = {}
         self._dt: float = 0.25  # set from ctx in add_variables
 
         # SOS2 piecewise-linear efficiency model fields.
@@ -228,6 +233,25 @@ class Battery:
                 # optimal_lower_soc_kwh - min_soc_kwh.
                 self._soc_low[t] = ctx.solver.add_var(lb=0.0, ub=soc_low_ub)
 
+        # Add active[t] only when both minimum power floors are configured.
+        #
+        # active[t] is a binary "the battery is running this step" flag. It is
+        # needed because mode[t] encodes direction, not activity: with both
+        # floors gated on mode[t] alone, every value of mode[t] forces one
+        # direction to run and the battery can never sit idle. See
+        # add_constraints for the constraint set.
+        #
+        # When at most one floor is configured the unfloored direction can
+        # always be driven to zero, so idling is already reachable and no extra
+        # binary is created. This keeps the variable count unchanged for the
+        # common case, where neither floor is set.
+        if (
+            self.config.min_charge_kw is not None
+            and self.config.min_discharge_kw is not None
+        ):
+            for t in ctx.T:
+                self._active[t] = ctx.solver.add_var(lb=0.0, ub=1.0, integer=True)
+
     def add_constraints(self, ctx: ModelContext, inputs: BatteryInputs) -> None:
         """Add SOC tracking and mode-guard constraints.
 
@@ -336,34 +360,79 @@ class Battery:
                 self.discharge_ac_kw(t) <= max_discharge_kw * (1 - self.mode[t])
             )
 
-            # Minimum operating power floors (Plan 38C).
+            # Minimum operating power floors.
             #
-            # When the battery is actively charging (mode[t]=1) or discharging
-            # (mode[t]=0), some hardware cannot safely operate below a threshold
-            # — for example, a DC-coupled inverter with a minimum PWM duty cycle.
-            # Below this threshold the inverter may cut out or behave erratically.
+            # Some hardware cannot safely operate below a power threshold — for
+            # example, a DC-coupled inverter with a minimum PWM duty cycle. Below
+            # that threshold the inverter may cut out or behave erratically. The
+            # floors express "run at or above this power, or do not run at all".
             #
-            # The floor is only applied when mode[t] selects the relevant direction:
-            #   - charge floor: charge_ac_kw(t) >= min_charge_kw * mode[t]
-            #     When mode[t]=0 (discharging) the right-hand side collapses to 0,
-            #     so the constraint is trivially satisfied and imposes no lower bound
-            #     on the charge power (which is already forced to zero by the Big-M above).
-            #   - discharge floor: discharge_ac_kw(t) >= min_discharge_kw * (1 - mode[t])
-            #     Same pattern: floor is active only when mode[t]=0 (discharging).
+            # mode[t] alone cannot express that rule when both floors are set.
+            # mode[t] is binary and selects a direction, not an activity level:
+            # gating the charge floor on mode[t] and the discharge floor on
+            # (1 - mode[t]) leaves no value of mode[t] under which the battery
+            # sits still, so idling becomes infeasible and the battery cycles on
+            # every step regardless of price. The active[t] binary declared in
+            # add_variables supplies the missing third state.
             #
-            # The discharge floor is applied to whichever discharge power expression
-            # the current model uses (stacked-segment or SOS2 piecewise-linear). All
-            # BatteryConfig instances are required by schema validation to configure a
-            # discharge model, so this constraint is always reachable.
-            if self.config.min_charge_kw is not None:
+            # active[t] = 0 means the battery is at rest this step; active[t] = 1
+            # means it is running in the direction mode[t] selects.
+            if t in self._active:
+                # Both floors are configured, so the idle state is modelled
+                # explicitly. Four constraints per step:
+                #
+                #   charge_ac    <= max_charge_kw    * active[t]
+                #   discharge_ac <= max_discharge_kw * active[t]
+                #     Force both directions to zero when the battery is at rest.
+                #     Without these the solver could set active[t] = 0 and still
+                #     charge, escaping the floor entirely.
+                #
+                #   charge_ac    >= min_charge_kw    * (mode[t] + active[t] - 1)
+                #     The right-hand side is min_charge_kw only when mode[t] = 1
+                #     and active[t] = 1 (charging). It is 0 or negative in every
+                #     other combination, leaving the constraint slack.
+                #
+                #   discharge_ac >= min_discharge_kw * (active[t] - mode[t])
+                #     Mirror image: binding only when active[t] = 1 and
+                #     mode[t] = 0 (discharging).
+                #
+                # The reachable states are therefore exactly: idle, charge at or
+                # above min_charge_kw, discharge at or above min_discharge_kw.
                 ctx.solver.add_constraint(
-                    self.charge_ac_kw(t) >= self.config.min_charge_kw * self.mode[t]
+                    self.charge_ac_kw(t) <= max_charge_kw * self._active[t]
                 )
-            if self.config.min_discharge_kw is not None:
+                ctx.solver.add_constraint(
+                    self.discharge_ac_kw(t) <= max_discharge_kw * self._active[t]
+                )
+                ctx.solver.add_constraint(
+                    self.charge_ac_kw(t)
+                    >= self.config.min_charge_kw * (self.mode[t] + self._active[t] - 1)
+                )
                 ctx.solver.add_constraint(
                     self.discharge_ac_kw(t)
-                    >= self.config.min_discharge_kw * (1 - self.mode[t])
+                    >= self.config.min_discharge_kw * (self._active[t] - self.mode[t])
                 )
+            else:
+                # At most one floor is configured. mode[t] on its own is
+                # sufficient here: the unfloored direction can always be driven
+                # to zero, so idling stays reachable and no extra binary is
+                # needed. Keeping this path variable-free matters because it is
+                # the common case.
+                #
+                # The discharge floor is applied to whichever discharge power
+                # expression the current model uses (stacked-segment or SOS2
+                # piecewise-linear). All BatteryConfig instances are required by
+                # schema validation to configure a discharge model, so this
+                # constraint is always reachable.
+                if self.config.min_charge_kw is not None:
+                    ctx.solver.add_constraint(
+                        self.charge_ac_kw(t) >= self.config.min_charge_kw * self.mode[t]
+                    )
+                if self.config.min_discharge_kw is not None:
+                    ctx.solver.add_constraint(
+                        self.discharge_ac_kw(t)
+                        >= self.config.min_discharge_kw * (1 - self.mode[t])
+                    )
 
         # Soft lower SOC bound — only when optimal_lower_soc_kwh is configured.
         #

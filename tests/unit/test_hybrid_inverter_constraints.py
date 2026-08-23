@@ -607,3 +607,64 @@ def test_objective_terms_includes_soc_low_penalty() -> None:
     assert abs(soc_low_val - 2.0) < 1e-4, (
         f"Expected soc_low=2.0, got {soc_low_val:.4f}"
     )
+
+
+def _config_with_floors(
+    min_charge_kw: float | None = None,
+    min_discharge_kw: float | None = None,
+) -> HybridInverterConfig:
+    return HybridInverterConfig(
+        capacity_kwh=10.0,
+        min_soc_kwh=0.0,
+        max_charge_kw=6.0,
+        max_discharge_kw=6.0,
+        battery_charge_efficiency=1.0,
+        battery_discharge_efficiency=1.0,
+        inverter_efficiency=1.0,
+        max_pv_kw=6.0,
+        topic_pv_forecast="mimir/input/hybrid_inv/pv_forecast",
+        min_charge_kw=min_charge_kw,
+        min_discharge_kw=min_discharge_kw,
+    )
+
+
+def test_hybrid_inverter_both_power_floors_allow_idle() -> None:
+    """A hybrid inverter with both floors set must still be able to do nothing.
+
+    Same defect as the battery and the V2H charger: with the charge floor
+    gated on mode[t] and the discharge floor on (1 - mode[t]) there is no
+    assignment of mode[t] that leaves the battery at rest.
+    """
+    ctx = _make_ctx(horizon=1)
+    cfg = _config_with_floors(min_charge_kw=2.0, min_discharge_kw=1.5)
+    hi = HybridInverterDevice(name="hi", config=cfg)
+    hi.add_variables(ctx)
+    hi.add_constraints(ctx, inputs=_inputs(soc_kwh=5.0, horizon=1))
+
+    ctx.solver.set_objective_minimize(hi.bat_charge_dc[0] + hi.bat_discharge_dc[0])
+    assert ctx.solver.solve() in ("optimal", "feasible")
+
+    charge = ctx.solver.var_value(hi.bat_charge_dc[0])
+    discharge = ctx.solver.var_value(hi.bat_discharge_dc[0])
+    assert charge < 1e-6 and discharge < 1e-6, (
+        f"hybrid inverter cannot idle with both floors set: charge={charge:.4f}, "
+        f"discharge={discharge:.4f}"
+    )
+
+
+def test_hybrid_inverter_both_power_floors_still_enforced_when_active() -> None:
+    """Adding an idle state must not weaken the charge floor when charging."""
+    ctx = _make_ctx(horizon=1)
+    cfg = _config_with_floors(min_charge_kw=2.0, min_discharge_kw=1.5)
+    hi = HybridInverterDevice(name="hi", config=cfg)
+    hi.add_variables(ctx)
+    hi.add_constraints(ctx, inputs=_inputs(soc_kwh=5.0, horizon=1))
+
+    ctx.solver.add_constraint(hi.bat_charge_dc[0] >= 0.1)
+    ctx.solver.set_objective_minimize(hi.bat_charge_dc[0])
+    assert ctx.solver.solve() in ("optimal", "feasible")
+
+    charge = ctx.solver.var_value(hi.bat_charge_dc[0])
+    assert charge >= 2.0 - 1e-6, (
+        f"charge={charge:.4f} violates min_charge_kw=2.0 once the battery is active"
+    )

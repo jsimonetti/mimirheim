@@ -71,6 +71,10 @@ class HybridInverterDevice:
         # soc_low[t] = SOC deficit below optimal_lower_soc_kwh at step t, in kWh.
         # Populated only when optimal_lower_soc_kwh > min_soc_kwh.
         self._soc_low: dict[int, Any] = {}
+        # active[t] = 1 when the battery runs at step t, 0 when it is idle.
+        # Populated only when both min_charge_kw and min_discharge_kw are set;
+        # see add_constraints for why mode[t] cannot carry this on its own.
+        self._active: dict[int, Any] = {}
 
         self._dt: float = 0.25  # set from ctx in add_variables
 
@@ -162,6 +166,24 @@ class HybridInverterDevice:
         if soc_low_ub > 0.0:
             for t in ctx.T:
                 self._soc_low[t] = ctx.solver.add_var(lb=0.0, ub=soc_low_ub)
+
+        # active[t]: binary "the battery is running this step" flag, declared
+        # only when both minimum power floors are configured.
+        #
+        # mode[t] encodes direction, not activity. Gating the charge floor on
+        # mode[t] and the discharge floor on (1 - mode[t]) leaves no value of
+        # mode[t] under which the battery sits still, so idling becomes
+        # infeasible and the battery cycles on every step regardless of price.
+        #
+        # When at most one floor is configured the unfloored direction can
+        # always be driven to zero, so idling is already reachable and no extra
+        # binary is created.
+        if (
+            self.config.min_charge_kw is not None
+            and self.config.min_discharge_kw is not None
+        ):
+            for t in ctx.T:
+                self._active[t] = ctx.solver.add_var(lb=0.0, ub=1.0, integer=True)
 
     def terminal_soc_var(self, ctx: ModelContext) -> Any | None:
         """Return the solver variable for the battery SOC at the last step.
@@ -337,24 +359,59 @@ class HybridInverterDevice:
                     self._soc_low[t] >= cfg.optimal_lower_soc_kwh - self.soc[t]
                 )
 
-            # --- Minimum charge power floor ---
-            # When the battery is charging (mode[t]=1), the DC charge power must
-            # be at least min_charge_kw. This models inverters that cannot operate
-            # at arbitrarily low charge rates. The Big-M on the right pins the
-            # constraint inactive when mode[t]=0 (discharging).
-            if cfg.min_charge_kw is not None:
+            # --- Minimum operating power floors ---
+            #
+            # Real inverters cannot operate at arbitrarily low charge or
+            # discharge rates. The floors express "run at or above this power,
+            # or do not run at all", so each one needs a way to say "not
+            # running".
+            if t in self._active:
+                # Both floors configured. mode[t] selects direction and
+                # active[t] selects whether the battery runs at all.
+                #
+                #   bat_charge_dc    <= max_charge_kw    * active[t]
+                #   bat_discharge_dc <= max_discharge_kw * active[t]
+                #     Force both directions to zero when idle. Without these the
+                #     solver could set active[t] = 0 and still charge, escaping
+                #     the floor entirely.
+                #
+                #   bat_charge_dc    >= min_charge_kw * (mode[t] + active[t] - 1)
+                #     Binding only when mode[t] = 1 and active[t] = 1; the
+                #     right-hand side is 0 or negative otherwise.
+                #
+                #   bat_discharge_dc >= min_discharge_kw * (active[t] - mode[t])
+                #     Mirror image: binding only when active[t] = 1 and
+                #     mode[t] = 0.
+                #
+                # Reachable states: idle, charge at or above min_charge_kw,
+                # discharge at or above min_discharge_kw.
                 ctx.solver.add_constraint(
-                    self.bat_charge_dc[t] >= cfg.min_charge_kw * self.mode[t]
+                    self.bat_charge_dc[t] <= cfg.max_charge_kw * self._active[t]
                 )
-
-            # --- Minimum discharge power floor ---
-            # Symmetric to the charge floor: when the battery is discharging
-            # (mode[t]=0, so 1 - mode[t]=1) the discharge power must be at least
-            # min_discharge_kw. The Big-M pins the constraint inactive during charging.
-            if cfg.min_discharge_kw is not None:
                 ctx.solver.add_constraint(
-                    self.bat_discharge_dc[t] >= cfg.min_discharge_kw * (1 - self.mode[t])
+                    self.bat_discharge_dc[t] <= cfg.max_discharge_kw * self._active[t]
                 )
+                ctx.solver.add_constraint(
+                    self.bat_charge_dc[t]
+                    >= cfg.min_charge_kw * (self.mode[t] + self._active[t] - 1)
+                )
+                ctx.solver.add_constraint(
+                    self.bat_discharge_dc[t]
+                    >= cfg.min_discharge_kw * (self._active[t] - self.mode[t])
+                )
+            else:
+                # At most one floor configured. mode[t] is sufficient: the
+                # unfloored direction can always be driven to zero, so idling
+                # stays reachable without an extra binary.
+                if cfg.min_charge_kw is not None:
+                    ctx.solver.add_constraint(
+                        self.bat_charge_dc[t] >= cfg.min_charge_kw * self.mode[t]
+                    )
+                if cfg.min_discharge_kw is not None:
+                    ctx.solver.add_constraint(
+                        self.bat_discharge_dc[t]
+                        >= cfg.min_discharge_kw * (1 - self.mode[t])
+                    )
 
         # --- Charge derating ---
         # At high SOC, many batteries cannot sustain peak charge power. This
