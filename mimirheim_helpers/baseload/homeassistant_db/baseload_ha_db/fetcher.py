@@ -50,9 +50,36 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger(__name__)
+
+
+def _redact_db_url(db_url: str) -> str:
+    """Return ``db_url`` with any password replaced by ``***``.
+
+    db_url is a SQLAlchemy URL, so for PostgreSQL and MariaDB it carries the
+    database password. Engine-creation failures are raised as FetchError and
+    logged by the caller with ``logger.exception``, which put that password
+    into the log -- and the trigger is a typo in the driver name, which is
+    exactly the misconfiguration whose log a user pastes into a bug report.
+
+    Everything else is kept: the driver, host, port, database and username are
+    what make the message worth reading.
+
+    Args:
+        db_url: The configured SQLAlchemy database URL.
+
+    Returns:
+        The URL with the password masked. When the string is too malformed for
+        SQLAlchemy to parse, a fixed placeholder is returned rather than the
+        original, because there is no structure to redact from.
+    """
+    try:
+        return make_url(db_url).render_as_string(hide_password=True)
+    except Exception:
+        return "<unparseable database URL>"
 
 
 class FetchError(Exception):
@@ -290,7 +317,10 @@ def fetch_statistics(
     try:
         engine = create_engine(db_url)
     except Exception as exc:
-        raise FetchError(f"Cannot create database engine for {db_url!r}: {exc}") from exc
+        raise FetchError(
+            f"Cannot create database engine for "
+            f"{_redact_db_url(db_url)!r}: {exc}"
+        ) from exc
 
     result: dict[str, list[dict[str, Any]]] = {eid: [] for eid in entity_ids}
 
@@ -431,7 +461,10 @@ def fetch_entity_units(
     try:
         engine = create_engine(db_url)
     except Exception as exc:
-        raise FetchError(f"Cannot create database engine for {db_url!r}: {exc}") from exc
+        raise FetchError(
+            f"Cannot create database engine for "
+            f"{_redact_db_url(db_url)!r}: {exc}"
+        ) from exc
 
     result: dict[str, str | None] = {eid: None for eid in entity_ids}
 
