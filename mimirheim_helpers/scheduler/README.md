@@ -101,8 +101,10 @@ schedules:
 ## 4. Running
 
 ```bash
-uv run python -m mimirheim_helpers.scheduler --config mimirheim_helpers/scheduler/config.yaml
+uv run python -m scheduler --config mimirheim_helpers/scheduler/example.yaml
 ```
+
+The module path is `scheduler`, not `mimirheim_helpers.scheduler`: the package is published at the top level of the `mimirheim` wheel. Copy `example.yaml` and edit it to make your own configuration.
 
 ### Systemd unit example
 
@@ -113,7 +115,7 @@ After=network.target mosquitto.service
 
 [Service]
 WorkingDirectory=/opt/mimirheim
-ExecStart=/opt/mimirheim/.venv/bin/python -m mimirheim_helpers.scheduler --config /etc/mimirheim/scheduler.yaml
+ExecStart=/opt/mimirheim/.venv/bin/python -m scheduler --config /etc/mimirheim/scheduler.yaml
 Restart=on-failure
 RestartSec=10
 
