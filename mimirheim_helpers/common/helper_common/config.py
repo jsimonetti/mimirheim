@@ -4,17 +4,25 @@ All helper tools import ``MqttConfig`` from here rather than defining their
 own copy. This ensures every tool has TLS support and consistent field
 validation without duplicating the model.
 
-This module also provides ``apply_mqtt_env_overrides``, which is called by
-every helper config loader to inject MQTT broker credentials from the HA
-Supervisor environment before Pydantic validation runs.
+This module also provides ``apply_mqtt_env_overrides``, which injects MQTT
+broker credentials from the HA Supervisor environment before Pydantic
+validation runs, and ``load_helper_config``, the shared YAML-load-and-validate
+entry point that every helper's ``__main__`` calls.
 
 This module has no imports from any specific helper tool.
 """
 from __future__ import annotations
 
+import logging
 import os
+import sys
+from pathlib import Path
+from typing import TypeVar
 
+import yaml
 from pydantic import BaseModel, ConfigDict, Field
+
+_ConfigT = TypeVar("_ConfigT", bound=BaseModel)
 
 
 class MqttConfig(BaseModel):
@@ -91,6 +99,70 @@ class HomeAssistantConfig(BaseModel):
     )
 
 
+def _parse_port(port_str: str) -> int:
+    """Parse the MQTT_PORT environment variable into a usable TCP port.
+
+    Args:
+        port_str: The raw environment variable value.
+
+    Returns:
+        The port as an int.
+
+    Raises:
+        ValueError: If the value is not an integer, or not in 1..65535. Naming
+            the variable and quoting the value matters here: this runs before
+            Pydantic sees the config, so without it the operator gets a bare
+            "invalid literal for int()" with no clue which setting is wrong.
+    """
+    try:
+        port = int(port_str)
+    except ValueError:
+        raise ValueError(
+            f"MQTT_PORT is not a number: {port_str!r}."
+        ) from None
+    if not 1 <= port <= 65535:
+        raise ValueError(
+            f"MQTT_PORT is not a valid TCP port: {port_str!r}. "
+            "It must be between 1 and 65535."
+        )
+    return port
+
+
+def mqtt_env_overrides() -> dict:
+    """Return the ``mqtt`` field overrides supplied by the environment.
+
+    When running as a HA add-on the Supervisor injects MQTT broker credentials
+    as environment variables (written by
+    container/etc/cont-init.d/01-mqtt-env.sh before any s6 service starts).
+    This maps them onto ``MqttConfig`` field names.
+
+    The mapping lives here so there is one definition of it. The config editor
+    needs the same values to show which fields the Supervisor controls, and
+    previously carried its own copy -- which had already drifted, silently
+    ignoring an unparseable MQTT_PORT where this one crashed on it.
+
+    Returns:
+        Dict mapping mqtt field names to their env-supplied values. Empty when
+        no MQTT env vars are set (plain Docker, no Supervisor).
+
+    Raises:
+        ValueError: If ``MQTT_PORT`` is set but is not a valid TCP port.
+    """
+    overrides: dict = {}
+    if host := os.environ.get("MQTT_HOST"):
+        overrides["host"] = host
+    if port_str := os.environ.get("MQTT_PORT"):
+        overrides["port"] = _parse_port(port_str)
+    if username := os.environ.get("MQTT_USERNAME"):
+        overrides["username"] = username
+    if password := os.environ.get("MQTT_PASSWORD"):
+        overrides["password"] = password
+    # MQTT_SSL is 'true' or 'false' (a string) as returned by bashio.
+    if ssl_str := os.environ.get("MQTT_SSL"):
+        overrides["tls"] = ssl_str.lower() == "true"
+    return overrides
+
+
 def apply_mqtt_env_overrides(raw: dict) -> dict:
     """Override the mqtt: section from environment variables if present.
 
@@ -109,20 +181,64 @@ def apply_mqtt_env_overrides(raw: dict) -> dict:
 
     Returns:
         The same dict with any MQTT env var overrides applied.
+
+    Raises:
+        ValueError: If ``raw`` is not a mapping (an empty or comment-only
+            config file), or if ``MQTT_PORT`` is set to something that is not a
+            valid TCP port.
     """
-    overrides: dict = {}
-    if host := os.environ.get("MQTT_HOST"):
-        overrides["host"] = host
-    if port_str := os.environ.get("MQTT_PORT"):
-        overrides["port"] = int(port_str)
-    if username := os.environ.get("MQTT_USERNAME"):
-        overrides["username"] = username
-    if password := os.environ.get("MQTT_PASSWORD"):
-        overrides["password"] = password
-    # MQTT_SSL is 'true' or 'false' (a string) as returned by bashio.
-    if ssl_str := os.environ.get("MQTT_SSL"):
-        overrides["tls"] = ssl_str.lower() == "true"
+    if not isinstance(raw, dict):
+        raise ValueError(
+            "The configuration file contains no configuration. It is empty, "
+            "holds only comments, or is not a YAML mapping."
+        )
+
+    overrides = mqtt_env_overrides()
     if overrides:
-        raw.setdefault("mqtt", {})
+        # A bare `mqtt:` key in YAML parses to None, not to {}. Treat a null
+        # section as an absent one so a config that leaves every broker setting
+        # to the Supervisor is valid; previously this raised AttributeError on
+        # the update() below.
+        if raw.get("mqtt") is None:
+            raw["mqtt"] = {}
         raw["mqtt"].update(overrides)
     return raw
+
+
+def load_helper_config(
+    path: str,
+    model_cls: type[_ConfigT],
+    logger: logging.Logger,
+) -> _ConfigT:
+    """Load, env-override and validate a helper's YAML configuration file.
+
+    Every helper daemon starts the same way: read the YAML, let the HA
+    Supervisor environment override the ``mqtt`` section, validate against the
+    helper's own Pydantic model, and abort the process if any of that fails.
+    This function is that sequence, shared so the five helpers that used to
+    carry an identical private copy stay in step.
+
+    Failure is terminal by design. A daemon cannot do useful work with a
+    configuration it could not read, and exiting lets the supervisor restart it
+    once the operator fixes the file.
+
+    Args:
+        path: Filesystem path to the YAML configuration file.
+        model_cls: The helper's Pydantic config model.
+        logger: The calling helper's logger, so the failure record carries the
+            helper's name rather than this module's.
+
+    Returns:
+        A validated instance of ``model_cls``.
+
+    Raises:
+        SystemExit: With code 1 if the file cannot be read or parsed, or if it
+            fails validation. The full traceback is logged first.
+    """
+    try:
+        raw = yaml.safe_load(Path(path).read_text())
+        apply_mqtt_env_overrides(raw)
+        return model_cls.model_validate(raw)
+    except Exception:
+        logger.exception("Failed to load configuration from %s", path)
+        sys.exit(1)

@@ -26,6 +26,7 @@ import paho.mqtt.client as mqtt
 
 from helper_common.cycle import CycleResult
 from helper_common.daemon import HelperDaemon
+from helper_common.publish import publish_checked
 
 from pv_fetcher.config import PvFetcherConfig, load_config
 from pv_fetcher.confidence import ConfidenceDecay, apply_confidence
@@ -160,19 +161,32 @@ class PvFetcherDaemon(HelperDaemon):
                     peak["ts"],
                 )
             else:
+                # An all-zero curve is a forecast of no production, which is
+                # information the solver wants. This branch used to log the
+                # line below and then skip the publish, leaving the earlier
+                # non-zero forecast retained on the topic -- so after the last
+                # daylight fetch mimirheim kept seeing PV that was not coming.
+                # Distinct from the empty-result case above, which is an
+                # absence of data rather than a forecast of zero.
                 logger.info(
                     "Array %r: publishing %d steps, all zero kW.",
                     name,
                     len(steps),
                 )
-                continue
             publish_array(client, array_cfg.output_topic, steps, signal_mimir=False)
             any_success = True
             if len(steps) > max_steps:
                 max_steps = len(steps)
 
         if any_success and config.signal_mimir:
-            client.publish(config.mimir_trigger_topic, payload=b"", qos=0, retain=False)
+            publish_checked(
+                client,
+                config.mimir_trigger_topic,
+                b"",
+                qos=0,
+                retain=False,
+                description="mimirheim solve trigger",
+            )
             logger.info("Published mimirheim trigger to %s", config.mimir_trigger_topic)
         if any_success and max_steps > 0:
             return CycleResult(horizon_hours=max_steps * 0.25)

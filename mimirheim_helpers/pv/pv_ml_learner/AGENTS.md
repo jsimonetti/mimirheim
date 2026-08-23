@@ -1,9 +1,8 @@
 # pv_ml_learner — Agent Instructions
 
-This tool is **independent of mimirheim**. It has its own `pyproject.toml`, its own
-virtual environment, and its own dependency set. It communicates with mimirheim
-exclusively via MQTT topics. There is no shared Python package, no shared virtual
-environment, and no shared imports between this tool and mimirheim.
+This tool is a helper package inside the mimirheim repository. It ships in the
+single `mimirheim` wheel, alongside the solver and every other helper, and it
+runs as its own daemon process communicating over MQTT.
 
 ---
 
@@ -21,29 +20,51 @@ The wiki provides supplementary user-facing documentation for this tool:
 
 ---
 
-## Critical separation rule
+## Dependencies
 
-**Never add dependencies required by this tool to the mimirheim `pyproject.toml`.** If
-this tool needs a library, add it here:
+There is one `pyproject.toml`, at the repo root. This tool has no `pyproject.toml`
+of its own and must not be given one: the build only reads the root file, so a
+local one would be silently ignored.
 
+Runtime dependencies belong in the root `pyproject.toml`, under this tool's extra:
+
+```toml
+[project.optional-dependencies]
+pv-ml-learner = [
+    "httpx>=0.27", "knmi-py>=0.2", "sqlalchemy>=2.0.52",
+    "xgboost>=3.4.1", "scikit-learn>=1.9.0", "joblib>=1.3", "pandas>=3.0.5",
+]
 ```
-mimirheim_helpers/pv/learner/pyproject.toml
-```
+
+Anything added there must also be added to the `helpers` meta-extra, which the
+container build and full developer environments install.
+Two further extras exist for the optional database drivers:
+`pv-ml-learner-postgres` and `pv-ml-learner-mysql`.
+
+`helper_common` is a deliberate shared dependency, not a violation of anything.
+`__main__.py` builds on `MqttDaemon` rather than `HelperDaemon`, because
+this daemon has two independent trigger topics (train and infer) instead of
+one.
 
 ---
 
-## Environment setup
+## Environment
 
-All commands must be run from this directory (`mimirheim_helpers/pv/learner/`), not
-from the repo root.
+There is one lockfile and one virtual environment, both at the repo root. Run
+every command from there, not from this directory:
 
 ```bash
-cd mimirheim_helpers/pv/learner
-
-uv sync --group dev           # create .venv and install all dependencies
-uv run pytest                 # run tests
-uv run python -m pv_ml_learner --config config.yaml   # run the daemon
+uv sync --all-extras                          # core plus every helper dependency
+uv run pytest                                 # the whole suite, this package included
+uv run pytest mimirheim_helpers/pv/pv_ml_learner/tests
+uv run ruff check .                           # must be clean before a change is done
+uv run python -m pv_ml_learner --config config.yaml
 ```
+
+The module path is `pv_ml_learner`, not a dotted path under
+`mimirheim_helpers`. The package is published at the top level by
+`[tool.hatch.build.targets.wheel]` in the root `pyproject.toml`, and the
+container's s6 service invokes it the same way.
 
 ---
 

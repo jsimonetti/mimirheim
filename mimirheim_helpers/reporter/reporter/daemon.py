@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +45,11 @@ logger = logging.getLogger(__name__)
 _INDEX_FILENAME = "index.html"
 _INDEX_CSS_FILENAME = "index.css"
 _PLOTLY_JS_FILENAME = "plotly.min.js"
+
+# Characters an ISO 8601 timestamp is built from. Deliberately a whitelist:
+# it excludes both path separators and NUL, so a value that matches cannot
+# escape the directory it is joined onto.
+_SAFE_TS_RE = re.compile(r"[0-9A-Za-z:+.\-]+")
 
 
 class ReporterDaemon(MqttDaemon):
@@ -171,10 +177,32 @@ class ReporterDaemon(MqttDaemon):
         input_path = Path(input_path_str)
         output_dump_path = Path(output_path_str)
 
-        # Determine the safe_ts (hyphens in time part, no colons) for the HTML filename.
-        safe_ts = _iso_to_safe_ts(ts)
+        # Determine the safe_ts (hyphens in time part, no colons) for the HTML
+        # filename. The payload is not trusted: ts is validated rather than
+        # merely transformed, because the result is joined onto output_dir.
+        try:
+            safe_ts = _iso_to_safe_ts(ts)
+        except ValueError as exc:
+            logger.warning("Rejecting notification: %s", exc)
+            return
         report_filename = f"{safe_ts}_report.html"
         report_path = cfg.output_dir / report_filename
+
+        # mimirheim publishes both dump paths as absolute paths inside
+        # reporting.dump_dir. A payload naming a file anywhere else is either
+        # malformed or hostile: reading it would let whoever can publish to the
+        # broker have the reporter embed an arbitrary file in a report, which
+        # the config editor then serves over HTTP.
+        for label, candidate in (("input", input_path), ("output", output_dump_path)):
+            if not _is_within(cfg.dump_dir, candidate):
+                logger.warning(
+                    "Rejecting notification: %s dump path %s is outside the "
+                    "configured dump directory %s.",
+                    label,
+                    candidate,
+                    cfg.dump_dir,
+                )
+                return
 
         if not input_path.exists():
             logger.warning("Input dump file does not exist: %s", input_path)
@@ -358,13 +386,49 @@ def _iso_to_safe_ts(ts: str) -> str:
 
     For example: ``"2026-04-02T14:00:00Z"`` becomes ``"2026-04-02T14-00-00Z"``.
 
+    The result is used as a filename component, and ``ts`` arrives in an MQTT
+    payload, so it is validated rather than trusted. Substituting colons was
+    all this function used to do, which left every path separator and every
+    ``..`` segment intact: a notification carrying
+    ``ts = "../escaped/PWNED"`` produced ``../escaped/PWNED_report.html`` and
+    the caller wrote it, outside the configured output directory.
+
     Args:
-        ts: ISO 8601 timestamp string.
+        ts: ISO 8601 timestamp string, as published by mimirheim.
 
     Returns:
         A filesystem-safe version of the timestamp.
+
+    Raises:
+        ValueError: If ``ts`` contains anything other than the characters an
+            ISO 8601 timestamp is made of, or contains a ``..`` segment. Path
+            separators and NUL are rejected by the character class.
     """
+    if not ts or not _SAFE_TS_RE.fullmatch(ts) or ".." in ts:
+        raise ValueError(
+            f"Notification timestamp is not a bare ISO 8601 timestamp: {ts!r}. "
+            "It is used to build a filename and must not contain path separators."
+        )
     if "T" in ts:
         date_part, time_part = ts.split("T", 1)
         return date_part + "T" + time_part.replace(":", "-")
     return ts.replace(":", "-")
+
+
+def _is_within(base: Path, candidate: Path) -> bool:
+    """Return True if ``candidate`` resolves to a location inside ``base``.
+
+    Both sides are fully resolved first, so symlinks and ``..`` segments cannot
+    be used to step outside ``base``.
+
+    Args:
+        base: The directory the candidate must stay inside.
+        candidate: A path taken from a notification payload.
+
+    Returns:
+        True if the resolved candidate is inside the resolved base.
+    """
+    try:
+        return candidate.resolve().is_relative_to(base.resolve())
+    except OSError:
+        return False

@@ -138,8 +138,8 @@ The `db_url` field is a standard SQLAlchemy connection URL.
 | Backend | URL format | Notes |
 |---------|-----------|-------|
 | SQLite | `sqlite:////absolute/path/to/home-assistant_v2.db` | Four slashes: three for the URL scheme, one to start the absolute path. The typical path inside HA OS is `/config/home-assistant_v2.db` |
-| PostgreSQL | `postgresql+psycopg2://user:pass@host/dbname` | Requires `psycopg2-binary`. Install with `uv pip install mimirheim-baseload-homeassistant-db[postgres]` |
-| MariaDB / MySQL | `mysql+pymysql://user:pass@host/dbname` | Requires `pymysql`. Install with `uv pip install mimirheim-baseload-homeassistant-db[mysql]` |
+| PostgreSQL | `postgresql+psycopg2://user:pass@host/dbname` | Requires `psycopg2-binary`. Install with `uv pip install "mimirheim[baseload-ha-db-postgres]"` |
+| MariaDB / MySQL | `mysql+pymysql://user:pass@host/dbname` | Requires `pymysql`. Install with `uv pip install "mimirheim[baseload-ha-db-mysql]"` |
 
 SQLite is the HA default and requires no extra driver.
 
@@ -196,14 +196,14 @@ Install dependencies and run from the tool directory:
 ```bash
 cd mimirheim_helpers/baseload/homeassistant_db
 uv sync --group dev
-uv run python -m baseload_ha --config config.yaml
+uv run python -m baseload_ha_db --config config.yaml
 ```
 
 For PostgreSQL or MariaDB, install the matching driver extra first:
 
 ```bash
-uv pip install mimirheim-baseload-homeassistant-db[postgres]   # PostgreSQL
-uv pip install mimirheim-baseload-homeassistant-db[mysql]      # MariaDB/MySQL
+uv pip install "mimirheim[baseload-ha-db-postgres]"   # PostgreSQL
+uv pip install "mimirheim[baseload-ha-db-mysql]"      # MariaDB/MySQL
 ```
 
 ---
@@ -262,107 +262,3 @@ GRANT SELECT ON statistics, statistics_meta TO ha_reader;
 GRANT SELECT ON homeassistant.statistics TO 'ha_reader'@'%';
 GRANT SELECT ON homeassistant.statistics_meta TO 'ha_reader'@'%';
 ```
-
-| `homeassistant.unit` | string | Unit reported by all entities: `W` or `kW`. The tool converts to kW before publishing. All entities must use the same unit |
-| `homeassistant.lookback_days` | integer 1–112 | Number of recent days to average. Higher values smooth out anomalies but respond more slowly to lifestyle changes. Default recommended: `7` |
-| `homeassistant.horizon_hours` | integer 1–168 | Number of hours of forecast to publish. The 24-hour day profile is repeated to fill the horizon. Default: `24` |
-| `signal_mimir` | boolean | Publish to `mimir_trigger_topic` after publishing the base load payload. Default `false` |
-| `mimir_trigger_topic` | string | mimirheim's trigger topic. Required when `signal_mimir: true` |
-
-### Getting a Long-Lived Access Token
-
-1. Open Home Assistant.
-2. Click your username in the lower-left corner → **Profile**.
-3. Scroll down to **Long-Lived Access Tokens** and click **Create Token**.
-4. Copy the token and paste it into config. The token is only shown once.
-
----
-
-## 4. Output format
-
-Published retained to `output_topic`. Steps are hourly. mimirheim resamples to its 15-minute solver grid using linear interpolation.
-
-```json
-[
-  {"ts": "2026-03-30T14:00:00+00:00", "kw": 0.42},
-  {"ts": "2026-03-30T15:00:00+00:00", "kw": 0.38},
-  {"ts": "2026-03-30T16:00:00+00:00", "kw": 0.51},
-  {"ts": "2026-03-30T17:00:00+00:00", "kw": 0.89},
-  {"ts": "2026-03-30T18:00:00+00:00", "kw": 1.23}
-]
-```
-
-- `ts` is UTC ISO 8601 with `+00:00` offset, marking the start of each hour.
-- `kw` is the net forecast power in kilowatts: sum of `sum_entities` minus sum of `subtract_entities`, clamped to zero.
-- No `confidence` field is included. mimirheim treats absent confidence as 1.0.
-- The forecast covers `horizon_hours` hours from the current wall-clock hour. If `horizon_hours` exceeds 24, the 24-hour day profile is tiled to fill the full window.
-
----
-
-## 5. Running
-
-```bash
-uv run python -m mimirheim_helpers.baseload.homeassistant --config mimirheim_helpers/baseload/homeassistant/config.yaml
-```
-
-### Systemd unit example
-
-```ini
-[Unit]
-Description=mimirheim HA base load fetcher
-After=network.target mosquitto.service
-
-[Service]
-WorkingDirectory=/opt/mimirheim
-ExecStart=/opt/mimirheim/.venv/bin/python -m mimirheim_helpers.baseload.homeassistant --config /etc/mimirheim/baseload_ha.yaml
-Restart=on-failure
-RestartSec=30
-
-[Install]
-WantedBy=multi-user.target
-```
-
----
-
-## 6. Fault tolerance
-
-- **HTTP failure**: If the HA REST API returns an error (network failure, 401, 500), the cycle is aborted and the error is logged. The last retained payload on `output_topic` remains unchanged.
-- **Insufficient history**: If fewer than `lookback_days` days of data are available (e.g. on first run), the tool computes the average over however many days are available. If no history exists at all for a given hour, the tool falls back to the mean across all available readings. This fallback is logged at `WARNING` level.
-- **Missing hours**: HA statistics can have gaps. The tool fills missing hours using linear interpolation from the nearest available readings. If an entire day has no data, that day is excluded from the average.
-- **MQTT disconnect**: Reconnects automatically.
-
----
-
-## 7. Scheduling
-
-Once daily at midnight is the standard cadence, refreshing the forecast for the coming day. If your household load is highly variable (e.g. you work from home some days and not others), updating more frequently does not help — the historical average is a fixed profile. A longer `lookback_days` is a better approach for absorbing variability.
-
-Example scheduler entry:
-
-```yaml
-schedules:
-  baseload:
-    cron: "0 0 * * *"
-    trigger_topic: mimir/input/tools/baseload/trigger
-```
-
----
-
-## 8. HA prerequisites
-
-The tool calls the HA statistics API endpoint:
-
-```
-GET {url}/api/recorder/statistics_during_period
-```
-
-This endpoint requires:
-
-- **HA version 2022.11 or later** — the statistics API was stabilised in this release.
-- **The recorder integration enabled** (it is enabled by default in HA). Statistics are stored in the HA SQLite or MariaDB database.
-- **Long-term statistics for the entity** — HA automatically stores hourly mean statistics for entities with `state_class: measurement` (which is the correct class for power sensors). If your power sensor does not have this class, HA will not have hourly statistics for it; check the entity in Settings → Entities.
-- **The Long-Lived Access Token** must have read access to the statistics API (all HA tokens do by default).
-
-### Verifying your sensor has statistics
-
-In Home Assistant: **Developer Tools → Statistics**. Search for your entity. If it appears, statistics are available and this tool will work. If it does not appear, check the entity's `state_class` attribute.

@@ -34,6 +34,7 @@ import yaml
 from pydantic import ValidationError as PydanticValidationError
 from ruamel.yaml import YAML
 
+from helper_common.config import mqtt_env_overrides
 from mimirheim.config.schema import MimirheimConfig
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,29 @@ _ALLOWED_REPORT_EXTENSIONS = {".html", ".js", ".css"}
 
 # Only these suffixes are served from the dump directory.
 _ALLOWED_DUMP_SUFFIXES = ("_input.json", "_output.json")
+
+# Substituted for credential values in the /api/config response.
+#
+# The editor needs to know which mqtt fields the Supervisor supplies, and needs
+# a value it can compare the form field against to decide whether the user
+# overrode it. It does not need the secret itself, and this server does not
+# authenticate: anything that can reach the port could read a real password out
+# of the response. The POST handlers strip this sentinel back out, so it never
+# reaches a YAML file even though the form posts it straight back.
+MQTT_ENV_REDACTED = "__supervisor_provided__"
+
+# mqtt fields whose value is replaced by MQTT_ENV_REDACTED on the way out.
+# host, port and tls are not secrets and the form needs to display them.
+_REDACTED_MQTT_FIELDS = ("password",)
+
+# Largest request body accepted on a POST.
+#
+# self.rfile.read(length) previously read whatever the client declared straight
+# into memory, with no cap. The largest thing this API legitimately receives is
+# a full mimirheim.yaml as JSON, which is a few tens of kilobytes; 1 MiB leaves
+# a wide margin while keeping a bad or hostile Content-Length from exhausting a
+# Home Assistant add-on box.
+MAX_REQUEST_BODY_BYTES = 1024 * 1024
 
 # Path to the static files bundled with this package.
 _STATIC_DIR = Path(__file__).parent / "static"
@@ -273,8 +297,6 @@ class ConfigEditorServer:
     ) -> None:
         self._config_dir = Path(config_dir)
         self._allowed_ip = allowed_ip
-        self._reports_dir: Path | None = self._detect_reports_dir()
-        self._dump_dir: Path | None = self._detect_dump_dir()
         self._schema: dict[str, Any] = MimirheimConfig.model_json_schema()
 
         # Load helper model registry. Dict maps filename → (model_cls, competitors).
@@ -305,10 +327,40 @@ class ConfigEditorServer:
                     self.send_response(403)
                     self.end_headers()
                     return
-                length = int(self.headers.get("Content-Length", 0))
+                raw_length = self.headers.get("Content-Length", "0")
+                try:
+                    length = int(raw_length)
+                except ValueError:
+                    # A non-numeric header used to raise ValueError here, which
+                    # took out the handler thread and reset the connection with
+                    # no response at all.
+                    logger.warning("Rejecting POST: bad Content-Length %r.", raw_length)
+                    self._reject(400, "bad Content-Length")
+                    return
+                if length < 0:
+                    logger.warning("Rejecting POST: negative Content-Length %r.", raw_length)
+                    self._reject(400, "bad Content-Length")
+                    return
+                if length > MAX_REQUEST_BODY_BYTES:
+                    logger.warning(
+                        "Rejecting POST: body of %d bytes exceeds the %d byte limit.",
+                        length,
+                        MAX_REQUEST_BODY_BYTES,
+                    )
+                    self._reject(413, "request body too large")
+                    return
                 raw = self.rfile.read(length)
                 status, headers, body = server_self.handle_request("POST", self.path, body=raw)
                 self._send(status, headers, body)
+
+            def _reject(self, status: int, message: str) -> None:
+                """Send a JSON error response without touching the request body."""
+                payload = json.dumps({"ok": False, "error": message}).encode()
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
 
             def _send(self, status: int, headers: dict[str, str], body: bytes) -> None:
                 def _sanitize_header_component(component: str) -> str:
@@ -338,25 +390,47 @@ class ConfigEditorServer:
     def _read_reporter_yaml(self) -> dict:
         """Read and parse reporter.yaml from the config directory.
 
-        Returns an empty dict if the file is absent or cannot be parsed.
+        Returns an empty dict if the file is absent, unreadable, or cannot be
+        parsed. An unreadable file used to raise OSError out of the request
+        handler; "reports not configured" is the honest answer and does not
+        take the thread down.
         """
         reporter_yaml = self._config_dir / "reporter.yaml"
-        if not reporter_yaml.exists():
-            return {}
         try:
             return yaml.safe_load(reporter_yaml.read_text()) or {}
-        except yaml.YAMLError:
+        except FileNotFoundError:
+            return {}
+        except (OSError, yaml.YAMLError) as exc:
+            logger.warning("Could not read %s: %s", reporter_yaml, exc)
             return {}
 
-    def _detect_reports_dir(self) -> Path | None:
-        """Return reporting.output_dir from reporter.yaml, or None if absent."""
-        output_dir = (self._read_reporter_yaml().get("reporting") or {}).get("output_dir")
-        return Path(output_dir) if output_dir else None
+    def _reporting_path(self, key: str) -> Path | None:
+        """Return a path from the ``reporting`` section of reporter.yaml.
 
-    def _detect_dump_dir(self) -> Path | None:
-        """Return reporting.dump_dir from reporter.yaml, or None if absent."""
-        dump_dir = (self._read_reporter_yaml().get("reporting") or {}).get("dump_dir")
-        return Path(dump_dir) if dump_dir else None
+        Read on each access rather than cached at construction. The editor
+        writes reporter.yaml itself, so a cached value meant that enabling the
+        reporter, or moving its output directory, had no effect until the
+        container restarted -- with nothing in the UI to explain why. This is a
+        low-traffic admin interface and the file is small.
+
+        Args:
+            key: The key to read from the ``reporting`` section.
+
+        Returns:
+            The configured path, or None when unset.
+        """
+        value = (self._read_reporter_yaml().get("reporting") or {}).get(key)
+        return Path(value) if value else None
+
+    @property
+    def _reports_dir(self) -> Path | None:
+        """Current reporting.output_dir, or None if not configured."""
+        return self._reporting_path("output_dir")
+
+    @property
+    def _dump_dir(self) -> Path | None:
+        """Current reporting.dump_dir, or None if not configured."""
+        return self._reporting_path("dump_dir")
 
     def serve_forever(self) -> None:
         """Start serving requests. Blocks until shutdown() is called."""
@@ -557,11 +631,13 @@ class ConfigEditorServer:
         Does not validate via Pydantic so that partially-complete configs
         written by the user are returned as-is for display in the frontend.
 
-        The ``mqtt_env`` key in the response contains MQTT broker settings
+        The ``mqtt_env`` key in the response names the MQTT broker settings
         currently set via environment variables (injected by the HA Supervisor).
         The frontend uses these to show which fields are Supervisor-controlled
         and to strip them from the saved YAML when the user has not overridden
-        them.
+        them. Credential values are replaced by ``MQTT_ENV_REDACTED``; the key
+        is still present, so the frontend can tell the field is env-supplied
+        without the secret leaving the process.
 
         Returns:
             ``{"exists": false, "config": {}, "mqtt_env": {...}}`` when the
@@ -569,7 +645,7 @@ class ConfigEditorServer:
             ``{"exists": true, "config": <dict>, "mqtt_env": {...}}`` when the
             file is present.
         """
-        mqtt_env = self._mqtt_env()
+        mqtt_env = self._mqtt_env_for_client()
         reports_available = (
             self._reports_dir is not None
             and (self._reports_dir / "index.html").exists()
@@ -625,6 +701,11 @@ class ConfigEditorServer:
             data = json.loads(body)
         except (json.JSONDecodeError, ValueError) as exc:
             return self._json_response(400, {"ok": False, "errors": str(exc)})
+
+        # An untouched password field posts the redaction sentinel back. Drop it
+        # before anything else looks at the data, so it is neither validated nor
+        # written to disk.
+        data = self._strip_redacted_mqtt(data) if isinstance(data, dict) else data
 
         # Merge env-supplied MQTT fields into a validation-only copy. The user
         # may have excluded mqtt fields that the Supervisor provides at runtime;
@@ -725,6 +806,8 @@ class ConfigEditorServer:
 
         # Enable: validate then write atomically.
         config_dict = data.get("config", {})
+        if isinstance(config_dict, dict):
+            config_dict = self._strip_redacted_mqtt(config_dict)
         model_cls, competitors = self._helper_models[filename]
 
         # Merge env-supplied MQTT fields for validation only. Helper configs may
@@ -763,6 +846,58 @@ class ConfigEditorServer:
     # Helpers
     # ------------------------------------------------------------------
 
+    @classmethod
+    def _mqtt_env_for_client(cls) -> dict[str, Any]:
+        """Return the env-supplied mqtt fields with credentials redacted.
+
+        Same keys as :meth:`_mqtt_env`, so the frontend still learns which
+        fields the Supervisor controls, but with the secret values replaced by
+        ``MQTT_ENV_REDACTED``.
+
+        Returns:
+            Dict mapping mqtt field names to their value, or to
+            ``MQTT_ENV_REDACTED`` for the fields listed in
+            ``_REDACTED_MQTT_FIELDS``.
+        """
+        env = cls._mqtt_env()
+        for field in _REDACTED_MQTT_FIELDS:
+            if field in env:
+                env[field] = MQTT_ENV_REDACTED
+        return env
+
+    @staticmethod
+    def _strip_redacted_mqtt(config: dict[str, Any]) -> dict[str, Any]:
+        """Return a copy of ``config`` with redacted mqtt values removed.
+
+        The editor pre-fills its form from the ``mqtt_env`` in the GET
+        response, so an untouched password field posts ``MQTT_ENV_REDACTED``
+        back. Persisting that would leave a config whose broker password is a
+        literal sentinel string.
+
+        The sentinel is stripped whether or not the environment still supplies
+        the field, so a config saved inside the add-on and re-saved outside it
+        does not turn the placeholder into a real password.
+
+        Args:
+            config: The submitted configuration dict.
+
+        Returns:
+            A shallow copy with any sentinel-valued mqtt field removed. The
+            ``mqtt`` key itself is dropped if nothing is left in it.
+        """
+        mqtt = config.get("mqtt")
+        if not isinstance(mqtt, dict):
+            return config
+        cleaned = {k: v for k, v in mqtt.items() if v != MQTT_ENV_REDACTED}
+        if cleaned == mqtt:
+            return config
+        result = dict(config)
+        if cleaned:
+            result["mqtt"] = cleaned
+        else:
+            del result["mqtt"]
+        return result
+
     @staticmethod
     def _json_response(
         status: int, data: Any
@@ -794,18 +929,13 @@ class ConfigEditorServer:
             Dict mapping mqtt field names to their env-supplied values. Empty
             when no MQTT env vars are set (plain Docker, no Supervisor).
         """
-        env: dict[str, Any] = {}
-        if host := os.environ.get("MQTT_HOST"):
-            env["host"] = host
-        if port_str := os.environ.get("MQTT_PORT"):
-            try:
-                env["port"] = int(port_str)
-            except ValueError:
-                pass
-        if username := os.environ.get("MQTT_USERNAME"):
-            env["username"] = username
-        if password := os.environ.get("MQTT_PASSWORD"):
-            env["password"] = password
-        if ssl_str := os.environ.get("MQTT_SSL"):
-            env["tls"] = ssl_str.lower() == "true"
-        return env
+        try:
+            return mqtt_env_overrides()
+        except ValueError as exc:
+            # A helper daemon exits on this, and should: it cannot connect to a
+            # broker on an invalid port. The editor is the tool an operator
+            # reaches for to fix configuration, so it degrades instead --
+            # reporting no Supervisor-supplied MQTT settings, which makes the
+            # form show the mqtt section for manual entry.
+            logger.warning("Ignoring MQTT environment overrides: %s", exc)
+            return {}

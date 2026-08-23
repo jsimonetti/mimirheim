@@ -64,8 +64,9 @@ class ConfigEditorConfig(BaseModel):
         description=(
             "If set, the server only accepts HTTP connections from this IP address. "
             "All other connections receive 403 Forbidden. When None (the default), "
-            "all IPs are accepted. Set automatically from the CONFIG_EDITOR_ALLOWED_IP "
-            "environment variable when running as a HA add-on."
+            "all IPs are accepted. The CONFIG_EDITOR_ALLOWED_IP environment "
+            "variable overrides this value when set, which is how the HA add-on "
+            "supplies the ingress gateway address."
         ),
         json_schema_extra={"ui_label": "Allowed IP", "ui_group": "advanced"},
     )
@@ -121,5 +122,12 @@ def load_config(path: str) -> ConfigEditorConfig:
     # cont-init.d/00-options-env.sh when running as a HA add-on. The variable
     # contains the container's default gateway IP, which is the address from
     # which the HA ingress proxy forwards requests.
-    cfg.allowed_ip = os.environ.get("CONFIG_EDITOR_ALLOWED_IP") or None
+    #
+    # Only when it is actually set. This used to assign unconditionally, so
+    # outside the add-on -- plain Docker, bare metal, where the variable does
+    # not exist -- a configured allowed_ip was replaced with None and the
+    # server accepted every source IP. The file is the operator's only
+    # restriction there.
+    if env_allowed_ip := os.environ.get("CONFIG_EDITOR_ALLOWED_IP"):
+        cfg.allowed_ip = env_allowed_ip
     return cfg

@@ -16,11 +16,53 @@ import sys
 from pathlib import Path
 
 import yaml
-from apscheduler.triggers.cron import CronTrigger
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic import ValidationError as PydanticValidationError
 
 from helper_common.config import MqttConfig, apply_mqtt_env_overrides
+
+from scheduler.cron import build_trigger
+
+
+# MQTT 3.1.1 encodes a topic name with a two-byte length prefix, so a topic
+# cannot exceed 65535 bytes of UTF-8.
+_MAX_TOPIC_BYTES = 65535
+
+
+def _validate_topic(index: int, topic: str) -> None:
+    """Reject a schedule topic that MQTT cannot publish to.
+
+    Without this the daemon starts happily and the fault only appears when the
+    schedule first fires, as a recurring error inside the job thread, while the
+    process still looks healthy. A typo in a topic is the likeliest mistake in
+    this file, so it is worth catching at startup where it stops the process
+    with a message naming the entry.
+
+    Args:
+        index: Position of the entry in the schedules list, used in the message.
+        topic: The configured MQTT topic.
+
+    Raises:
+        ValueError: If the topic is empty or blank, contains an MQTT wildcard
+            or a null character, or exceeds the MQTT length limit.
+    """
+    if not topic.strip():
+        raise ValueError(f"schedules[{index}] topic must not be empty")
+    if "+" in topic or "#" in topic:
+        raise ValueError(
+            f"schedules[{index}] topic {topic!r} contains an MQTT wildcard; "
+            f"wildcards are for subscribing, and the scheduler publishes"
+        )
+    if "\x00" in topic:
+        raise ValueError(
+            f"schedules[{index}] topic contains a null character"
+        )
+    encoded = len(topic.encode("utf-8"))
+    if encoded > _MAX_TOPIC_BYTES:
+        raise ValueError(
+            f"schedules[{index}] topic is too long: {encoded} bytes of UTF-8, "
+            f"maximum is {_MAX_TOPIC_BYTES}"
+        )
 
 
 class SchedulerConfig(BaseModel):
@@ -38,6 +80,7 @@ class SchedulerConfig(BaseModel):
 
     mqtt: MqttConfig = Field(description="MQTT broker connection parameters.", json_schema_extra={"ui_label": "MQTT", "ui_group": "basic"})
     schedules: list[dict[str, str]] = Field(
+        min_length=1,
         description=(
             "List of schedule entries. Each entry is a single-key dict: "
             "{cron_expression: mqtt_topic}."
@@ -50,29 +93,36 @@ class SchedulerConfig(BaseModel):
     def _validate_schedules(cls, v: list[dict[str, str]]) -> list[dict[str, str]]:
         """Validate that the schedules list is non-empty and each entry is well-formed.
 
+        Both halves of an entry are checked, because a fault in either one is
+        equally fatal and equally invisible until the schedule first fires.
+
+        The list being non-empty is enforced by ``min_length`` on the field, so
+        it is not re-checked here.
+
         Raises:
-            ValueError: If the list is empty, if any entry has more than one
-                key, or if any key is not a valid five-field cron expression.
+            ValueError: If any entry has more than one key, if any key is not a
+                valid five-field cron expression, or if any value is a topic
+                MQTT cannot publish to.
         """
-        if not v:
-            raise ValueError("schedules must not be empty")
         for i, entry in enumerate(v):
             if len(entry) != 1:
                 raise ValueError(
                     f"schedules[{i}] must have exactly one key (a cron expression), "
                     f"got {len(entry)} keys: {list(entry.keys())}"
                 )
-            cron_expr = next(iter(entry))
+            cron_expr, topic = next(iter(entry.items()))
             try:
-                CronTrigger.from_crontab(cron_expr, timezone="UTC")
+                build_trigger(cron_expr)
             except ValueError as exc:
                 raise ValueError(
-                    f"schedules[{i}] has invalid cron expression: {cron_expr!r}"
+                    f"schedules[{i}] has invalid cron expression "
+                    f"{cron_expr!r}: {exc}"
                 ) from exc
+            _validate_topic(i, topic)
         return v
 
     @model_validator(mode="after")
-    def _set_client_id_default(self) -> "SchedulerConfig":
+    def _set_client_id_default(self) -> SchedulerConfig:
         """Set the default MQTT client identifier when not explicitly configured."""
         if not self.mqtt.client_id:
             self.mqtt.client_id = "mimir-scheduler"

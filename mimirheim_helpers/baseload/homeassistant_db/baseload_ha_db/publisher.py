@@ -11,6 +11,8 @@ from typing import Any
 
 import paho.mqtt.client as mqtt
 
+from helper_common.publish import publish_checked
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,9 +45,23 @@ def publish_forecast(
         )
 
     payload = json.dumps(steps)
-    client.publish(output_topic, payload, qos=1, retain=True)
+    publish_checked(
+        client,
+        output_topic,
+        payload,
+        qos=1,
+        retain=True,
+        description="base load forecast",
+    )
     logger.info("Published %d base load steps to %s", len(steps), output_topic)
 
     if signal_mimir:
-        client.publish(mimir_trigger_topic, "", qos=0, retain=False)
+        publish_checked(
+            client,
+            mimir_trigger_topic,
+            "",
+            qos=0,
+            retain=False,
+            description="mimirheim solve trigger",
+        )
         logger.debug("Signalled mimirheim via %s", mimir_trigger_topic)

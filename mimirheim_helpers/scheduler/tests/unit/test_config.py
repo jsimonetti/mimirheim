@@ -8,6 +8,9 @@ Tests verify:
 - An empty schedules list is rejected.
 - Unknown top-level and mqtt fields are rejected (extra="forbid").
 - Multiple entries targeting the same topic are valid.
+- Day-of-week follows standard cron, so 7 is accepted as Sunday.
+- Restricting day-of-month and day-of-week together is rejected.
+- A schedule entry whose topic MQTT cannot publish to is rejected.
 - Default values for optional mqtt fields are applied correctly.
 """
 
@@ -77,9 +80,20 @@ def test_multi_key_dict_rejected() -> None:
 
 
 def test_empty_schedules_list_rejected() -> None:
-    """An empty schedules list raises ValidationError."""
-    with pytest.raises(ValidationError, match="must not be empty"):
+    """An empty schedules list raises ValidationError.
+
+    The rule lives in ``min_length`` on the field rather than in the validator,
+    so that it also reaches the generated JSON schema as ``minItems`` and the
+    config editor can report it before the daemon is started.
+    """
+    with pytest.raises(ValidationError, match="at least 1 item"):
         SchedulerConfig.model_validate(_base_raw(schedules=[]))
+
+
+def test_non_empty_constraint_reaches_the_json_schema() -> None:
+    """The config editor builds its UI from the schema, not from the validator."""
+    schema = SchedulerConfig.model_json_schema()
+    assert schema["properties"]["schedules"]["minItems"] == 1
 
 
 def test_unknown_top_level_field_rejected() -> None:
@@ -152,3 +166,82 @@ def test_multiple_valid_cron_formats() -> None:
         _base_raw(schedules=[{expr: "t"} for expr in valid_exprs])
     )
     assert len(config.parsed_schedules()) == len(valid_exprs)
+
+
+def test_day_seven_is_accepted_as_sunday() -> None:
+    """Standard cron spells Sunday as 0 or 7; APScheduler alone rejects 7."""
+    config = SchedulerConfig.model_validate(
+        _base_raw(schedules=[{"0 2 * * 7": "mimir/input/trigger"}])
+    )
+    assert config.parsed_schedules() == [("0 2 * * 7", "mimir/input/trigger")]
+
+
+def test_both_day_fields_restricted_is_rejected() -> None:
+    """Standard cron ORs the two day fields, which one trigger cannot express."""
+    with pytest.raises(ValidationError, match="day-of-month and day-of-week"):
+        SchedulerConfig.model_validate(
+            _base_raw(schedules=[{"0 0 13 * fri": "some/topic"}])
+        )
+
+
+def test_invalid_cron_error_names_the_entry_and_the_reason() -> None:
+    """The validation message identifies both the bad entry and what is wrong."""
+    with pytest.raises(ValidationError, match=r"schedules\[0\].*out of range"):
+        SchedulerConfig.model_validate(
+            _base_raw(schedules=[{"0 14 * * 9": "some/topic"}])
+        )
+
+
+# ---------------------------------------------------------------------------
+# Topic validation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("topic", "reason"),
+    [
+        ("", "must not be empty"),
+        ("   ", "must not be empty"),
+        ("mimir/input/#", "wildcard"),
+        ("mimir/+/trigger", "wildcard"),
+        ("mimir/\x00/trigger", "null"),
+        ("a" * 65536, "too long"),
+    ],
+)
+def test_unpublishable_topic_rejected(topic: str, reason: str) -> None:
+    """A topic paho would refuse is rejected at startup, not at fire time."""
+    with pytest.raises(ValidationError, match=reason):
+        SchedulerConfig.model_validate(
+            _base_raw(schedules=[{"*/15 * * * *": topic}])
+        )
+
+
+def test_topic_error_names_the_entry() -> None:
+    """The message identifies which schedule entry carries the bad topic."""
+    with pytest.raises(ValidationError, match=r"schedules\[1\]"):
+        SchedulerConfig.model_validate(
+            _base_raw(
+                schedules=[
+                    {"*/15 * * * *": "mimir/input/trigger"},
+                    {"0 14 * * *": "mimir/input/#"},
+                ]
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    "topic",
+    [
+        "mimir/input/trigger",
+        "a",
+        "a" * 65535,
+        "mimir/input/tools/pv_ml_learner/infer",
+        "with spaces/inside",
+    ],
+)
+def test_valid_topics_accepted(topic: str) -> None:
+    """Anything MQTT can publish to stays acceptable, including odd but legal names."""
+    config = SchedulerConfig.model_validate(
+        _base_raw(schedules=[{"*/15 * * * *": topic}])
+    )
+    assert config.parsed_schedules()[0][1] == topic

@@ -16,6 +16,8 @@ import json
 import logging
 from typing import Any
 
+from helper_common.publish import publish_checked
+
 logger = logging.getLogger("pv_fetcher.publisher")
 
 
@@ -48,9 +50,23 @@ def publish_array(
             ``signal_mimir`` is True; ignored otherwise.
     """
     payload = json.dumps(steps)
-    client.publish(output_topic, payload, qos=1, retain=True)
+    publish_checked(
+        client,
+        output_topic,
+        payload,
+        qos=1,
+        retain=True,
+        description="PV forecast",
+    )
     logger.debug("Published %d forecast steps to %s", len(steps), output_topic)
 
     if signal_mimir:
-        client.publish(mimir_trigger_topic, payload=b"", qos=0, retain=False)
+        publish_checked(
+            client,
+            mimir_trigger_topic,
+            b"",
+            qos=0,
+            retain=False,
+            description="mimirheim solve trigger",
+        )
         logger.debug("Published mimirheim trigger to %s", mimir_trigger_topic)

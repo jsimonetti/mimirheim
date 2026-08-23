@@ -1,35 +1,53 @@
 # homeassistant_db — Agent Instructions
 
-This tool is **independent of mimirheim**. It has its own `pyproject.toml`, its own virtual environment, and its own dependency set. It communicates with mimirheim exclusively via MQTT topics. There is no shared Python package, no shared virtual environment, and no shared imports between this tool and mimirheim.
+This tool is a helper package inside the mimirheim repository. It ships in the
+single `mimirheim` wheel, alongside the solver and every other helper, and it
+runs as its own daemon process communicating over MQTT.
 
 ---
 
-## Critical separation rule
+## Dependencies
 
-**Never add dependencies required by this tool to the mimirheim `pyproject.toml`.** If this tool needs a library, add it here:
+There is one `pyproject.toml`, at the repo root. This tool has no `pyproject.toml`
+of its own and must not be given one: the build only reads the root file, so a
+local one would be silently ignored.
 
+Runtime dependencies belong in the root `pyproject.toml`, under this tool's extra:
+
+```toml
+[project.optional-dependencies]
+baseload-ha-db = ["sqlalchemy>=2.0.52"]
 ```
-mimirheim_helpers/baseload/homeassistant_db/pyproject.toml
-```
 
-The mimirheim `pyproject.toml` at the repo root must not list `sqlalchemy` or any other dependency that belongs to this tool.
+Anything added there must also be added to the `helpers` meta-extra, which the
+container build and full developer environments install.
+Two further extras exist for the optional database drivers:
+`baseload-ha-db-postgres` and `baseload-ha-db-mysql`.
+
+`helper_common` is a deliberate shared dependency, not a violation of anything.
+`config.py` imports `MqttConfig` and `apply_mqtt_env_overrides`, and
+`__main__.py` builds on `HelperDaemon`, so every helper validates broker
+settings identically and handles triggers the same way.
 
 ---
 
-## Environment setup
+## Environment
 
-All commands must be run from this directory (`mimirheim_helpers/baseload/homeassistant_db/`), not from the repo root.
+There is one lockfile and one virtual environment, both at the repo root. Run
+every command from there, not from this directory:
 
 ```bash
-cd mimirheim_helpers/baseload/homeassistant_db
-
-uv sync --group dev           # create .venv and install runtime + test dependencies
-uv run pytest                 # run tests
-uv run python -m baseload_ha --config config.yaml   # run the tool
+uv sync --all-extras                          # core plus every helper dependency
+uv run pytest                                 # the whole suite, this package included
+uv run pytest mimirheim_helpers/baseload/homeassistant_db/tests
+uv run ruff check .                           # must be clean before a change is done
+uv run python -m baseload_ha_db --config config.yaml
 ```
 
-Use `uv sync` without `--group dev` only when you want runtime dependencies without pytest.
-Running `uv sync` from the repo root creates the mimirheim venv, not this tool's venv.
+The module path is `baseload_ha_db`, not a dotted path under
+`mimirheim_helpers`. The package is published at the top level by
+`[tool.hatch.build.targets.wheel]` in the root `pyproject.toml`, and the
+container's s6 service invokes it the same way.
 
 ---
 
@@ -62,7 +80,6 @@ Apply all mimirheim code standards from the root `AGENTS.md` to this tool withou
 
 ```
 mimirheim_helpers/baseload/homeassistant_db/
-  pyproject.toml       # dependencies: paho-mqtt, pydantic, pyyaml, sqlalchemy
   README.md            # external specification (authoritative)
   AGENTS.md            # this file
   baseload_ha_db/
@@ -107,8 +124,8 @@ This schema is present in all HA recorder backends (SQLite, PostgreSQL, MariaDB)
 The `db_url` config field is a standard SQLAlchemy connection URL. The SQLite driver is built into Python. PostgreSQL (`psycopg2-binary`) and MariaDB (`pymysql`) require the matching optional extra:
 
 ```bash
-uv pip install mimirheim-baseload-homeassistant-db[postgres]
-uv pip install mimirheim-baseload-homeassistant-db[mysql]
+uv pip install "mimirheim[baseload-ha-db-postgres]"
+uv pip install "mimirheim[baseload-ha-db-mysql]"
 ```
 
 All queries in `fetcher.py` are `SELECT`-only. No writes are performed.

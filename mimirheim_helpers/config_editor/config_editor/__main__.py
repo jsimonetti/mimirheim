@@ -18,6 +18,10 @@ import threading
 from config_editor.config import load_config
 from config_editor.server import ConfigEditorServer
 
+# Named explicitly, not derived from __name__: this module runs as
+# `python -m config_editor`, where __name__ is "__main__".
+logger = logging.getLogger("config_editor")
+
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -58,7 +62,7 @@ def main() -> None:
     stop_event = threading.Event()
 
     def _handle_stop(signum: int, frame: object) -> None:
-        logging.getLogger(__name__).info("Received signal %d, shutting down.", signum)
+        logger.info("Received signal %d, shutting down.", signum)
         stop_event.set()
 
     signal.signal(signal.SIGTERM, _handle_stop)

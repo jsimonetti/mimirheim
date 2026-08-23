@@ -5,8 +5,8 @@ per schedule entry, starts a BackgroundScheduler, then blocks on the stop_event
 until the caller requests shutdown. On stop, it shuts down the scheduler cleanly
 and waits for any in-flight job to complete.
 
-APScheduler handles all timer, drift, and coalescing logic. The custom min-heap
-and threading.Event sleep loop that previously existed here have been removed.
+APScheduler handles all timer, drift, and coalescing logic, so this module
+holds no timing code of its own.
 
 What this module does not do:
 - It does not parse configuration — that is config.py's responsibility.
@@ -22,9 +22,11 @@ import logging
 import threading
 from typing import Any
 
+import paho.mqtt.client as mqtt
 from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED, JobExecutionEvent
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
+
+from scheduler.cron import build_trigger
 
 logger = logging.getLogger("scheduler.loop")
 
@@ -36,11 +38,28 @@ def _publish(client: Any, topic: str) -> None:
     intentionally thin: all scheduling logic lives in APScheduler, and all
     MQTT connection management lives in __main__.py.
 
+    A qos=0 publish on a disconnected client does not raise; paho discards the
+    message and reports it only in the result code. Raising on a non-zero code
+    turns that into an ``EVENT_JOB_ERROR``, so the listener below reports the
+    trigger as lost instead of logging it as delivered.
+
+    The result code confirms the message reached the network loop, not that the
+    broker received it. At qos=0 there is no acknowledgement to wait for, so a
+    trigger can still be lost in transit without anything to report.
+
     Args:
         client: A paho-mqtt Client instance with loop_start() already called.
         topic: The MQTT topic to publish to.
+
+    Raises:
+        RuntimeError: If paho refused the message, most often because the
+            broker connection is down.
     """
-    client.publish(topic, payload=b"", qos=0, retain=False)
+    info = client.publish(topic, payload=b"", qos=0, retain=False)
+    if info.rc != mqtt.MQTT_ERR_SUCCESS:
+        raise RuntimeError(
+            f"MQTT publish to {topic!r} failed: {mqtt.error_string(info.rc)}"
+        )
 
 
 def run(
@@ -71,13 +90,17 @@ def run(
             each trigger that fires.
         schedules: List of (cron_expr, topic) pairs from the config. Typically
             obtained via SchedulerConfig.parsed_schedules().
-        stop_event: Setting this event causes the loop to exit after the
-            current sleep completes. SIGTERM and SIGINT handlers in __main__
-            set this event.
+        stop_event: Setting this event causes run() to return. SIGTERM and
+            SIGINT handlers in __main__ set it.
         _scheduler: Optional BackgroundScheduler to use instead of creating a
             new one. Pass a controlled instance in tests to add pre-configured
-            jobs or inspect registered jobs after run() returns.
+            jobs or inspect registered jobs after run() returns. The caller
+            owns anything it passes, including shutting it down; the scheduler
+            fixture in the test suite's conftest does that.
     """
+    # Only a scheduler created here is shut down here. shutdown() empties the
+    # job store, so shutting down a caller's instance would destroy the jobs it
+    # passed the instance in to inspect.
     owned = _scheduler is None
     scheduler = _scheduler if _scheduler is not None else BackgroundScheduler(timezone="UTC")
 
@@ -86,7 +109,7 @@ def run(
         job_id = f"job_{i}"
         scheduler.add_job(
             _publish,
-            CronTrigger.from_crontab(cron_expr, timezone="UTC"),
+            build_trigger(cron_expr),
             args=[client, topic],
             id=job_id,
             name=topic,
@@ -96,6 +119,9 @@ def run(
         job_topic[job_id] = topic
 
     def _on_event(event: JobExecutionEvent) -> None:
+        # Jobs registered above are keyed by id so the log can name the topic.
+        # An injected scheduler may carry jobs this function did not register,
+        # which have no topic; fall back to the job id for those.
         topic = job_topic.get(event.job_id, event.job_id)  # type: ignore[arg-type]
         if event.exception:
             logger.error(

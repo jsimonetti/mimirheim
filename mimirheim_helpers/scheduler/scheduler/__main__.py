@@ -91,14 +91,30 @@ def _make_paho_client(config: SchedulerConfig) -> paho.Client:
     return client
 
 
+def _configure_logging() -> None:
+    """Set up log formatting and levels for the daemon.
+
+    APScheduler logs every job it runs and every job that finishes, at INFO,
+    each line carrying the full trigger repr. Those two lines restate what
+    ``loop.py`` already reports once per fire in a readable form, so with the
+    recommended schedule they account for a few hundred redundant lines a day.
+    Quietening its loggers to WARNING removes the duplication and keeps the
+    misfire warning, which is the only place a skipped trigger is reported.
+    """
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    logging.getLogger("apscheduler").setLevel(logging.WARNING)
+
+
 def main() -> None:
     """Run the scheduler daemon until SIGTERM or SIGINT.
 
     Parses ``--config``, loads and validates the configuration, connects to
     the MQTT broker, then enters the schedule loop. The loop publishes an
     empty trigger message to each configured topic when its cron expression
-    fires. On SIGTERM or SIGINT, the stop event is set and the loop exits
-    after the current sleep completes.
+    fires. On SIGTERM or SIGINT, the stop event is set and the loop returns.
     """
     parser = argparse.ArgumentParser(
         description="mimirheim scheduler — publish MQTT trigger messages on a cron schedule.",
@@ -111,10 +127,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    _configure_logging()
 
     config = load_config(args.config)
     schedules = config.parsed_schedules()

@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -32,6 +34,48 @@ _EXPIRY_MARGIN_SECONDS = 60
 # Zonneplan OTP links expire after roughly 5 minutes; 4 minutes gives a
 # safety margin to complete the token exchange before the OTP becomes invalid.
 _PENDING_FRESH_SECONDS = 4 * 60
+
+def _write_secret_json(path: Path, data: dict) -> None:
+    """Write ``data`` as JSON to ``path``, atomically and owner-readable only.
+
+    Two properties matter here and neither came free from ``Path.write_text``:
+
+    Permissions. ``write_text`` creates at 0644 minus umask, so the refresh
+    token -- which is long-lived -- was readable by every local user and by any
+    other container sharing the volume. ``mkstemp`` creates at 0600 regardless
+    of umask, and ``os.replace`` keeps the new file's mode, so an existing
+    world-readable file from an earlier release is tightened on the next write.
+
+    Atomicity. ``write_text`` truncates before writing, so a crash partway
+    through left a corrupt file. That is not a self-healing failure: an
+    unreadable token means the user has to go through the email-OTP flow again.
+    Writing to a temporary file in the same directory and renaming means a
+    reader sees either the old file or the new one.
+
+    Args:
+        path: Destination path for the JSON file.
+        data: The dict to serialise.
+
+    Raises:
+        OSError: If the file cannot be written or renamed. The previous file is
+            left untouched and the temporary file is removed.
+    """
+    payload = json.dumps(data, indent=2)
+    # mkstemp creates the file with mode 0600 and does not consult the umask,
+    # which is the permission this function needs. An explicit fchmod here
+    # would be dead code: removing it changed nothing that any test could see.
+    # The mode assertions in test_token.py are what hold this in place.
+    fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix=path.name, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as fh:
+            fh.write(payload)
+        os.replace(tmp_path, path)
+    except OSError:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
 
 def load_token(path: Path) -> dict | None:
@@ -75,7 +119,7 @@ def save_token(path: Path, token: dict) -> None:
         "token_type": token.get("token_type", "Bearer"),
         "expires_at": expires_at.isoformat(),
     }
-    path.write_text(json.dumps(data, indent=2))
+    _write_secret_json(path, data)
 
 
 def is_token_valid(token: dict) -> bool:
@@ -131,7 +175,7 @@ def save_pending(path: Path, uuid: str, email: str) -> None:
         "email": email,
         "requested_at": datetime.now(tz=timezone.utc).isoformat(),
     }
-    path.write_text(json.dumps(data, indent=2))
+    _write_secret_json(path, data)
 
 
 def delete_pending(path: Path) -> None:

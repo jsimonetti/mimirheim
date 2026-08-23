@@ -137,7 +137,7 @@ Published retained to `output_topic`. Steps are hourly. mimirheim resamples to i
 ## 5. Running
 
 ```bash
-uv run python -m mimirheim_helpers.baseload.homeassistant --config mimirheim_helpers/baseload/homeassistant/config.yaml
+uv run python -m baseload_ha --config mimirheim_helpers/baseload/homeassistant/config.yaml
 ```
 
 ### Systemd unit example
@@ -149,7 +149,7 @@ After=network.target mosquitto.service
 
 [Service]
 WorkingDirectory=/opt/mimirheim
-ExecStart=/opt/mimirheim/.venv/bin/python -m mimirheim_helpers.baseload.homeassistant --config /etc/mimirheim/baseload_ha.yaml
+ExecStart=/opt/mimirheim/.venv/bin/python -m baseload_ha --config /etc/mimirheim/baseload_ha.yaml
 Restart=on-failure
 RestartSec=30
 

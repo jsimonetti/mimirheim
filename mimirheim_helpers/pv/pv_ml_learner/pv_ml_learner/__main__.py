@@ -39,6 +39,7 @@ import sqlalchemy as sa
 
 from helper_common.cycle import CycleResult
 from helper_common.daemon import MqttDaemon
+from helper_common.publish import publish_checked
 from helper_common.discovery import publish_trigger_discovery
 
 from pv_ml_learner.config import ArrayConfig, PvLearnerConfig, load_config
@@ -586,7 +587,14 @@ class PvLearnerDaemon(MqttDaemon):
 
         # Optionally signal mimirheim that all forecasts have been published.
         if cfg.signal_mimir and cfg.mimir_trigger_topic:
-            client.publish(cfg.mimir_trigger_topic, payload="", retain=False)
+            publish_checked(
+                client,
+                cfg.mimir_trigger_topic,
+                "",
+                qos=0,
+                retain=False,
+                description="mimirheim solve trigger",
+            )
             logger.info("Published mimirheim trigger to %s.", cfg.mimir_trigger_topic)
 
         return max_steps

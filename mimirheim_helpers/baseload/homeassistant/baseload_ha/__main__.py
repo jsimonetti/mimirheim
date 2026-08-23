@@ -16,14 +16,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
-import sys
 from datetime import datetime, timezone
-from pathlib import Path
 
 import paho.mqtt.client as mqtt
-import yaml
 
-from helper_common.config import apply_mqtt_env_overrides
+from helper_common.config import load_helper_config
 from helper_common.cycle import CycleResult
 from helper_common.daemon import HelperDaemon
 from helper_common.discovery import POWER_NO_CONFIDENCE_FORECAST_ATTRIBUTES_TEMPLATE
@@ -33,28 +30,10 @@ from baseload_ha.fetcher import FetchError, fetch_statistics
 from baseload_ha.forecast import build_forecast
 from baseload_ha.publisher import publish_forecast
 
-logger = logging.getLogger(__name__)
-
-
-def _load_config(path: str) -> BaseloadConfig:
-    """Load and validate the YAML configuration file.
-
-    Args:
-        path: Filesystem path to the config.yaml file.
-
-    Returns:
-        Validated BaseloadConfig instance.
-
-    Raises:
-        SystemExit: If the file cannot be read or fails validation.
-    """
-    try:
-        raw = yaml.safe_load(Path(path).read_text())
-        apply_mqtt_env_overrides(raw)
-        return BaseloadConfig.model_validate(raw)
-    except Exception:
-        logger.exception("Failed to load configuration from %s", path)
-        sys.exit(1)
+# Named explicitly, not derived from __name__: this module runs as
+# `python -m baseload_ha`, where __name__ is "__main__" and the records would
+# not join the ones MqttDaemon emits under the package name.
+logger = logging.getLogger("baseload_ha")
 
 
 class HaBaseloadDaemon(HelperDaemon):
@@ -136,8 +115,15 @@ def main() -> None:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    # httpx logs a line per request at INFO, which here means one
+    # "HTTP Request: POST .../api/recorder/statistics_during_period 200 OK" for
+    # every cycle. Nothing secret leaks -- the HA token travels in an
+    # Authorization header, not the URL -- but it doubles the output of a
+    # daemon whose own log is one line per cycle. pv_ml_learner already does
+    # this.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
-    HaBaseloadDaemon(_load_config(args.config)).run()
+    HaBaseloadDaemon(load_helper_config(args.config, BaseloadConfig, logger)).run()
 
 
 if __name__ == "__main__":

@@ -11,6 +11,8 @@ What these tests do not cover:
 from __future__ import annotations
 
 import json
+import logging
+import os
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -18,7 +20,7 @@ from unittest.mock import patch
 import pytest
 import yaml
 
-from config_editor.server import ConfigEditorServer
+from config_editor.server import MQTT_ENV_REDACTED, ConfigEditorServer
 
 
 # ---------------------------------------------------------------------------
@@ -621,3 +623,308 @@ def test_pv_ml_learner_array_output_topic_has_ui_source(tmp_path: Path) -> None:
     array_config = schemas["pv-ml-learner.yaml"]["$defs"]["ArrayConfig"]
     field = array_config["properties"]["output_topic"]
     assert field.get("ui_source") == "pv_arrays"
+
+
+# ---------------------------------------------------------------------------
+# The Supervisor's broker password must not cross the wire
+# ---------------------------------------------------------------------------
+
+def test_get_config_does_not_return_the_broker_password(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GET /api/config must not contain the value of MQTT_PASSWORD.
+
+    This server does not authenticate, by design. Returning the Supervisor's
+    broker password in a plaintext response hands it to anything that can
+    reach the port.
+    """
+    monkeypatch.setenv("MQTT_HOST", "core-mosquitto")
+    monkeypatch.setenv("MQTT_PASSWORD", "SuperSecret123")
+    server = _make_server(tmp_path)
+
+    status, headers, body = _dispatch_get(server, "/api/config")
+
+    assert status == 200
+    assert b"SuperSecret123" not in body
+
+
+def test_get_config_still_reports_that_the_password_is_env_supplied(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The editor still needs to know the field is Supervisor-controlled."""
+    monkeypatch.setenv("MQTT_HOST", "core-mosquitto")
+    monkeypatch.setenv("MQTT_PASSWORD", "SuperSecret123")
+    server = _make_server(tmp_path)
+
+    status, headers, body = _dispatch_get(server, "/api/config")
+    data = json.loads(body)
+
+    assert "password" in data["mqtt_env"]
+    assert data["mqtt_env"]["password"] == MQTT_ENV_REDACTED
+
+
+def test_get_config_omits_password_key_when_env_does_not_set_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No placeholder appears for a field the Supervisor does not supply."""
+    monkeypatch.delenv("MQTT_PASSWORD", raising=False)
+    monkeypatch.setenv("MQTT_HOST", "core-mosquitto")
+    server = _make_server(tmp_path)
+
+    status, headers, body = _dispatch_get(server, "/api/config")
+    data = json.loads(body)
+
+    assert "password" not in data["mqtt_env"]
+
+
+def test_post_config_never_writes_the_placeholder_to_yaml(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A form round-trip submits the placeholder back; it must not be persisted.
+
+    The editor pre-fills the form from mqtt_env, so an untouched password field
+    posts the placeholder. Writing that string into mimirheim.yaml would leave a
+    config whose broker password is a literal sentinel.
+    """
+    monkeypatch.setenv("MQTT_HOST", "core-mosquitto")
+    monkeypatch.setenv("MQTT_PASSWORD", "SuperSecret123")
+    server = _make_server(tmp_path)
+    submitted = {
+        "mqtt": {"client_id": "mimir", "password": MQTT_ENV_REDACTED},
+        "grid": {"import_limit_kw": 25.0, "export_limit_kw": 25.0},
+    }
+
+    status, headers, body = _dispatch_post(server, "/api/config", submitted)
+
+    assert status == 200, json.loads(body)
+    written = (tmp_path / "mimirheim.yaml").read_text()
+    assert MQTT_ENV_REDACTED not in written
+    loaded = yaml.safe_load(written)
+    assert "password" not in loaded.get("mqtt", {})
+
+
+def test_post_config_keeps_a_password_the_user_actually_typed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Overriding the Supervisor value must still work."""
+    monkeypatch.setenv("MQTT_HOST", "core-mosquitto")
+    monkeypatch.setenv("MQTT_PASSWORD", "SuperSecret123")
+    server = _make_server(tmp_path)
+    submitted = {
+        "mqtt": {"client_id": "mimir", "password": "my-own-password"},
+        "grid": {"import_limit_kw": 25.0, "export_limit_kw": 25.0},
+    }
+
+    status, headers, body = _dispatch_post(server, "/api/config", submitted)
+
+    assert status == 200, json.loads(body)
+    loaded = yaml.safe_load((tmp_path / "mimirheim.yaml").read_text())
+    assert loaded["mqtt"]["password"] == "my-own-password"
+
+
+def test_post_helper_config_never_writes_the_placeholder_to_yaml(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Helper configs go through the same form prefill, so the same guard applies."""
+    monkeypatch.setenv("MQTT_HOST", "core-mosquitto")
+    monkeypatch.setenv("MQTT_PASSWORD", "SuperSecret123")
+    server = _make_server(tmp_path)
+    submitted = {
+        "enabled": True,
+        "config": {
+            "mqtt": {"client_id": "nordpool", "password": MQTT_ENV_REDACTED},
+            "trigger_topic": "mimir/input/nordpool/trigger",
+            "output_topic": "mimir/input/prices",
+            "nordpool": {"area": "NL"},
+        },
+    }
+
+    status, headers, body = _dispatch_post(
+        server, "/api/helper-config/nordpool.yaml", submitted
+    )
+
+    assert status == 200, json.loads(body)
+    written = (tmp_path / "nordpool.yaml").read_text()
+    assert MQTT_ENV_REDACTED not in written
+    assert "SuperSecret123" not in written
+
+
+def test_placeholder_submitted_when_env_absent_is_rejected_not_written(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The placeholder is stripped regardless of whether the env still supplies it.
+
+    Otherwise a config saved inside the add-on and re-saved outside it would
+    persist the sentinel as a real password.
+    """
+    monkeypatch.delenv("MQTT_PASSWORD", raising=False)
+    monkeypatch.delenv("MQTT_HOST", raising=False)
+    server = _make_server(tmp_path)
+    submitted = {
+        "mqtt": {"host": "broker", "client_id": "mimir", "password": MQTT_ENV_REDACTED},
+        "grid": {"import_limit_kw": 25.0, "export_limit_kw": 25.0},
+    }
+
+    status, headers, body = _dispatch_post(server, "/api/config", submitted)
+
+    assert status == 200, json.loads(body)
+    written = (tmp_path / "mimirheim.yaml").read_text()
+    assert MQTT_ENV_REDACTED not in written
+
+
+# ---------------------------------------------------------------------------
+# The report and dump directories track reporter.yaml
+# ---------------------------------------------------------------------------
+
+def _write_reporter_yaml(config_dir: Path, output_dir: Path, dump_dir: Path) -> None:
+    (config_dir / "reporter.yaml").write_text(
+        yaml.safe_dump(
+            {"reporting": {"output_dir": str(output_dir), "dump_dir": str(dump_dir)}}
+        )
+    )
+
+
+def test_reports_index_follows_a_reporter_yaml_written_after_startup(
+    tmp_path: Path,
+) -> None:
+    """Enabling the reporter through the editor must not need a restart.
+
+    The directories were resolved once in __init__, so a reporter.yaml written
+    or edited through this very editor had no effect until the process
+    restarted, with nothing in the UI to say why.
+    """
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    (reports / "index.html").write_text("<html>reports</html>")
+    server = _make_server(tmp_path)
+    # Before: no reporter.yaml at all.
+    status, _headers, _body = _dispatch_get(server, "/reports")
+    assert status == 404
+
+    _write_reporter_yaml(tmp_path, reports, tmp_path / "dumps")
+
+    status, _headers, body = _dispatch_get(server, "/reports")
+    assert status == 200
+    assert b"reports" in body
+
+
+def test_reports_index_follows_a_changed_output_dir(tmp_path: Path) -> None:
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    for d in (first, second):
+        d.mkdir()
+    (first / "index.html").write_text("<html>first</html>")
+    (second / "index.html").write_text("<html>second</html>")
+    _write_reporter_yaml(tmp_path, first, tmp_path / "dumps")
+    server = _make_server(tmp_path)
+    assert b"first" in _dispatch_get(server, "/reports")[2]
+
+    _write_reporter_yaml(tmp_path, second, tmp_path / "dumps")
+
+    assert b"second" in _dispatch_get(server, "/reports")[2]
+
+
+def test_dump_file_follows_a_changed_dump_dir(tmp_path: Path) -> None:
+    dumps = tmp_path / "late-dumps"
+    dumps.mkdir()
+    (dumps / "2026-01-01T00-00-00Z_input.json").write_text('{"ok": true}')
+    server = _make_server(tmp_path)
+    assert _dispatch_get(server, "/reports/dumps/2026-01-01T00-00-00Z_input.json")[0] == 404
+
+    _write_reporter_yaml(tmp_path, tmp_path / "reports", dumps)
+
+    status, _headers, body = _dispatch_get(
+        server, "/reports/dumps/2026-01-01T00-00-00Z_input.json"
+    )
+    assert status == 200
+    assert b'"ok"' in body
+
+
+def test_reports_available_flag_follows_reporter_yaml(tmp_path: Path) -> None:
+    """GET /api/config reports whether the reports tab should be shown."""
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    (reports / "index.html").write_text("<html/>")
+    server = _make_server(tmp_path)
+    assert json.loads(_dispatch_get(server, "/api/config")[2])["reports_available"] is False
+
+    _write_reporter_yaml(tmp_path, reports, tmp_path / "dumps")
+
+    assert json.loads(_dispatch_get(server, "/api/config")[2])["reports_available"] is True
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root can read a 0000 file")
+def test_unreadable_reporter_yaml_degrades_to_not_configured(tmp_path: Path) -> None:
+    """An existing but unreadable reporter.yaml must not raise out of a handler."""
+    reporter_yaml = tmp_path / "reporter.yaml"
+    reporter_yaml.write_text("reporting:\n  output_dir: /tmp/x\n")
+    reporter_yaml.chmod(0o000)
+    server = _make_server(tmp_path)
+    try:
+        status, _headers, body = _dispatch_get(server, "/reports")
+    finally:
+        reporter_yaml.chmod(0o644)
+
+    assert status == 404
+    assert b"not configured" in body
+
+
+def test_malformed_reporter_yaml_degrades_to_not_configured(tmp_path: Path) -> None:
+    (tmp_path / "reporter.yaml").write_text("reporting: [unclosed\n")
+    server = _make_server(tmp_path)
+
+    status, _headers, body = _dispatch_get(server, "/reports")
+
+    assert status == 404
+    assert b"not configured" in body
+
+
+# ---------------------------------------------------------------------------
+# The env mapping is shared with helper_common
+# ---------------------------------------------------------------------------
+
+def test_mqtt_env_matches_helper_common(monkeypatch: pytest.MonkeyPatch) -> None:
+    """One definition of the env-to-field mapping, not two that can drift."""
+    from helper_common.config import mqtt_env_overrides
+
+    monkeypatch.setenv("MQTT_HOST", "core-mosquitto")
+    monkeypatch.setenv("MQTT_PORT", "8883")
+    monkeypatch.setenv("MQTT_USERNAME", "user1")
+    monkeypatch.setenv("MQTT_SSL", "true")
+
+    assert ConfigEditorServer._mqtt_env() == mqtt_env_overrides()
+
+
+def test_bad_mqtt_port_does_not_break_the_editor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A helper exits on an invalid MQTT_PORT; the editor must stay usable.
+
+    It is the tool an operator reaches for to fix configuration, and it cannot
+    repair an environment variable. Deliberate behaviour change: it now reports
+    no Supervisor-supplied MQTT settings at all rather than silently dropping
+    just the port and claiming the rest are Supervisor-controlled.
+    """
+    monkeypatch.setenv("MQTT_HOST", "core-mosquitto")
+    monkeypatch.setenv("MQTT_PORT", "not-a-number")
+    server = _make_server(tmp_path)
+
+    with caplog.at_level(logging.WARNING):
+        status, _headers, body = _dispatch_get(server, "/api/config")
+
+    assert status == 200
+    assert json.loads(body)["mqtt_env"] == {}
+    assert "MQTT_PORT" in caplog.text
+
+
+def test_out_of_range_mqtt_port_is_also_ignored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("MQTT_HOST", "core-mosquitto")
+    monkeypatch.setenv("MQTT_PORT", "99999")
+    server = _make_server(tmp_path)
+
+    status, _headers, body = _dispatch_get(server, "/api/config")
+
+    assert status == 200
+    assert json.loads(body)["mqtt_env"] == {}

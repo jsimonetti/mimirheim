@@ -5,9 +5,14 @@ Covers MQTT publish behaviour including retention and mimirheim signalling.
 from __future__ import annotations
 
 import json
+import logging
 from unittest.mock import MagicMock
 
+import paho.mqtt.client as mqtt
+
 import pytest
+
+from helper_common.publish import PublishError
 
 from nordpool.publisher import _normalise_zeros, publish_prices
 
@@ -31,7 +36,19 @@ _STEPS = [
 @pytest.fixture
 def mqtt_client() -> MagicMock:
     """Return a mock paho MQTT client."""
-    return MagicMock()
+    return _mqtt_client()
+
+
+def _mqtt_client() -> MagicMock:
+    """Return a mock paho client whose publish() reports success.
+
+    publish_checked inspects the rc of the MQTTMessageInfo that publish()
+    returns. A bare MagicMock yields a mock attribute there, which is exactly
+    why no test in this suite could ever have exercised a publish failure.
+    """
+    client = MagicMock()
+    client.publish.return_value.rc = mqtt.MQTT_ERR_SUCCESS
+    return client
 
 
 class TestPublishPrices:
@@ -120,3 +137,44 @@ class TestNormaliseZeros:
         serialised = json.dumps(result[0])
         assert "-0" not in serialised
         assert "0.0" not in serialised
+
+
+class TestPublishFailureIsNotSilent:
+    """The old code logged "Published N price steps" whatever paho returned."""
+
+    def test_dropped_trigger_raises(self) -> None:
+        client = MagicMock()
+        client.publish.return_value.rc = mqtt.MQTT_ERR_NO_CONN
+
+        with pytest.raises(PublishError):
+            publish_prices(
+                client,
+                "mimir/input/prices",
+                _STEPS,
+                signal_mimir=True,
+                mimir_trigger_topic="mimir/input/trigger",
+            )
+
+    def test_queued_payload_at_qos1_does_not_raise(self) -> None:
+        """The forecast itself is queued by paho and redelivered, so it is fine."""
+        client = MagicMock()
+        client.publish.return_value.rc = mqtt.MQTT_ERR_NO_CONN
+
+        publish_prices(client, "mimir/input/prices", _STEPS, signal_mimir=False)
+
+    def test_no_success_line_is_logged_for_a_dropped_trigger(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        client = MagicMock()
+        client.publish.return_value.rc = mqtt.MQTT_ERR_NO_CONN
+
+        with caplog.at_level(logging.DEBUG), pytest.raises(PublishError):
+            publish_prices(
+                client,
+                "mimir/input/prices",
+                _STEPS,
+                signal_mimir=True,
+                mimir_trigger_topic="mimir/input/trigger",
+            )
+
+        assert "Signalled mimirheim" not in caplog.text

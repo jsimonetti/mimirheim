@@ -390,3 +390,70 @@ class TestFetchEntityUnits:
         with pytest.raises(FetchError):
             fetch_entity_units(db_url=url, entity_ids=["sensor.p"])
 
+
+
+class TestDbUrlIsNotLeaked:
+    """The engine-creation failure message used to carry the whole db_url.
+
+    db_url is a SQLAlchemy URL, so for PostgreSQL and MariaDB it contains the
+    database password. The caller logs the FetchError with logger.exception, so
+    the password went into the log -- and the trigger is a typo in the driver
+    name, exactly the misconfiguration whose log a user pastes into an issue.
+    """
+
+    _SECRET = "SuperSecret123"
+
+    @pytest.mark.parametrize(
+        "db_url",
+        [
+            f"nosuchdriver://homeassistant:{_SECRET}@10.0.0.5/hass",
+            f"mysql+nodriver://homeassistant:{_SECRET}@10.0.0.5/hass",
+            f"postgresql+nodriver://ha:{_SECRET}@db.local:5432/hass",
+        ],
+        ids=["unknown-dialect", "unknown-mysql-driver", "unknown-postgres-driver"],
+    )
+    def test_fetch_statistics_error_omits_the_password(self, db_url: str) -> None:
+        with pytest.raises(FetchError) as exc:
+            fetch_statistics(db_url=db_url, entity_ids=["sensor.x"], lookback_days=1)
+
+        assert self._SECRET not in str(exc.value)
+
+    def test_fetch_entity_units_error_omits_the_password(self) -> None:
+        db_url = f"nosuchdriver://homeassistant:{self._SECRET}@10.0.0.5/hass"
+
+        with pytest.raises(FetchError) as exc:
+            fetch_entity_units(db_url=db_url, entity_ids=["sensor.x"])
+
+        assert self._SECRET not in str(exc.value)
+
+    def test_error_still_identifies_the_host_and_driver(self) -> None:
+        """Redaction must not make the message useless for diagnosis."""
+        db_url = f"mysql+nodriver://homeassistant:{self._SECRET}@10.0.0.5/hass"
+
+        with pytest.raises(FetchError) as exc:
+            fetch_statistics(db_url=db_url, entity_ids=["sensor.x"], lookback_days=1)
+
+        message = str(exc.value)
+        assert "10.0.0.5" in message
+        assert "nodriver" in message
+        assert "homeassistant" in message
+
+    def test_a_url_too_malformed_to_parse_is_still_not_echoed(self) -> None:
+        """If make_url itself fails there is no structure to redact from."""
+        db_url = f"::: not a url ::: {self._SECRET}"
+
+        with pytest.raises(FetchError) as exc:
+            fetch_statistics(db_url=db_url, entity_ids=["sensor.x"], lookback_days=1)
+
+        assert self._SECRET not in str(exc.value)
+
+    def test_a_passwordless_url_is_reported_in_full(self) -> None:
+        """A sqlite URL has no credentials, so nothing needs hiding."""
+        with pytest.raises(FetchError) as exc:
+            fetch_statistics(
+                db_url="sqlite+nodriver:///tmp/hass.db",
+                entity_ids=["sensor.x"],
+                lookback_days=1,
+            )
+
+        assert "nodriver" in str(exc.value)
