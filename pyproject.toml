@@ -1,7 +1,7 @@
 [project]
 name = "mimirheim"
 version = "0.1.10"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
     "mip>=1.14",
     "pydantic>=2.13.4",
@@ -120,9 +120,10 @@ dev = [
 ]
 
 [tool.ruff]
-# Match the interpreter the project targets, so ruff does not suggest syntax
-# that 3.12 cannot run.
-target-version = "py312"
+# Tracks `requires-python` above, which is also what the container runs. Keep
+# the two in step: ruff must not suggest syntax the supported interpreter
+# cannot execute.
+target-version = "py314"
 line-length = 100
 
 [tool.ruff.lint]

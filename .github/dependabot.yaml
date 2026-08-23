@@ -13,6 +13,17 @@ updates:
   directory: "/container"
   schedule:
     interval: "weekly"
+  ignore:
+    # Digest refreshes are wanted; interpreter version jumps are not. Moving
+    # the base image to a new Python is a coordinated change across
+    # .python-version, both CI workflows and the venv line in the Dockerfile,
+    # so it belongs in a deliberate PR rather than a dependency bump that
+    # touches only the FROM lines. PR #137 was exactly that bump, and merging
+    # it alone would have produced a 3.14 image running a downloaded 3.12.
+    - dependency-name: "python"
+      update-types:
+        - "version-update:semver-major"
+        - "version-update:semver-minor"
 
 - package-ecosystem: "uv"
   directory: "/"
@@ -21,7 +32,7 @@ updates:
   ignore:
     # amqtt 0.11.x has a packaging bug: different sub-releases pin either
     # pyyaml==6.0.2 or pyyaml==6.0.3, making the constraints unsatisfiable
-    # when Dependabot resolves across all Python versions in the >=3.12 range.
+    # when Dependabot resolves across all Python versions in the >=3.14 range.
     # amqtt is a dev-only MQTT broker dependency; the pinned version in uv.lock
     # is correct and does not need automated updates.
     - dependency-name: amqtt
