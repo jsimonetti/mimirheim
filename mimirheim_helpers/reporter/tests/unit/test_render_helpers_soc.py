@@ -223,3 +223,82 @@ def test_report_html_renders_without_recomputed_times() -> None:
     html = build_report_html(inp, out)
 
     assert "2026-08-23T12:00:00Z" in html
+
+
+# ---------------------------------------------------------------------------
+# SOC series alignment
+# ---------------------------------------------------------------------------
+
+
+def _y_arrays(html: str) -> list[str]:
+    """Return the raw text of every Plotly trace "y" array found in the page."""
+    return re.findall(r'"y":\s*\[(.*?)\]', html, flags=re.S)
+
+
+def _dumps_with_distinct_soc() -> tuple[dict, dict]:
+    """A 4-step dump whose SOC percentages are all distinguishable.
+
+    1.23, 2.34, 3.45 and 4.56 kWh on a 10 kWh battery give 12.3%, 23.4%,
+    34.5% and 45.6%. None of those values collides with a price or a power in
+    the fixture, so finding one in a chart's y array is unambiguous.
+    """
+    inp, out = _minimal_dumps(4)
+    for step, soc in zip(out["schedule"], (1.23, 2.34, 3.45, 4.56), strict=True):
+        step["devices"]["bat"]["soc_kwh"] = soc
+    return inp, out
+
+
+def test_soc_series_keeps_every_step() -> None:
+    """The chart must plot one SOC point per schedule step, not one fewer.
+
+    _read_soc_from_schedule returns exactly len(schedule) values. Slicing the
+    first one off is the indexing convention of the removed _reconstruct_soc,
+    which returned len(schedule) + 1 values with the initial SOC first.
+    """
+    from reporter.render import build_report_html
+
+    inp, out = _dumps_with_distinct_soc()
+    html = build_report_html(inp, out)
+
+    soc_axes = [a for a in _y_arrays(html) if "45.6" in a]
+    assert soc_axes, "no chart plots the final SOC value"
+    values = [v.strip() for v in soc_axes[0].split(",")]
+    assert len(values) == len(out["schedule"]), (
+        f"SOC series has {len(values)} points for {len(out['schedule'])} steps"
+    )
+
+
+def test_soc_series_includes_the_first_step() -> None:
+    """The SOC at the end of step 0 must appear on the chart.
+
+    Dropping it loses the first quarter hour of every report and shifts every
+    remaining point one slot earlier than the step it belongs to.
+    """
+    from reporter.render import build_report_html
+
+    inp, out = _dumps_with_distinct_soc()
+    html = build_report_html(inp, out)
+
+    assert any("12.3" in a for a in _y_arrays(html)), (
+        "the step-0 SOC (12.3%) is missing from every chart"
+    )
+
+
+def test_soc_point_sits_at_the_step_end_boundary() -> None:
+    """soc[i] is the SOC after step i, so it belongs at the end of step i.
+
+    With a 4-step horizon starting 12:00, the four values belong at 12:15,
+    12:30, 12:45 and 13:00. The last is one step past the final step start,
+    which is why the renderer extends the axis by one step.
+    """
+    from reporter.render import build_report_html
+
+    inp, out = _dumps_with_distinct_soc()
+    html = build_report_html(inp, out)
+
+    soc_idx = [i for i, a in enumerate(_y_arrays(html)) if "45.6" in a]
+    assert soc_idx, "no chart plots the final SOC value"
+    axis = _x_arrays(html)[soc_idx[0]]
+    stamps = [s.strip().strip('"') for s in axis.split(",")]
+    assert stamps[0] == "2026-08-23T12:15:00Z", f"first SOC point at {stamps[0]}"
+    assert stamps[-1] == "2026-08-23T13:00:00Z", f"last SOC point at {stamps[-1]}"
