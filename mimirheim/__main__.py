@@ -24,7 +24,6 @@ import os
 import queue
 import signal
 import sys
-import traceback
 from pathlib import Path
 
 import paho.mqtt.client as paho
@@ -83,6 +82,34 @@ def _clip_bundle(bundle: SolveBundle, max_steps: int) -> SolveBundle:
             chp["outdoor_temp_forecast_c"] = chp["outdoor_temp_forecast_c"][:max_steps]
 
     return SolveBundle.model_validate(d)
+
+
+def _format_solve_error(exc: BaseException) -> str:
+    """Summarise an exception for the retained last-solve status topic.
+
+    ``outputs.last_solve`` is published with ``retain=True``, so whatever goes
+    into it stays on the broker until the next solve overwrites it and is
+    delivered to every subscriber that connects in the meantime. A formatted
+    traceback would expose filesystem paths and internal call structure there,
+    which is why ``MqttPublisher.publish_last_solve_status`` documents its
+    ``error`` argument as excluding them. The full traceback is written to the
+    process log instead, where operators can reach it.
+
+    Newlines are collapsed because the summary is embedded in a JSON payload
+    that operators read in an MQTT client. Pydantic validation errors in
+    particular span many lines.
+
+    Args:
+        exc: The exception raised by the solve cycle.
+
+    Returns:
+        A single-line ``"ExceptionType: message"`` string, or just the type
+        name when the exception carries no message.
+    """
+    message = " ".join(str(exc).split())
+    if not message:
+        return type(exc).__name__
+    return f"{type(exc).__name__}: {message}"
 
 
 def _publish_reporting_notification(
@@ -318,9 +345,12 @@ def main() -> None:
             result = assign_control_authority(result, bundle, config)
             if result.solve_status != "infeasible":
                 publisher.publish_result(result)
-        except Exception:
-            error_msg = traceback.format_exc()
-            logger.error("Solve failed:\n%s", error_msg)
+        except Exception as exc:
+            # The traceback goes to the log, where it is useful and private.
+            # Only a one-line summary reaches the retained status topic; see
+            # _format_solve_error.
+            logger.exception("Solve failed.")
+            error_msg = _format_solve_error(exc)
 
         publisher.publish_last_solve_status(result, error_msg)
 
