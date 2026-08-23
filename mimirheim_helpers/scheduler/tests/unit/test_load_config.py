@@ -99,7 +99,7 @@ def test_invalid_config_exits_with_code_one(
     assert exc.value.code == 1
     err = capsys.readouterr().err
     assert "Invalid configuration" in err
-    assert "must not be empty" in err
+    assert "at least 1 item" in err
 
 
 def test_invalid_cron_in_file_is_reported(
