@@ -264,8 +264,10 @@ class ReadinessConfig(BaseModel):
             the next 4 hours due to a missed refresh, the warning will fire.
         max_gap_hours: Any gap between consecutive data points within the
             computed horizon that exceeds this value triggers a warning. The
-            gap is filled by interpolation regardless; the warning signals that
-            the data source may have failed a refresh cycle. Default 2 hours.
+            solve proceeds regardless: resampling holds the last known value
+            across the gap. The warning signals that the data source may have
+            failed a refresh cycle and that the held value may no longer
+            describe conditions late in the gap. Default 2 hours.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -285,7 +287,11 @@ class ReadinessConfig(BaseModel):
     max_gap_hours: float = Field(
         ge=0,
         default=2.0,
-        description="Log a warning when any gap between consecutive forecast points exceeds this value in hours.",
+        description=(
+            "Log a warning when any gap between consecutive forecast points "
+            "exceeds this value in hours. The solve proceeds regardless: "
+            "resampling holds the last known value across the gap."
+        ),
         json_schema_extra={"ui_label": "Max gap (h)", "ui_group": "advanced"},
     )
 
