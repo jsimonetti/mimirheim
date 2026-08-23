@@ -47,6 +47,20 @@ _ALLOWED_REPORT_EXTENSIONS = {".html", ".js", ".css"}
 # Only these suffixes are served from the dump directory.
 _ALLOWED_DUMP_SUFFIXES = ("_input.json", "_output.json")
 
+# Substituted for credential values in the /api/config response.
+#
+# The editor needs to know which mqtt fields the Supervisor supplies, and needs
+# a value it can compare the form field against to decide whether the user
+# overrode it. It does not need the secret itself, and this server does not
+# authenticate: anything that can reach the port could read a real password out
+# of the response. The POST handlers strip this sentinel back out, so it never
+# reaches a YAML file even though the form posts it straight back.
+MQTT_ENV_REDACTED = "__supervisor_provided__"
+
+# mqtt fields whose value is replaced by MQTT_ENV_REDACTED on the way out.
+# host, port and tls are not secrets and the form needs to display them.
+_REDACTED_MQTT_FIELDS = ("password",)
+
 # Path to the static files bundled with this package.
 _STATIC_DIR = Path(__file__).parent / "static"
 
@@ -557,11 +571,13 @@ class ConfigEditorServer:
         Does not validate via Pydantic so that partially-complete configs
         written by the user are returned as-is for display in the frontend.
 
-        The ``mqtt_env`` key in the response contains MQTT broker settings
+        The ``mqtt_env`` key in the response names the MQTT broker settings
         currently set via environment variables (injected by the HA Supervisor).
         The frontend uses these to show which fields are Supervisor-controlled
         and to strip them from the saved YAML when the user has not overridden
-        them.
+        them. Credential values are replaced by ``MQTT_ENV_REDACTED``; the key
+        is still present, so the frontend can tell the field is env-supplied
+        without the secret leaving the process.
 
         Returns:
             ``{"exists": false, "config": {}, "mqtt_env": {...}}`` when the
@@ -569,7 +585,7 @@ class ConfigEditorServer:
             ``{"exists": true, "config": <dict>, "mqtt_env": {...}}`` when the
             file is present.
         """
-        mqtt_env = self._mqtt_env()
+        mqtt_env = self._mqtt_env_for_client()
         reports_available = (
             self._reports_dir is not None
             and (self._reports_dir / "index.html").exists()
@@ -625,6 +641,11 @@ class ConfigEditorServer:
             data = json.loads(body)
         except (json.JSONDecodeError, ValueError) as exc:
             return self._json_response(400, {"ok": False, "errors": str(exc)})
+
+        # An untouched password field posts the redaction sentinel back. Drop it
+        # before anything else looks at the data, so it is neither validated nor
+        # written to disk.
+        data = self._strip_redacted_mqtt(data) if isinstance(data, dict) else data
 
         # Merge env-supplied MQTT fields into a validation-only copy. The user
         # may have excluded mqtt fields that the Supervisor provides at runtime;
@@ -725,6 +746,8 @@ class ConfigEditorServer:
 
         # Enable: validate then write atomically.
         config_dict = data.get("config", {})
+        if isinstance(config_dict, dict):
+            config_dict = self._strip_redacted_mqtt(config_dict)
         model_cls, competitors = self._helper_models[filename]
 
         # Merge env-supplied MQTT fields for validation only. Helper configs may
@@ -762,6 +785,58 @@ class ConfigEditorServer:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    @classmethod
+    def _mqtt_env_for_client(cls) -> dict[str, Any]:
+        """Return the env-supplied mqtt fields with credentials redacted.
+
+        Same keys as :meth:`_mqtt_env`, so the frontend still learns which
+        fields the Supervisor controls, but with the secret values replaced by
+        ``MQTT_ENV_REDACTED``.
+
+        Returns:
+            Dict mapping mqtt field names to their value, or to
+            ``MQTT_ENV_REDACTED`` for the fields listed in
+            ``_REDACTED_MQTT_FIELDS``.
+        """
+        env = cls._mqtt_env()
+        for field in _REDACTED_MQTT_FIELDS:
+            if field in env:
+                env[field] = MQTT_ENV_REDACTED
+        return env
+
+    @staticmethod
+    def _strip_redacted_mqtt(config: dict[str, Any]) -> dict[str, Any]:
+        """Return a copy of ``config`` with redacted mqtt values removed.
+
+        The editor pre-fills its form from the ``mqtt_env`` in the GET
+        response, so an untouched password field posts ``MQTT_ENV_REDACTED``
+        back. Persisting that would leave a config whose broker password is a
+        literal sentinel string.
+
+        The sentinel is stripped whether or not the environment still supplies
+        the field, so a config saved inside the add-on and re-saved outside it
+        does not turn the placeholder into a real password.
+
+        Args:
+            config: The submitted configuration dict.
+
+        Returns:
+            A shallow copy with any sentinel-valued mqtt field removed. The
+            ``mqtt`` key itself is dropped if nothing is left in it.
+        """
+        mqtt = config.get("mqtt")
+        if not isinstance(mqtt, dict):
+            return config
+        cleaned = {k: v for k, v in mqtt.items() if v != MQTT_ENV_REDACTED}
+        if cleaned == mqtt:
+            return config
+        result = dict(config)
+        if cleaned:
+            result["mqtt"] = cleaned
+        else:
+            del result["mqtt"]
+        return result
 
     @staticmethod
     def _json_response(

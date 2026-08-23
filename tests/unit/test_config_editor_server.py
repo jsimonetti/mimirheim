@@ -18,7 +18,7 @@ from unittest.mock import patch
 import pytest
 import yaml
 
-from config_editor.server import ConfigEditorServer
+from config_editor.server import MQTT_ENV_REDACTED, ConfigEditorServer
 
 
 # ---------------------------------------------------------------------------
@@ -621,3 +621,150 @@ def test_pv_ml_learner_array_output_topic_has_ui_source(tmp_path: Path) -> None:
     array_config = schemas["pv-ml-learner.yaml"]["$defs"]["ArrayConfig"]
     field = array_config["properties"]["output_topic"]
     assert field.get("ui_source") == "pv_arrays"
+
+
+# ---------------------------------------------------------------------------
+# The Supervisor's broker password must not cross the wire
+# ---------------------------------------------------------------------------
+
+def test_get_config_does_not_return_the_broker_password(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GET /api/config must not contain the value of MQTT_PASSWORD.
+
+    This server does not authenticate, by design. Returning the Supervisor's
+    broker password in a plaintext response hands it to anything that can
+    reach the port.
+    """
+    monkeypatch.setenv("MQTT_HOST", "core-mosquitto")
+    monkeypatch.setenv("MQTT_PASSWORD", "SuperSecret123")
+    server = _make_server(tmp_path)
+
+    status, headers, body = _dispatch_get(server, "/api/config")
+
+    assert status == 200
+    assert b"SuperSecret123" not in body
+
+
+def test_get_config_still_reports_that_the_password_is_env_supplied(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The editor still needs to know the field is Supervisor-controlled."""
+    monkeypatch.setenv("MQTT_HOST", "core-mosquitto")
+    monkeypatch.setenv("MQTT_PASSWORD", "SuperSecret123")
+    server = _make_server(tmp_path)
+
+    status, headers, body = _dispatch_get(server, "/api/config")
+    data = json.loads(body)
+
+    assert "password" in data["mqtt_env"]
+    assert data["mqtt_env"]["password"] == MQTT_ENV_REDACTED
+
+
+def test_get_config_omits_password_key_when_env_does_not_set_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No placeholder appears for a field the Supervisor does not supply."""
+    monkeypatch.delenv("MQTT_PASSWORD", raising=False)
+    monkeypatch.setenv("MQTT_HOST", "core-mosquitto")
+    server = _make_server(tmp_path)
+
+    status, headers, body = _dispatch_get(server, "/api/config")
+    data = json.loads(body)
+
+    assert "password" not in data["mqtt_env"]
+
+
+def test_post_config_never_writes_the_placeholder_to_yaml(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A form round-trip submits the placeholder back; it must not be persisted.
+
+    The editor pre-fills the form from mqtt_env, so an untouched password field
+    posts the placeholder. Writing that string into mimirheim.yaml would leave a
+    config whose broker password is a literal sentinel.
+    """
+    monkeypatch.setenv("MQTT_HOST", "core-mosquitto")
+    monkeypatch.setenv("MQTT_PASSWORD", "SuperSecret123")
+    server = _make_server(tmp_path)
+    submitted = {
+        "mqtt": {"client_id": "mimir", "password": MQTT_ENV_REDACTED},
+        "grid": {"import_limit_kw": 25.0, "export_limit_kw": 25.0},
+    }
+
+    status, headers, body = _dispatch_post(server, "/api/config", submitted)
+
+    assert status == 200, json.loads(body)
+    written = (tmp_path / "mimirheim.yaml").read_text()
+    assert MQTT_ENV_REDACTED not in written
+    loaded = yaml.safe_load(written)
+    assert "password" not in loaded.get("mqtt", {})
+
+
+def test_post_config_keeps_a_password_the_user_actually_typed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Overriding the Supervisor value must still work."""
+    monkeypatch.setenv("MQTT_HOST", "core-mosquitto")
+    monkeypatch.setenv("MQTT_PASSWORD", "SuperSecret123")
+    server = _make_server(tmp_path)
+    submitted = {
+        "mqtt": {"client_id": "mimir", "password": "my-own-password"},
+        "grid": {"import_limit_kw": 25.0, "export_limit_kw": 25.0},
+    }
+
+    status, headers, body = _dispatch_post(server, "/api/config", submitted)
+
+    assert status == 200, json.loads(body)
+    loaded = yaml.safe_load((tmp_path / "mimirheim.yaml").read_text())
+    assert loaded["mqtt"]["password"] == "my-own-password"
+
+
+def test_post_helper_config_never_writes_the_placeholder_to_yaml(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Helper configs go through the same form prefill, so the same guard applies."""
+    monkeypatch.setenv("MQTT_HOST", "core-mosquitto")
+    monkeypatch.setenv("MQTT_PASSWORD", "SuperSecret123")
+    server = _make_server(tmp_path)
+    submitted = {
+        "enabled": True,
+        "config": {
+            "mqtt": {"client_id": "nordpool", "password": MQTT_ENV_REDACTED},
+            "trigger_topic": "mimir/input/nordpool/trigger",
+            "output_topic": "mimir/input/prices",
+            "nordpool": {"area": "NL"},
+        },
+    }
+
+    status, headers, body = _dispatch_post(
+        server, "/api/helper-config/nordpool.yaml", submitted
+    )
+
+    assert status == 200, json.loads(body)
+    written = (tmp_path / "nordpool.yaml").read_text()
+    assert MQTT_ENV_REDACTED not in written
+    assert "SuperSecret123" not in written
+
+
+def test_placeholder_submitted_when_env_absent_is_rejected_not_written(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The placeholder is stripped regardless of whether the env still supplies it.
+
+    Otherwise a config saved inside the add-on and re-saved outside it would
+    persist the sentinel as a real password.
+    """
+    monkeypatch.delenv("MQTT_PASSWORD", raising=False)
+    monkeypatch.delenv("MQTT_HOST", raising=False)
+    server = _make_server(tmp_path)
+    submitted = {
+        "mqtt": {"host": "broker", "client_id": "mimir", "password": MQTT_ENV_REDACTED},
+        "grid": {"import_limit_kw": 25.0, "export_limit_kw": 25.0},
+    }
+
+    status, headers, body = _dispatch_post(server, "/api/config", submitted)
+
+    assert status == 200, json.loads(body)
+    written = (tmp_path / "mimirheim.yaml").read_text()
+    assert MQTT_ENV_REDACTED not in written
