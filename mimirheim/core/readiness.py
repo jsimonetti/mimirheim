@@ -213,6 +213,13 @@ class ReadinessState:
         - Deferrable window latest topic → ``datetime``
         - Deferrable start_time topic → ``datetime``
 
+        Every SOC value arrives here already expressed in kWh. When
+        ``SocTopicConfig.unit`` is ``"percent"`` the topic handler built by
+        ``MqttClient._build_topic_handlers`` converts the reading using the
+        device capacity before calling this method. That is the single
+        conversion site for all device classes; ``snapshot()`` must not convert
+        again.
+
         The ``received_at`` timestamp is recorded at the time ``update()`` is
         called. For forecast topics this is used only for diagnostics; readiness
         is determined by the data timestamps, not the receive time.
@@ -408,13 +415,16 @@ class ReadinessState:
                 pv_steps: list[PowerForecastStep] = pv_entry[0]
                 pv_forecast_kw = resample_power(pv_steps, solve_start, n_steps)
 
+                # Stored SOC values are already in kWh. The topic handler built
+                # by MqttClient applies the percent-to-kWh conversion before
+                # calling update(), so converting again here would divide the
+                # value by the capacity a second time. Batteries and EVs below
+                # rely on the same single conversion site.
                 soc_kwh = 0.0
                 if cfg.inputs is not None:
                     soc_entry = self._entries.get(cfg.inputs.soc.topic)
                     if soc_entry is not None:
                         soc_kwh = soc_entry[0]
-                        if cfg.inputs.soc.unit == "percent":
-                            soc_kwh = soc_kwh * cfg.capacity_kwh / 100.0
 
                 hybrid_inverter_inputs[name] = HybridInverterInputs(
                     soc_kwh=soc_kwh,
