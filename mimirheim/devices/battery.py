@@ -156,7 +156,7 @@ class Battery:
                 for s, var in enumerate(w_d):
                     self._w_discharge[t, s] = var
 
-                # Discharge AC power expression (kW at the DC bus output).
+                # Discharge AC power expression (kW delivered to the AC bus).
                 ac_d: Any = 0
                 for s, bp in enumerate(discharge_curve):
                     if bp.power_kw > 0.0:
@@ -270,10 +270,11 @@ class Battery:
                      + Σ_i (seg_i.efficiency × charge_seg[t, i] × dt)
                      - Σ_i ((1 / seg_i.efficiency) × discharge_seg[t, i] × dt)
 
-        The asymmetry is intentional: in the charge direction, efficiency < 1
-        means less energy reaches the cells than is drawn from the DC bus. In
-        the discharge direction, efficiency < 1 means more energy leaves the
-        cells than appears at the DC bus.
+        The asymmetry is intentional. The efficiency describes the conversion
+        between the AC bus and the cells, and the loss is on the AC side in
+        both directions: charging at 1 kW from the AC bus puts less than 1 kW
+        into the cells, and delivering 1 kW to the AC bus takes more than 1 kW
+        out of them.
 
         **Simultaneous charge/discharge guard** (Big-M, for each ``t``):
 
@@ -327,7 +328,7 @@ class Battery:
 
                 # energy_drawn[t] = Σ_i ((1 / seg.efficiency) × discharge_seg[t, i] × dt)
                 # This is the energy that leaves the cells. For efficiency=0.95,
-                # discharging at 1 kW at the DC bus requires (1 / 0.95) ≈ 1.053 kW
+                # delivering 1 kW to the AC bus requires (1 / 0.95) ≈ 1.053 kW
                 # to leave the cells — the rest is lost as heat in the inverter.
                 energy_drawn = sum(
                     (1.0 / seg.efficiency) * self.discharge_seg[t, i] * ctx.dt
@@ -562,10 +563,10 @@ class Battery:
     def net_power(self, t: int) -> Any:
         """Return the net power expression at time step ``t``.
 
-        Net power is defined as total discharge minus total charge. A positive
-        value means the battery is producing power (discharging to the home
-        DC bus); a negative value means the battery is consuming power
-        (charging from the DC bus). This sign convention matches the system
+        Net power is defined as total discharge minus total charge, both
+        measured at the AC bus. A positive value means the battery is producing
+        power (discharging into the home); a negative value means it is
+        consuming power (charging). This sign convention matches the system
         power balance constraint in ``build_and_solve()``.
 
         Args:

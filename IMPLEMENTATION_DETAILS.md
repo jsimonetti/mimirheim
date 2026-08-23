@@ -14,10 +14,12 @@ This document records internal implementation decisions: library choices, archit
 6. [Pydantic config models as device constructor arguments](#6-pydantic-config-models-as-device-constructor-arguments)
 7. [SolveBundle and per-device input models](#7-solvebundle-and-per-device-input-models)
 8. [MIP model design: device contract, split variables, piecewise efficiency, and objective builder](#8-mip-model-design-device-contract-split-variables-piecewise-efficiency-and-objective-builder)
-9. [Concurrency model](#9-concurrency-model)
-10. [Fault resilience](#10-fault-resilience)
-11. [Development environment and dependency management](#11-development-environment-and-dependency-management)
-12. [MQTT topic naming convention and auto-derivation](#14-mqtt-topic-naming-convention-and-auto-derivation)
+9. [Arbitration engine and closed-loop enforcer selection](#9-arbitration-engine-and-closed-loop-enforcer-selection)
+10. [Exchange-shaping secondary term](#10-exchange-shaping-secondary-term)
+11. [Concurrency model](#11-concurrency-model)
+12. [Fault resilience](#12-fault-resilience)
+13. [Development environment and dependency management](#13-development-environment-and-dependency-management)
+14. [MQTT topic naming convention and auto-derivation](#14-mqtt-topic-naming-convention-and-auto-derivation)
 
 ---
 
@@ -109,10 +111,12 @@ via FFI calls, producing approximately 8 seconds of pure Python→C++ overhead a
 the solver even starts. `python-mip` via CBC has similar call-by-call overhead but the solver
 itself is so much faster that it dominates less.
 
-BC is free, redistributable, and well-established (it is the default solver in PuLP and many other
-open-source optimisation tools). No licence management is required.
+CBC is free, redistributable, and well-established (it is the default solver in PuLP and many
+other open-source optimisation tools). No licence management is required.
 
-See `SOLVER_REWRITE.md` for the full measurement methodology and decision record.
+The measurements above are the record of that decision. HiGHS was removed from the codebase once
+CBC had replaced it; the `SolverBackend` Protocol remains so that another backend can be
+substituted without touching model-building code.
 
 ### Configurable time limit
 
@@ -146,6 +150,7 @@ class SolverBackend(Protocol):
     def var_value(self, var: Any) -> float: ...
     def add_sos2(self, variables: list[Any], weights: list[float]) -> None: ...
     def objective_value(self) -> float: ...
+    def model_stats(self) -> tuple[int, int, int, int]: ...
 ```
 
 `ModelContext.solver` is typed as `SolverBackend`. The concrete implementation is
@@ -162,13 +167,13 @@ class SolverBackend(Protocol):
 | `solve(t)` | `model.optimize(max_seconds=t)`, then map `OptimizationStatus` |
 | `var_value(var)` | `var.x` |
 | `objective_value()` | `model.objective_value` |
-| `add_sos2(vars, weights)` | Big-M binary emulation (see below) |
+| `add_sos2(vars, weights)` | Binary emulation (see below) |
 
 ### SOS2 implementation
 
-Neither `highspy` nor `python-mip` exposes a native SOS2 constraint API that maps cleanly to
-the `SolverBackend` Protocol. The `add_sos2` method is implemented via a Big-M binary emulation
-that is solver-agnostic and therefore portable across any backend:
+`python-mip` does not expose a native SOS2 constraint API that maps cleanly to the
+`SolverBackend` Protocol. The `add_sos2` method is implemented via a binary emulation that relies
+only on `add_var` and `add_constraint`, so it is portable across any backend:
 
 ```
 For N weight variables w[0..N-1], create N-1 binary variables b[0..N-2]:
@@ -425,6 +430,8 @@ debug:
 
 Dump files contain energy price data, device state (SOC values, EV plug state), and schedule decisions. They do not contain credentials or personal identifiers. The dump directory should have filesystem permissions restricted to the mimirheim process user. Document this in the deployment guide.
 
+## 6. Pydantic config models as device constructor arguments
+
 **Decision: device solver classes accept their Pydantic `*Config` model directly**
 
 Each device solver class takes its validated Pydantic config model as a constructor argument rather than unpacking individual fields:
@@ -672,10 +679,10 @@ Input models (`BatteryInputs`, `EvInputs`, etc.) live in `mimirheim/core/bundle.
 
 ```python
 # mimirheim/core/context.py
-from highspy import Highs  # or abstracted SolverBackend
+from mimirheim.core.solver_backend import SolverBackend
 
 class ModelContext:
-    def __init__(self, solver: Highs, horizon: int, dt: float) -> None:
+    def __init__(self, solver: SolverBackend, horizon: int, dt: float) -> None:
         self.solver = solver     # the live solver instance — devices add variables and constraints here
         self.T = range(horizon)  # time index; len(T) == len(bundle.horizon_prices)
         self.dt = dt             # time step duration in hours (0.25 for quarter-hourly)
@@ -1015,7 +1022,7 @@ When a battery is the `zero_exchange_active` enforcer for a step, any EV with `c
 
 An EV that is itself the `zero_exchange_active` enforcer receives `zero_exchange_active=True` and `loadbalance_active=False`. `loadbalance_active=True` is only set on steps where the EV is not the `zero_exchange` enforcer.
 
-### Exchange-shaping secondary term
+## 10. Exchange-shaping secondary term
 
 Under a net-of-meter (NoM) tariff, import and export prices are symmetric. The `minimize_cost` objective naturally produces near-zero exchange as a consequence — there is no economic benefit to importing energy you could supply from storage. However, when prices are flat or very close to symmetric, the solver is indifferent among solutions with the same net cost but different gross exchange magnitudes. Floating-point degeneracy can cause it to choose a solution with unnecessary cycling.
 
@@ -1147,7 +1154,7 @@ mimirheim uses [uv](https://github.com/astral-sh/uv) for environment and depende
 uv sync
 
 # Add a production dependency (updates pyproject.toml and uv.lock)
-uv add highspy
+uv add mip
 
 # Add a development-only dependency
 uv add --dev pytest amqtt pytest-asyncio
@@ -1166,8 +1173,8 @@ uv run python -m mimirheim --config config.yaml
 ```toml
 [project]
 dependencies = [
-    "highspy>=1.7",
-    "pydantic>=2.7",
+    "mip>=1.14",
+    "pydantic>=2.13.4",
     "paho-mqtt>=2.0",
     "pyyaml>=6.0",
 ]

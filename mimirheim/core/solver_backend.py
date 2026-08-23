@@ -131,8 +131,8 @@ class SolverBackend(Protocol):
         interpolates between the two breakpoints bounding that segment.
 
         Because the installed ``python-mip`` version does not expose a native SOS2
-        API, the constraint is implemented via a set of binary auxiliary variables
-        — one per segment — with Big-M upper bounds on the weights:
+        API, the constraint is implemented via a set of binary auxiliary variables,
+        one per segment, each bounding the weights adjacent to it:
 
         .. code-block::
 
@@ -357,9 +357,10 @@ class CBCSolverBackend:
         When b[i] = 1, only variables[i] and variables[i+1] can be nonzero;
         all other variables are forced to zero by their upper-bound constraints.
 
-        This emulation is solver-agnostic: it relies only on ``self.add_var``
-        and ``self.add_constraint``, which are defined in terms of this
-        Protocol. The same emulation is used in ``CBCSolverBackend``.
+        The emulation relies only on ``self.add_var`` and
+        ``self.add_constraint``, both defined by the ``SolverBackend`` Protocol,
+        so any future backend can inherit or copy it unchanged rather than
+        needing a native SOS2 API.
 
         Args:
             variables: List of solver variable handles to constrain. Must

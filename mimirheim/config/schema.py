@@ -772,7 +772,11 @@ class BatteryConfig(BaseModel):
         discharge_efficiency_curve: SOS2 piecewise-linear efficiency curve for
             discharging. Same constraints as charge_efficiency_curve.
         wear_cost_eur_per_kwh: Cost per kWh of energy throughput in EUR.
-        optimal_lower_soc_kwh: Preferred minimum SOC. See plan 21 notes.
+        optimal_lower_soc_kwh: Preferred minimum SOC in kWh. A soft lower
+            bound: dropping below it costs
+            ``soc_low_penalty_eur_per_kwh_h`` per kWh of deficit per hour
+            rather than being forbidden, so the solver still discharges past it
+            when the price spread pays for the penalty.
         soc_low_penalty_eur_per_kwh_h: Penalty rate for negative SOC deviation.
         reduce_charge_above_soc_kwh: SOC threshold above which charge is derated.
         reduce_charge_min_kw: Minimum charge power at capacity_kwh when derated.
@@ -2615,10 +2619,10 @@ class CombiHeatPumpConfig(BaseModel):
     the solver prefers at each price step.
 
     The tank model (temperature dynamics, hard bounds) is identical to
-    ``ThermalBoilerDevice`` (plan 25). The space heating model (degree-days
-    demand, minimum run) is identical to ``SpaceHeatingDevice`` in on/off mode
-    (plan 26). The unique constraint in this device is the mutual exclusion
-    between the two modes.
+    ``ThermalBoilerDevice``. The space heating model (degree-days demand,
+    minimum run) is identical to ``SpaceHeatingDevice`` in on/off mode. The
+    unique constraint in this device is the mutual exclusion between the two
+    modes.
 
     Attributes:
         elec_power_kw: Rated electrical power in kW. Applied at this level in

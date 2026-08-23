@@ -421,8 +421,9 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
                 power_limit_kw = pv_kw if caps.power_limit else None
             # zero_exchange_active: the discrete closed-loop mode register.
             # Initialised to False for devices that have the capability
-            # configured, or None for devices that do not. The arbitration
-            # engine (Plan 43) will set the final per-step value.
+            # configured, or None for devices that do not. The final per-step
+            # value is set later by control_arbitration.assign_control_authority,
+            # which runs after this function returns.
             zero_exchange_active = False if caps.zero_export else None
             # on_off_active: True when the solver chose to switch on the array
             # at this step; False when it chose to switch it off. None when the
@@ -449,8 +450,9 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
         for ev in ev_devices:
             # zero_exchange_active: initialise to False (not in closed-loop mode)
             # for devices that have the capability register, or None for devices
-            # that do not. The arbitration engine (Plan 43) will set the final
-            # per-step value based on grid exchange and enforcer selection.
+            # that do not. The final per-step value is set later by
+            # control_arbitration.assign_control_authority, based on grid
+            # exchange and enforcer selection.
             ev_zea = False if ev.config.capabilities.zero_exchange else None
             # loadbalance_active: initialise to False for loadbalance-capable
             # devices, None otherwise.
@@ -666,17 +668,20 @@ def _compute_soc_credit(
 
     Formula per storage device:
 
-        delta_cell_kwh = terminal_soc - initial_soc
-        soc_credit += avg_import_price * delta_cell_kwh * avg_discharge_eff
+        delta_kwh = -sum(ac_kw[t] * dt for t in horizon)
+        soc_credit += avg_import_price * delta_kwh * avg_discharge_eff
 
-    The cell SOC delta is reconstructed from the schedule by accumulating the
-    signed AC power at the inverter terminals. Negative AC kW means charging
-    (energy flows into the inverter); the cell energy gained equals
-    ``|ac_kw| * charge_eff * dt``. For simplicity and consistency with the
-    objective function, the reconstruction uses the AC kW directly (treating
-    total charge efficiency = 1 at the reconstruction stage) and applies only
-    the discharge efficiency when pricing the credit. This is a slight
-    overstatement of cell SOC, but the error is small relative to rounding.
+    ``delta_kwh`` is the net energy the device took in across the horizon,
+    measured at the AC terminals: ``ac_kw`` is positive when discharging and
+    negative when charging, so negating the sum gives energy absorbed. It is
+    deliberately an AC-side figure rather than the cell-side SOC delta the
+    schedule also carries in ``DeviceSetpoint.soc_kwh``. Charge efficiency is
+    therefore treated as 1 at this stage and only the discharge efficiency is
+    applied when pricing the credit, which slightly overstates the value of
+    energy taken in. The error is small relative to the rounding already
+    applied to the published figures, and using the AC side keeps the credit
+    directly comparable with ``optimised_cost_eur``, which is also an AC-side
+    cash flow.
 
     A positive credit means the horizon ends with more stored energy than it
     started with. Subtract from ``optimised_cost_eur`` for a fair comparison
@@ -697,13 +702,13 @@ def _compute_soc_credit(
 
     credit = 0.0
 
-    for name, inputs in bundle.battery_inputs.items():
+    for name in bundle.battery_inputs:
         bat_cfg = config.batteries.get(name)
         discharge_eff = _avg_discharge_efficiency(
             bat_cfg.discharge_segments if bat_cfg else None,
             bat_cfg.discharge_efficiency_curve if bat_cfg else None,
         )
-        # Reconstruct terminal SOC from the AC kW in the schedule.
+        # Net energy absorbed, from the AC kW in the schedule.
         # Positive kw = discharge (SOC decreases); negative kw = charge.
         soc_delta = -sum(
             step.devices[name].kw * dt

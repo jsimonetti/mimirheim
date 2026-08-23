@@ -122,10 +122,27 @@ class MqttPublisher:
     def publish_result(self, result: SolveResult) -> None:
         """Publish a ``SolveResult`` to all output topics.
 
-        Publishes:
+        Publishes, in order:
+
         1. The full schedule as JSON to ``config.outputs.schedule``.
         2. The current-step summary to ``config.outputs.current``.
         3. One retained setpoint topic per device in the current step.
+        4. PV control topics for each PV array that declares them: production
+           limit, zero-export mode, on/off mode, and the mode-agnostic
+           curtailment flag.
+        5. EV closed-loop topics: exchange mode and load-balance command.
+        6. Battery exchange-mode topics.
+        7. Hybrid inverter exchange-mode topics.
+        8. Recommended start times for deferrable loads the solver scheduled.
+
+        Items 4 to 8 are published only for devices whose configuration
+        declares the matching capability and output topic, so a minimal
+        installation sees only the first three.
+
+        Everything is retained, so the broker holds the latest value for
+        subscribers that connect later. When the schedule is empty only item 1
+        is published; the solve loop does not call this method for an
+        infeasible result in any case.
 
         Stores ``result`` for later re-publication via ``republish_last_result()``.
 

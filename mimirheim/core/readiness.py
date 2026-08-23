@@ -36,7 +36,7 @@ Thread safety:
     All public methods acquire ``_lock`` before touching shared state. The lock
     is held only long enough to update or read ``_entries`` — never during a
     solve. This matches the concurrency model described in
-    ``IMPLEMENTATION_DETAILS §9``.
+    ``IMPLEMENTATION_DETAILS §11``.
 
 This module imports from ``mimirheim.core`` and ``mimirheim.config`` but never from
 ``mimirheim.io``.

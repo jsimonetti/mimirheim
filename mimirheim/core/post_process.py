@@ -160,10 +160,20 @@ def _is_future(dt: datetime, reference: datetime) -> bool:
 def _build_idle_result(result: SolveResult) -> SolveResult:
     """Build a SolveResult whose schedule idles all controllable devices.
 
-    All battery, EV, and deferrable load setpoints are set to 0 kW. PV and
-    static load setpoints are preserved unchanged (they are forecasts, not
-    dispatch decisions). Grid import and export are recomputed from the power
-    balance to reflect the reduced dispatch.
+    Every device type in ``_CONTROLLABLE_TYPES`` is set to 0 kW: batteries,
+    EV chargers, deferrable loads and hybrid inverters. Suppression exists to
+    avoid cycling storage for a gain too small to justify the wear, and those
+    are the devices whose dispatch is discretionary.
+
+    Everything else keeps the setpoint the solver chose. For PV and static
+    loads that is because they are forecasts rather than decisions. For the
+    three heat pump types it is because their output is a decision, but one
+    driven by a thermal demand or comfort band that does not stop being
+    mandatory when the arbitrage gain is small; zeroing them would leave the
+    tank cold or the house below its comfort floor.
+
+    Grid import and export are recomputed from the power balance to reflect
+    the reduced dispatch.
 
     The ``naive_cost_eur`` and ``optimised_cost_eur`` fields from the original
     result are preserved. They represent what the solver found, not what the
@@ -184,9 +194,12 @@ def _build_idle_result(result: SolveResult) -> SolveResult:
 
         for name, sp in step.devices.items():
             if sp.type in _CONTROLLABLE_TYPES:
-                # Zero the controllable device's power. Preserve auxiliary
-                # fields (power_limit_kw, zero_exchange_active, loadbalance_active)
-                # so that hardware control setpoints are unaffected.
+                # Zero the controllable device's power but carry the auxiliary
+                # fields across unchanged. The solve loop runs
+                # assign_control_authority after this function, so the
+                # closed-loop flags still hold their build_and_solve defaults
+                # here; copying them keeps this function from deciding
+                # something that is not its business.
                 idle_devices[name] = DeviceSetpoint(
                     kw=0.0,
                     type=sp.type,
@@ -222,9 +235,3 @@ def _build_idle_result(result: SolveResult) -> SolveResult:
         "dispatch_suppressed": True,
         "schedule": idle_schedule,
     })
-
-
-# ---------------------------------------------------------------------------
-# End of module — apply_zero_export_flags and its private helpers have been
-# removed. Use mimirheim.core.control_arbitration.assign_control_authority instead.
-# ---------------------------------------------------------------------------
