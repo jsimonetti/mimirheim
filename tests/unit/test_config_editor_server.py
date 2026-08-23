@@ -11,6 +11,7 @@ What these tests do not cover:
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any
@@ -876,3 +877,54 @@ def test_malformed_reporter_yaml_degrades_to_not_configured(tmp_path: Path) -> N
 
     assert status == 404
     assert b"not configured" in body
+
+
+# ---------------------------------------------------------------------------
+# The env mapping is shared with helper_common
+# ---------------------------------------------------------------------------
+
+def test_mqtt_env_matches_helper_common(monkeypatch: pytest.MonkeyPatch) -> None:
+    """One definition of the env-to-field mapping, not two that can drift."""
+    from helper_common.config import mqtt_env_overrides
+
+    monkeypatch.setenv("MQTT_HOST", "core-mosquitto")
+    monkeypatch.setenv("MQTT_PORT", "8883")
+    monkeypatch.setenv("MQTT_USERNAME", "user1")
+    monkeypatch.setenv("MQTT_SSL", "true")
+
+    assert ConfigEditorServer._mqtt_env() == mqtt_env_overrides()
+
+
+def test_bad_mqtt_port_does_not_break_the_editor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A helper exits on an invalid MQTT_PORT; the editor must stay usable.
+
+    It is the tool an operator reaches for to fix configuration, and it cannot
+    repair an environment variable. Deliberate behaviour change: it now reports
+    no Supervisor-supplied MQTT settings at all rather than silently dropping
+    just the port and claiming the rest are Supervisor-controlled.
+    """
+    monkeypatch.setenv("MQTT_HOST", "core-mosquitto")
+    monkeypatch.setenv("MQTT_PORT", "not-a-number")
+    server = _make_server(tmp_path)
+
+    with caplog.at_level(logging.WARNING):
+        status, _headers, body = _dispatch_get(server, "/api/config")
+
+    assert status == 200
+    assert json.loads(body)["mqtt_env"] == {}
+    assert "MQTT_PORT" in caplog.text
+
+
+def test_out_of_range_mqtt_port_is_also_ignored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("MQTT_HOST", "core-mosquitto")
+    monkeypatch.setenv("MQTT_PORT", "99999")
+    server = _make_server(tmp_path)
+
+    status, _headers, body = _dispatch_get(server, "/api/config")
+
+    assert status == 200
+    assert json.loads(body)["mqtt_env"] == {}

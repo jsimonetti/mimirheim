@@ -128,6 +128,41 @@ def _parse_port(port_str: str) -> int:
     return port
 
 
+def mqtt_env_overrides() -> dict:
+    """Return the ``mqtt`` field overrides supplied by the environment.
+
+    When running as a HA add-on the Supervisor injects MQTT broker credentials
+    as environment variables (written by
+    container/etc/cont-init.d/01-mqtt-env.sh before any s6 service starts).
+    This maps them onto ``MqttConfig`` field names.
+
+    The mapping lives here so there is one definition of it. The config editor
+    needs the same values to show which fields the Supervisor controls, and
+    previously carried its own copy -- which had already drifted, silently
+    ignoring an unparseable MQTT_PORT where this one crashed on it.
+
+    Returns:
+        Dict mapping mqtt field names to their env-supplied values. Empty when
+        no MQTT env vars are set (plain Docker, no Supervisor).
+
+    Raises:
+        ValueError: If ``MQTT_PORT`` is set but is not a valid TCP port.
+    """
+    overrides: dict = {}
+    if host := os.environ.get("MQTT_HOST"):
+        overrides["host"] = host
+    if port_str := os.environ.get("MQTT_PORT"):
+        overrides["port"] = _parse_port(port_str)
+    if username := os.environ.get("MQTT_USERNAME"):
+        overrides["username"] = username
+    if password := os.environ.get("MQTT_PASSWORD"):
+        overrides["password"] = password
+    # MQTT_SSL is 'true' or 'false' (a string) as returned by bashio.
+    if ssl_str := os.environ.get("MQTT_SSL"):
+        overrides["tls"] = ssl_str.lower() == "true"
+    return overrides
+
+
 def apply_mqtt_env_overrides(raw: dict) -> dict:
     """Override the mqtt: section from environment variables if present.
 
@@ -158,18 +193,7 @@ def apply_mqtt_env_overrides(raw: dict) -> dict:
             "holds only comments, or is not a YAML mapping."
         )
 
-    overrides: dict = {}
-    if host := os.environ.get("MQTT_HOST"):
-        overrides["host"] = host
-    if port_str := os.environ.get("MQTT_PORT"):
-        overrides["port"] = _parse_port(port_str)
-    if username := os.environ.get("MQTT_USERNAME"):
-        overrides["username"] = username
-    if password := os.environ.get("MQTT_PASSWORD"):
-        overrides["password"] = password
-    # MQTT_SSL is 'true' or 'false' (a string) as returned by bashio.
-    if ssl_str := os.environ.get("MQTT_SSL"):
-        overrides["tls"] = ssl_str.lower() == "true"
+    overrides = mqtt_env_overrides()
     if overrides:
         # A bare `mqtt:` key in YAML parses to None, not to {}. Treat a null
         # section as an absent one so a config that leaves every broker setting

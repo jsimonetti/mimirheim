@@ -34,6 +34,7 @@ import yaml
 from pydantic import ValidationError as PydanticValidationError
 from ruamel.yaml import YAML
 
+from helper_common.config import mqtt_env_overrides
 from mimirheim.config.schema import MimirheimConfig
 
 logger = logging.getLogger(__name__)
@@ -928,18 +929,13 @@ class ConfigEditorServer:
             Dict mapping mqtt field names to their env-supplied values. Empty
             when no MQTT env vars are set (plain Docker, no Supervisor).
         """
-        env: dict[str, Any] = {}
-        if host := os.environ.get("MQTT_HOST"):
-            env["host"] = host
-        if port_str := os.environ.get("MQTT_PORT"):
-            try:
-                env["port"] = int(port_str)
-            except ValueError:
-                pass
-        if username := os.environ.get("MQTT_USERNAME"):
-            env["username"] = username
-        if password := os.environ.get("MQTT_PASSWORD"):
-            env["password"] = password
-        if ssl_str := os.environ.get("MQTT_SSL"):
-            env["tls"] = ssl_str.lower() == "true"
-        return env
+        try:
+            return mqtt_env_overrides()
+        except ValueError as exc:
+            # A helper daemon exits on this, and should: it cannot connect to a
+            # broker on an invalid port. The editor is the tool an operator
+            # reaches for to fix configuration, so it degrades instead --
+            # reporting no Supervisor-supplied MQTT settings, which makes the
+            # form show the mqtt section for manual entry.
+            logger.warning("Ignoring MQTT environment overrides: %s", exc)
+            return {}
