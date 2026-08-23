@@ -25,7 +25,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from mimirheim.config.schema import MimirheimConfig
-from mimirheim.core.bundle import ScheduleStep, SolveResult
+from mimirheim.core.bundle import DeviceSetpoint, ScheduleStep, SolveResult
 
 logger = logging.getLogger("mimirheim.publisher")
 
@@ -203,156 +203,25 @@ class MqttPublisher:
                 retain=True,
             )
 
-            # 3. Per-device retained setpoint topics.
+            # 3-7. Per-device topics.
+            #
+            # One pass over the devices, dispatching on type. The setpoint
+            # topic is published for every device; the control topics that
+            # follow it depend on which capabilities and output topics the
+            # device declares. Publishing per device rather than per topic
+            # family keeps the "which topics does this device get" question
+            # answerable in one place.
             prefix = self._config.mqtt.topic_prefix
             for device_name, setpoint in current.devices.items():
-                device_topic = f"{prefix}/device/{device_name}/setpoint"
-                device_payload = json.dumps({
-                    "kw": setpoint.kw,
-                    "type": setpoint.type,
-                })
                 self._client.publish(
-                    device_topic,
-                    device_payload,
+                    f"{prefix}/device/{device_name}/setpoint",
+                    json.dumps({"kw": setpoint.kw, "type": setpoint.type}),
                     qos=1,
                     retain=True,
                 )
-
-            # 4. PV control output topics (production limit and zero-export mode).
-            # These are separate retained topics rather than part of the generic
-            # setpoint payload so that inverter automations can subscribe to a
-            # single, purpose-specific topic without parsing the setpoint JSON.
-            for device_name, setpoint in current.devices.items():
-                if setpoint.type != "pv":
-                    continue
-                pv_cfg = self._config.pv_arrays.get(device_name)
-                if pv_cfg is None:
-                    continue
-
-                if (
-                    pv_cfg.has_power_limit_output
-                    and setpoint.power_limit_kw is not None
-                ):
-                    self._client.publish(
-                        pv_cfg.outputs.power_limit_kw,
-                        str(setpoint.power_limit_kw),
-                        qos=1,
-                        retain=True,
-                    )
-
-                if (
-                    pv_cfg.has_zero_export_output
-                    and setpoint.zero_exchange_active is not None
-                ):
-                    self._client.publish(
-                        pv_cfg.outputs.zero_export_mode,
-                        "true" if setpoint.zero_exchange_active else "false",
-                        qos=1,
-                        retain=True,
-                    )
-
-                if (
-                    pv_cfg.has_on_off_output
-                    and setpoint.on_off_active is not None
-                ):
-                    # Payload semantics: "true" = inverter is ON (producing);
-                    # "false" = inverter is OFF (curtailed by mimirheim).
-                    # Note: the internal solver variable is pv_curtailed (0=on,
-                    # 1=off), the opposite polarity. on_off_active already
-                    # inverts it: True means on, False means off.
-                    self._client.publish(
-                        pv_cfg.outputs.on_off_mode,
-                        "true" if setpoint.on_off_active else "false",
-                        qos=1,
-                        retain=True,
-                    )
-
-                if (
-                    pv_cfg.outputs.is_curtailed is not None
-                    and setpoint.pv_is_curtailed is not None
-                ):
-                    # Mode-agnostic curtailment signal. True means mimirheim is
-                    # actively holding PV output below the available forecast.
-                    # Published for staged, power_limit, and on_off modes.
-                    # Not published for fixed-mode arrays (pv_is_curtailed is None).
-                    self._client.publish(
-                        pv_cfg.outputs.is_curtailed,
-                        "true" if setpoint.pv_is_curtailed else "false",
-                        qos=1,
-                        retain=True,
-                    )
-
-            # 5. EV closed-loop output topics.
-            # The exchange_mode topic carries the zero-exchange closed-loop
-            # assertion. The loadbalance_cmd topic carries the load-balance mode
-            # assertion. Both are published only when the matching capability
-            # flag is True and the output topic is configured.
-            for device_name, setpoint in current.devices.items():
-                if setpoint.type != "ev_charger":
-                    continue
-                ev_cfg = self._config.ev_chargers.get(device_name)
-                if ev_cfg is None:
-                    continue
-                if (
-                    ev_cfg.has_exchange_mode_output
-                    and setpoint.zero_exchange_active is not None
-                ):
-                    self._client.publish(
-                        ev_cfg.outputs.exchange_mode,
-                        "true" if setpoint.zero_exchange_active else "false",
-                        qos=1,
-                        retain=True,
-                    )
-                if (
-                    ev_cfg.has_loadbalance_output
-                    and setpoint.loadbalance_active is not None
-                ):
-                    self._client.publish(
-                        ev_cfg.outputs.loadbalance_cmd,
-                        "true" if setpoint.loadbalance_active else "false",
-                        qos=1,
-                        retain=True,
-                    )
-
-            # 6. Battery exchange_mode output topic.
-            # Published when capabilities.zero_exchange is True and
-            # outputs.exchange_mode topic is configured.
-            for device_name, setpoint in current.devices.items():
-                if setpoint.type != "battery":
-                    continue
-                bat_cfg = self._config.batteries.get(device_name)
-                if bat_cfg is None:
-                    continue
-                if (
-                    bat_cfg.has_exchange_mode_output
-                    and setpoint.zero_exchange_active is not None
-                ):
-                    self._client.publish(
-                        bat_cfg.outputs.exchange_mode,
-                        "true" if setpoint.zero_exchange_active else "false",
-                        qos=1,
-                        retain=True,
-                    )
-
-            # 7. Hybrid inverter exchange_mode output topic.
-            # Published when capabilities.zero_exchange is True and
-            # outputs.exchange_mode topic is configured.
-            for device_name, setpoint in current.devices.items():
-                if setpoint.type != "hybrid_inverter":
-                    continue
-                hi_cfg = self._config.hybrid_inverters.get(device_name)
-                if hi_cfg is None:
-                    continue
-                if (
-                    hi_cfg.has_exchange_mode_output
-                    and setpoint.zero_exchange_active is not None
-                ):
-                    self._client.publish(
-                        hi_cfg.outputs.exchange_mode,
-                        "true" if setpoint.zero_exchange_active else "false",
-                        qos=1,
-                        retain=True,
-                    )
+                handler = self._CONTROL_PUBLISHERS.get(setpoint.type)
+                if handler is not None:
+                    handler(self, device_name, setpoint)
 
             # 8. Deferrable load recommended-start output topics.
             self._publish_deferrable_recommended_starts(result)
@@ -381,6 +250,107 @@ class MqttPublisher:
                 qos=1,
                 retain=True,
             )
+
+    def _publish_bool(self, topic: str | None, value: bool | None) -> None:
+        """Publish a boolean control flag to ``topic`` as "true" or "false".
+
+        Does nothing when either argument is None. Both are optional for the
+        same reason: a device only receives a control topic when its config
+        declares one, and only carries a flag when the matching capability is
+        enabled. Publishing on a half-configured device would either target no
+        topic or carry no decision.
+
+        Args:
+            topic: The configured output topic, or None if not configured.
+            value: The flag from the device setpoint, or None if the device has
+                no such capability.
+        """
+        if topic is None or value is None:
+            return
+        self._client.publish(topic, "true" if value else "false", qos=1, retain=True)
+
+    def _publish_pv_controls(self, name: str, sp: DeviceSetpoint) -> None:
+        """Publish the control topics for one PV array.
+
+        These are separate retained topics rather than fields inside the
+        generic setpoint payload so that an inverter automation can subscribe
+        to a single, purpose-specific topic without parsing JSON.
+
+        Args:
+            name: Device name, used to look the array up in config.
+            sp: The array's setpoint for the current step.
+        """
+        cfg = self._config.pv_arrays.get(name)
+        if cfg is None:
+            return
+
+        if cfg.has_power_limit_output and sp.power_limit_kw is not None:
+            self._client.publish(
+                cfg.outputs.power_limit_kw, str(sp.power_limit_kw), qos=1, retain=True
+            )
+        if cfg.has_zero_export_output:
+            self._publish_bool(cfg.outputs.zero_export_mode, sp.zero_exchange_active)
+        if cfg.has_on_off_output:
+            # Payload semantics: "true" = inverter is ON (producing), "false" =
+            # OFF. The internal solver variable is pv_curtailed with the
+            # opposite polarity; on_off_active has already inverted it.
+            self._publish_bool(cfg.outputs.on_off_mode, sp.on_off_active)
+        # Mode-agnostic curtailment signal: true means mimirheim is holding PV
+        # output below the available forecast. Published for staged,
+        # power_limit and on_off arrays; a fixed-mode array is not controllable
+        # so has_is_curtailed_output is False. Using the same property that
+        # ha_discovery uses to advertise the entity keeps the two in step.
+        if cfg.has_is_curtailed_output:
+            self._publish_bool(cfg.outputs.is_curtailed, sp.pv_is_curtailed)
+
+    def _publish_ev_controls(self, name: str, sp: DeviceSetpoint) -> None:
+        """Publish the closed-loop control topics for one EV charger.
+
+        Args:
+            name: Device name, used to look the charger up in config.
+            sp: The charger's setpoint for the current step.
+        """
+        cfg = self._config.ev_chargers.get(name)
+        if cfg is None:
+            return
+        if cfg.has_exchange_mode_output:
+            self._publish_bool(cfg.outputs.exchange_mode, sp.zero_exchange_active)
+        if cfg.has_loadbalance_output:
+            self._publish_bool(cfg.outputs.loadbalance_cmd, sp.loadbalance_active)
+
+    def _publish_battery_controls(self, name: str, sp: DeviceSetpoint) -> None:
+        """Publish the exchange-mode topic for one battery.
+
+        Args:
+            name: Device name, used to look the battery up in config.
+            sp: The battery's setpoint for the current step.
+        """
+        cfg = self._config.batteries.get(name)
+        if cfg is None or not cfg.has_exchange_mode_output:
+            return
+        self._publish_bool(cfg.outputs.exchange_mode, sp.zero_exchange_active)
+
+    def _publish_hybrid_inverter_controls(self, name: str, sp: DeviceSetpoint) -> None:
+        """Publish the exchange-mode topic for one hybrid inverter.
+
+        Args:
+            name: Device name, used to look the inverter up in config.
+            sp: The inverter's setpoint for the current step.
+        """
+        cfg = self._config.hybrid_inverters.get(name)
+        if cfg is None or not cfg.has_exchange_mode_output:
+            return
+        self._publish_bool(cfg.outputs.exchange_mode, sp.zero_exchange_active)
+
+    # Device type to control-topic publisher. Types absent from this table
+    # (static loads, deferrable loads, the three heat pump types) have no
+    # control topics beyond the generic setpoint.
+    _CONTROL_PUBLISHERS = {
+        "pv": _publish_pv_controls,
+        "ev_charger": _publish_ev_controls,
+        "battery": _publish_battery_controls,
+        "hybrid_inverter": _publish_hybrid_inverter_controls,
+    }
 
     def publish_last_solve_status(
         self, result: SolveResult | None, error: str | None
