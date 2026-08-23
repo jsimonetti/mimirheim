@@ -36,6 +36,7 @@ from typing import Any
 
 from mimirheim.config.schema import SpaceHeatingConfig
 from mimirheim.core.bundle import SpaceHeatingInputs
+from mimirheim.core.building_thermal import add_building_thermal_constraints
 from mimirheim.core.context import ModelContext
 
 
@@ -237,31 +238,20 @@ class SpaceHeatingDevice:
         Replaces the degree-days total-heat lower bound with a first-order
         difference equation that tracks indoor temperature at each step.
 
-        The dynamics equation for step t is:
+        The dynamics themselves are shared with ``CombiHeatPumpDevice`` and live
+        in ``core.building_thermal``; see that module for the equation and its
+        coefficients. This method supplies the part that differs between the two
+        devices, the thermal power expression:
 
-            T_indoor[t] = alpha * T_prev
-                        + (dt / C) * P_heat[t]
-                        + beta_outdoor * T_outdoor[t]
+        - On/off: ``P_heat[t] = elec_power_kw * cop * hp_on[t]``
+        - SOS2:   ``P_heat[t] = sum(w[t][s] * stages[s].elec_kw * stages[s].cop)``
 
-        where:
-            alpha        = 1 - dt * L / C
-            beta_outdoor = dt * L / C
-            C            = thermal_capacity_kwh_per_k   (building thermal mass)
-            L            = heat_loss_coeff_kw_per_k      (heat loss coefficient)
-            dt           = ctx.dt                        (step duration, hours)
-            T_prev       = current_indoor_temp_c for t=0; T_indoor[t-1] for t > 0
-            P_heat[t]    = thermal power delivered to the building at step t (kW)
+        Both are linear in the solver variables, because ``cop`` and
+        ``elec_power_kw`` are constants.
 
         The comfort bounds [comfort_min_c, comfort_max_c] are enforced by the
-        variable bounds declared in add_variables; no explicit inequality is added
-        here.
-
-        P_heat depends on the control mode:
-        - On/off: P_heat[t] = elec_power_kw * cop * hp_on[t]
-        - SOS2:   P_heat[t] = sum(w[t][s] * stages[s].elec_kw * stages[s].cop ...)
-
-        All terms are linear in the solver variables because cop and elec_power_kw
-        are constants multiplied by the binary/continuous solver variables.
+        variable bounds declared in ``add_variables``; no explicit inequality is
+        added here.
 
         Args:
             ctx: The current solve context.
@@ -273,91 +263,29 @@ class SpaceHeatingDevice:
                 or if current_indoor_temp_c is None.
         """
         cfg = self.config
-        btm = cfg.building_thermal  # type: ignore[union-attr]
-        H = len(ctx.T)
-
-        if inputs.current_indoor_temp_c is None:
-            raise ValueError(
-                f"Device '{self.name}': building_thermal is configured but "
-                "current_indoor_temp_c is None in SpaceHeatingInputs."
-            )
-        if inputs.outdoor_temp_forecast_c is None or len(inputs.outdoor_temp_forecast_c) < H:
-            have = len(inputs.outdoor_temp_forecast_c) if inputs.outdoor_temp_forecast_c else 0
-            raise ValueError(
-                f"Device '{self.name}': outdoor_temp_forecast_c has {have} values "
-                f"but the horizon requires {H}."
-            )
-
-        C = btm.thermal_capacity_kwh_per_k
-        L = btm.heat_loss_coeff_kw_per_k
-        dt = ctx.dt
-
-        # Derived coefficients for the first-order difference equation.
-        # alpha: fraction of the previous indoor temperature retained after one step.
-        # A value below 1.0 means the building loses heat proportionally to the
-        # indoor-outdoor temperature gap.
-        alpha = 1.0 - dt * L / C
-
-        # beta_outdoor: contribution of outdoor temperature to indoor at each step.
-        # Equals dt * L / C = (1 - alpha). At equilibrium (no HP, steady outdoor),
-        # T_indoor -> T_outdoor as the building tracks outdoor temperature.
-        beta_outdoor = dt * L / C
-
-        # dt_over_C: converts thermal power (kW) * dt (h) = kWh into the
-        # temperature rise per step (°C). Multiplied by P_heat to get the
-        # heat-driven temperature increment.
-        dt_over_C = dt / C
-
         stages = cfg.stages
 
-        for t in ctx.T:
-            # T_prev is the indoor temperature entering this step.
-            # For t=0 it is the measured current temperature; for t>0 it is the
-            # previous step's decision variable.
-            if t == 0:
-                t_prev = inputs.current_indoor_temp_c
-            else:
-                t_prev = self._T_indoor[t - 1]
-
-            T_outdoor_t = inputs.outdoor_temp_forecast_c[t]
-
-            # P_heat_expr: thermal power expression for this step (kW).
-            # This is linear in the solver variables hp_on[t] or w[t][s].
+        def heat_power_kw(t: int) -> Any:
+            """Thermal power delivered at step t, in kW, linear in the variables."""
             if stages is not None:
-                # SOS2 mode: sum over all non-sentinel stages.
-                # P_heat = sum(w[t][s] * elec_kw[s] * cop[s] for s >= 0)
-                # (Stage 0 has elec_kw=0, cop=0, so it contributes zero naturally.)
-                p_heat_expr = sum(
+                # SOS2 mode: sum over all stages. Stage 0 has elec_kw=0 and
+                # cop=0, so it contributes zero naturally.
+                return sum(
                     self._w[t][s] * (stages[s].elec_kw * stages[s].cop)
                     for s in range(len(stages))
                 )
-            else:
-                # On/off mode: P_heat = elec_power_kw * cop * hp_on[t].
-                p_heat_expr = (cfg.elec_power_kw * cfg.cop) * self._hp_on[t]  # type: ignore[operator]
+            # On/off mode.
+            return (cfg.elec_power_kw * cfg.cop) * self._hp_on[t]  # type: ignore[operator]
 
-            # Dynamics equality constraint:
-            #
-            #   T_indoor[t] = alpha * T_prev
-            #               + (dt/C) * P_heat[t]
-            #               + beta_outdoor * T_outdoor[t]
-            #
-            # Rearranged so all solver variable terms are on the left and
-            # the constant terms are on the right:
-            #
-            #   T_indoor[t] - (dt/C) * P_heat[t] - alpha * T_prev (if variable)
-            #     = alpha * T_prev (if constant, t=0) + beta_outdoor * T_outdoor[t]
-            rhs = beta_outdoor * T_outdoor_t
-            if t == 0:
-                # T_prev is a known constant (the current measured temperature).
-                rhs += alpha * t_prev  # type: ignore[operator]
-                ctx.solver.add_constraint(
-                    self._T_indoor[t] - dt_over_C * p_heat_expr == rhs
-                )
-            else:
-                # T_prev = T_indoor[t-1] is a solver variable. Move it to the LHS.
-                ctx.solver.add_constraint(
-                    self._T_indoor[t] - dt_over_C * p_heat_expr - alpha * t_prev == rhs
-                )
+        add_building_thermal_constraints(
+            ctx,
+            device_name=self.name,
+            btm=cfg.building_thermal,  # type: ignore[arg-type]
+            indoor_temp=self._T_indoor,
+            current_indoor_temp_c=inputs.current_indoor_temp_c,
+            outdoor_temp_forecast_c=inputs.outdoor_temp_forecast_c,
+            heat_power_kw=heat_power_kw,
+        )
 
     def _add_constraints_on_off(
         self, ctx: ModelContext, inputs: SpaceHeatingInputs
