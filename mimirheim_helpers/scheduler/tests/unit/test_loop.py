@@ -5,14 +5,14 @@ Tests verify:
 - run() registers exactly one APScheduler job per schedule entry.
 - All registered jobs use CronTrigger triggers.
 - run() handles an empty schedule list without error.
-- run() publishes to the correct topic when a job fires.
+- A configured schedule reaches _publish() with the right topic and payload.
 - A publish the broker never received raises, rather than logging success.
 """
 
 import logging
 import threading
 import time
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -20,7 +20,6 @@ import paho.mqtt.client as mqtt
 import pytest
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from apscheduler.triggers.date import DateTrigger
 
 from scheduler.loop import _publish, run
 
@@ -98,27 +97,87 @@ def test_run_empty_schedules() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_run_publishes_when_job_fires() -> None:
-    """The publish callable is invoked when a pre-configured job fires.
+def _fire(scheduler: BackgroundScheduler, job_id: str, client: "_RcClient") -> None:
+    """Bring a registered job forward and wait for it to run.
 
-    A DateTrigger job is injected into the BackgroundScheduler before run() is
-    called. The job publishes to a topic and then sets stop_event. run() blocks
-    on stop_event.wait(), so it returns only after the publish has occurred.
+    Args:
+        scheduler: The running scheduler holding the job.
+        job_id: Identifier of the job to fire.
+        client: The client whose recorded calls signal that the job has run.
     """
-    client = MagicMock()
-    stop_event = threading.Event()
+    scheduler.get_job(job_id).modify(
+        next_run_time=datetime.now(tz=UTC) + timedelta(milliseconds=50)
+    )
+    deadline = time.monotonic() + 5.0
+    while not client.calls and time.monotonic() < deadline:
+        time.sleep(0.01)
 
-    def _job() -> None:
-        client.publish("test/topic", payload=b"", qos=0, retain=False)
-        stop_event.set()
 
+def test_a_firing_schedule_publishes_an_empty_trigger_to_its_topic() -> None:
+    """A configured schedule reaches scheduler.loop._publish when it fires.
+
+    This goes through the real path: a (cron_expr, topic) pair is registered by
+    run(), the registered job is brought forward, and the publish that arrives
+    at the client is inspected. Asserting the payload, qos and retain flag as
+    well as the topic is what makes the test fail if _publish is changed or
+    removed, rather than merely if the job runs.
+    """
+    client = _RcClient(mqtt.MQTT_ERR_SUCCESS)
     scheduler = BackgroundScheduler(timezone="UTC")
-    run_date = datetime.now(tz=timezone.utc) + timedelta(milliseconds=200)
-    scheduler.add_job(_job, DateTrigger(run_date=run_date), id="test_job")
+    stop_event = threading.Event()
+    stop_event.set()
 
-    run(client, [], stop_event, _scheduler=scheduler)
+    try:
+        run(client, [("*/15 * * * *", "mimir/input/trigger")], stop_event,
+            _scheduler=scheduler)
+        _fire(scheduler, "job_0", client)
+    finally:
+        scheduler.shutdown()
 
-    client.publish.assert_called_once_with("test/topic", payload=b"", qos=0, retain=False)
+    assert client.calls == [("mimir/input/trigger", b"", 0, False)]
+
+
+def test_each_schedule_publishes_to_its_own_topic() -> None:
+    """The topic published is the one paired with the cron expression that fired."""
+    client = _RcClient(mqtt.MQTT_ERR_SUCCESS)
+    scheduler = BackgroundScheduler(timezone="UTC")
+    stop_event = threading.Event()
+    stop_event.set()
+
+    schedules = [
+        ("*/15 * * * *", "mimir/input/trigger"),
+        ("0 14 * * *", "mimir/input/tools/prices/trigger"),
+        ("0 0 * * *", "mimir/input/tools/baseload/trigger"),
+    ]
+    try:
+        run(client, schedules, stop_event, _scheduler=scheduler)
+        _fire(scheduler, "job_1", client)
+    finally:
+        scheduler.shutdown()
+
+    assert client.calls == [("mimir/input/tools/prices/trigger", b"", 0, False)]
+
+
+def test_a_firing_schedule_is_logged_with_its_topic(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A delivered trigger is reported under the topic, not the internal job id."""
+    client = _RcClient(mqtt.MQTT_ERR_SUCCESS)
+    scheduler = BackgroundScheduler(timezone="UTC")
+    stop_event = threading.Event()
+    stop_event.set()
+
+    try:
+        with caplog.at_level(logging.INFO, logger="scheduler.loop"):
+            run(client, [("*/15 * * * *", "mimir/input/trigger")], stop_event,
+                _scheduler=scheduler)
+            _fire(scheduler, "job_0", client)
+            messages = _wait_for_log(caplog, "Triggered")
+    finally:
+        scheduler.shutdown()
+
+    assert any("Triggered mimir/input/trigger" in m for m in messages), messages
+
 
 # ---------------------------------------------------------------------------
 # publish failure
