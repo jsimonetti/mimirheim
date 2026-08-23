@@ -11,6 +11,7 @@ What these tests do not cover:
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -768,3 +769,110 @@ def test_placeholder_submitted_when_env_absent_is_rejected_not_written(
     assert status == 200, json.loads(body)
     written = (tmp_path / "mimirheim.yaml").read_text()
     assert MQTT_ENV_REDACTED not in written
+
+
+# ---------------------------------------------------------------------------
+# The report and dump directories track reporter.yaml
+# ---------------------------------------------------------------------------
+
+def _write_reporter_yaml(config_dir: Path, output_dir: Path, dump_dir: Path) -> None:
+    (config_dir / "reporter.yaml").write_text(
+        yaml.safe_dump(
+            {"reporting": {"output_dir": str(output_dir), "dump_dir": str(dump_dir)}}
+        )
+    )
+
+
+def test_reports_index_follows_a_reporter_yaml_written_after_startup(
+    tmp_path: Path,
+) -> None:
+    """Enabling the reporter through the editor must not need a restart.
+
+    The directories were resolved once in __init__, so a reporter.yaml written
+    or edited through this very editor had no effect until the process
+    restarted, with nothing in the UI to say why.
+    """
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    (reports / "index.html").write_text("<html>reports</html>")
+    server = _make_server(tmp_path)
+    # Before: no reporter.yaml at all.
+    status, _headers, _body = _dispatch_get(server, "/reports")
+    assert status == 404
+
+    _write_reporter_yaml(tmp_path, reports, tmp_path / "dumps")
+
+    status, _headers, body = _dispatch_get(server, "/reports")
+    assert status == 200
+    assert b"reports" in body
+
+
+def test_reports_index_follows_a_changed_output_dir(tmp_path: Path) -> None:
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    for d in (first, second):
+        d.mkdir()
+    (first / "index.html").write_text("<html>first</html>")
+    (second / "index.html").write_text("<html>second</html>")
+    _write_reporter_yaml(tmp_path, first, tmp_path / "dumps")
+    server = _make_server(tmp_path)
+    assert b"first" in _dispatch_get(server, "/reports")[2]
+
+    _write_reporter_yaml(tmp_path, second, tmp_path / "dumps")
+
+    assert b"second" in _dispatch_get(server, "/reports")[2]
+
+
+def test_dump_file_follows_a_changed_dump_dir(tmp_path: Path) -> None:
+    dumps = tmp_path / "late-dumps"
+    dumps.mkdir()
+    (dumps / "2026-01-01T00-00-00Z_input.json").write_text('{"ok": true}')
+    server = _make_server(tmp_path)
+    assert _dispatch_get(server, "/reports/dumps/2026-01-01T00-00-00Z_input.json")[0] == 404
+
+    _write_reporter_yaml(tmp_path, tmp_path / "reports", dumps)
+
+    status, _headers, body = _dispatch_get(
+        server, "/reports/dumps/2026-01-01T00-00-00Z_input.json"
+    )
+    assert status == 200
+    assert b'"ok"' in body
+
+
+def test_reports_available_flag_follows_reporter_yaml(tmp_path: Path) -> None:
+    """GET /api/config reports whether the reports tab should be shown."""
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    (reports / "index.html").write_text("<html/>")
+    server = _make_server(tmp_path)
+    assert json.loads(_dispatch_get(server, "/api/config")[2])["reports_available"] is False
+
+    _write_reporter_yaml(tmp_path, reports, tmp_path / "dumps")
+
+    assert json.loads(_dispatch_get(server, "/api/config")[2])["reports_available"] is True
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root can read a 0000 file")
+def test_unreadable_reporter_yaml_degrades_to_not_configured(tmp_path: Path) -> None:
+    """An existing but unreadable reporter.yaml must not raise out of a handler."""
+    reporter_yaml = tmp_path / "reporter.yaml"
+    reporter_yaml.write_text("reporting:\n  output_dir: /tmp/x\n")
+    reporter_yaml.chmod(0o000)
+    server = _make_server(tmp_path)
+    try:
+        status, _headers, body = _dispatch_get(server, "/reports")
+    finally:
+        reporter_yaml.chmod(0o644)
+
+    assert status == 404
+    assert b"not configured" in body
+
+
+def test_malformed_reporter_yaml_degrades_to_not_configured(tmp_path: Path) -> None:
+    (tmp_path / "reporter.yaml").write_text("reporting: [unclosed\n")
+    server = _make_server(tmp_path)
+
+    status, _headers, body = _dispatch_get(server, "/reports")
+
+    assert status == 404
+    assert b"not configured" in body
