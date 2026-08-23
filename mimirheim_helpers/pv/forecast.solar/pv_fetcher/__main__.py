@@ -160,12 +160,18 @@ class PvFetcherDaemon(HelperDaemon):
                     peak["ts"],
                 )
             else:
+                # An all-zero curve is a forecast of no production, which is
+                # information the solver wants. This branch used to log the
+                # line below and then skip the publish, leaving the earlier
+                # non-zero forecast retained on the topic -- so after the last
+                # daylight fetch mimirheim kept seeing PV that was not coming.
+                # Distinct from the empty-result case above, which is an
+                # absence of data rather than a forecast of zero.
                 logger.info(
                     "Array %r: publishing %d steps, all zero kW.",
                     name,
                     len(steps),
                 )
-                continue
             publish_array(client, array_cfg.output_topic, steps, signal_mimir=False)
             any_success = True
             if len(steps) > max_steps:

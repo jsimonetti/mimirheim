@@ -10,8 +10,12 @@ Tests verify:
 """
 
 import inspect
+import json
+import logging
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 from helper_common.cycle import CycleResult
@@ -209,3 +213,146 @@ def test_on_message_ignores_triggers_before_reset_at() -> None:
     assert cycle_call_count == 1
 
 
+
+
+# ---------------------------------------------------------------------------
+# An all-zero forecast is data, not an absence of data
+# ---------------------------------------------------------------------------
+
+
+def _zero_watts() -> dict:
+    """A forecast.solar response whose every value is zero."""
+    return {
+        datetime(2026, 3, 31, h, 0, 0, tzinfo=timezone.utc): 0
+        for h in range(0, 24)
+    }
+
+
+def _nonzero_watts() -> dict:
+    """A forecast.solar response with a daylight curve."""
+    watts = {
+        datetime(2026, 3, 31, h, 0, 0, tzinfo=timezone.utc): 0
+        for h in range(0, 24)
+    }
+    for h in (10, 11, 12, 13):
+        watts[datetime(2026, 3, 31, h, 0, 0, tzinfo=timezone.utc)] = 3000
+    return watts
+
+
+def test_all_zero_forecast_is_published() -> None:
+    """An all-zero curve must reach the topic.
+
+    The branch logged "publishing %d steps, all zero kW" and then continued,
+    so it published nothing. The previous non-zero forecast stayed retained,
+    which left the topic advertising PV production that was not coming.
+    """
+    daemon = _make_daemon()
+    client = MagicMock()
+
+    with patch(
+        "pv_fetcher.__main__.asyncio.run",
+        side_effect=_close_coro_and_return(_zero_watts()),
+    ):
+        daemon._run_cycle(client)
+
+    published_topics = [call.args[0] for call in client.publish.call_args_list]
+    assert "mimir/input/pv_a" in published_topics
+    assert "mimir/input/pv_b" in published_topics
+
+
+def test_all_zero_forecast_payload_is_all_zero() -> None:
+    """The published payload must be the zero curve, not a stale one."""
+    daemon = _make_daemon()
+    client = MagicMock()
+
+    with patch(
+        "pv_fetcher.__main__.asyncio.run",
+        side_effect=_close_coro_and_return(_zero_watts()),
+    ):
+        daemon._run_cycle(client)
+
+    payload = json.loads(client.publish.call_args_list[0].args[1])
+    assert payload, "an all-zero forecast must not publish an empty list"
+    assert all(step["kw"] == 0 for step in payload)
+
+
+def test_all_zero_forecast_signals_mimir_when_configured() -> None:
+    """Publishing a forecast means the solver has something new to act on."""
+    daemon = _make_daemon(signal_mimir=True)
+    client = MagicMock()
+
+    with patch(
+        "pv_fetcher.__main__.asyncio.run",
+        side_effect=_close_coro_and_return(_zero_watts()),
+    ):
+        daemon._run_cycle(client)
+
+    published_topics = [call.args[0] for call in client.publish.call_args_list]
+    assert "mimir/input/trigger" in published_topics
+
+
+def test_all_zero_forecast_reports_a_horizon() -> None:
+    """A published forecast has a horizon; CycleResult must say so."""
+    daemon = _make_daemon()
+    client = MagicMock()
+
+    with patch(
+        "pv_fetcher.__main__.asyncio.run",
+        side_effect=_close_coro_and_return(_zero_watts()),
+    ):
+        result = daemon._run_cycle(client)
+
+    assert isinstance(result, CycleResult)
+    assert result.horizon_hours is not None
+    assert result.horizon_hours > 0
+
+
+def test_empty_forecast_is_still_not_published() -> None:
+    """No steps at all is a different case and must keep being skipped.
+
+    Publishing "[]" writes an empty retained value that mimirheim's parser
+    rejects, which would leave the PV topic invalid rather than stale.
+    """
+    daemon = _make_daemon()
+    client = MagicMock()
+
+    with patch(
+        "pv_fetcher.__main__.asyncio.run",
+        side_effect=_close_coro_and_return({}),
+    ):
+        daemon._run_cycle(client)
+
+    client.publish.assert_not_called()
+
+
+def test_nonzero_forecast_is_still_published() -> None:
+    """Regression guard on the path that already worked."""
+    daemon = _make_daemon()
+    client = MagicMock()
+
+    with patch(
+        "pv_fetcher.__main__.asyncio.run",
+        side_effect=_close_coro_and_return(_nonzero_watts()),
+    ):
+        daemon._run_cycle(client)
+
+    published_topics = [call.args[0] for call in client.publish.call_args_list]
+    assert "mimir/input/pv_a" in published_topics
+
+
+def test_all_zero_forecast_log_says_publishing_and_means_it(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The log line claimed a publish that did not happen."""
+    daemon = _make_daemon()
+    client = MagicMock()
+
+    with caplog.at_level(logging.INFO, logger="pv_fetcher"):
+        with patch(
+            "pv_fetcher.__main__.asyncio.run",
+            side_effect=_close_coro_and_return(_zero_watts()),
+        ):
+            daemon._run_cycle(client)
+
+    assert "all zero kW" in caplog.text
+    assert client.publish.called
