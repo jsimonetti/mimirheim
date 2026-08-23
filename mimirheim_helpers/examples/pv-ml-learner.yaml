@@ -33,22 +33,29 @@ meteoserver:
   forecast_horizon_hours: 48
 
 homeassistant:
-  # Path to the Home Assistant SQLite database. In a container, bind-mount the
-  # HA config directory so this path is accessible.
-  db_path: /config/home-assistant_v2.db
+  # SQLAlchemy URL for the Home Assistant recorder database. A bare filesystem
+  # path is rejected: the scheme is required even for a local SQLite file, and
+  # note the four slashes for an absolute path (sqlite:/// plus /config/...).
+  # In a container, bind-mount the HA config directory so the path resolves.
+  #
+  # PostgreSQL:  postgresql+psycopg2://user:pass@host/homeassistant
+  #              (needs the pv-ml-learner-postgres extra)
+  # MariaDB:     mysql+pymysql://user:pass@host/homeassistant
+  #              (needs the pv-ml-learner-mysql extra)
+  db_url: sqlite:////config/home-assistant_v2.db
 
 # One entry per independently metered PV array. At least one array is required.
-# Add more entries here for installations with multiple inverters or arrays.
+# This is a mapping, not a list: the key is the array name, and it must match
+# the corresponding mimirheim pv_arrays device name.
 arrays:
-  - name: main
+  main:
     # Installed peak power in kWp. Predictions above peak_power_kwp * 1.1 are
     # clamped to this ceiling.
     peak_power_kwp: 5.2
 
     # MQTT topic to which the forecast is published (retained, mimirheim format).
-    # Derived from mimir_topic_prefix and array name when not set:
+    # Derived from mimir_topic_prefix and the map key when not set:
     #   mimir/input/pv/main/forecast
-    # The array name must match the corresponding mimirheim pv_arrays device name.
     # Override: output_topic: mimir/input/pv/main/forecast
 
     # One or more HA energy sensor entity IDs whose hourly production is summed
@@ -71,9 +78,9 @@ arrays:
     #   - binary_sensor.solaredge_export_limited
 
   # Uncomment and fill in to add a second array (e.g. roof-east + roof-west):
-  # - name: east
+  # east:
   #   peak_power_kwp: 3.0
-  #   output_topic: mimir/input/pv_forecast/east
+  #   output_topic: mimir/input/pv/east/forecast
   #   sum_entity_ids:
   #     - sensor.east_roof_energy_today
   #   model_path: /data/pv_ml_learner_east.joblib

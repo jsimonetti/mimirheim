@@ -36,35 +36,13 @@ reporting:
   # Must match reporting.notify_topic in the mimirheim configuration.
   notify_topic: "mimir/status/dump_available"
 
-# MQTT publishing of apex-charts-compatible chart and summary data.
-# Both topics are optional and independent.  Remove or leave as null to
-# disable publishing for that topic.
+# Note: reporter publishes no MQTT topics. It only subscribes to
+# reporting.notify_topic.
 #
-# chart_topic receives a JSON object with time-series arrays for use with
-# the apexcharts-card HA custom component.  Each series is a list of
-# [ISO-timestamp, value] pairs at 15-minute intervals.
-#
-# summary_topic receives a compact JSON object with scalar economic and
-# exchange statistics for the last solve (naive_cost_eur, saving_eur,
-# self_sufficiency_pct, grid_import_kwh, etc.).
-#
-# Both payloads are published retained so any HA dashboard that subscribes
-# receives the latest values immediately on load.
-chart_publishing:
-  chart_topic: "mimir/reporter/chart"
-  summary_topic: "mimir/reporter/summary"
-  # Maximum serialised payload size in bytes.  Payloads exceeding this limit
-  # are dropped with a WARNING log rather than published.  0 = unlimited.
-  max_payload_bytes: 65536
-
-# Home Assistant MQTT discovery for the chart and summary sensors.
-# When enabled, a single retained discovery payload is published to
-#   {discovery_prefix}/device/{device_id}/config
-# so HA creates both sensors automatically without manual YAML.
-# Requires Home Assistant 2024.2 or later.
-#
-# ha_discovery:
-#   enabled: true
-#   discovery_prefix: "homeassistant"
-#   device_id: null           # defaults to mqtt.client_id ("mimirheim-reporter")
-#   device_name: "mimirheim Reporter"
+# The chart_publishing and ha_discovery sections that used to live here have
+# been removed from the model, and this file used to still carry them -- which
+# made it fail validation on copy, since the config model sets extra="forbid".
+# The economic summary is published by mimirheim core on outputs.last_solve
+# (mimir/status/last_solve by default), and the chart time series is available
+# as Home Assistant MQTT sensor attributes. See wiki/Helpers/Reporter.md for
+# the apexcharts-card migration details.
