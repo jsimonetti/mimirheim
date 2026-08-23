@@ -6,17 +6,23 @@ Tests verify:
 - All registered jobs use CronTrigger triggers.
 - run() handles an empty schedule list without error.
 - run() publishes to the correct topic when a job fires.
+- A publish the broker never received raises, rather than logging success.
 """
 
+import logging
 import threading
-from datetime import datetime, timedelta, timezone
+import time
+from datetime import UTC, datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import paho.mqtt.client as mqtt
+import pytest
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 
-from scheduler.loop import run
+from scheduler.loop import _publish, run
 
 
 # ---------------------------------------------------------------------------
@@ -114,3 +120,93 @@ def test_run_publishes_when_job_fires() -> None:
 
     client.publish.assert_called_once_with("test/topic", payload=b"", qos=0, retain=False)
 
+# ---------------------------------------------------------------------------
+# publish failure
+# ---------------------------------------------------------------------------
+
+
+class _RcClient:
+    """A client whose publish() reports a paho result code without connecting."""
+
+    def __init__(self, rc: int) -> None:
+        self._rc = rc
+        self.calls: list[tuple] = []
+
+    def publish(self, topic, payload=None, qos=0, retain=False):  # noqa: ANN001, ANN201
+        self.calls.append((topic, payload, qos, retain))
+        return SimpleNamespace(rc=self._rc)
+
+
+def test_publish_is_silent_when_the_broker_accepts_the_message() -> None:
+    """A successful publish raises nothing and logs nothing at warning or above."""
+    client = _RcClient(mqtt.MQTT_ERR_SUCCESS)
+    _publish(client, "mimir/input/trigger")
+    assert client.calls == [("mimir/input/trigger", b"", 0, False)]
+
+
+def test_publish_raises_when_the_client_is_not_connected() -> None:
+    """paho drops a qos=0 publish while disconnected and only reports it in the rc."""
+    client = _RcClient(mqtt.MQTT_ERR_NO_CONN)
+    with pytest.raises(RuntimeError, match="not currently connected"):
+        _publish(client, "mimir/input/trigger")
+
+
+def test_publish_error_names_the_topic() -> None:
+    """The failure message identifies which trigger was lost."""
+    client = _RcClient(mqtt.MQTT_ERR_QUEUE_SIZE)
+    with pytest.raises(RuntimeError, match="mimir/input/tools/prices/trigger"):
+        _publish(client, "mimir/input/tools/prices/trigger")
+
+
+def _wait_for_log(
+    caplog: pytest.LogCaptureFixture, needle: str, timeout: float = 10.0
+) -> list[str]:
+    """Wait for a log record containing ``needle`` and return every message seen.
+
+    The event listener that logs a fire runs after the job function returns, on
+    APScheduler's executor thread. Sleeping a fixed interval instead of waiting
+    for the record is a race that a loaded CI runner loses.
+
+    Args:
+        caplog: The pytest log capture fixture.
+        needle: Substring identifying the record to wait for.
+        timeout: Seconds to wait before giving up.
+
+    Returns:
+        The messages captured so far, whether or not the needle appeared.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        messages = [r.getMessage() for r in caplog.records]
+        if any(needle in m for m in messages):
+            return messages
+        time.sleep(0.01)
+    return [r.getMessage() for r in caplog.records]
+
+
+def test_lost_trigger_is_not_logged_as_a_successful_trigger(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A trigger lost to a broker outage must not produce a success line.
+
+    Before this behaviour existed, publish() returned rc=4, the message went
+    nowhere, and the job still completed normally, so the scheduler logged
+    "Triggered <topic>" every cycle for the duration of the outage.
+    """
+    client = _RcClient(mqtt.MQTT_ERR_NO_CONN)
+    scheduler = BackgroundScheduler(timezone="UTC")
+    stop_event = threading.Event()
+    # Pre-set, so run() registers the job and returns without blocking. The
+    # injected scheduler keeps running, which lets the job be forced below.
+    stop_event.set()
+
+    with caplog.at_level(logging.DEBUG, logger="scheduler.loop"):
+        run(client, [("*/15 * * * *", "mimir/input/trigger")], stop_event,
+            _scheduler=scheduler)
+        job = scheduler.get_jobs()[0]
+        job.modify(next_run_time=datetime.now(tz=UTC) + timedelta(milliseconds=50))
+        messages = _wait_for_log(caplog, "raised an exception")
+        scheduler.shutdown()
+
+    assert any("raised an exception" in m for m in messages), messages
+    assert not any("Triggered mimir/input/trigger" in m for m in messages), messages

@@ -22,6 +22,7 @@ import logging
 import threading
 from typing import Any
 
+import paho.mqtt.client as mqtt
 from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED, JobExecutionEvent
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -37,11 +38,28 @@ def _publish(client: Any, topic: str) -> None:
     intentionally thin: all scheduling logic lives in APScheduler, and all
     MQTT connection management lives in __main__.py.
 
+    A qos=0 publish on a disconnected client does not raise; paho discards the
+    message and reports it only in the result code. Raising on a non-zero code
+    turns that into an ``EVENT_JOB_ERROR``, so the listener below reports the
+    trigger as lost instead of logging it as delivered.
+
+    The result code confirms the message reached the network loop, not that the
+    broker received it. At qos=0 there is no acknowledgement to wait for, so a
+    trigger can still be lost in transit without anything to report.
+
     Args:
         client: A paho-mqtt Client instance with loop_start() already called.
         topic: The MQTT topic to publish to.
+
+    Raises:
+        RuntimeError: If paho refused the message, most often because the
+            broker connection is down.
     """
-    client.publish(topic, payload=b"", qos=0, retain=False)
+    info = client.publish(topic, payload=b"", qos=0, retain=False)
+    if info.rc != mqtt.MQTT_ERR_SUCCESS:
+        raise RuntimeError(
+            f"MQTT publish to {topic!r} failed: {mqtt.error_string(info.rc)}"
+        )
 
 
 def run(
