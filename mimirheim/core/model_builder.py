@@ -848,7 +848,18 @@ def debug_dump(
                 "kw": _round4(sp.kw),
                 "type": sp.type,
             }
-            # Omit null-only fields; include only when present.
+            # Omit null-only fields; include only when present. A None here
+            # means the device has no such capability, which is worth
+            # distinguishing from a real value, so the key is left out rather
+            # than written as null.
+            #
+            # Every optional field on DeviceSetpoint must appear below. The
+            # reporter reads these files, so a field missing here is invisible
+            # to it: soc_kwh was consumed by the reporter for months while this
+            # writer never emitted it, and the fallback turned the absent key
+            # into a flat zero SOC chart rather than an error.
+            # tests/unit/test_debug_dump.py fails if a field is added to the
+            # model and forgotten here.
             if sp.power_limit_kw is not None:
                 entry["power_limit_kw"] = _round4(sp.power_limit_kw)
             if sp.zero_exchange_active is not None:
@@ -857,6 +868,10 @@ def debug_dump(
                 entry["on_off_active"] = sp.on_off_active
             if sp.loadbalance_active is not None:
                 entry["loadbalance_active"] = sp.loadbalance_active
+            if sp.pv_is_curtailed is not None:
+                entry["pv_is_curtailed"] = sp.pv_is_curtailed
+            if sp.soc_kwh is not None:
+                entry["soc_kwh"] = _round4(sp.soc_kwh)
             devices[name] = entry
 
         steps.append({
