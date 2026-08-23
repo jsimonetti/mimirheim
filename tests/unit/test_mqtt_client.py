@@ -113,3 +113,49 @@ class TestTriggerDebounce:
             client._on_message(None, None, normal_msg)    # should proceed
 
         assert q.qsize() == 1
+
+
+class TestFaultLogging:
+    """A failure on the paho network thread must be logged, not propagated."""
+
+    def test_parse_failure_leaves_readiness_untouched_and_logs(self, caplog) -> None:
+        """A malformed payload marks one topic stale and nothing more.
+
+        The handler runs on the paho network thread. Letting the exception
+        escape would stop mimirheim reading every other topic, so it is caught
+        and logged. The message must name the topic and the reason, because
+        that is all an operator gets at the default log level.
+        """
+        import logging
+
+        client = _make_mqtt_client()
+        msg = MagicMock()
+        msg.retain = False
+        msg.topic = "home/bat/soc"
+        msg.payload = b"not-a-number"
+
+        with caplog.at_level(logging.WARNING, logger="mimirheim.mqtt"):
+            client._on_message(MagicMock(), None, msg)
+
+        client._readiness.update.assert_not_called()
+        assert "home/bat/soc" in caplog.text
+
+    def test_snapshot_failure_is_logged_with_a_traceback(self, caplog) -> None:
+        """A failed bundle assembly must record the traceback.
+
+        snapshot() touches every configured device, so the exception message
+        on its own rarely identifies which one is at fault.
+        """
+        import logging
+        import queue as queue_mod
+
+        q: queue_mod.Queue = queue_mod.Queue()
+        client = _make_mqtt_client(solve_queue=q)
+        client._readiness.snapshot.side_effect = ValueError("boom")
+
+        with caplog.at_level(logging.ERROR, logger="mimirheim.mqtt"):
+            client._on_message(MagicMock(), None, _make_trigger_msg())
+
+        assert q.empty()
+        assert "Traceback" in caplog.text
+        assert "boom" in caplog.text

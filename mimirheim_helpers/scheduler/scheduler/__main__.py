@@ -64,12 +64,12 @@ def _make_paho_client(config: SchedulerConfig) -> paho.Client:
         reason_code: object,
         properties: object,
     ) -> None:
-        if reason_code == 0:
+        if reason_code.is_failure:
+            logger.warning("MQTT connection failed: reason_code=%s", reason_code)
+        else:
             logger.info(
                 "Connected to MQTT broker %s:%d.", config.mqtt.host, config.mqtt.port
             )
-        else:
-            logger.warning("MQTT connection failed: reason_code=%s", reason_code)
 
     def _on_disconnect(
         cl: paho.Client,

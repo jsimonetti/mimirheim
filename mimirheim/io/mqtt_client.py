@@ -292,8 +292,15 @@ class MqttClient:
                         self._solve_queue.put_nowait(bundle)
                     except queue.Full:
                         logger.debug("Solve queue full; trigger on %r discarded.", topic)
-                    except Exception as exc:  # noqa: BLE001 — snapshot errors must not crash
-                        logger.error("Failed to assemble SolveBundle on trigger: %s", exc)
+                    except Exception:
+                        # Deliberately broad. This runs on the paho network
+                        # thread, so an escaping exception would take down MQTT
+                        # handling entirely and the daemon would go deaf rather
+                        # than merely skip a solve. Assembling a bundle touches
+                        # every configured device, so the traceback is the only
+                        # thing that identifies which one failed; logger.exception
+                        # records it in full.
+                        logger.exception("Failed to assemble SolveBundle on trigger.")
                 else:
                     reason = self._readiness.not_ready_reason()
                     logger.warning(
@@ -316,8 +323,23 @@ class MqttClient:
         try:
             validated_input = handler(payload)
             self._readiness.update(topic, validated_input)
-        except Exception as exc:  # noqa: BLE001 — log all parse errors, re-raise nothing
-            logger.warning("Failed to parse message on topic %r: %s", topic, exc)
+        except Exception as exc:
+            # Deliberately broad, for the same reason as the trigger handler:
+            # this runs on the paho network thread. A device publishing a
+            # malformed payload must leave that one topic stale, not stop
+            # mimirheim from reading every other topic.
+            #
+            # The traceback is attached only at DEBUG. A sensor stuck on a bad
+            # payload republishes on every cycle, and a full traceback each
+            # time would bury the rest of the log. The exception message
+            # already names the field and the reason for a Pydantic
+            # ValidationError, which is the common case.
+            logger.warning(
+                "Failed to parse message on topic %r: %s",
+                topic,
+                exc,
+                exc_info=logger.isEnabledFor(logging.DEBUG),
+            )
 
 
     # ------------------------------------------------------------------

@@ -130,6 +130,104 @@ class ObjectiveBuilder:
                     grid.export_[t] <= config.constraints.max_export_kw
                 )
 
+    def _cost_objective_terms(
+        self,
+        ctx: ModelContext,
+        devices: list[Any],
+        grid: Grid,
+        bundle: SolveBundle,
+        config: MimirheimConfig,
+    ) -> list[Any]:
+        """Build the confidence-weighted cost objective as a list of terms.
+
+        Shared by ``_minimize_cost`` and by phase 2 of
+        ``_minimize_consumption``, which optimise exactly the same expression.
+        Phase 2 differs only in the import-volume constraint added before it,
+        not in the objective itself, so the two must not be allowed to drift
+        apart.
+
+        Terms are produced in step order, each step contributing its economic
+        term followed by the wear terms of every device, then the terminal SoC
+        and exchange-shaping terms at the end. The order is part of the
+        contract: floating-point addition is not associative, so reordering can
+        shift the objective in the last bits and change which of two equally
+        good schedules the solver returns.
+
+        Args:
+            ctx: Model context.
+            devices: Non-grid devices contributing wear and terminal SoC terms.
+            grid: Grid device providing import and export variables.
+            bundle: Runtime inputs with prices and per-step confidence.
+            config: Static configuration.
+
+        Returns:
+            The objective terms, ready to pass to ``_set_objective``. May be
+            empty when every term is a numeric zero.
+        """
+        terms: list[Any] = []
+        for t in ctx.T:
+            economic = weight_by_confidence(
+                bundle.horizon_prices[t] * grid.import_[t]
+                - bundle.horizon_export_prices[t] * grid.export_[t],
+                bundle.horizon_confidence[t],
+            )
+            # weight_by_confidence returns Python int 0 when confidence == 0;
+            # only append solver expressions (non-numeric values).
+            if not isinstance(economic, (int, float)):
+                terms.append(economic)
+            for d in devices:
+                terms.extend(self._wear_terms(d, t))
+
+        terms.extend(self._terminal_soc_terms(ctx, devices, bundle))
+        terms.extend(self._exchange_shaping_terms(ctx, grid, config))
+        return terms
+
+    @staticmethod
+    def _wear_terms(device: Any, t: int) -> list[Any]:
+        """Return a device's objective terms at step ``t`` as a flat list.
+
+        ``Device.objective_terms`` has three possible return shapes: a scalar
+        zero when the device has no cost to contribute, a single solver
+        expression, or a list of expressions. Numeric values are dropped rather
+        than added, because adding a Python int to a solver expression is
+        pointless work and some backends object to it.
+
+        Args:
+            device: Any device implementing ``objective_terms(t)``.
+            t: Time step index.
+
+        Returns:
+            Zero or more solver expressions.
+        """
+        wear = device.objective_terms(t)
+        if isinstance(wear, list):
+            return [w for w in wear if not isinstance(w, (int, float))]
+        if isinstance(wear, (int, float)):
+            return []
+        return [wear]
+
+    @staticmethod
+    def _set_objective(ctx: ModelContext, terms: list[Any]) -> None:
+        """Sum ``terms`` and set the result as the minimisation objective.
+
+        An empty list means every contribution was a numeric zero, which
+        happens when confidence is zero at every step and no device has a wear
+        cost. A constant objective is set instead, leaving the solver to return
+        any feasible schedule.
+
+        Args:
+            ctx: Model context holding the solver.
+            terms: Solver expressions to sum, in the order they should be
+                added. See ``_cost_objective_terms`` on why order matters.
+        """
+        if not terms:
+            ctx.solver.set_objective_minimize(0)
+            return
+        obj: Any = terms[0]
+        for term in terms[1:]:
+            obj = obj + term
+        ctx.solver.set_objective_minimize(obj)
+
     def _minimize_cost(
         self,
         ctx: ModelContext,
@@ -182,41 +280,9 @@ class ObjectiveBuilder:
             bundle: Runtime inputs with prices and confidence per step.
             config: Static configuration containing objective weights.
         """
-        obj_terms: list[Any] = []
-        for t in ctx.T:
-            economic = weight_by_confidence(
-                bundle.horizon_prices[t] * grid.import_[t]
-                - bundle.horizon_export_prices[t] * grid.export_[t],
-                bundle.horizon_confidence[t],
-            )
-            # weight_by_confidence returns Python int 0 when confidence==0;
-            # only append solver expressions (non-numeric values).
-            if not isinstance(economic, (int, float)):
-                obj_terms.append(economic)
-            for d in devices:
-                wear = d.objective_terms(t)
-                # objective_terms may return a scalar 0 (no wear cost), a
-                # single solver expression, or a list of solver expressions.
-                if isinstance(wear, list):
-                    obj_terms.extend(
-                        w for w in wear if not isinstance(w, (int, float))
-                    )
-                elif not isinstance(wear, (int, float)):
-                    obj_terms.append(wear)
-
-        for term in self._terminal_soc_terms(ctx, devices, bundle):
-            obj_terms.append(term)
-
-        for term in self._exchange_shaping_terms(ctx, grid, config):
-            obj_terms.append(term)
-
-        if obj_terms:
-            obj: Any = obj_terms[0]
-            for term in obj_terms[1:]:
-                obj = obj + term
-            ctx.solver.set_objective_minimize(obj)
-        else:
-            ctx.solver.set_objective_minimize(0)
+        self._set_objective(
+            ctx, self._cost_objective_terms(ctx, devices, grid, bundle, config)
+        )
 
     def _minimize_consumption(
         self,
@@ -291,6 +357,13 @@ class ObjectiveBuilder:
         # The slack prevents numeric infeasibility if the phase-1 optimal value
         # is fractionally below the sum of individual var_value readings.
         i_star = sum(ctx.solver.var_value(v) for v in import_vars)
+
+        # Build the same sum a second time rather than reusing import_sum.
+        # mip.minimize() mutates the expression it is handed, stamping a sense
+        # of "MIN" onto it, so the object above is no longer a neutral linear
+        # expression. Feeding it into a constraint happens to work today, but
+        # relying on that couples this code to an implementation detail of the
+        # backend that SolverBackend exists to hide.
         import_sum_for_constr: Any = import_vars[0]
         for v in import_vars[1:]:
             import_sum_for_constr = import_sum_for_constr + v
@@ -300,39 +373,9 @@ class ObjectiveBuilder:
         # import volume from Phase 1. This shifts imports to the cheapest time slots
         # and simultaneously maximises export revenue. Device wear cost and terminal
         # SoC value are included exactly as in _minimize_cost.
-        obj_terms: list[Any] = []
-        for t in ctx.T:
-            economic = weight_by_confidence(
-                bundle.horizon_prices[t] * grid.import_[t]
-                - bundle.horizon_export_prices[t] * grid.export_[t],
-                bundle.horizon_confidence[t],
-            )
-            # weight_by_confidence returns Python int 0 when confidence == 0;
-            # only append solver expressions.
-            if not isinstance(economic, (int, float)):
-                obj_terms.append(economic)
-            for d in devices:
-                wear = d.objective_terms(t)
-                if isinstance(wear, list):
-                    obj_terms.extend(
-                        w for w in wear if not isinstance(w, (int, float))
-                    )
-                elif not isinstance(wear, (int, float)):
-                    obj_terms.append(wear)
-
-        for term in self._terminal_soc_terms(ctx, devices, bundle):
-            obj_terms.append(term)
-
-        for term in self._exchange_shaping_terms(ctx, grid, config):
-            obj_terms.append(term)
-
-        if obj_terms:
-            obj: Any = obj_terms[0]
-            for term in obj_terms[1:]:
-                obj = obj + term
-            ctx.solver.set_objective_minimize(obj)
-        else:
-            ctx.solver.set_objective_minimize(0)
+        self._set_objective(
+            ctx, self._cost_objective_terms(ctx, devices, grid, bundle, config)
+        )
 
         return config.solver.time_limit_seconds - phase_budget
 
@@ -397,31 +440,14 @@ class ObjectiveBuilder:
         # Device wear cost terms (unconditional, not confidence-weighted).
         for t in ctx.T:
             for d in devices:
-                wear = d.objective_terms(t)
-                # objective_terms may return a scalar 0 (no wear cost), a
-                # single solver expression, or a list of solver expressions.
-                if isinstance(wear, list):
-                    cost_terms.extend(
-                        w for w in wear if not isinstance(w, (int, float))
-                    )
-                elif not isinstance(wear, (int, float)):
-                    cost_terms.append(wear)
+                cost_terms.extend(self._wear_terms(d, t))
 
         # Terminal SoC value: preserves stored energy across the horizon
         # boundary. Same semantics as in _minimize_cost.
-        for term in self._terminal_soc_terms(ctx, devices, bundle):
-            cost_terms.append(term)
+        cost_terms.extend(self._terminal_soc_terms(ctx, devices, bundle))
+        cost_terms.extend(self._exchange_shaping_terms(ctx, grid, config))
 
-        for term in self._exchange_shaping_terms(ctx, grid, config):
-            cost_terms.append(term)
-
-        if cost_terms:
-            obj: Any = cost_terms[0]
-            for term in cost_terms[1:]:
-                obj = obj + term
-            ctx.solver.set_objective_minimize(obj)
-        else:
-            ctx.solver.set_objective_minimize(0)
+        self._set_objective(ctx, cost_terms)
 
     def _exchange_shaping_terms(
         self,

@@ -107,7 +107,8 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
            ``bundle.horizon_prices``.
         2. Create a fresh ``CBCSolverBackend`` and ``ModelContext``.
         3. Instantiate all device objects from ``config``.
-        4. Call ``add_variables(ctx)`` on all devices.
+        4. Give every group of two or more batteries or EV chargers a shared
+           direction binary, then call ``add_variables(ctx)`` on all devices.
         5. Call ``add_constraints(ctx, inputs)`` on all devices, passing the
            relevant slice of ``bundle`` to each.
         6. Add the power balance constraint for each time step:
@@ -185,11 +186,6 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
         *hybrid_inverters, *thermal_boilers, *space_heating_hps, *combi_heat_pumps,
     ]
 
-    # --- Add variables ---
-    grid.add_variables(ctx)
-    for device in all_devices:
-        device.add_variables(ctx)
-
     # --- Shared system direction binaries (anti-roundtrip) ---
     #
     # When two or more batteries are present, they could individually choose
@@ -206,11 +202,16 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
     # scale — and enforces the physical principle that energy should not loop.
     #
     # When only one battery is present the constraint is unnecessary; the
-    # per-device mode from add_variables is used unchanged.
+    # per-device mode created by add_variables is used unchanged.
     #
     # The same logic applies to EV chargers regardless of V2H capability.
     # For charge-only EVs the discharge bound is trivially non-binding, so
     # the shared variable is harmless but maintains uniform activation logic.
+    #
+    # This runs before add_variables so that a device handed a shared binary
+    # never creates a per-device one. Creating both would leave one free
+    # integer variable per step per device in the model, referenced by no
+    # constraint and no objective term.
     if len(batteries) >= 2:
         bat_shared_mode = {
             t: ctx.solver.add_var(lb=0.0, ub=1.0, integer=True)
@@ -226,6 +227,11 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
         }
         for ev in ev_devices:
             ev.set_external_mode(ev_shared_mode)
+
+    # --- Add variables ---
+    grid.add_variables(ctx)
+    for device in all_devices:
+        device.add_variables(ctx)
 
     # --- Add constraints ---
     grid.add_constraints(ctx, inputs=None)

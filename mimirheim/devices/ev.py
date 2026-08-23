@@ -145,7 +145,13 @@ class EvDevice:
                 # discharging. Required to prevent the LP from simultaneously
                 # charging and discharging (see battery.py for a full
                 # explanation of the Big-M pattern).
-                self.mode[t] = ctx.solver.add_var(lb=0.0, ub=1.0, integer=True)
+                #
+                # Skipped when build_and_solve has already installed a shared
+                # system-wide direction binary via set_external_mode; creating
+                # one here as well would leave a free integer variable per step
+                # that no constraint references.
+                if t not in self.mode:
+                    self.mode[t] = ctx.solver.add_var(lb=0.0, ub=1.0, integer=True)
 
             # soc[t]: vehicle state of charge at end of step t, in kWh.
             # Bounded by [min_soc_kwh, capacity_kwh] to protect the battery
@@ -462,8 +468,10 @@ class EvDevice:
         the activation logic is uniform across all EV chargers regardless of
         V2H capability.
 
-        This method must be called after ``add_variables`` and before
-        ``add_constraints``.
+        Must be called before ``add_variables``. ``add_variables`` skips
+        creating a per-device binary for any step already present in
+        ``self.mode``, so calling in that order leaves no orphaned variables
+        behind.
 
         Args:
             mode_vars: Dict mapping step index ``t`` to the shared binary

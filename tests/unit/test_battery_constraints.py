@@ -939,3 +939,38 @@ def test_battery_both_power_floors_discharge_floor_enforced_when_active() -> Non
     assert discharge >= 1.5 - 1e-6, (
         f"discharge={discharge:.4f} violates min_discharge_kw=1.5 once active"
     )
+
+
+def test_battery_skips_its_own_mode_binary_when_a_shared_one_is_supplied() -> None:
+    """A battery handed a shared direction binary must not create its own.
+
+    build_and_solve installs one system-wide direction binary when two or more
+    batteries are present, so that they cannot roundtrip energy between
+    themselves. If add_variables still created a per-device binary, the model
+    would carry one free integer variable per step per battery, referenced by
+    no constraint and priced by no objective term.
+    """
+    ctx = _make_ctx(horizon=8)
+    shared = {t: ctx.solver.add_var(lb=0.0, ub=1.0, integer=True) for t in ctx.T}
+    int_count_before = ctx.solver.model_stats()[2]
+
+    battery = Battery(name="bat", config=_config())
+    battery.set_external_mode(shared)
+    battery.add_variables(ctx)
+
+    assert ctx.solver.model_stats()[2] == int_count_before, (
+        "add_variables created integer variables despite a shared mode being set"
+    )
+    assert battery.mode == shared
+
+
+def test_battery_creates_its_own_mode_binary_when_alone() -> None:
+    """Without a shared binary the battery must still declare its own."""
+    ctx = _make_ctx(horizon=8)
+    int_count_before = ctx.solver.model_stats()[2]
+
+    battery = Battery(name="bat", config=_config())
+    battery.add_variables(ctx)
+
+    assert ctx.solver.model_stats()[2] == int_count_before + 8
+    assert sorted(battery.mode) == list(range(8))

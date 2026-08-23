@@ -35,6 +35,7 @@ from typing import Any
 
 from mimirheim.config.schema import CombiHeatPumpConfig
 from mimirheim.core.bundle import CombiHeatPumpInputs
+from mimirheim.core.building_thermal import add_building_thermal_constraints
 from mimirheim.core.context import ModelContext
 
 # Specific heat capacity of water: 4186 J/(kg·K) = 4186/3600/1000 kWh/(L·K).
@@ -259,19 +260,15 @@ class CombiHeatPumpDevice:
         SH mode binary sh_mode[t]. DHW mode steps (sh_mode[t]=0) deliver no
         heat to the building; the building cools naturally during those steps.
 
-        The dynamics equation for step t:
+        The dynamics themselves are shared with ``SpaceHeatingDevice`` and live
+        in ``core.building_thermal``; see that module for the equation and its
+        coefficients. This method supplies the part that differs, the thermal
+        power expression:
 
-            T_indoor[t] = alpha * T_prev
-                        + (dt / C) * P_heat_sh[t]
-                        + beta_outdoor * T_outdoor[t]
+            ``P_heat_sh[t] = elec_power_kw * cop_sh * sh_mode[t]``
 
-        where:
-            P_heat_sh[t] = elec_power_kw * cop_sh * sh_mode[t]
-            alpha        = 1 - dt * L / C
-            beta_outdoor = dt * L / C
-
-        When sh_mode[t]=0 (HP off or in DHW mode), P_heat_sh=0 and the building
-        cools toward outdoor temperature at the natural rate set by alpha.
+        When ``sh_mode[t] = 0`` (the HP is off or in DHW mode) that is zero and
+        the building cools toward outdoor temperature at the natural rate.
 
         Comfort bounds [comfort_min_c, comfort_max_c] are enforced by the
         variable bounds declared in add_variables.
@@ -286,54 +283,25 @@ class CombiHeatPumpDevice:
                 or if current_indoor_temp_c is None.
         """
         cfg = self.config
-        btm = cfg.building_thermal  # type: ignore[union-attr]
-        H = len(ctx.T)
 
-        if inputs.current_indoor_temp_c is None:
-            raise ValueError(
-                f"Device '{self.name}': building_thermal is configured but "
-                "current_indoor_temp_c is None in CombiHeatPumpInputs."
-            )
-        if inputs.outdoor_temp_forecast_c is None or len(inputs.outdoor_temp_forecast_c) < H:
-            have = len(inputs.outdoor_temp_forecast_c) if inputs.outdoor_temp_forecast_c else 0
-            raise ValueError(
-                f"Device '{self.name}': outdoor_temp_forecast_c has {have} values "
-                f"but the horizon requires {H}."
-            )
+        def heat_power_kw(t: int) -> Any:
+            """Thermal power delivered to the building at step t, in kW.
 
-        C = btm.thermal_capacity_kwh_per_k
-        L = btm.heat_loss_coeff_kw_per_k
-        dt = ctx.dt
+            Linear in sh_mode[t]. On a DHW step sh_mode[t] is 0 and the
+            building receives nothing, so it cools toward outdoor temperature
+            at the natural rate that alpha sets.
+            """
+            return (cfg.elec_power_kw * cfg.cop_sh) * self._sh_mode[t]
 
-        alpha = 1.0 - dt * L / C
-        beta_outdoor = dt * L / C
-        dt_over_C = dt / C
-
-        # Coefficient: thermal power to temperature rise per step.
-        # P_heat_sh[t] = elec_power_kw * cop_sh kW; multiply by dt_over_C for °C rise.
-        p_heat_coeff = cfg.elec_power_kw * cfg.cop_sh  # kW per unit sh_mode step
-
-        for t in ctx.T:
-            if t == 0:
-                t_prev = inputs.current_indoor_temp_c
-            else:
-                t_prev = self._T_indoor[t - 1]
-
-            T_outdoor_t = inputs.outdoor_temp_forecast_c[t]
-
-            # P_heat_sh is linear: elec_power_kw * cop_sh * sh_mode[t]
-            p_heat_expr = p_heat_coeff * self._sh_mode[t]
-
-            rhs = beta_outdoor * T_outdoor_t
-            if t == 0:
-                rhs += alpha * t_prev  # type: ignore[operator]
-                ctx.solver.add_constraint(
-                    self._T_indoor[t] - dt_over_C * p_heat_expr == rhs
-                )
-            else:
-                ctx.solver.add_constraint(
-                    self._T_indoor[t] - dt_over_C * p_heat_expr - alpha * t_prev == rhs
-                )
+        add_building_thermal_constraints(
+            ctx,
+            device_name=self.name,
+            btm=cfg.building_thermal,  # type: ignore[arg-type]
+            indoor_temp=self._T_indoor,
+            current_indoor_temp_c=inputs.current_indoor_temp_c,
+            outdoor_temp_forecast_c=inputs.outdoor_temp_forecast_c,
+            heat_power_kw=heat_power_kw,
+        )
 
     def _add_min_run_constraints(self, ctx: ModelContext) -> None:
         """Add minimum consecutive run length constraints based on hp_on[t].
