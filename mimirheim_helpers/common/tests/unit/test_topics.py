@@ -8,7 +8,6 @@ hardcoded string.
 
 from __future__ import annotations
 
-import pytest
 import helper_common.topics as topics
 
 

@@ -107,6 +107,7 @@ packages = [
 
 [dependency-groups]
 dev = [
+    "ruff>=0.14",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "pytest-benchmark>=4.0",
@@ -116,6 +117,31 @@ dev = [
     "respx>=0.21",
     "jinja2>=3.0",
 ]
+
+[tool.ruff]
+# Match the interpreter the project targets, so ruff does not suggest syntax
+# that 3.12 cannot run.
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+# Deliberately narrow. These four families catch real defects rather than
+# style preferences, and the tree is clean under them, so the CI gate is
+# meaningful from the first commit rather than a wall of pre-existing noise.
+#
+#   F   pyflakes: undefined names, unused imports, dead local variables.
+#   E9  syntax and IO errors only. The rest of pycodestyle is formatting and
+#       is left out on purpose; this project does not run a formatter.
+#   B   bugbear: mutable default arguments, zip() without strict, except
+#       clauses that swallow the original error.
+#
+# RUF100 (unused noqa directives) is deliberately absent. With a narrow select
+# list most existing `# noqa` comments name rules that are not enabled, and
+# they are worth keeping: `# noqa: S307` on a deliberate eval documents the
+# decision whether or not the security rules run today.
+#
+# Widen this list only together with the work to make the tree pass it.
+select = ["F", "E9", "B"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

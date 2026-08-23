@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import paho.mqtt.client as mqtt
 import pytest

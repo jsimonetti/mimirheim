@@ -65,10 +65,10 @@ class SchedulerConfig(BaseModel):
             cron_expr = next(iter(entry))
             try:
                 CronTrigger.from_crontab(cron_expr, timezone="UTC")
-            except ValueError:
+            except ValueError as exc:
                 raise ValueError(
                     f"schedules[{i}] has invalid cron expression: {cron_expr!r}"
-                )
+                ) from exc
         return v
 
     @model_validator(mode="after")

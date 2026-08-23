@@ -5,7 +5,7 @@ Covers MQTT publish behaviour including retention and mimirheim signalling.
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
 import pytest
 

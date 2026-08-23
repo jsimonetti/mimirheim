@@ -147,8 +147,11 @@ def fetch_knmi_hours(
         # Some responses omit the STN column when only one station is requested.
         stn_series = None
 
+    # strict=True: all five series are columns of the same DataFrame, so a
+    # length mismatch means the frame was built wrong and silently dropping
+    # rows would corrupt the training set.
     for idx_ts, q_raw, fh_raw, t_raw, rh_raw in zip(
-        df.index, q_series, fh_series, t_series, rh_series
+        df.index, q_series, fh_series, t_series, rh_series, strict=True
     ):
         q_val = int(q_raw) if not pd.isna(q_raw) else _KNMI_MISSING
 

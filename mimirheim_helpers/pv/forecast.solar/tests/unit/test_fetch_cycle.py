@@ -13,7 +13,6 @@ import inspect
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from helper_common.cycle import CycleResult
 from pv_fetcher.__main__ import PvFetcherDaemon

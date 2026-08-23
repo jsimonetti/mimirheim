@@ -194,12 +194,31 @@ def test_deferrable_load_net_power_negative() -> None:
 
 def test_deferrable_load_running_has_fixed_draw() -> None:
     """When start_time falls within the current horizon, the steps still running
-    must contribute the correct profile power. No binary variable is used."""
+    must contribute the correct profile power. No binary variable is used.
+
+    The load began one step before the horizon, so one step of its two-step
+    profile is left. The solver must not be given a start decision to make: the
+    appliance is already running and mimirheim cannot move it.
+    """
     solve_time = _now()
     # Load started one step ago; 1 step of flat profile (1.5 kW) remains.
     start_time = solve_time - timedelta(minutes=15)
     ctx = _make_ctx(horizon=8)
     load = DeferrableLoad(name="wash", config=_config(flat_kw=1.5, duration_steps=2))
+    load.add_variables(ctx)
+    load.add_constraints(
+        ctx,
+        window=None,
+        solve_time_utc=solve_time,
+        start_time=start_time,
+    )
+
+    assert len(load.start) == 0, "a running load must not get a start decision"
+
+    # Step 0 consumes the final profile entry; everything after is idle.
+    assert load.net_power(0) == pytest.approx(-1.5)
+    for t in range(1, 8):
+        assert load.net_power(t) == pytest.approx(0.0), f"step {t} should be idle"
 
 
 def test_deferrable_load_running_all_steps_remaining() -> None:

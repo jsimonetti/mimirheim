@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import html
 from datetime import datetime, timedelta
-from typing import Any
 
 import plotly.graph_objects as go
 

@@ -6,7 +6,7 @@ QoS settings, retain flags, and JSON payloads of publish() calls.
 
 import json
 from datetime import UTC, datetime
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -92,8 +92,7 @@ def test_publishes_schedule_topic() -> None:
         if c.args[0] == config.outputs.schedule
     ]
     assert len(schedule_calls) == 1
-    _, kwargs = schedule_calls[0].args[0], schedule_calls[0]
-    assert schedule_calls[0].kwargs.get("retain", schedule_calls[0].args[3] if len(schedule_calls[0].args) > 3 else None) or True  # retain check below
+    # Retain and QoS are asserted by test_publishes_schedule_topic_retain_and_qos.
     # Verify payload is valid JSON.
     payload = schedule_calls[0].args[1]
     parsed = json.loads(payload)
@@ -908,7 +907,7 @@ def test_publishes_pv_on_off_mode_false_when_off() -> None:
 
 def test_pv_on_off_mode_not_published_when_on_off_active_is_none() -> None:
     """on_off_mode is not published when on_off_active is None (capability not configured)."""
-    from mimirheim.config.schema import PvCapabilitiesConfig, PvConfig, PvOutputsConfig
+    from mimirheim.config.schema import PvConfig
 
     mock_client = MagicMock()
     config = MimirheimConfig(

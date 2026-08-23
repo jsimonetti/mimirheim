@@ -24,14 +24,14 @@ dependency.
 """
 
 import json
-from typing import Union
+from datetime import datetime, timezone
 
 from mimirheim.core.bundle import PowerForecastStep, PriceStep
 
 _VALID_STRATEGIES = {"minimize_cost", "minimize_consumption", "balanced"}
 
 
-def _decode(payload: Union[bytes, str]) -> str:
+def _decode(payload: bytes | str) -> str:
     """Decode bytes to str if necessary.
 
     Args:
@@ -45,7 +45,7 @@ def _decode(payload: Union[bytes, str]) -> str:
     return payload
 
 
-def _parse_json(payload: Union[bytes, str]) -> object:
+def _parse_json(payload: bytes | str) -> object:
     """Parse a JSON payload and raise ValueError on failure.
 
     Args:
@@ -63,7 +63,7 @@ def _parse_json(payload: Union[bytes, str]) -> object:
         raise ValueError(f"Invalid JSON payload: {exc}") from exc
 
 
-def parse_battery_inputs(payload: Union[bytes, str]) -> float:
+def parse_battery_inputs(payload: bytes | str) -> float:
     """Parse a battery state-of-charge payload into a float kWh value.
 
     The payload must be a plain numeric string or a JSON number.
@@ -89,7 +89,7 @@ def parse_battery_inputs(payload: Union[bytes, str]) -> float:
         raise ValueError(f"Battery SOC payload is not a valid number: {text!r}") from exc
 
 
-def parse_ev_inputs(payload: Union[bytes, str]) -> float:
+def parse_ev_inputs(payload: bytes | str) -> float:
     """Parse an EV state-of-charge payload into a float kWh value.
 
     The payload must be a plain numeric string or a JSON number.
@@ -119,7 +119,7 @@ def parse_ev_inputs(payload: Union[bytes, str]) -> float:
         raise ValueError(f"EV SOC payload is not a valid number: {text!r}") from exc
 
 
-def parse_price_steps(payload: Union[bytes, str]) -> list[PriceStep]:
+def parse_price_steps(payload: bytes | str) -> list[PriceStep]:
     """Parse a timestamped electricity price forecast into a list of PriceStep objects.
 
     Expected payload: a JSON array of objects, each with ``ts``,
@@ -158,7 +158,7 @@ def parse_price_steps(payload: Union[bytes, str]) -> list[PriceStep]:
     return [PriceStep.model_validate(item) for item in data]
 
 
-def parse_power_forecast(payload: Union[bytes, str]) -> list[PowerForecastStep]:
+def parse_power_forecast(payload: bytes | str) -> list[PowerForecastStep]:
     """Parse a timestamped power forecast (PV or static load) into PowerForecastStep objects.
 
     Expected payload: a JSON array of objects, each with ``ts``, ``kw``,
@@ -193,7 +193,7 @@ def parse_power_forecast(payload: Union[bytes, str]) -> list[PowerForecastStep]:
     return [PowerForecastStep.model_validate(item) for item in data]
 
 
-def parse_datetime(payload: Union[bytes, str]) -> "datetime":
+def parse_datetime(payload: bytes | str) -> datetime:
     """Parse an ISO 8601 UTC datetime payload.
 
     Used for deferrable load window endpoints and the ``topic_committed_start_time``
@@ -220,11 +220,9 @@ def parse_datetime(payload: Union[bytes, str]) -> "datetime":
     Raises:
         ValueError: If the payload cannot be parsed as a datetime.
     """
-    from datetime import datetime as _datetime, timezone as _tz
-
     text = _decode(payload).strip().strip('"')
     try:
-        dt = _datetime.fromisoformat(text)
+        dt = datetime.fromisoformat(text)
     except ValueError as exc:
         raise ValueError(f"Cannot parse datetime from payload {payload!r}: {exc}") from exc
 
@@ -233,12 +231,12 @@ def parse_datetime(payload: Union[bytes, str]) -> "datetime":
         # Treat naive values as UTC so downstream arithmetic against
         # solve_time_utc (which is always timezone-aware) does not raise
         # TypeError.
-        dt = dt.replace(tzinfo=_tz.utc)
+        dt = dt.replace(tzinfo=timezone.utc)
 
     return dt
 
 
-def parse_strategy(payload: Union[bytes, str]) -> str:
+def parse_strategy(payload: bytes | str) -> str:
     """Parse the ``{prefix}/input/strategy`` payload.
 
     Accepts either a plain text strategy name::
@@ -279,7 +277,7 @@ def parse_strategy(payload: Union[bytes, str]) -> str:
     return strategy
 
 
-def parse_hybrid_inverter_soc(payload: Union[bytes, str]) -> float:
+def parse_hybrid_inverter_soc(payload: bytes | str) -> float:
     """Parse a hybrid inverter battery state-of-charge payload.
 
     The payload must be a plain numeric string or a JSON number. This function
@@ -305,7 +303,7 @@ def parse_hybrid_inverter_soc(payload: Union[bytes, str]) -> float:
         ) from exc
 
 
-def parse_thermal_boiler_temp(payload: Union[bytes, str]) -> float:
+def parse_thermal_boiler_temp(payload: bytes | str) -> float:
     """Parse a thermal boiler water temperature payload.
 
     The payload must be a plain numeric string or a JSON number representing
@@ -330,7 +328,7 @@ def parse_thermal_boiler_temp(payload: Union[bytes, str]) -> float:
         ) from exc
 
 
-def parse_space_heating_demand(payload: Union[bytes, str]) -> float:
+def parse_space_heating_demand(payload: bytes | str) -> float:
     """Parse a space heating demand payload.
 
     The payload must be a plain numeric string or a JSON number representing
@@ -364,7 +362,7 @@ def parse_space_heating_demand(payload: Union[bytes, str]) -> float:
     return value
 
 
-def parse_combi_hp_temp(payload: Union[bytes, str]) -> float:
+def parse_combi_hp_temp(payload: bytes | str) -> float:
     """Parse a combined heat pump DHW tank temperature payload.
 
     The payload must be a plain numeric string or a JSON number representing
@@ -389,7 +387,7 @@ def parse_combi_hp_temp(payload: Union[bytes, str]) -> float:
         ) from exc
 
 
-def parse_combi_hp_sh_demand(payload: Union[bytes, str]) -> float:
+def parse_combi_hp_sh_demand(payload: bytes | str) -> float:
     """Parse a combined heat pump space heating demand payload.
 
     The payload must be a plain numeric string or a JSON number representing
@@ -420,7 +418,7 @@ def parse_combi_hp_sh_demand(payload: Union[bytes, str]) -> float:
     return value
 
 
-def parse_current_indoor_temp(payload: Union[bytes, str]) -> float:
+def parse_current_indoor_temp(payload: bytes | str) -> float:
     """Parse a current indoor temperature payload.
 
     The payload is either a plain numeric string or a JSON object with a
@@ -475,7 +473,7 @@ def parse_current_indoor_temp(payload: Union[bytes, str]) -> float:
         ) from exc
 
 
-def parse_outdoor_temp_forecast(payload: Union[bytes, str]) -> list[float]:
+def parse_outdoor_temp_forecast(payload: bytes | str) -> list[float]:
     """Parse a per-step outdoor temperature forecast payload.
 
     The payload is a JSON array of floats, one value per 15-minute horizon

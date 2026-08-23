@@ -8,11 +8,9 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, call
 
-import pytest
 
-from zonneplan_prices.api import AuthError
 from zonneplan_prices.auth import attempt_auth
 
 

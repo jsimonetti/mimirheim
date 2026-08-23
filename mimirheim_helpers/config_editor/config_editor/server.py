@@ -27,7 +27,6 @@ import logging
 import mimetypes
 import os
 import tempfile
-import threading
 from pathlib import Path
 from typing import Any
 

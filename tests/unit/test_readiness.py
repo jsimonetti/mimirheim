@@ -6,7 +6,6 @@ All tests must fail before the implementation exists (TDD).
 import threading
 from datetime import UTC, datetime, timedelta
 
-import pytest
 
 from mimirheim.config.schema import (
     BatteryConfig,
@@ -18,7 +17,7 @@ from mimirheim.config.schema import (
     OutputsConfig,
     SocTopicConfig,
 )
-from mimirheim.core.bundle import BatteryInputs, PriceStep, SolveBundle
+from mimirheim.core.bundle import PriceStep, SolveBundle
 from mimirheim.core.readiness import ReadinessState
 
 

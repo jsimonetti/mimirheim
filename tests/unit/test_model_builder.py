@@ -6,7 +6,7 @@ a solver. All tests must fail before the implementation exists (TDD).
 
 from datetime import datetime, timezone
 
-from mimirheim.core.bundle import DeviceSetpoint, ScheduleStep, SolveBundle
+from mimirheim.core.bundle import DeviceSetpoint, SolveBundle
 from mimirheim.core.model_builder import _compute_naive_cost
 
 

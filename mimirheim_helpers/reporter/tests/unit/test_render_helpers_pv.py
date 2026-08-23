@@ -13,8 +13,6 @@ existing fixed forecast columns (regression guard).
 """
 from __future__ import annotations
 
-import plotly.graph_objects as go
-import pytest
 
 from reporter._render_helpers import _build_data_table
 

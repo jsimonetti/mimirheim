@@ -175,8 +175,21 @@ The project targets **Python 3.12**. If `uv sync` picks a different interpreter,
 uv sync --python 3.12 --all-extras   # first-time setup: installs core + all helper dependencies
 uv sync --all-extras                  # subsequent syncs reuse the pinned interpreter
 uv run pytest                         # run tests
+uv run ruff check .                   # run the linter
 uv run python -m mimirheim --config config.yaml   # run the application
 ```
+
+`ruff check .` must be clean before a change is complete. CI runs it as a
+separate job alongside the test suite, so a lint failure fails the build even
+when every test passes.
+
+The enabled rule set is deliberately narrow (`F`, `E9`, `B`; see
+`[tool.ruff.lint]` in `pyproject.toml`). It targets defects, not formatting:
+undefined names, unused imports, dead locals, mutable default arguments,
+`zip()` without `strict`, and `except` clauses that discard the original error.
+The project does not run a formatter, so style rules are out of scope. Do not
+silence a finding with `# noqa` when the underlying problem can be fixed
+instead.
 
 Never invoke `python`, `pytest`, or `pip` directly — always prefix with `uv run` to ensure the correct interpreter and installed packages are used. Do not modify `uv.lock` by hand; it is updated automatically by `uv add` and `uv sync`.
 

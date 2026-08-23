@@ -30,11 +30,9 @@ import queue
 import random
 import threading
 import time
-from datetime import UTC, datetime
 from typing import Any
 
 from mimirheim.config.schema import MimirheimConfig
-from mimirheim.core.bundle import DeferrableWindow
 from mimirheim.core.readiness import ReadinessState
 from mimirheim.io.input_parser import (
     parse_battery_inputs,

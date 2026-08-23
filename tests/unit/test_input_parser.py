@@ -7,7 +7,6 @@ import json
 from datetime import UTC, datetime
 
 import pytest
-from pydantic import ValidationError
 
 from mimirheim.io.input_parser import (
     parse_battery_inputs,
@@ -132,7 +131,6 @@ def test_rejects_battery_extra_field() -> None:
 
 def test_parse_datetime_with_utc_offset() -> None:
     """ISO 8601 string with '+00:00' offset parses to a UTC-aware datetime."""
-    from datetime import timezone
     result = parse_datetime("2026-03-30T14:00:00+00:00")
     assert result.tzinfo is not None
     assert result.utcoffset().total_seconds() == 0
@@ -147,7 +145,6 @@ def test_parse_datetime_naive_is_treated_as_utc() -> None:
     which strips the timezone marker. The value HA encodes is always UTC, so
     treating naive payloads as UTC is correct.
     """
-    from datetime import timezone
     result = parse_datetime("2026-03-30T13:00:00")
     assert result.tzinfo is not None
     assert result.utcoffset().total_seconds() == 0

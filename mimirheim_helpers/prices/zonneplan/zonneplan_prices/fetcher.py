@@ -26,7 +26,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from zonneplan_prices.api import FetchError, ZonneplanClient
+from zonneplan_prices.api import ZonneplanClient
 from zonneplan_prices.config import get_export_fn, get_import_fn, ZonneplanApiConfig
 
 logger = logging.getLogger(__name__)

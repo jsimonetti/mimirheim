@@ -13,7 +13,6 @@ from mimirheim.config.schema import (
     BatteryCapabilitiesConfig,
     BatteryConfig,
     BatteryInputsConfig,
-    ConstraintsConfig,
     DebugConfig,
     DeferrableLoadConfig,
     EfficiencySegment,
@@ -24,9 +23,7 @@ from mimirheim.config.schema import (
     GridConfig,
     HybridInverterConfig,
     MimirheimConfig,
-    MqttConfig,
     ObjectivesConfig,
-    OutputsConfig,
     PvCapabilitiesConfig,
     PvConfig,
     PvOutputsConfig,
@@ -2670,7 +2667,6 @@ class TestOutputCapabilityProperties:
     # --- HybridInverterConfig.has_exchange_mode_output ---
 
     def test_hybrid_has_exchange_mode_output_true_when_cap_and_topic_set(self) -> None:
-        from mimirheim.config.schema import HybridInverterCapabilitiesConfig, HybridInverterOutputsConfig
 
         cfg = HybridInverterConfig.model_validate(
             _minimal_hybrid(

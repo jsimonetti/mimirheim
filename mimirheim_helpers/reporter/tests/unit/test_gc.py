@@ -6,9 +6,7 @@ when the limit is not exceeded or when max_reports is 0 (unlimited).
 """
 from __future__ import annotations
 
-import json
 
-import pytest
 
 from reporter import gc as reporter_gc
 from reporter import inventory as inv

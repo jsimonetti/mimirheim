@@ -160,4 +160,6 @@ def _iter_combinations(param_grid: dict[str, list]) -> object:
     keys = list(param_grid.keys())
     values = [param_grid[k] for k in keys]
     for combo in product(*values):
-        yield dict(zip(keys, combo))
+        # strict=True: product() yields one value per key by construction, so
+        # a mismatch would be a logic error rather than bad input.
+        yield dict(zip(keys, combo, strict=True))

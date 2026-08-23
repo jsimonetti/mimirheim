@@ -173,7 +173,7 @@ class TestMeteoserverFetch:
         assert get_latest_meteoserver_fetch(conn) is None
 
     def test_prune_keeps_most_recent_fetches(self, conn, mc_row) -> None:
-        from pv_ml_learner.storage import insert_meteoserver_fetch, prune_meteoserver, get_latest_meteoserver_fetch
+        from pv_ml_learner.storage import insert_meteoserver_fetch, prune_meteoserver
         import sqlalchemy as sa
 
         for i in range(5):
@@ -187,7 +187,6 @@ class TestMeteoserverFetch:
         conn.commit()
 
         # Only the 2 most recent fetches should remain.
-        from pv_ml_learner import storage as st
         result = conn.execute(sa.select(sa.func.count()).select_from(
             sa.text("meteoserver_forecast")
         )).scalar_one()

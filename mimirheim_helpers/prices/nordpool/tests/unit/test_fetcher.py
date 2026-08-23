@@ -5,7 +5,7 @@ The NordPoolClient is mocked to isolate the fetcher from live network calls.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pynordpool.exceptions import NordPoolError
