@@ -4,17 +4,25 @@ All helper tools import ``MqttConfig`` from here rather than defining their
 own copy. This ensures every tool has TLS support and consistent field
 validation without duplicating the model.
 
-This module also provides ``apply_mqtt_env_overrides``, which is called by
-every helper config loader to inject MQTT broker credentials from the HA
-Supervisor environment before Pydantic validation runs.
+This module also provides ``apply_mqtt_env_overrides``, which injects MQTT
+broker credentials from the HA Supervisor environment before Pydantic
+validation runs, and ``load_helper_config``, the shared YAML-load-and-validate
+entry point that every helper's ``__main__`` calls.
 
 This module has no imports from any specific helper tool.
 """
 from __future__ import annotations
 
+import logging
 import os
+import sys
+from pathlib import Path
+from typing import TypeVar
 
+import yaml
 from pydantic import BaseModel, ConfigDict, Field
+
+_ConfigT = TypeVar("_ConfigT", bound=BaseModel)
 
 
 class MqttConfig(BaseModel):
@@ -126,3 +134,42 @@ def apply_mqtt_env_overrides(raw: dict) -> dict:
         raw.setdefault("mqtt", {})
         raw["mqtt"].update(overrides)
     return raw
+
+
+def load_helper_config(
+    path: str,
+    model_cls: type[_ConfigT],
+    logger: logging.Logger,
+) -> _ConfigT:
+    """Load, env-override and validate a helper's YAML configuration file.
+
+    Every helper daemon starts the same way: read the YAML, let the HA
+    Supervisor environment override the ``mqtt`` section, validate against the
+    helper's own Pydantic model, and abort the process if any of that fails.
+    This function is that sequence, shared so the five helpers that used to
+    carry an identical private copy stay in step.
+
+    Failure is terminal by design. A daemon cannot do useful work with a
+    configuration it could not read, and exiting lets the supervisor restart it
+    once the operator fixes the file.
+
+    Args:
+        path: Filesystem path to the YAML configuration file.
+        model_cls: The helper's Pydantic config model.
+        logger: The calling helper's logger, so the failure record carries the
+            helper's name rather than this module's.
+
+    Returns:
+        A validated instance of ``model_cls``.
+
+    Raises:
+        SystemExit: With code 1 if the file cannot be read or parsed, or if it
+            fails validation. The full traceback is logged first.
+    """
+    try:
+        raw = yaml.safe_load(Path(path).read_text())
+        apply_mqtt_env_overrides(raw)
+        return model_cls.model_validate(raw)
+    except Exception:
+        logger.exception("Failed to load configuration from %s", path)
+        sys.exit(1)

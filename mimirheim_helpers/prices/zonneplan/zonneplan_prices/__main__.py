@@ -22,13 +22,11 @@ from __future__ import annotations
 
 import argparse
 import logging
-import sys
 from pathlib import Path
 
 import paho.mqtt.client as mqtt
-import yaml
 
-from helper_common.config import apply_mqtt_env_overrides
+from helper_common.config import load_helper_config
 from helper_common.cycle import CycleResult
 from helper_common.daemon import HelperDaemon
 from helper_common.discovery import PRICE_FORECAST_ATTRIBUTES_TEMPLATE
@@ -41,27 +39,6 @@ from zonneplan_prices.publisher import publish_prices
 from zonneplan_prices.token import is_token_valid, load_token, save_token
 
 logger = logging.getLogger(__name__)
-
-
-def _load_config(path: str) -> ZonneplanPricesConfig:
-    """Load and validate the YAML configuration file.
-
-    Args:
-        path: Filesystem path to the config.yaml file.
-
-    Returns:
-        Validated ZonneplanPricesConfig instance.
-
-    Raises:
-        SystemExit: If the file cannot be read or fails validation.
-    """
-    try:
-        raw = yaml.safe_load(Path(path).read_text())
-        apply_mqtt_env_overrides(raw)
-        return ZonneplanPricesConfig.model_validate(raw)
-    except Exception:
-        logger.exception("Failed to load configuration from %s", path)
-        sys.exit(1)
 
 
 class ZonneplanPricesDaemon(HelperDaemon):
@@ -186,7 +163,7 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    ZonneplanPricesDaemon(_load_config(args.config)).run()
+    ZonneplanPricesDaemon(load_helper_config(args.config, ZonneplanPricesConfig, logger)).run()
 
 
 if __name__ == "__main__":
