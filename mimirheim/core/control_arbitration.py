@@ -415,16 +415,25 @@ def assign_control_authority(
 
     **Loadbalance**:
 
-    - EV devices with ``capabilities.loadbalance=True`` receive
-      ``loadbalance_active=True`` on all steps where the vehicle is plugged in.
-    - When a battery is the zero_exchange enforcer on a step, the EV's
-      ``loadbalance_active`` is set to False for that step (the battery's
-      closed-loop controller and an EVSE loadbalance controller both regulate
-      the same grid current; only one may be authoritative).
-    - An EV that is itself the zero_exchange enforcer receives
+    ``capabilities.loadbalance`` and ``capabilities.zero_exchange`` are
+    orthogonal: an EV may declare either, both, or neither, and this function
+    evaluates them independently for every device.
+
+    An EV with ``capabilities.loadbalance=True`` receives
+    ``loadbalance_active=True`` on a step when the vehicle is plugged in and
+    nothing else is regulating the same grid current. Two things take
+    precedence:
+
+    - The EV is itself the zero_exchange enforcer on that step. Its own
+      closed-loop firmware already owns the grid current, so it receives
       ``zero_exchange_active=True`` and ``loadbalance_active=False``.
-    - ``loadbalance_active=True`` is only set on steps where the EV is NOT
-      selected as the zero_exchange enforcer.
+    - A battery is the zero_exchange enforcer on that step. The battery's
+      closed-loop controller and an EVSE loadbalance controller both regulate
+      the same measurement, and only one may be authoritative.
+
+    A PV array holding the enforcer role does not suppress load balancing: zero
+    export clamps the array's own production and does not compete for control
+    of the grid current.
 
     This function is a pure transformation: it creates new objects and does
     not mutate the input SolveResult, ScheduleStep, or DeviceSetpoint instances.
@@ -477,18 +486,22 @@ def assign_control_authority(
             current_score = -1.0
 
             for name, sp in step.devices.items():
+                # The two capabilities are independent, so both are evaluated
+                # for every device. An EV may declare zero_exchange and
+                # loadbalance together (the schema calls them orthogonal);
+                # treating them as alternatives would leave such an EV without
+                # load balancing on every step.
+                updates: dict = {}
                 if name in zex_capable:
-                    updated_devices[name] = DeviceSetpoint(
-                        **{**sp.model_dump(), "zero_exchange_active": False}
-                    )
-                elif name in lb_capable:
-                    # loadbalance: active when EV is plugged in.
-                    ev_plugged = ev_available.get(name, False)
-                    updated_devices[name] = DeviceSetpoint(
-                        **{**sp.model_dump(), "loadbalance_active": ev_plugged}
-                    )
-                else:
-                    updated_devices[name] = sp
+                    updates["zero_exchange_active"] = False
+                if name in lb_capable:
+                    # No enforcer is active on this step, so nothing competes
+                    # with the EVSE for control of grid current. Load balance
+                    # whenever a vehicle is connected.
+                    updates["loadbalance_active"] = ev_available.get(name, False)
+                updated_devices[name] = (
+                    DeviceSetpoint(**{**sp.model_dump(), **updates}) if updates else sp
+                )
         else:
             # Near-zero-exchange step: select enforcer.
             candidates = _build_candidates(
@@ -567,23 +580,32 @@ def assign_control_authority(
             )
 
             for name, sp in step.devices.items():
+                # Both capabilities are evaluated for every device; they are
+                # orthogonal and an EV may declare either or both.
+                updates: dict = {}
+                is_enforcer = name == enforcer_name
                 if name in zex_capable:
-                    flag = (name == enforcer_name)
-                    new_sp = DeviceSetpoint(**{**sp.model_dump(), "zero_exchange_active": flag})
-                    # If this EV is enforcer (zero_exchange), clear its loadbalance.
-                    if name in lb_capable and flag:
-                        new_sp = DeviceSetpoint(**{**new_sp.model_dump(), "loadbalance_active": False})
-                    updated_devices[name] = new_sp
-                elif name in lb_capable:
-                    # EV with only loadbalance (no zero_exchange capability).
-                    # Active when plugged in AND the battery is not the enforcer.
-                    ev_plugged = ev_available.get(name, False)
-                    lb_flag = ev_plugged and not enforcer_is_battery
-                    updated_devices[name] = DeviceSetpoint(
-                        **{**sp.model_dump(), "loadbalance_active": lb_flag}
+                    updates["zero_exchange_active"] = is_enforcer
+                if name in lb_capable:
+                    # Load balancing runs only when nothing else is regulating
+                    # the same grid current:
+                    #
+                    # - Not while this EV is itself the closed-loop enforcer;
+                    #   its zero-exchange firmware already owns the current.
+                    # - Not while a battery is the enforcer; the battery's
+                    #   controller and the EVSE load balancer would fight over
+                    #   the same measurement.
+                    #
+                    # A PV array enforcing zero export only clamps its own
+                    # production and does not conflict.
+                    updates["loadbalance_active"] = (
+                        ev_available.get(name, False)
+                        and not is_enforcer
+                        and not enforcer_is_battery
                     )
-                else:
-                    updated_devices[name] = sp
+                updated_devices[name] = (
+                    DeviceSetpoint(**{**sp.model_dump(), **updates}) if updates else sp
+                )
 
         new_schedule.append(
             ScheduleStep(

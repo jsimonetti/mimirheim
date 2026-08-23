@@ -948,3 +948,173 @@ def test_hybrid_inverter_wear_cost_penalises_selection() -> None:
     assert result.schedule[0].devices["bat"].zero_exchange_active is True
     assert result.schedule[0].devices["hi"].zero_exchange_active is False
 
+
+
+# ---------------------------------------------------------------------------
+# EV with both zero_exchange and loadbalance, when it is NOT the enforcer
+# ---------------------------------------------------------------------------
+
+
+def _config_with_battery_zex_and_dual_capability_ev() -> MimirheimConfig:
+    """A battery with zero_exchange plus an EV with zero_exchange and loadbalance.
+
+    The schema documents loadbalance as orthogonal to zero_exchange, so this
+    combination is valid. It is the case where a dual-capability EV loses the
+    enforcer role to a battery and should fall back to load balancing.
+    """
+    raw = _minimal_config_dict()
+    raw["batteries"] = {
+        "bat": {
+            "capacity_kwh": 10.0,
+            "charge_segments": [{"power_max_kw": 5.0, "efficiency": 0.99}],
+            "discharge_segments": [{"power_max_kw": 5.0, "efficiency": 0.99}],
+            "capabilities": {"zero_exchange": True},
+            "outputs": {"exchange_mode": "mimir/bat/exchange_mode"},
+        }
+    }
+    raw["ev_chargers"] = {
+        "ev1": {
+            "capacity_kwh": 52.0,
+            "charge_segments": [{"power_max_kw": 11.0, "efficiency": 0.80}],
+            "capabilities": {"zero_exchange": True, "v2h": True, "loadbalance": True},
+            "outputs": {
+                "exchange_mode": "mimir/ev1/exchange_mode",
+                "loadbalance_cmd": "mimir/ev1/loadbalance_cmd",
+            },
+        }
+    }
+    return MimirheimConfig.model_validate(raw)
+
+
+def _dual_capability_devices() -> dict[str, DeviceSetpoint]:
+    return {
+        "bat": DeviceSetpoint(kw=0.0, type="battery", zero_exchange_active=False),
+        "ev1": DeviceSetpoint(
+            kw=0.0,
+            type="ev_charger",
+            zero_exchange_active=False,
+            loadbalance_active=False,
+        ),
+    }
+
+
+def test_dual_capability_ev_loadbalances_on_non_zero_exchange_steps() -> None:
+    """A plugged-in dual-capability EV must load balance when no enforcer is needed.
+
+    On a step with real grid exchange no closed-loop enforcer is selected, so
+    the EV's zero_exchange register is cleared. Its loadbalance capability is
+    independent and the vehicle is plugged in, so load balancing applies.
+    An EV declaring only loadbalance already behaves this way; declaring
+    zero_exchange as well must not silently disable it.
+    """
+    config = _config_with_battery_zex_and_dual_capability_ev()
+    bundle = _minimal_bundle(ev_available=True, ev_name="ev1")
+    step = _step(
+        t=0,
+        grid_import_kw=3.0,
+        grid_export_kw=0.0,
+        devices=_dual_capability_devices(),
+    )
+
+    result = assign_control_authority(_result([step]), bundle, config)
+
+    ev = result.schedule[0].devices["ev1"]
+    assert ev.zero_exchange_active is False
+    assert ev.loadbalance_active is True
+
+
+def test_dual_capability_ev_loadbalances_when_a_pv_array_enforces() -> None:
+    """Losing the enforcer role to a PV array must leave load balancing on.
+
+    Load balancing is suppressed only when a battery holds the enforcer role,
+    because a battery's closed-loop controller and an EVSE load balancer
+    regulate the same grid current. A PV array curtailing its own production
+    does not conflict with an EVSE clamping its charge power.
+
+    The EV is pinned at full charge power so its absorption headroom is zero
+    and it drops out of enforcer selection, leaving the PV array as the only
+    eligible candidate.
+    """
+    raw = _minimal_config_dict()
+    raw["pv_arrays"] = {
+        "pv": {
+            "topic_forecast": "mimir/input/pv/forecast",
+            "max_power_kw": 5.0,
+            "capabilities": {"zero_export": True},
+            "outputs": {"zero_export_mode": "mimir/pv/zero_export_mode"},
+        }
+    }
+    raw["ev_chargers"] = {
+        "ev1": {
+            "capacity_kwh": 52.0,
+            "charge_segments": [{"power_max_kw": 11.0, "efficiency": 0.80}],
+            "capabilities": {"zero_exchange": True, "v2h": True, "loadbalance": True},
+            "outputs": {
+                "exchange_mode": "mimir/ev1/exchange_mode",
+                "loadbalance_cmd": "mimir/ev1/loadbalance_cmd",
+            },
+        }
+    }
+    config = MimirheimConfig.model_validate(raw)
+    bundle = _minimal_bundle(ev_available=True, ev_name="ev1")
+    step = _step(
+        t=0,
+        grid_import_kw=0.0,
+        grid_export_kw=0.0,
+        devices={
+            "pv": DeviceSetpoint(kw=2.0, type="pv", zero_exchange_active=False),
+            "ev1": DeviceSetpoint(
+                kw=-11.0,
+                type="ev_charger",
+                zero_exchange_active=False,
+                loadbalance_active=False,
+            ),
+        },
+    )
+
+    result = assign_control_authority(_result([step]), bundle, config)
+
+    assert result.schedule[0].devices["pv"].zero_exchange_active is True
+    ev = result.schedule[0].devices["ev1"]
+    assert ev.zero_exchange_active is False
+    assert ev.loadbalance_active is True
+
+
+def test_dual_capability_ev_loadbalance_suppressed_when_battery_enforces() -> None:
+    """A battery holding the enforcer role must still suppress EV load balancing.
+
+    Both controllers regulate the same grid current, so only one may be
+    authoritative. This is the rule that makes the dual-capability case worth
+    getting right rather than simply always enabling load balancing.
+    """
+    config = _config_with_battery_zex_and_dual_capability_ev()
+    bundle = _minimal_bundle(ev_available=True, ev_name="ev1")
+    step = _step(
+        t=0,
+        grid_import_kw=0.0,
+        grid_export_kw=0.0,
+        devices=_dual_capability_devices(),
+    )
+
+    result = assign_control_authority(_result([step]), bundle, config)
+
+    assert result.schedule[0].devices["bat"].zero_exchange_active is True
+    ev = result.schedule[0].devices["ev1"]
+    assert ev.zero_exchange_active is False
+    assert ev.loadbalance_active is False
+
+
+def test_dual_capability_ev_not_loadbalanced_when_unplugged() -> None:
+    """Load balancing is meaningless with no vehicle connected."""
+    config = _config_with_battery_zex_and_dual_capability_ev()
+    bundle = _minimal_bundle(ev_available=False, ev_name="ev1")
+    step = _step(
+        t=0,
+        grid_import_kw=3.0,
+        grid_export_kw=0.0,
+        devices=_dual_capability_devices(),
+    )
+
+    result = assign_control_authority(_result([step]), bundle, config)
+
+    assert result.schedule[0].devices["ev1"].loadbalance_active is False
