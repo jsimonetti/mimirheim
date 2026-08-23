@@ -967,6 +967,71 @@ def test_btm_heat_loss_coeff_must_be_positive() -> None:
         )
 
 
+def test_btm_rejects_a_thermally_unstable_parameter_pair() -> None:
+    """dt * L / C >= 1 must be rejected rather than solved.
+
+    The dynamics equation is T_in[t] = alpha * T_prev + ... with
+    alpha = 1 - dt * L / C. Once dt * L / C reaches 1 the building is modelled
+    as losing at least its entire stored heat within one 15-minute step, and
+    beyond that alpha goes negative: indoor temperature responds to the
+    previous step with an inverted sign and the solver returns a schedule that
+    is arithmetically valid and physically meaningless.
+
+    Both fields are individually plausible, so nothing else catches the
+    combination. C=0.1 kWh/K with L=1.5 kW/K gives alpha = -2.75.
+    """
+    from mimirheim.config.schema import BuildingThermalConfig
+
+    with pytest.raises(ValidationError, match="thermally unstable"):
+        BuildingThermalConfig.model_validate(
+            {
+                "thermal_capacity_kwh_per_k": 0.1,
+                "heat_loss_coeff_kw_per_k": 1.5,
+                "comfort_min_c": 18.0,
+                "comfort_max_c": 24.0,
+            }
+        )
+
+
+def test_btm_rejects_the_exact_stability_boundary() -> None:
+    """dt * L / C == 1 gives alpha = 0 and must also be rejected.
+
+    At alpha = 0 the building retains none of its indoor temperature between
+    steps, which is not a building. C = 0.25 * L puts the ratio exactly at 1.
+    """
+    from mimirheim.config.schema import BuildingThermalConfig
+
+    with pytest.raises(ValidationError, match="thermally unstable"):
+        BuildingThermalConfig.model_validate(
+            {
+                "thermal_capacity_kwh_per_k": 0.25,
+                "heat_loss_coeff_kw_per_k": 1.0,
+                "comfort_min_c": 18.0,
+                "comfort_max_c": 24.0,
+            }
+        )
+
+
+def test_btm_accepts_the_documented_extremes() -> None:
+    """Every combination the field docs describe as typical must validate.
+
+    The docstrings quote 3 to 40 kWh/K for capacity and 0.05 to 1.5 kW/K for
+    heat loss. The worst pairing of those, C=3 with L=1.5, gives alpha = 0.875
+    and must not be rejected by the stability check.
+    """
+    from mimirheim.config.schema import BuildingThermalConfig
+
+    cfg = BuildingThermalConfig.model_validate(
+        {
+            "thermal_capacity_kwh_per_k": 3.0,
+            "heat_loss_coeff_kw_per_k": 1.5,
+            "comfort_min_c": 18.0,
+            "comfort_max_c": 24.0,
+        }
+    )
+    assert cfg.thermal_capacity_kwh_per_k == 3.0
+
+
 def test_btm_comfort_min_must_be_below_max() -> None:
     """comfort_min_c >= comfort_max_c must raise ValidationError."""
     from mimirheim.config.schema import BuildingThermalConfig

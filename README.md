@@ -121,6 +121,8 @@ where:
 - $\alpha = 1 - \Delta t \cdot L / C$ — thermal decay factor
 - $\beta_{out} = \Delta t \cdot L / C$ — outdoor coupling factor
 
+$\alpha$ is the share of the indoor-to-outdoor temperature difference the building still holds after one step, so it must lie strictly between 0 and 1. That makes $C$ and $L$ jointly constrained: configuration is rejected when $\Delta t \cdot L / C \ge 1$, which would model the building as shedding all of its stored heat within a single 15-minute step.
+
 The comfort band imposes hard bounds on $T_{in}[t]$:
 
 $$T_{min} \le T_{in}[t] \le T_{max} \quad \forall\, t$$

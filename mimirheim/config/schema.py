@@ -2163,6 +2163,12 @@ class BuildingThermalConfig(BaseModel):
 
     All terms are linear in the solver variables.
 
+    ``alpha`` is the share of the indoor-to-outdoor temperature difference the
+    building still holds after one step, so it must lie strictly between 0 and
+    1. That makes ``thermal_capacity_kwh_per_k`` and ``heat_loss_coeff_kw_per_k``
+    jointly constrained rather than independent, and the pair is checked by
+    ``_validate_thermal_stability``.
+
     Attributes:
         thermal_capacity_kwh_per_k: Effective thermal mass of the building in
             kWh per degree Kelvin. Represents how much energy is stored or
@@ -2170,12 +2176,16 @@ class BuildingThermalConfig(BaseModel):
             values range from 3–5 kWh/K for a small well-insulated apartment
             to 15–40 kWh/K for a large passive house with concrete floors.
             Can be estimated from the time the building takes to cool by 1 °C
-            when the HP is off in calm weather.
+            when the HP is off in calm weather. Must exceed
+            ``0.25 * heat_loss_coeff_kw_per_k`` so that ``alpha`` stays above
+            zero; see ``_validate_thermal_stability``.
         heat_loss_coeff_kw_per_k: Building heat loss coefficient in kW per
             degree Kelvin of indoor–outdoor temperature difference. At a 15 °C
             delta, a coefficient of 0.5 kW/K means 7.5 kW of heat is needed
             to maintain temperature. Typical range: 0.05 kW/K (very well
-            insulated) to 1.5 kW/K (draughty older building).
+            insulated) to 1.5 kW/K (draughty older building). Must stay below
+            ``thermal_capacity_kwh_per_k / 0.25``; see
+            ``_validate_thermal_stability``.
         comfort_min_c: Minimum acceptable indoor temperature in degrees
             Celsius. The solver will not allow T_indoor to drop below this
             value at any step. Default 19.0 °C.
@@ -2221,6 +2231,54 @@ class BuildingThermalConfig(BaseModel):
             raise ValueError(
                 f"comfort_min_c ({self.comfort_min_c}) must be strictly less than "
                 f"comfort_max_c ({self.comfort_max_c})."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_thermal_stability(self) -> "BuildingThermalConfig":
+        """Reject parameter pairs that make the dynamics equation unstable.
+
+        The difference equation carries the previous indoor temperature forward
+        with the factor ``alpha = 1 - dt * L / C``. That factor is the share of
+        the indoor-to-outdoor temperature difference the building still holds
+        after one step, so it must lie strictly between 0 and 1.
+
+        Once ``dt * L / C`` reaches 1 the model says the building loses at
+        least all of its stored heat within a single 15-minute step, and beyond
+        that ``alpha`` turns negative and indoor temperature responds to the
+        previous step with an inverted sign. Either way the solver still
+        returns a schedule; it is simply meaningless, and nothing downstream
+        can detect that.
+
+        Each field is individually plausible, so only the combination reveals
+        the problem: 0.1 kWh/K with 1.5 kW/K gives ``alpha = -2.75`` while both
+        values pass their own ``gt=0`` bound. Every combination the field
+        documentation calls typical stays well inside the limit; the worst of
+        them, 3 kWh/K with 1.5 kW/K, gives ``alpha = 0.875``.
+
+        The 0.25 h step is hardcoded because mimirheim's grid is fixed at 15
+        minutes project-wide. Config models may not import from
+        ``mimirheim.core``, so the constant cannot be shared with
+        ``core.forecast``.
+
+        Raises:
+            ValueError: If ``0.25 * heat_loss_coeff_kw_per_k`` is greater than
+                or equal to ``thermal_capacity_kwh_per_k``.
+        """
+        step_hours = 0.25
+        ratio = step_hours * self.heat_loss_coeff_kw_per_k / self.thermal_capacity_kwh_per_k
+        if ratio >= 1.0:
+            raise ValueError(
+                f"BuildingThermalConfig is thermally unstable: "
+                f"dt * heat_loss_coeff_kw_per_k / thermal_capacity_kwh_per_k = "
+                f"{step_hours} * {self.heat_loss_coeff_kw_per_k} / "
+                f"{self.thermal_capacity_kwh_per_k} = {ratio:.3f}, which must be "
+                f"below 1. The model would have the building shed all of its "
+                f"stored heat within one 15-minute step. Raise "
+                f"thermal_capacity_kwh_per_k above "
+                f"{step_hours * self.heat_loss_coeff_kw_per_k:.3f} kWh/K, or lower "
+                f"heat_loss_coeff_kw_per_k below "
+                f"{self.thermal_capacity_kwh_per_k / step_hours:.3f} kW/K."
             )
         return self
 
