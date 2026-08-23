@@ -196,6 +196,15 @@ class SolverConfig(BaseModel):
             -1 means use all available CPU cores. On a dedicated home server that
             is otherwise idle between solve cycles, -1 is the recommended setting.
             Default -1.
+        time_limit_seconds: Wall-clock budget for one solve cycle. When the
+            limit is reached the solver returns the best incumbent found so
+            far, which is acceptable for a rolling-horizon strategy: a slightly
+            suboptimal schedule is better than no schedule. The solve loop is
+            single-threaded, so this is also the longest a solve can block the
+            handling of the next trigger. Default 59 seconds, chosen to fit
+            inside a 60-second solve cycle. The ``minimize_consumption``
+            strategy solves twice and splits this budget across both phases,
+            so the total never exceeds it.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -219,6 +228,19 @@ class SolverConfig(BaseModel):
             "1 = single-threaded."
         ),
         json_schema_extra={"ui_label": "Solver threads", "ui_group": "advanced"},
+    )
+    time_limit_seconds: float = Field(
+        default=59.0,
+        gt=0.0,
+        description=(
+            "Wall-clock budget for one solve cycle, in seconds. On expiry the "
+            "solver returns its best incumbent instead of a proven optimum. "
+            "Also the longest a solve can block the next trigger, because the "
+            "solve loop is single-threaded. The minimize_consumption strategy "
+            "splits this budget across its two phases. Default 59 s, which "
+            "fits inside a 60-second cycle."
+        ),
+        json_schema_extra={"ui_label": "Solver time limit (s)", "ui_group": "advanced"},
     )
 
 class ReadinessConfig(BaseModel):

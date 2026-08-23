@@ -527,7 +527,8 @@ solver:
   # as thermal heat pumps.
   #
   # The 72-hour default (288 steps) is chosen because the worst-case residential
-  # installation solves within the 59-second wall-clock budget at that length.
+  # installation solves within the default 59-second wall-clock budget at that
+  # length. See solver.time_limit_seconds to change it.
   # At 7 days (672 steps) the same installation exceeds the budget regardless of
   # tuning. Run mimirheim with --log-level DEBUG to see the exact binary variable
   # count per solve and tune this value to your installation.
@@ -541,6 +542,23 @@ solver:
   # -1 is the recommended setting. Set to 1 to force single-threaded solving
   # (useful for debugging or on very constrained hardware).
   threads: -1
+
+  # Wall-clock budget for one solve cycle, in seconds.
+  #
+  # When the budget runs out the solver returns the best schedule it has found
+  # so far rather than a proven optimum. For a rolling horizon that is an
+  # acceptable trade: a slightly suboptimal schedule beats no schedule.
+  #
+  # This is also the longest a solve can delay the next trigger, because the
+  # solve loop is single-threaded. The 59-second default leaves a second of
+  # headroom in a 60-second solve cycle. Raise it if you run a long horizon on
+  # slow hardware and see "feasible" rather than "optimal" in the status topic;
+  # lower it if you trigger solves more often than once a minute.
+  #
+  # The minimize_consumption strategy solves twice (it minimises import volume
+  # first, then cost within that volume) and splits this budget across both
+  # phases, so the total stays inside the value set here.
+  time_limit_seconds: 59.0
 
 # ---------------------------------------------------------------------------
 # MQTT

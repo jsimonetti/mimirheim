@@ -112,8 +112,10 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
            relevant slice of ``bundle`` to each.
         6. Add the power balance constraint for each time step:
            ``sum(d.net_power(t) for d in all_devices) + grid.net_power(t) == 0``.
-        7. Call ``ObjectiveBuilder().build(...)`` to set the objective.
-        8. Call ``ctx.solver.solve()``.
+        7. Call ``ObjectiveBuilder().build(...)`` to set the objective. For
+           the ``minimize_consumption`` strategy this also runs a phase-1
+           solve internally; ``build`` returns the solver budget that remains.
+        8. Call ``ctx.solver.solve()`` with that remaining budget.
         9. If infeasible, return an empty ``SolveResult``.
         10. Extract variable values and assemble ``SolveResult``.
 
@@ -320,7 +322,14 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
             ctx.solver.add_constraint(device_net + grid_net == 0)
 
     # --- Objective ---
-    ObjectiveBuilder().build(ctx, all_devices, grid, bundle, config)
+    # build() returns the solver budget left for the solve below. Most
+    # strategies leave the whole of config.solver.time_limit_seconds, but
+    # minimize_consumption is lexicographic and spends part of it on its
+    # phase-1 solve inside build(). Passing the returned value through is what
+    # keeps a two-phase solve inside the configured budget.
+    solve_budget_seconds = ObjectiveBuilder().build(
+        ctx, all_devices, grid, bundle, config
+    )
 
     # --- Log model size ---
     # Logged at DEBUG so it appears when the operator runs with --log-level DEBUG
@@ -341,7 +350,7 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
     )
 
     # --- Solve ---
-    status = ctx.solver.solve(time_limit_seconds=59.0)
+    status = ctx.solver.solve(time_limit_seconds=solve_budget_seconds)
 
     if status == "infeasible":
         return SolveResult(

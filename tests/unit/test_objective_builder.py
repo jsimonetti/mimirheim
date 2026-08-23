@@ -656,3 +656,108 @@ def test_exchange_shaping_weight_nonzero_adds_secondary_term() -> None:
     assert abs(ctx.solver.objective_value() - expected) < 1e-8, (
         f"Expected objective {expected}, got {ctx.solver.objective_value()}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Solver time budget
+# ---------------------------------------------------------------------------
+
+
+class _RecordingSolver(CBCSolverBackend):
+    """CBC backend that records the time limit passed to every solve call."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.solve_limits: list[float] = []
+
+    def solve(self, time_limit_seconds: float = 59.0) -> str:
+        self.solve_limits.append(time_limit_seconds)
+        return super().solve(time_limit_seconds=time_limit_seconds)
+
+
+def _build_with_recording_solver(strategy: str, config: MimirheimConfig):
+    """Run ObjectiveBuilder.build with a solver that records its time limits."""
+    solver = _RecordingSolver()
+    ctx = ModelContext(solver=solver, horizon=4, dt=0.25)
+    grid, bat = _build_devices(ctx, _battery_inputs())
+    remaining = ObjectiveBuilder().build(
+        ctx, [bat], grid, _bundle(strategy=strategy), config
+    )
+    return solver, remaining
+
+
+def test_build_returns_the_full_budget_for_single_phase_strategies() -> None:
+    """A single-phase strategy leaves the whole budget to the caller's solve.
+
+    build() must report the budget rather than leave the caller guessing,
+    because for one strategy build() spends part of it internally.
+    """
+    config = _make_config()
+    config.solver.time_limit_seconds = 40.0
+
+    for strategy in ("minimize_cost", "balanced"):
+        solver, remaining = _build_with_recording_solver(strategy, config)
+        assert solver.solve_limits == [], f"{strategy} must not solve inside build()"
+        assert remaining == 40.0
+
+
+def test_minimize_consumption_splits_the_budget_across_both_phases() -> None:
+    """The two-phase strategy must not consume the budget twice.
+
+    Phase 1 runs inside build(); phase 2 runs in build_and_solve. Both
+    previously defaulted to the full 59 s limit, so this strategy could block
+    the single-threaded solve loop for nearly two minutes against a budget
+    that is documented as fitting inside one solve cycle.
+    """
+    config = _make_config()
+    config.solver.time_limit_seconds = 40.0
+
+    solver, remaining = _build_with_recording_solver("minimize_consumption", config)
+
+    assert len(solver.solve_limits) == 1, "phase 1 must run exactly one solve"
+    assert solver.solve_limits[0] + remaining == pytest.approx(40.0)
+    assert solver.solve_limits[0] > 0.0
+    assert remaining > 0.0
+
+
+def test_configured_time_limit_is_honoured_by_the_final_solve() -> None:
+    """build_and_solve must pass the configured budget to the solver."""
+    from unittest.mock import patch
+
+    from mimirheim.core import model_builder
+
+    config = _make_config()
+    config.solver.time_limit_seconds = 12.5
+
+    recorded: list[float] = []
+    real_solve = CBCSolverBackend.solve
+
+    def _spy(self, time_limit_seconds: float = 59.0) -> str:
+        recorded.append(time_limit_seconds)
+        return real_solve(self, time_limit_seconds=time_limit_seconds)
+
+    with patch.object(CBCSolverBackend, "solve", _spy):
+        bundle = _bundle(strategy="minimize_cost")
+        bundle.battery_inputs["bat"] = _battery_inputs()
+        model_builder.build_and_solve(bundle, config)
+
+    assert recorded == [12.5]
+
+
+def test_solver_time_limit_defaults_to_59_seconds() -> None:
+    """The documented default must survive; it is what fits a 60 s cycle."""
+    from mimirheim.config.schema import SolverConfig
+
+    assert SolverConfig().time_limit_seconds == 59.0
+
+
+def test_solver_time_limit_must_be_positive() -> None:
+    """A zero or negative budget would make every solve fail immediately."""
+    from pydantic import ValidationError
+
+    from mimirheim.config.schema import SolverConfig
+
+    with pytest.raises(ValidationError):
+        SolverConfig(time_limit_seconds=0.0)
+    with pytest.raises(ValidationError):
+        SolverConfig(time_limit_seconds=-1.0)
