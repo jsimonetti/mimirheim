@@ -28,7 +28,10 @@ from nordpool.config import NordpoolConfig
 from nordpool.fetcher import FetchError, fetch_prices
 from nordpool.publisher import publish_prices
 
-logger = logging.getLogger(__name__)
+# Named explicitly, not derived from __name__: this module runs as
+# `python -m nordpool`, where __name__ is "__main__" and the records would
+# not join the ones MqttDaemon emits under the package name.
+logger = logging.getLogger("nordpool")
 
 
 class NordpoolDaemon(HelperDaemon):
