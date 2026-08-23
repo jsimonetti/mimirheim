@@ -81,9 +81,11 @@ class DeferrableLoad:
     Attributes:
         name: Device name matching the key in ``config.deferrable_loads``.
         config: Static deferrable load configuration.
-        start: Maps eligible step indices to their binary start variable handle.
-            Empty before ``add_constraints`` is called, if ``window`` is None,
-            or when in fixed-draw or committed state.
+        start: Maps eligible step indices to their binary start variable
+            handle. Only the steps at which the load may begin appear; the rest
+            of the horizon is absent rather than pinned to zero. Empty before
+            ``add_constraints`` is called, if ``window`` is None, or when in
+            fixed-draw or committed state.
         _fixed_steps: Number of horizon steps in which the load is fixed-on
             due to an active run (``start_time`` is in the past). Zero unless
             in running state. ``net_power(t)`` returns the profile value at
@@ -107,23 +109,20 @@ class DeferrableLoad:
         self.name = name
         self.config = config
         self.start: dict[int, Any] = {}
-        self._horizon: int = 0
-        self._active: bool = False
         self._fixed_steps: int = 0  # non-zero only in "running" (active) state
         self._elapsed_steps: int = 0  # profile steps already consumed before this horizon
         self._committed_start_step: int | None = None  # set in "committed" (future) state
 
     def add_variables(self, ctx: ModelContext) -> None:
-        """No-op at this stage — variables are created in add_constraints.
+        """No-op — variables are created in ``add_constraints``.
 
-        Deferrable load variables depend on the runtime window datetimes, which
-        are not known until ``add_constraints`` is called. This method exists
-        to satisfy the Device Protocol.
+        Which start steps are eligible depends on the runtime window
+        datetimes, and those are not known until ``add_constraints`` is
+        called. This method exists to satisfy the Device Protocol.
 
         Args:
-            ctx: The current solve context (unused here).
+            ctx: The current solve context (unused).
         """
-        self._horizon = len(ctx.T)
 
     def add_constraints(
         self,
@@ -204,8 +203,6 @@ class DeferrableLoad:
         if window is None:
             return
 
-        self._active = True
-
         # Convert window datetimes to step indices.
         earliest_step = _datetime_to_step(window.earliest, solve_time_utc, ctx.dt)
         latest_step = _datetime_to_step(window.latest, solve_time_utc, ctx.dt)
@@ -224,23 +221,19 @@ class DeferrableLoad:
         if last_valid_start < earliest_step:
             return
 
-        # Declare start[t] for each eligible step and set upper bound 0 for
-        # out-of-window steps so the solver cannot choose them.
-        for t in ctx.T:
-            if earliest_step <= t <= last_valid_start:
-                # start[t] is a binary "start decision" variable.
-                #
-                # Decision variable: 1 if the load begins at step t, 0 otherwise.
-                # The solver allocates exactly one start across all eligible steps
-                # (enforced by the sum-to-one constraint below). Binary because
-                # the load either starts or it does not — there is no partial start.
-                self.start[t] = ctx.solver.add_var(lb=0.0, ub=1.0, integer=True)
-            else:
-                # Steps outside the window are given a fixed-zero variable so
-                # that net_power(t) can still reference start[k] for window
-                # boundary steps without raising a KeyError. Upper bound 0
-                # makes them effectively constants equal to 0.
-                self.start[t] = ctx.solver.add_var(lb=0.0, ub=0.0, integer=True)
+        # Declare start[t] only for the steps the load may actually begin at.
+        #
+        # start[t] is a binary "start decision" variable: 1 if the load begins
+        # at step t, 0 otherwise. Binary because the load either starts or it
+        # does not; there is no partial start. Exactly one of them is 1, which
+        # the sum-to-one constraint below enforces.
+        #
+        # Steps outside the window get no variable at all. Every reader of
+        # self.start already skips absent keys, so declaring fixed-zero
+        # variables for them would add up to one integer variable per horizon
+        # step per load that can only ever take the value zero.
+        for t in range(earliest_step, last_valid_start + 1):
+            self.start[t] = ctx.solver.add_var(lb=0.0, ub=1.0, integer=True)
 
         # Exactly one start within the window.
         #
@@ -252,11 +245,7 @@ class DeferrableLoad:
         # entirely (if running is costly) or start it at every cheap step
         # (exploiting cheap electricity multiple times). The sum-to-one
         # constraint makes the scheduling problem well-defined.
-        eligible_starts = sum(
-            self.start[t]
-            for t in range(earliest_step, last_valid_start + 1)
-            if t in self.start
-        )
+        eligible_starts = sum(self.start.values())
         ctx.solver.add_constraint(eligible_starts == 1)
 
     def net_power(self, t: int) -> Any:

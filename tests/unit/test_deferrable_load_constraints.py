@@ -76,7 +76,9 @@ def test_deferrable_load_runs_exactly_once() -> None:
     ctx.solver.set_objective_minimize(load.start[0])
     ctx.solver.solve()
 
-    total_starts = sum(ctx.solver.var_value(load.start[t]) for t in ctx.T)
+    # Only eligible steps carry a start variable; the sum across them is the
+    # "runs exactly once" property.
+    total_starts = sum(ctx.solver.var_value(v) for v in load.start.values())
     assert abs(total_starts - 1.0) < 1e-6
 
 
@@ -96,11 +98,14 @@ def test_deferrable_load_completes_within_window() -> None:
     ctx.solver.set_objective_minimize(load.start[2])
     ctx.solver.solve()
 
-    # Steps outside the window must have start == 0.
+    # Steps outside the window must not be startable. They carry no variable
+    # at all, so the solver has no way to select them.
     for t in [0, 1, 6, 7]:
-        assert ctx.solver.var_value(load.start[t]) < 1e-6, (
-            f"step {t}: start should be 0 outside window"
-        )
+        assert t not in load.start, f"step {t}: should not be an eligible start"
+
+    # And exactly one of the eligible steps is chosen.
+    total_starts = sum(ctx.solver.var_value(v) for v in load.start.values())
+    assert abs(total_starts - 1.0) < 1e-6
 
 
 def test_deferrable_load_power_correct_when_running() -> None:
@@ -509,7 +514,7 @@ def test_deferrable_load_completed_rescheduled_when_window_present() -> None:
 
     ctx.solver.set_objective_minimize(load.start[0])
     ctx.solver.solve()
-    total_starts = sum(ctx.solver.var_value(load.start[t]) for t in ctx.T)
+    total_starts = sum(ctx.solver.var_value(v) for v in load.start.values())
     assert abs(total_starts - 1.0) < 1e-6, "Expected exactly one start after rescheduling"
 
 
@@ -548,3 +553,25 @@ def test_deferrable_load_window_too_short_is_excluded() -> None:
     assert len(load.start) == 0
     for t in ctx.T:
         assert load.net_power(t) == pytest.approx(0.0)
+
+
+def test_deferrable_load_declares_no_variable_for_ineligible_steps() -> None:
+    """Only the eligible start steps get a solver variable.
+
+    Declaring a fixed-zero binary for every other horizon step costs one
+    integer variable per step per load that can never take any value but zero.
+    Every reader of ``start`` skips absent keys, so there is nothing to gain
+    from creating them.
+    """
+    solve_time = _now()
+    # Window covers steps 2 to 5; duration 2 means the last valid start is 4.
+    window = DeferrableWindow(
+        earliest=solve_time + timedelta(hours=0.5),
+        latest=solve_time + timedelta(hours=1.5),
+    )
+    ctx = _make_ctx(horizon=8)
+    load = DeferrableLoad(name="wash", config=_config(duration_steps=2))
+    load.add_variables(ctx)
+    load.add_constraints(ctx, window=window, solve_time_utc=solve_time)
+
+    assert sorted(load.start) == [2, 3, 4]

@@ -176,7 +176,7 @@ class Battery:
                     lb=self.config.min_soc_kwh,
                     ub=self.config.capacity_kwh,
                 )
-                self.mode[t] = ctx.solver.add_var(lb=0.0, ub=1.0, integer=True)
+                self._declare_mode(ctx, t)
         else:
             # Stacked-segment model (existing behaviour).
             for t in ctx.T:
@@ -213,7 +213,7 @@ class Battery:
                 # the LP from simultaneously charging and discharging to exploit any
                 # efficiency asymmetry as free energy. The guard is always applied —
                 # omitting it would produce physically meaningless solutions.
-                self.mode[t] = ctx.solver.add_var(lb=0.0, ub=1.0, integer=True)
+                self._declare_mode(ctx, t)
 
         # Add soc_low[t] variables only when an optimal lower SOC is configured.
         # Skipping this in the default case (optimal = 0) keeps variable count
@@ -251,6 +251,22 @@ class Battery:
         ):
             for t in ctx.T:
                 self._active[t] = ctx.solver.add_var(lb=0.0, ub=1.0, integer=True)
+
+    def _declare_mode(self, ctx: ModelContext, t: int) -> None:
+        """Create the direction binary for step ``t`` unless one was supplied.
+
+        ``build_and_solve`` calls ``set_external_mode`` before ``add_variables``
+        when two or more batteries share a system-wide direction binary. In that
+        case ``self.mode`` is already populated and creating a per-device binary
+        would leave a free integer variable in the model for every step, bound
+        by no constraint and priced by no objective term.
+
+        Args:
+            ctx: The current solve context.
+            t: Time step index.
+        """
+        if t not in self.mode:
+            self.mode[t] = ctx.solver.add_var(lb=0.0, ub=1.0, integer=True)
 
     def add_constraints(self, ctx: ModelContext, inputs: BatteryInputs) -> None:
         """Add SOC tracking and mode-guard constraints.
@@ -545,14 +561,11 @@ class Battery:
         - 1 = all batteries are in the charging direction this step.
         - 0 = all batteries are in the discharging direction this step.
 
-        The per-device mode variables created in ``add_variables`` become
-        unused (they are unconstrained free binaries in the solver model).
-        This is a negligible overhead: the solver sets them arbitrarily
-        without affecting the objective or feasibility.
-
-        This method must be called after ``add_variables`` and before
-        ``add_constraints``. Calling it after ``add_constraints`` has no
-        effect on already-added constraints.
+        Must be called before ``add_variables``. ``add_variables`` skips
+        creating a per-device binary for any step already present in
+        ``self.mode``, so calling in that order leaves no orphaned variables
+        behind. Calling it after ``add_constraints`` has no effect on
+        constraints that have already been added.
 
         Args:
             mode_vars: Dict mapping step index ``t`` to the shared binary
