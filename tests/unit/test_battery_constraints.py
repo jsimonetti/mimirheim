@@ -851,3 +851,91 @@ def test_battery_min_discharge_kw_floor_inactive_when_charging() -> None:
     assert status != "infeasible", (
         "battery with min_discharge_kw=2.0 must be feasible when mode forces charging"
     )
+
+
+def test_battery_both_power_floors_allow_idle() -> None:
+    """With both floors set, the battery must still be able to do nothing.
+
+    The direction binary mode[t] selects charge (1) or discharge (0). If the
+    charge floor is gated on mode[t] and the discharge floor on (1 - mode[t]),
+    every value of mode[t] forces one direction to run and idling becomes
+    infeasible. A battery configured with both floors would then cycle on every
+    step regardless of price, accruing wear for no economic benefit.
+    """
+    ctx = _make_ctx(horizon=1)
+    cfg = BatteryConfig(
+        capacity_kwh=10.0,
+        charge_segments=[_seg(5.0)],
+        discharge_segments=[_seg(5.0)],
+        min_charge_kw=2.0,
+        min_discharge_kw=1.5,
+    )
+    battery = Battery(name="bat", config=cfg)
+    battery.add_variables(ctx)
+    battery.add_constraints(ctx, inputs=_inputs(soc_kwh=5.0))
+
+    # Ask for the least possible activity. Idle is the optimum if reachable.
+    ctx.solver.set_objective_minimize(
+        battery.charge_ac_kw(0) + battery.discharge_ac_kw(0)
+    )
+    assert ctx.solver.solve() in ("optimal", "feasible")
+
+    charge = ctx.solver.var_value(battery.charge_seg[0, 0])
+    discharge = ctx.solver.var_value(battery.discharge_seg[0, 0])
+    assert charge < 1e-6 and discharge < 1e-6, (
+        f"battery cannot idle with both floors set: charge={charge:.4f}, "
+        f"discharge={discharge:.4f}"
+    )
+
+
+def test_battery_both_power_floors_still_enforced_when_active() -> None:
+    """Adding an idle state must not weaken either floor when the battery runs.
+
+    Forcing a non-trivial SOC increase means the battery has to charge; the
+    charge power must then respect min_charge_kw rather than trickling.
+    """
+    ctx = _make_ctx(horizon=1)
+    cfg = BatteryConfig(
+        capacity_kwh=10.0,
+        charge_segments=[_seg(5.0)],
+        discharge_segments=[_seg(5.0)],
+        min_charge_kw=2.0,
+        min_discharge_kw=1.5,
+    )
+    battery = Battery(name="bat", config=cfg)
+    battery.add_variables(ctx)
+    battery.add_constraints(ctx, inputs=_inputs(soc_kwh=5.0))
+
+    # Require some charging, then ask for as little of it as possible.
+    ctx.solver.add_constraint(battery.charge_ac_kw(0) >= 0.1)
+    ctx.solver.set_objective_minimize(battery.charge_ac_kw(0))
+    assert ctx.solver.solve() in ("optimal", "feasible")
+
+    charge = ctx.solver.var_value(battery.charge_seg[0, 0])
+    assert charge >= 2.0 - 1e-6, (
+        f"charge={charge:.4f} violates min_charge_kw=2.0 once the battery is active"
+    )
+
+
+def test_battery_both_power_floors_discharge_floor_enforced_when_active() -> None:
+    """The discharge floor must survive the idle state in the same way."""
+    ctx = _make_ctx(horizon=1)
+    cfg = BatteryConfig(
+        capacity_kwh=10.0,
+        charge_segments=[_seg(5.0)],
+        discharge_segments=[_seg(5.0)],
+        min_charge_kw=2.0,
+        min_discharge_kw=1.5,
+    )
+    battery = Battery(name="bat", config=cfg)
+    battery.add_variables(ctx)
+    battery.add_constraints(ctx, inputs=_inputs(soc_kwh=5.0))
+
+    ctx.solver.add_constraint(battery.discharge_ac_kw(0) >= 0.1)
+    ctx.solver.set_objective_minimize(battery.discharge_ac_kw(0))
+    assert ctx.solver.solve() in ("optimal", "feasible")
+
+    discharge = ctx.solver.var_value(battery.discharge_seg[0, 0])
+    assert discharge >= 1.5 - 1e-6, (
+        f"discharge={discharge:.4f} violates min_discharge_kw=1.5 once active"
+    )

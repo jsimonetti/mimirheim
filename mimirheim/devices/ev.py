@@ -84,6 +84,10 @@ class EvDevice:
         self.discharge_seg: dict[tuple[int, int], Any] = {}
         self.soc: dict[int, Any] = {}
         self.mode: dict[int, Any] = {}
+        # Populated only when a minimum power floor needs an explicit idle
+        # state. active[t] is 1 when the charger runs at step t and 0 when it
+        # is at rest. See _needs_active_binary and add_constraints.
+        self._active: dict[int, Any] = {}
         self._dt: float = 0.25
         # Set to True by add_constraints when the vehicle is plugged in.
         # Used by terminal_soc_var to determine whether the SOC variable
@@ -150,6 +154,44 @@ class EvDevice:
                 lb=self.config.min_soc_kwh,
                 ub=self.config.capacity_kwh,
             )
+
+        # active[t]: binary "the charger is running this step" flag, declared
+        # only when a minimum power floor needs an explicit idle state.
+        #
+        # mode[t] encodes direction, not activity. On a V2H charger with both
+        # floors set, gating the charge floor on mode[t] and the discharge floor
+        # on (1 - mode[t]) leaves no value of mode[t] under which the charger can
+        # sit still, so idling becomes infeasible. On a charge-only charger there
+        # is no mode[t] at all, so a floor has nothing to switch it off.
+        #
+        # Both cases need the same third state. When only one floor is set on a
+        # V2H charger the unfloored direction can always be driven to zero, so
+        # idling is already reachable and no extra binary is created.
+        if self._needs_active_binary():
+            for t in ctx.T:
+                self._active[t] = ctx.solver.add_var(lb=0.0, ub=1.0, integer=True)
+
+    def _needs_active_binary(self) -> bool:
+        """Return True when a minimum power floor requires an explicit idle state.
+
+        Two configurations need one:
+
+        - A V2H charger with both ``min_charge_kw`` and ``min_discharge_kw``
+          set. The direction binary cannot also encode "neither direction".
+        - A charge-only charger with ``min_charge_kw`` set. There is no
+          direction binary at all, so the floor would otherwise apply
+          unconditionally and force the vehicle to charge on every step.
+
+        Returns:
+            True if ``add_variables`` should declare ``active[t]``.
+        """
+        has_v2h = len(self.config.discharge_segments) > 0
+        if has_v2h:
+            return (
+                self.config.min_charge_kw is not None
+                and self.config.min_discharge_kw is not None
+            )
+        return self.config.min_charge_kw is not None
 
     def add_constraints(
         self,
@@ -257,16 +299,17 @@ class EvDevice:
                 self.soc[t] - energy_stored + energy_drawn == soc_prev
             )
 
+            total_charge = sum(
+                self.charge_seg[t, i]
+                for i in range(len(self.config.charge_segments))
+            )
+            total_discharge = sum(
+                self.discharge_seg[t, i]
+                for i in range(len(self.config.discharge_segments))
+            ) if has_v2h else 0.0
+
             # --- Big-M simultaneous charge/discharge guard ---
             if has_v2h:
-                total_charge = sum(
-                    self.charge_seg[t, i]
-                    for i in range(len(self.config.charge_segments))
-                )
-                total_discharge = sum(
-                    self.discharge_seg[t, i]
-                    for i in range(len(self.config.discharge_segments))
-                )
                 ctx.solver.add_constraint(
                     total_charge <= max_charge_kw * self.mode[t]
                 )
@@ -274,20 +317,70 @@ class EvDevice:
                     total_discharge <= max_discharge_kw * (1 - self.mode[t])
                 )
 
-                # Minimum operating power floors (Plan 38C).
-                #
-                # When the EV charger (in V2H mode) is actively charging or
-                # discharging, some hardware cannot safely operate below a
-                # threshold — for example, a CHAdeMO gateway with a minimum
-                # current setpoint.
-                #
-                # The floor is applied only when mode[t] selects the direction:
-                #   - charge floor: total_charge >= min_charge_kw * mode[t]
-                #   - discharge floor: total_discharge >= min_discharge_kw * (1 - mode[t])
-                #
-                # For charge-only EVs (has_v2h=False) this entire block is
-                # unreachable, so the discharge floor is never added and
-                # self.mode is never used in add_constraints.
+            # --- Minimum operating power floors ---
+            #
+            # Some hardware cannot operate below a power threshold — for example,
+            # a CHAdeMO gateway or an EVSE with a minimum current setpoint. The
+            # floors express "run at or above this power, or do not run at all",
+            # so each one needs a way to say "not running".
+            #
+            # Three shapes, depending on what is configured:
+            if t in self._active:
+                if has_v2h:
+                    # V2H charger with both floors. mode[t] selects direction and
+                    # active[t] selects whether the charger runs at all.
+                    #
+                    #   total_charge    <= max_charge_kw    * active[t]
+                    #   total_discharge <= max_discharge_kw * active[t]
+                    #     Force both directions to zero when idle. Without these
+                    #     the solver could set active[t] = 0 and still charge,
+                    #     escaping the floor entirely.
+                    #
+                    #   total_charge    >= min_charge_kw * (mode[t] + active[t] - 1)
+                    #     Binding only when mode[t] = 1 and active[t] = 1. The
+                    #     right-hand side is 0 or negative otherwise.
+                    #
+                    #   total_discharge >= min_discharge_kw * (active[t] - mode[t])
+                    #     Mirror image: binding only when active[t] = 1 and
+                    #     mode[t] = 0.
+                    #
+                    # Reachable states: idle, charge at or above min_charge_kw,
+                    # discharge at or above min_discharge_kw.
+                    ctx.solver.add_constraint(
+                        total_charge <= max_charge_kw * self._active[t]
+                    )
+                    ctx.solver.add_constraint(
+                        total_discharge <= max_discharge_kw * self._active[t]
+                    )
+                    ctx.solver.add_constraint(
+                        total_charge
+                        >= self.config.min_charge_kw
+                        * (self.mode[t] + self._active[t] - 1)
+                    )
+                    ctx.solver.add_constraint(
+                        total_discharge
+                        >= self.config.min_discharge_kw
+                        * (self._active[t] - self.mode[t])
+                    )
+                else:
+                    # Charge-only charger with a charge floor. There is no
+                    # direction binary, so active[t] alone gates the floor:
+                    #
+                    #   total_charge <= max_charge_kw * active[t]
+                    #   total_charge >= min_charge_kw * active[t]
+                    #
+                    # Reachable states: idle, or charge in
+                    # [min_charge_kw, max_charge_kw].
+                    ctx.solver.add_constraint(
+                        total_charge <= max_charge_kw * self._active[t]
+                    )
+                    ctx.solver.add_constraint(
+                        total_charge >= self.config.min_charge_kw * self._active[t]
+                    )
+            elif has_v2h:
+                # At most one floor is configured on a V2H charger. mode[t] is
+                # sufficient: the unfloored direction can always be driven to
+                # zero, so idling stays reachable without an extra binary.
                 if self.config.min_charge_kw is not None:
                     ctx.solver.add_constraint(
                         total_charge >= self.config.min_charge_kw * self.mode[t]

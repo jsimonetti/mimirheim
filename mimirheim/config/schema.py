@@ -901,9 +901,12 @@ class BatteryConfig(BaseModel):
         default=None,
         ge=0.0,
         description=(
-            "Minimum charge power in kW when the inverter is actively charging. "
-            "When set, the solver enforces: total_charge >= min_charge_kw × mode[t]. "
-            "The inverter either charges at this power or above, or stays idle (0 kW). "
+            "Minimum charge power in kW when the battery is actively charging. "
+            "The battery either charges at this power or above, or stays idle (0 kW); "
+            "intermediate charge powers are excluded from the solution space. "
+            "Safe to combine with min_discharge_kw: the solver models idle as a "
+            "distinct state, so setting both floors does not force the battery to "
+            "cycle. "
             "Default None = no floor applied."
         ),
         json_schema_extra={"ui_label": "Minimum charge power (kW)", "ui_group": "advanced"},
@@ -912,10 +915,10 @@ class BatteryConfig(BaseModel):
         default=None,
         ge=0.0,
         description=(
-            "Minimum discharge power in kW when the inverter is actively discharging. "
-            "When set, the solver enforces: total_discharge >= min_discharge_kw × (1 − mode[t]). "
-            "The floor is only active in the discharging direction (mode[t]=0); "
-            "charging steps see a right-hand side of zero and are unaffected. "
+            "Minimum discharge power in kW when the battery is actively discharging. "
+            "The battery either discharges at this power or above, or stays idle (0 kW); "
+            "intermediate discharge powers are excluded from the solution space. "
+            "Safe to combine with min_charge_kw. "
             "Default None = no floor applied."
         ),
         json_schema_extra={"ui_label": "Minimum discharge power (kW)", "ui_group": "advanced"},
@@ -1252,10 +1255,9 @@ class EvConfig(BaseModel):
         description=(
             "Minimum charge power in kW when the EVSE is actively charging. "
             "IEC 61851 mandates ≥ 6 A per phase; single-phase 230 V = 1.38 kW, "
-            "three-phase = 4.14 kW. When set and V2H is configured "
-            "(discharge_segments non-empty), the solver enforces: "
-            "total_charge >= min_charge_kw × mode[t]. "
-            "Silently ignored for charge-only EVs (no mode variable). "
+            "three-phase = 4.14 kW. The charger either charges at this power or "
+            "above, or draws nothing; intermediate charge powers are excluded from "
+            "the solution space. Applies to both V2H and charge-only chargers. "
             "Default None = no floor applied."
         ),
         json_schema_extra={"ui_label": "Minimum EVSE charge power (kW)", "ui_group": "advanced"},
@@ -1265,9 +1267,11 @@ class EvConfig(BaseModel):
         ge=0.0,
         description=(
             "Minimum V2H discharge power in kW when the EVSE is actively discharging. "
-            "When set and discharge_segments is non-empty, the solver enforces: "
-            "total_discharge >= min_discharge_kw × (1 − mode[t]). "
-            "Silently ignored when discharge_segments is empty. "
+            "The charger either discharges at this power or above, or stays idle; "
+            "intermediate discharge powers are excluded from the solution space. "
+            "Safe to combine with min_charge_kw. Has no effect when "
+            "discharge_segments is empty, because a charge-only charger cannot "
+            "discharge at all. "
             "Default None = no floor applied."
         ),
         json_schema_extra={"ui_label": "Minimum V2H discharge power (kW)", "ui_group": "advanced"},
@@ -1850,7 +1854,11 @@ class HybridInverterConfig(BaseModel):
         ge=0.0,
         description=(
             "Minimum DC charge power in kW when the inverter is actively charging. "
-            "The inverter either charges at this power or above, or stays idle. "
+            "The inverter either charges at this power or above, or stays idle; "
+            "intermediate charge powers are excluded from the solution space. "
+            "Safe to combine with min_discharge_kw: the solver models idle as a "
+            "distinct state, so setting both floors does not force the battery to "
+            "cycle. "
             "Default None = no floor applied."
         ),
         json_schema_extra={"ui_label": "Minimum charge power (kW)", "ui_group": "advanced"},
@@ -1860,6 +1868,9 @@ class HybridInverterConfig(BaseModel):
         ge=0.0,
         description=(
             "Minimum DC discharge power in kW when the inverter is actively discharging. "
+            "The inverter either discharges at this power or above, or stays idle; "
+            "intermediate discharge powers are excluded from the solution space. "
+            "Safe to combine with min_charge_kw. "
             "Default None = no floor applied."
         ),
         json_schema_extra={"ui_label": "Minimum discharge power (kW)", "ui_group": "advanced"},
