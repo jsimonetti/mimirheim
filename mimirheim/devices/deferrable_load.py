@@ -135,33 +135,28 @@ class DeferrableLoad:
         """Add scheduling constraints for this run cycle.
 
         Determines the device state from ``start_time`` and ``solve_time_utc``,
-        then applies the appropriate modelling approach:
+        then applies the appropriate modelling approach. The states are the
+        four described in the module docstring, evaluated in this order:
 
-        - **Completed state** (``start_time`` present, run entirely in the
-          past): falls through to scheduling. If ``window`` is provided, the
-          load is re-scheduled for a new run; otherwise no-op.
-        - **Running state** (``start_time`` present, run currently active): sets
+        - **Running** (``start_time`` present, run currently active): sets
           ``_fixed_steps`` and ``_elapsed_steps`` so ``net_power(t)`` returns
-          the correct profile values for remaining steps. No solver variables.
-        - **Committed state** (``start_time`` present, run starts in the
-          future): sets ``_committed_start_step`` so ``net_power(t)`` returns
-          profile values at the committed horizon step. No solver variables;
-          any ``window`` argument is ignored.
-        - **Unscheduled state** (``window`` is None and no active
+          the correct profile values for the remaining steps. No solver
+          variables. Any ``window`` argument is ignored: the load has already
+          started and the window no longer has anything to decide.
+        - **Committed** (``start_time`` present, run starts in the future):
+          sets ``_committed_start_step`` so ``net_power(t)`` returns profile
+          values at the committed horizon steps. No solver variables. Any
+          ``window`` argument is ignored, because the automation has already
+          accepted and programmed this start time and mimirheim must not move
+          it.
+        - **Completed** (``start_time`` present, run entirely in the past): the
+          retained ``start_time`` is stale, so it is disregarded and control
+          falls through to the scheduling case below.
+        - **Scheduling** (``window`` present and no ``start_time`` that is
+          running or committed): binary optimisation over the eligible start
+          steps within the window.
+        - **Unscheduled** (no ``window`` and no running or committed
           ``start_time``): no-op. ``net_power`` returns 0.
-        - **Scheduling state** (``window`` present, no ``start_time``, or
-          ``start_time`` has completed): binary optimisation within the window.
-        - **Completed state** (``start_time`` present but the run has ended):
-          no-op. ``net_power`` returns 0.
-        - **Unscheduled state** (``window`` is None and no ``start_time``):
-          no-op. ``net_power`` returns 0.
-        - **Scheduling state** (``window`` present, no active ``start_time``,
-          or ``start_time`` is in the future): binary optimisation within
-          the window.
-
-        When both ``start_time`` and ``window`` are provided and ``start_time``
-        indicates the load is currently running, the running state takes
-        priority and the window is ignored.
 
         Args:
             ctx: The current solve context.

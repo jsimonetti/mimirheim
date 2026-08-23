@@ -692,9 +692,10 @@ readiness:
   warn_below_hours: 8.0
 
   # Any gap between consecutive data points within the computed horizon
-  # that exceeds this value triggers a warning. The gap is filled by
-  # interpolation regardless; the warning signals that the data source may
-  # have failed a refresh cycle. Default 2 hours.
+  # that exceeds this value triggers a warning. The solve proceeds regardless:
+  # resampling holds the last known value across the gap, so a long gap means
+  # a stale value is carried forward for hours. The warning signals that the
+  # data source may have failed a refresh cycle. Default 2 hours.
   max_gap_hours: 2.0
 
 # ---------------------------------------------------------------------------

@@ -83,7 +83,7 @@ This is a hard project rule documented in IMPLEMENTATION_DETAILS §1. An unguard
 
 ### Exception handling
 
-Never use a bare `except:` or `except Exception:` without immediately re-raising or logging with full traceback. Catch the most specific exception type possible. The fault resilience design (IMPLEMENTATION_DETAILS §10) depends on exceptions surfacing cleanly to the solve loop, not being swallowed inside helper functions.
+Never use a bare `except:` or `except Exception:` without immediately re-raising or logging with full traceback. Catch the most specific exception type possible. The fault resilience design (IMPLEMENTATION_DETAILS §12) depends on exceptions surfacing cleanly to the solve loop, not being swallowed inside helper functions.
 
 ### No emoticons
 
@@ -281,27 +281,10 @@ mimirheim/
     input_parser.py     # Parses raw MQTT payloads into validated input models
   __main__.py           # Entry point: config load, solve loop, signal handling
 tests/
-  unit/
-    test_battery_constraints.py
-    test_pv_constraints.py
-    test_ev_constraints.py
-    test_deferrable_load_constraints.py
-    test_objective_builder.py
-    test_horizon.py
-    test_config_schema.py
-    test_input_parser.py
-    test_mqtt_publisher.py
-    test_readiness.py
-  scenarios/
-    high_price_spread/
-    flat_price/
-    negative_export_price/
-    ev_not_plugged/
-    low_confidence_horizon/
-    zero_export_constrained/
-  integration/
-    test_mqtt_roundtrip.py
-    test_readiness_mqtt.py
+  unit/            # one module per unit under test; see the directory listing
+  scenarios/       # one directory per golden-file scenario
+  benchmarks/      # pytest-benchmark performance scenarios
+  integration/     # require a live MQTT broker; run with -m integration
   conftest.py
 pyproject.toml
 README.md
@@ -314,7 +297,7 @@ plans/
   done/
 ```
 
-Device modules must not import from `mimirheim/io/`. Config models must not import from `mimirheim/core/` or `mimirheim/io/`. See IMPLEMENTATION_DETAILS §6 and §7 for the full boundary rules.
+Device modules must not import from `mimirheim/io/`. Config models must not import from `mimirheim/core/` or `mimirheim/io/`. See IMPLEMENTATION_DETAILS §6 and §7 for the full boundary rules, and §8 for the device method contract.
 
 ---
 

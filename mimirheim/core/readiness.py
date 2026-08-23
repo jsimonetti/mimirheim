@@ -36,7 +36,7 @@ Thread safety:
     All public methods acquire ``_lock`` before touching shared state. The lock
     is held only long enough to update or read ``_entries`` — never during a
     solve. This matches the concurrency model described in
-    ``IMPLEMENTATION_DETAILS §9``.
+    ``IMPLEMENTATION_DETAILS §11``.
 
 This module imports from ``mimirheim.core`` and ``mimirheim.config`` but never from
 ``mimirheim.io``.
@@ -303,9 +303,11 @@ class ReadinessState:
 
         Computes the available horizon (number of 15-minute steps) from the
         joint coverage of all forecast series, resamples each series to that
-        grid, and assembles the ``SolveBundle``. Gaps in intermediate steps
-        are filled by interpolation (power) or step-function (prices) with a
-        warning logged when a gap exceeds ``max_gap_hours``.
+        grid, and assembles the ``SolveBundle``. Both prices and power
+        forecasts are resampled with a hold-previous step function, so an
+        intermediate gap is filled by carrying the last known value forward
+        rather than by interpolating across it. A gap wider than
+        ``max_gap_hours`` is logged as a warning.
 
         Returns:
             A ``SolveBundle`` with flat resampled arrays for the available
@@ -590,7 +592,7 @@ class ReadinessState:
                 gap_hours = (gap_end - gap_start).total_seconds() / 3600
                 logger.warning(
                     "Gap of %.1f hours in forecast topic %r from %s to %s. "
-                    "The gap is filled by interpolation.",
+                    "The last known value is held across the gap.",
                     gap_hours,
                     topic,
                     gap_start.isoformat(),

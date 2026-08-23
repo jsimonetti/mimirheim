@@ -98,8 +98,12 @@ class PowerForecastStep(BaseModel):
 
     PV generation and household base-load forecasts arrive from external APIs
     at arbitrary resolution (typically hourly). ``ReadinessState`` stores a list
-    of these and resamples them to the 15-minute solver grid using linear
-    interpolation between adjacent known points.
+    of these and resamples them to the 15-minute solver grid with a
+    hold-previous step function: ``kw`` is the average power over the interval
+    beginning at ``ts``, so every 15-minute slot inside that interval takes the
+    same value. Interpolating between adjacent points would blend two hourly
+    averages and invent a ramp the data does not describe. See
+    ``core.forecast.resample_power``.
 
     Attributes:
         ts: UTC datetime of this forecast point.
@@ -284,10 +288,11 @@ class SolveBundle(BaseModel):
             this value; low-confidence steps are conservatively weighted.
         pv_forecast: PV generation forecast in kW per step. Positive = power
             flowing from the PV array into the home. Sum of all configured
-            PV arrays, resampled via linear interpolation.
+            PV arrays, resampled to the 15-minute grid with a hold-previous
+            step function.
         base_load_forecast: Forecast of non-controllable (static) household
             load in kW per step. Sum of all configured static loads, resampled
-            via linear interpolation.
+            the same way.
         battery_inputs: Keyed by battery device name (matching config). Empty
             if no batteries are configured or their MQTT state is stale.
         ev_inputs: Keyed by EV device name. Empty if no EV is plugged in.
@@ -437,8 +442,10 @@ class ScheduleStep(BaseModel):
     """The complete power dispatch for a single 15-minute time step.
 
     Attributes:
-        t: Zero-based time step index within the horizon (0–95 for a 96-step
-            24-hour horizon).
+        t: Zero-based time step index within the horizon. The horizon length is
+            variable, set per solve by the available forecast coverage, so the
+            highest index differs between cycles. Use ``SolveResult.solve_time_utc``
+            plus ``t * 15 minutes`` to turn an index into a wall-clock time.
         grid_import_kw: Power imported from the grid in kW. Non-negative.
         grid_export_kw: Power exported to the grid in kW. Non-negative.
         devices: Per-device setpoints for this step, keyed by device name.

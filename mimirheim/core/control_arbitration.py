@@ -382,9 +382,8 @@ def assign_control_authority(
 ) -> SolveResult:
     """Assign closed-loop enforcer authority to at most one device per step.
 
-    This function replaces ``apply_zero_export_flags`` from Plan 42. It
-    implements a four-level scoring cascade to select the best enforcer,
-    with hysteresis and minimum dwell to prevent rapid switching.
+    Implements a four-level scoring cascade to select the best enforcer, with
+    hysteresis and minimum dwell to prevent rapid switching.
 
     **Step classification**: A step is near-zero-exchange when both
     ``grid_import_kw`` and ``grid_export_kw`` are below
@@ -525,13 +524,19 @@ def assign_control_authority(
                 dwell_remaining = 0
                 current_score = -1.0
 
-            # Dwell: if an enforcer is locked in and dwell has not expired, keep it.
+            # Dwell takes priority over the switch_delta hysteresis. While
+            # dwell_remaining is above zero the current enforcer keeps the role
+            # no matter how well a challenger scores; the only thing that can
+            # end a dwell early is the enforcer becoming ineligible, which the
+            # check above has already handled.
+            #
+            # Dwell and switch_delta guard against the same failure in
+            # different ways. switch_delta stops two devices with nearly equal
+            # scores from trading the role back and forth; dwell puts a floor
+            # on how often the role can move at all, so a device whose score
+            # genuinely improves cannot take over mid-sequence and leave the
+            # hardware toggling closed-loop registers every step.
             if current_enforcer is not None and dwell_remaining > 0:
-                # Check if a challenger beats the current enforcer by switch_delta.
-                # Dwell does not prevent an override when the challenger margin is
-                # large — but the plan says dwell takes priority over switch_delta.
-                # Exact rule: dwell_remaining > 0 → keep current enforcer regardless
-                # of challenger score, unless current becomes ineligible.
                 dwell_remaining -= 1
                 enforcer_name = current_enforcer
             else:
@@ -547,11 +552,14 @@ def assign_control_authority(
                         current_score = best_score
                         dwell_remaining = max(0, ctrl.min_enforcer_dwell_steps - 1)
                     else:
-                        # Check switch_delta against the full score tuple, not just level 1.
-                        # Use the composite float score as a proxy: sum of weighted levels.
-                        # For a stable and simple comparison, we compare the efficiency
-                        # score (level 1) difference only — which is the most meaningful
-                        # discriminator and what the plan describes.
+                        # Hysteresis compares level 1 of the score tuple only,
+                        # that is the efficiency at the expected compensation
+                        # power. The later levels (headroom, wear, type, name)
+                        # exist to break ties deterministically within a single
+                        # step and are not on a common scale, so a delta across
+                        # the whole tuple would not mean anything. Efficiency is
+                        # the discriminator that actually justifies moving the
+                        # role between devices.
                         best_eff = best.score_tuple()[0]
                         if best.name != current_enforcer and (best_eff - current_score) > ctrl.switch_delta:
                             # Challenger significantly outscores current enforcer: switch.

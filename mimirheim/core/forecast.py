@@ -81,7 +81,8 @@ def compute_horizon_steps(solve_start: datetime, *series: list[Any]) -> int:
     3. ``n_steps = floor((horizon_end - solve_start) / 15 minutes)``.
 
     No extrapolation is performed beyond the last known data point of any
-    series. Interpolation is only valid within ``[solve_start, horizon_end]``.
+    series: resampling is only well defined within
+    ``[solve_start, horizon_end]``.
 
     Args:
         solve_start: The 15-minute-aligned start of the solve horizon.
@@ -116,9 +117,10 @@ def find_gaps(
 ) -> list[tuple[datetime, datetime]]:
     """Find consecutive timestamp pairs within the horizon whose gap exceeds max_gap_hours.
 
-    Only timestamps strictly within ``[solve_start, horizon_end]`` are
-    considered. The gap before the first data point at or after solve_start
-    is ignored — it is a horizon boundary, not an internal data gap.
+    Only timestamps inside ``[solve_start, horizon_end]`` are considered, with
+    both bounds inclusive. The gap before the first data point at or after
+    solve_start is ignored — it is a horizon boundary, not an internal data
+    gap.
 
     A gap of exactly ``max_gap_hours`` is not flagged; only strictly greater
     gaps are returned. This prevents false alarms when data arrives at
@@ -156,8 +158,9 @@ def resample_prices(
     """Resample price steps to the 15-minute grid using a step (constant) function.
 
     For each 15-minute output step at time ``t_i``, the price is taken from
-    the most recent ``PriceStep`` whose ``.ts <= t_i``. If all steps are after
-    ``t_i``, the first known step is used (conservative forward-fill).
+    the most recent ``PriceStep`` whose ``.ts <= t_i``. If every step is after
+    ``t_i`` the first known step is used, extending the earliest known price
+    backwards to cover the leading edge.
 
     This matches how day-ahead market prices work: a price quoted for 15:00
     applies unchanged until the next quoted price, regardless of the quoting

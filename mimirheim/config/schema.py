@@ -264,8 +264,10 @@ class ReadinessConfig(BaseModel):
             the next 4 hours due to a missed refresh, the warning will fire.
         max_gap_hours: Any gap between consecutive data points within the
             computed horizon that exceeds this value triggers a warning. The
-            gap is filled by interpolation regardless; the warning signals that
-            the data source may have failed a refresh cycle. Default 2 hours.
+            solve proceeds regardless: resampling holds the last known value
+            across the gap. The warning signals that the data source may have
+            failed a refresh cycle and that the held value may no longer
+            describe conditions late in the gap. Default 2 hours.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -285,7 +287,11 @@ class ReadinessConfig(BaseModel):
     max_gap_hours: float = Field(
         ge=0,
         default=2.0,
-        description="Log a warning when any gap between consecutive forecast points exceeds this value in hours.",
+        description=(
+            "Log a warning when any gap between consecutive forecast points "
+            "exceeds this value in hours. The solve proceeds regardless: "
+            "resampling holds the last known value across the gap."
+        ),
         json_schema_extra={"ui_label": "Max gap (h)", "ui_group": "advanced"},
     )
 
@@ -766,7 +772,11 @@ class BatteryConfig(BaseModel):
         discharge_efficiency_curve: SOS2 piecewise-linear efficiency curve for
             discharging. Same constraints as charge_efficiency_curve.
         wear_cost_eur_per_kwh: Cost per kWh of energy throughput in EUR.
-        optimal_lower_soc_kwh: Preferred minimum SOC. See plan 21 notes.
+        optimal_lower_soc_kwh: Preferred minimum SOC in kWh. A soft lower
+            bound: dropping below it costs
+            ``soc_low_penalty_eur_per_kwh_h`` per kWh of deficit per hour
+            rather than being forbidden, so the solver still discharges past it
+            when the price spread pays for the penalty.
         soc_low_penalty_eur_per_kwh_h: Penalty rate for negative SOC deviation.
         reduce_charge_above_soc_kwh: SOC threshold above which charge is derated.
         reduce_charge_min_kw: Minimum charge power at capacity_kwh when derated.
@@ -2609,10 +2619,10 @@ class CombiHeatPumpConfig(BaseModel):
     the solver prefers at each price step.
 
     The tank model (temperature dynamics, hard bounds) is identical to
-    ``ThermalBoilerDevice`` (plan 25). The space heating model (degree-days
-    demand, minimum run) is identical to ``SpaceHeatingDevice`` in on/off mode
-    (plan 26). The unique constraint in this device is the mutual exclusion
-    between the two modes.
+    ``ThermalBoilerDevice``. The space heating model (degree-days demand,
+    minimum run) is identical to ``SpaceHeatingDevice`` in on/off mode. The
+    unique constraint in this device is the mutual exclusion between the two
+    modes.
 
     Attributes:
         elec_power_kw: Rated electrical power in kW. Applied at this level in

@@ -1,25 +1,32 @@
 """PV device — fixed forecast or solver-controlled generation.
 
-In fixed mode (no capabilities enabled) mimirheim does not control PV output: the
-per-step power forecast is treated as a given constant, and dispatchable devices
-schedule around it.
+An array is in exactly one of four control modes, chosen by config. The modes
+describe genuinely different hardware and the schema rejects any combination of
+them (see ``PvCapabilitiesConfig._validate_mutually_exclusive_modes`` and
+``PvConfig._validate_production_stages``), so ``add_constraints`` dispatches on
+them with a single if/elif chain.
 
-When ``capabilities.power_limit`` is True, mimirheim adds a continuous decision
-variable ``pv_kw[t]`` bounded by the forecast, allowing the solver to curtail
-generation when exporting would be costly.
+**Fixed** (no capability enabled, no stages). mimirheim does not control the
+array. The per-step forecast enters the power balance as a constant and
+dispatchable devices schedule around it.
 
-When ``capabilities.on_off`` is True, mimirheim adds a binary variable
-``pv_curtailed[t]``: 0 means the array is running (produces the full forecast),
-1 means it is switched off. Curtailment is penalised with a negligible objective
-term (1e-6 EUR per step) so the solver defaults to on when indifferent.
+**Continuous** (``capabilities.power_limit``). Models an inverter that accepts a
+power limit setpoint, such as an SMA, Kostal or Fronius. mimirheim adds a
+continuous variable ``pv_kw[t]`` bounded by the forecast, so the solver can
+curtail to any level when exporting would be costly. Sending zero is how such an
+inverter is switched off; there is no separate on/off register.
 
-Both capabilities may be enabled together: ``pv_kw[t]`` is bounded by
-``forecast[t] * (1 - pv_curtailed[t])``.
+**Binary** (``capabilities.on_off``). Models an inverter or relay with no
+setpoint register at all, which can only run or not run. mimirheim adds a binary
+``pv_curtailed[t]``: 0 means the array is running and produces the full
+forecast, 1 means it is switched off. Curtailment carries a negligible objective
+penalty (1e-6 EUR per step) so the solver defaults to running when indifferent.
 
-When ``production_stages`` is provided in config, mimirheim adds one binary variable
-``stage_active[t, s]`` per step per stage. Exactly one stage is active at each
-step, and the effective output is the precomputed ``min(forecast[t], stage_kw[s])``.
-This mode is mutually exclusive with ``power_limit`` and ``on_off``.
+**Staged** (``production_stages``). Models an inverter that accepts a fixed
+enumeration of output levels including zero, such as an Enphase IQ Combiner.
+mimirheim adds one binary ``stage_active[t, s]`` per step per stage, constrains
+exactly one to be active, and uses the precomputed
+``min(forecast[t], stage_kw[s])`` as the effective output.
 
 ``PvInputs`` is defined here because it is a direct input to this device's
 ``add_constraints`` method. It is not a runtime MQTT model with staleness checks
@@ -53,21 +60,26 @@ class PvInputs(BaseModel):
 class PvDevice:
     """Models a PV array as a fixed or solver-controlled generation source.
 
-    In fixed mode (no capabilities), PV output is not a decision variable. All
-    forecast generation enters the power balance as a constant, and other devices
-    must absorb or export any surplus.
+    In fixed mode (no capability, no stages), PV output is not a decision
+    variable. All forecast generation enters the power balance as a constant,
+    and other devices must absorb or export any surplus.
 
     When ``power_limit`` is enabled, ``pv_kw[t]`` is a continuous variable
     bounded by the forecast; the solver may curtail below the forecast value.
 
-    When ``on_off`` is enabled, ``pv_on[t]`` is a binary variable; the array
-    either produces the full forecast or nothing.
+    When ``on_off`` is enabled, ``pv_curtailed[t]`` is a binary variable; the
+    array either produces the full forecast or nothing. Note the polarity:
+    0 means running, 1 means switched off. See ``add_constraints`` for why the
+    variable is expressed as curtailment rather than as an "on" flag.
 
-    Both modes may be active simultaneously: ``pv_kw[t] <= forecast[t] * pv_on[t]``.
+    When ``production_stages`` is set, one binary per stage per step selects the
+    inverter register value.
+
+    The four modes are mutually exclusive and the schema enforces that.
 
     Attributes:
-        name: Device name matching the key in ``config.pv``. Used by the power
-            balance assembler to identify this source.
+        name: Device name matching the key in ``config.pv_arrays``. Used by the
+            power balance assembler to identify this source.
         config: Static PV configuration.
     """
 
@@ -75,7 +87,7 @@ class PvDevice:
         """Initialise the PV device.
 
         Args:
-            name: Device name, matching the key in ``MimirheimConfig.pv``.
+            name: Device name, matching the key in ``MimirheimConfig.pv_arrays``.
             config: Validated static PV configuration.
         """
         self.name = name
@@ -117,15 +129,17 @@ class PvDevice:
         each time step with upper bound equal to the (clipped) forecast. The
         solver may choose any value in ``[0, forecast[t]]``.
 
-        In on_off mode, a binary variable ``pv_on[t]`` is added for each step.
-        Production is ``forecast[t] * pv_on[t]``: either the full forecast or
-        zero, with no intermediate values.
+        In on_off mode, a binary variable ``pv_curtailed[t]`` is added for each
+        step. Production is ``forecast[t] * (1 - pv_curtailed[t])``: either the
+        full forecast or zero, with no intermediate values.
 
-        When both modes are active, both variables are created and the Big-M
-        constraint ``pv_kw[t] <= forecast[t] * pv_on[t]`` couples them.
-        ``forecast[t]`` plays the role of Big-M because it is the tightest
-        valid upper bound: ``pv_kw[t]`` cannot exceed the forecast regardless
-        of ``pv_on``.
+        In staged mode, one binary ``stage_active[t, s]`` per stage is added and
+        constrained so that exactly one is active per step.
+
+        The modes are mutually exclusive, so exactly one branch runs per step
+        and no coupling between mode variables is needed. Attempting to
+        configure two of them is rejected by the schema rather than resolved
+        here.
 
         Args:
             ctx: The current solve context.
