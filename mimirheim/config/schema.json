@@ -2003,7 +2003,7 @@
     },
     "SolverConfig": {
       "additionalProperties": false,
-      "description": "Solver tuning parameters for the CBC MILP backend.\n\nControls resource limits and performance characteristics of the solver.\nThese settings do not affect solution correctness \u2014 only how quickly the\nsolver finds and proves the optimal schedule.\n\nAttributes:\n    max_horizon_steps: Hard cap on the number of 15-minute steps passed to\n        the solver per cycle. At 15-minute resolution: 96 = 24 h, 192 = 48 h,\n        288 = 72 h. When the available forecast horizon exceeds this cap, the\n        bundle is trimmed to this length before building the model. A longer\n        horizon improves schedule quality but increases MILP complexity\n        exponentially for binary-variable devices such as thermal heat pumps.\n        Minimum 96 (24 h). Default 288 (72 h).\n    threads: Number of parallel threads CBC may use during branch-and-bound.\n        -1 means use all available CPU cores. On a dedicated home server that\n        is otherwise idle between solve cycles, -1 is the recommended setting.\n        Default -1.",
+      "description": "Solver tuning parameters for the CBC MILP backend.\n\nControls resource limits and performance characteristics of the solver.\nThese settings do not affect solution correctness \u2014 only how quickly the\nsolver finds and proves the optimal schedule.\n\nAttributes:\n    max_horizon_steps: Hard cap on the number of 15-minute steps passed to\n        the solver per cycle. At 15-minute resolution: 96 = 24 h, 192 = 48 h,\n        288 = 72 h. When the available forecast horizon exceeds this cap, the\n        bundle is trimmed to this length before building the model. A longer\n        horizon improves schedule quality but increases MILP complexity\n        exponentially for binary-variable devices such as thermal heat pumps.\n        Minimum 96 (24 h). Default 288 (72 h).\n    threads: Number of parallel threads CBC may use during branch-and-bound.\n        -1 means use all available CPU cores. On a dedicated home server that\n        is otherwise idle between solve cycles, -1 is the recommended setting.\n        Default -1.\n    time_limit_seconds: Wall-clock budget for one solve cycle. When the\n        limit is reached the solver returns the best incumbent found so\n        far, which is acceptable for a rolling-horizon strategy: a slightly\n        suboptimal schedule is better than no schedule. The solve loop is\n        single-threaded, so this is also the longest a solve can block the\n        handling of the next trigger. Default 59 seconds, chosen to fit\n        inside a 60-second solve cycle. The ``minimize_consumption``\n        strategy solves twice and splits this budget across both phases,\n        so the total never exceeds it.",
       "properties": {
         "max_horizon_steps": {
           "default": 288,
@@ -2022,6 +2022,15 @@
           "type": "integer",
           "ui_group": "advanced",
           "ui_label": "Solver threads"
+        },
+        "time_limit_seconds": {
+          "default": 59.0,
+          "description": "Wall-clock budget for one solve cycle, in seconds. On expiry the solver returns its best incumbent instead of a proven optimum. Also the longest a solve can block the next trigger, because the solve loop is single-threaded. The minimize_consumption strategy splits this budget across its two phases. Default 59 s, which fits inside a 60-second cycle.",
+          "exclusiveMinimum": 0.0,
+          "title": "Time Limit Seconds",
+          "type": "number",
+          "ui_group": "advanced",
+          "ui_label": "Solver time limit (s)"
         }
       },
       "title": "SolverConfig",

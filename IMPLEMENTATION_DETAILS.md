@@ -116,9 +116,16 @@ See `SOLVER_REWRITE.md` for the full measurement methodology and decision record
 
 ### Configurable time limit
 
-A `time_limit_seconds` cap (default: 59 s) prevents the solver from blocking the re-solve loop.
-If the limit is hit, CBC returns the best incumbent found so far. This is acceptable for a
-rolling-horizon strategy — a slightly suboptimal schedule is better than no schedule.
+A `time_limit_seconds` cap prevents the solver from blocking the re-solve loop. It is set by
+`solver.time_limit_seconds` in the config (default: 59 s) and is threaded from `build_and_solve`
+into `SolverBackend.solve`. If the limit is hit, CBC returns the best incumbent found so far. This
+is acceptable for a rolling-horizon strategy — a slightly suboptimal schedule is better than no
+schedule.
+
+The cap covers the whole solve cycle, not one solver invocation. `minimize_consumption` is
+lexicographic and solves twice: `ObjectiveBuilder.build` runs the phase-1 volume minimisation
+internally and returns the unspent half of the budget, which `build_and_solve` passes to the
+phase-2 solve. The total therefore stays inside the configured limit.
 
 ### SolverBackend interface
 
@@ -1033,7 +1040,7 @@ The term is implemented in `mimirheim/core/objective.py` in the `_exchange_shapi
 Three activities need to coexist:
 1. paho-mqtt network I/O (continuous — receives retained messages, sends publishes)
 2. Readiness state tracking (updates on every incoming message)
-3. Solving (blocking, up to 59 s)
+3. Solving (blocking, up to `solver.time_limit_seconds`)
 
 ### Thread structure
 
@@ -1073,7 +1080,7 @@ publisher.publish(result)
 
 ### No concurrent solves
 
-Only one solve runs at a time. There is no thread pool for solving. The 59 s time limit exists precisely to bound how stale the next solve cycle can be. Running overlapping solves would share no benefit and would race on the solver instance.
+Only one solve runs at a time. There is no thread pool for solving. The `solver.time_limit_seconds` cap exists precisely to bound how stale the next solve cycle can be. Running overlapping solves would share no benefit and would race on the solver instance.
 
 ### `build_and_solve()` is thread-safe
 

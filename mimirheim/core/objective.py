@@ -11,7 +11,8 @@ Three strategies are supported:
 - ``minimize_consumption``: minimise total grid import lexicographically, then
   maximise export revenue subject to the optimal import bound. This is the only
   strategy that calls ``ctx.solver.solve()`` internally (phase-1 solve). The
-  caller must call ``ctx.solver.solve()`` once more to complete phase 2.
+  caller must call ``ctx.solver.solve()`` once more to complete phase 2, using
+  the budget that ``build`` returns.
 - ``balanced``: weighted sum of cost and self-sufficiency objectives, blended
   according to ``config.objectives.balanced_weights``.
 
@@ -45,7 +46,7 @@ class ObjectiveBuilder:
         grid: Grid,
         bundle: SolveBundle,
         config: MimirheimConfig,
-    ) -> None:
+    ) -> float:
         """Set the objective on ctx.solver according to bundle.strategy.
 
         This is the sole entry point for objective assembly. It:
@@ -53,12 +54,18 @@ class ObjectiveBuilder:
         1. Adds hard-cap constraints from ``config.constraints`` (import and
            export power limits) at every time step.
         2. Dispatches to the appropriate strategy implementation.
+        3. Returns the wall-clock solver budget the caller has left.
 
-        For ``minimize_consumption``, this method calls ``ctx.solver.solve()``
-        once internally (phase-1 solve). The caller must call
-        ``ctx.solver.solve()`` once more after ``build`` returns to complete the
-        phase-2 solve. This is the only strategy with two solver invocations per
-        ``build_and_solve`` cycle.
+        Most strategies only assemble an objective and leave the whole budget
+        to the caller. ``minimize_consumption`` is lexicographic and has to
+        solve once inside this method to find the minimum import volume before
+        it can constrain phase 2, so it spends part of the budget here.
+
+        The return value exists to make that asymmetry impossible to miss. The
+        caller must pass it to its own ``ctx.solver.solve(...)`` rather than
+        assuming the full ``config.solver.time_limit_seconds`` is still
+        available; doing otherwise lets a two-phase solve run for twice the
+        configured budget and block the single-threaded solve loop.
 
         Args:
             ctx: The model context holding the solver and time horizon.
@@ -68,23 +75,31 @@ class ObjectiveBuilder:
                 primary economic variables in the objective.
             bundle: Runtime inputs including the strategy name, time-varying
                 prices, and per-step confidence values.
-            config: Static configuration including strategy weights and
-                optional hard-cap constraints.
+            config: Static configuration including strategy weights, optional
+                hard-cap constraints, and the solver time budget.
+
+        Returns:
+            Seconds of solver wall-clock budget remaining for the caller's
+            solve. Equal to ``config.solver.time_limit_seconds`` for
+            single-phase strategies, and the unspent remainder for
+            ``minimize_consumption``.
 
         Raises:
             ValueError: If ``bundle.strategy`` is not one of the three
                 supported strings.
         """
         self._add_hard_cap_constraints(ctx, grid, config)
+        budget = config.solver.time_limit_seconds
 
         if bundle.strategy == "minimize_cost":
             self._minimize_cost(ctx, devices, grid, bundle, config)
-        elif bundle.strategy == "minimize_consumption":
-            self._minimize_consumption(ctx, devices, grid, bundle, config)
-        elif bundle.strategy == "balanced":
+            return budget
+        if bundle.strategy == "minimize_consumption":
+            return self._minimize_consumption(ctx, devices, grid, bundle, config)
+        if bundle.strategy == "balanced":
             self._balanced(ctx, devices, grid, bundle, config)
-        else:
-            raise ValueError(f"Unknown strategy: {bundle.strategy!r}")
+            return budget
+        raise ValueError(f"Unknown strategy: {bundle.strategy!r}")
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -208,7 +223,7 @@ class ObjectiveBuilder:
         grid: Grid,
         bundle: SolveBundle,
         config: MimirheimConfig,
-    ) -> None:
+    ) -> float:
         """Set a two-phase lexicographic consumption-minimisation objective.
 
         The strategy uses two sequential solver calls to achieve a
@@ -239,14 +254,28 @@ class ObjectiveBuilder:
         phase 2, where it acts as a tiebreaker among solutions with equal
         phase-1 import volume.
 
+        **Time budget.** ``config.solver.time_limit_seconds`` covers the whole
+        solve cycle, not one solver invocation, so the two phases split it
+        evenly rather than each taking the full amount. An even split is used
+        instead of measuring phase-1 elapsed time because it keeps the model
+        build free of clock reads and gives a predictable worst case. Phase 1
+        is a pure volume minimisation with no price terms and normally
+        finishes well inside its half.
+
         Args:
             ctx: Model context.
             devices: Non-grid devices. Storage devices contribute wear cost and
                 terminal SoC value terms in phase 2.
             grid: Grid device providing import and export variables.
             bundle: Runtime inputs with per-step prices and confidence values.
-            config: Static configuration containing objective weights.
+            config: Static configuration containing objective weights and the
+                solver time budget.
+
+        Returns:
+            Seconds of solver budget left for the caller's phase-2 solve.
         """
+        phase_budget = config.solver.time_limit_seconds / 2.0
+
         # Phase 1: minimise total import.
         import_vars = [grid.import_[t] for t in ctx.T]
         import_sum: Any = import_vars[0]
@@ -254,7 +283,7 @@ class ObjectiveBuilder:
             import_sum = import_sum + v
 
         ctx.solver.set_objective_minimize(import_sum)
-        ctx.solver.solve()
+        ctx.solver.solve(time_limit_seconds=phase_budget)
 
         # Record the optimal total import and lock it in with a small slack.
         # The slack prevents numeric infeasibility if the phase-1 optimal value
@@ -302,6 +331,8 @@ class ObjectiveBuilder:
             ctx.solver.set_objective_minimize(obj)
         else:
             ctx.solver.set_objective_minimize(0)
+
+        return config.solver.time_limit_seconds - phase_budget
 
     def _balanced(
         self,

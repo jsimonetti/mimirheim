@@ -140,7 +140,7 @@ Confidence is applied to revenue/cost terms only, never to constraints. Physical
 
 ### Solver
 
-**CBC** (COIN-OR Branch and Cut, free, EPL 2.0, embedded via `python-mip`). The solver interface is abstracted behind a `SolverBackend` protocol; any compliant backend can be substituted. A 59-second time limit prevents blocking. CBC is approximately 100× faster than HiGHS on this problem class due to aggressive Gomory cut generation on temperature-coupled binary variables.
+**CBC** (COIN-OR Branch and Cut, free, EPL 2.0, embedded via `python-mip`). The solver interface is abstracted behind a `SolverBackend` protocol; any compliant backend can be substituted. A wall-clock time limit prevents blocking, configurable via `solver.time_limit_seconds` (default 59 seconds). The `minimize_consumption` strategy solves twice and splits that budget across both phases, so the total never exceeds it. CBC is approximately 100× faster than HiGHS on this problem class due to aggressive Gomory cut generation on temperature-coupled binary variables.
 
 ---
 
