@@ -95,6 +95,30 @@ class MqttPublisher:
         self._config = config
         self._last_result: SolveResult | None = None
 
+    @staticmethod
+    def _step_origin(result: SolveResult) -> datetime:
+        """Return the wall-clock time that schedule step 0 refers to.
+
+        ``build_and_solve`` copies the bundle's ``solve_time_utc`` onto every
+        result, so in the running daemon this is always populated and the
+        result carries its own time axis.
+
+        The fallback covers results constructed directly, which happens in
+        tests and in golden files written before the field existed. It floors
+        the current time to the enclosing 15-minute slot, reproducing the
+        previous behaviour for those callers only.
+
+        Args:
+            result: The result about to be published.
+
+        Returns:
+            A timezone-aware UTC datetime aligned to a 15-minute boundary.
+        """
+        if result.solve_time_utc is not None:
+            return result.solve_time_utc
+        now = datetime.now(UTC)
+        return now.replace(minute=(now.minute // 15) * 15, second=0, microsecond=0)
+
     def publish_result(self, result: SolveResult) -> None:
         """Publish a ``SolveResult`` to all output topics.
 
@@ -110,15 +134,14 @@ class MqttPublisher:
         """
         self._last_result = result
 
-        # Compute the aligned 15-minute slot boundary once. Used both for
-        # injecting per-step ISO timestamps into the schedule blob and for
-        # the current-step summary topic.
-        now = datetime.now(UTC)
-        step_start = now.replace(
-            minute=(now.minute // 15) * 15,
-            second=0,
-            microsecond=0,
-        )
+        # The origin of the step time axis. It comes from the result, not from
+        # the clock, because publishing is not simultaneous with solving: a
+        # solve can take up to the solver time limit, and
+        # republish_last_result() re-runs this method whenever the broker
+        # connection is restored, potentially hours later. Reading the clock
+        # here would relabel an old schedule as starting now, and every
+        # consumer of the schedule and current-step topics would act on it.
+        step_start = self._step_origin(result)
 
         # 1. Full schedule blob with per-step ISO timestamps.
         # result.model_dump() carries integer step indices in each step's 't'
@@ -393,8 +416,15 @@ class MqttPublisher:
         """Re-publish the last stored result to all output topics.
 
         Called from ``mqtt_client``'s ``on_connect`` callback when the broker
-        reconnects. Re-publishing ensures retained topics are current even if
-        the broker restarted and lost its retained state.
+        reconnects. Re-publishing restores the retained topics after a broker
+        restart has dropped its retained state.
+
+        The payloads are byte-identical to the original publication. In
+        particular the step time axis still refers to the solve that produced
+        the result, so a schedule re-published an hour later is not presented
+        as though it started at the moment of reconnection. Consumers can
+        compare ``solve_time_utc`` against their own clock to judge how stale
+        the plan is.
 
         If no result has been stored yet (process just started, no solve has
         completed), this method is a no-op.

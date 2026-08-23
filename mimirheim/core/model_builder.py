@@ -346,6 +346,7 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
     if status == "infeasible":
         return SolveResult(
             strategy=bundle.strategy,
+            solve_time_utc=bundle.solve_time_utc,
             objective_value=0.0,
             solve_status="infeasible",
             schedule=[],
@@ -521,6 +522,12 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
 
     return SolveResult(
         strategy=bundle.strategy,
+        # The single time origin for this result. Every consumer that maps a
+        # step index to a wall-clock time reads it from here rather than from
+        # the clock, so a result published (or re-published after a broker
+        # reconnect) minutes or hours later still describes the quarter hour it
+        # was actually computed for.
+        solve_time_utc=bundle.solve_time_utc,
         objective_value=obj_val,
         solve_status=status,
         naive_cost_eur=_compute_naive_cost(bundle, horizon, dt),
