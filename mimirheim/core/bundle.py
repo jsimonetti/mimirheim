@@ -467,6 +467,14 @@ class SolveResult(BaseModel):
 
     Attributes:
         strategy: The strategy that was active during this solve.
+        solve_time_utc: The 15-minute slot boundary that step 0 of ``schedule``
+            refers to, copied from ``SolveBundle.solve_time_utc``. This is the
+            single time origin for the whole result: every consumer that needs
+            to turn a step index into a wall-clock time must use it rather than
+            reading the clock, otherwise a result published or re-published
+            later is silently attributed to the wrong quarter hour. ``None``
+            only for results constructed outside ``build_and_solve`` (tests and
+            golden files predating this field).
         objective_value: The objective function value returned by the solver.
             The sign convention follows the solver: lower is better for
             minimisation strategies.
@@ -506,6 +514,14 @@ class SolveResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     strategy: str
+    solve_time_utc: datetime | None = Field(
+        default=None,
+        description=(
+            "The 15-minute slot boundary that schedule step 0 refers to. Copied "
+            "from SolveBundle.solve_time_utc. The single time origin for the "
+            "whole result; consumers must not substitute the current clock."
+        ),
+    )
     objective_value: float
     solve_status: str
     dispatch_suppressed: bool = Field(

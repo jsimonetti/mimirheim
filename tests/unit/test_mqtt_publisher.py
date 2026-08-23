@@ -1194,3 +1194,101 @@ def test_hybrid_exchange_mode_not_published_when_zero_exchange_active_none() -> 
         if c.args[0] == "mimir/hybrid/hybrid/exchange_mode"
     ]
     assert len(em_calls) == 0
+
+
+# ---------------------------------------------------------------------------
+# Schedule timestamps are anchored to the solve, not to the publish call
+# ---------------------------------------------------------------------------
+
+
+def _make_result_at(solve_time: datetime) -> SolveResult:
+    """A two-step result stamped with an explicit solve time."""
+    return SolveResult(
+        strategy="minimize_cost",
+        objective_value=0.5,
+        solve_status="optimal",
+        solve_time_utc=solve_time,
+        schedule=[
+            ScheduleStep(
+                t=t,
+                grid_import_kw=1.0,
+                grid_export_kw=0.0,
+                devices={"bat": DeviceSetpoint(kw=-1.0, type="battery")},
+            )
+            for t in range(2)
+        ],
+    )
+
+
+def _published(client: MagicMock, topic: str) -> dict:
+    """Return the decoded JSON payload of the last publish to a topic."""
+    for c in reversed(client.publish.call_args_list):
+        if c.args[0] == topic:
+            return json.loads(c.args[1])
+    raise AssertionError(f"nothing published to {topic!r}")
+
+
+def test_schedule_timestamps_use_the_solve_time() -> None:
+    """Step timestamps must be derived from the solve, not from the clock.
+
+    A solve started at 09:00 produces a schedule whose first step is 09:00,
+    whatever time the publish happens to occur.
+    """
+    solve_time = datetime(2026, 6, 1, 9, 0, tzinfo=UTC)
+    client = MagicMock()
+    publisher = MqttPublisher(client=client, config=_make_config())
+
+    publisher.publish_result(_make_result_at(solve_time))
+
+    payload = _published(client, "mimir/strategy/schedule")
+    assert payload["schedule"][0]["ts"] == "2026-06-01T09:00:00Z"
+    assert payload["schedule"][1]["ts"] == "2026-06-01T09:15:00Z"
+
+
+def test_current_step_timestamp_uses_the_solve_time() -> None:
+    """The current-step summary must carry the solve's own step time."""
+    solve_time = datetime(2026, 6, 1, 9, 0, tzinfo=UTC)
+    client = MagicMock()
+    publisher = MqttPublisher(client=client, config=_make_config())
+
+    publisher.publish_result(_make_result_at(solve_time))
+
+    payload = _published(client, "mimir/strategy/current")
+    assert payload["t"] == "2026-06-01T09:00:00Z"
+
+
+def test_republish_preserves_original_timestamps() -> None:
+    """Re-publishing after a reconnect must not re-stamp a stale schedule.
+
+    republish_last_result() runs when the broker connection is restored, which
+    may be long after the solve. Deriving the time axis from the clock at that
+    moment would present an hours-old plan as though it started now, and any
+    consumer reading the schedule or the current-step topic would act on it.
+    """
+    solve_time = datetime(2026, 6, 1, 9, 0, tzinfo=UTC)
+    client = MagicMock()
+    publisher = MqttPublisher(client=client, config=_make_config())
+
+    publisher.publish_result(_make_result_at(solve_time))
+    first = _published(client, "mimir/strategy/schedule")
+
+    client.reset_mock()
+    publisher.republish_last_result()
+    second = _published(client, "mimir/strategy/schedule")
+
+    assert [s["ts"] for s in second["schedule"]] == [
+        s["ts"] for s in first["schedule"]
+    ]
+    assert second["schedule"][0]["ts"] == "2026-06-01T09:00:00Z"
+
+
+def test_solve_time_is_carried_in_the_schedule_payload() -> None:
+    """Consumers must be able to tell when the schedule was computed."""
+    solve_time = datetime(2026, 6, 1, 9, 0, tzinfo=UTC)
+    client = MagicMock()
+    publisher = MqttPublisher(client=client, config=_make_config())
+
+    publisher.publish_result(_make_result_at(solve_time))
+
+    payload = _published(client, "mimir/strategy/schedule")
+    assert payload["solve_time_utc"] == "2026-06-01T09:00:00Z"

@@ -510,16 +510,18 @@ The array must contain at least as many values as the active horizon length. mim
 
 ### `outputs.schedule`
 
-Published retained after every successful solve. Contains the complete 96-step dispatch schedule:
+Published retained after every successful solve. Contains the complete dispatch schedule for the solved horizon:
 
 ```json
 {
   "strategy": "minimize_cost",
+  "solve_time_utc": "2026-06-01T09:00:00Z",
   "objective_value": 1.24,
   "solve_status": "optimal",
   "schedule": [
     {
       "t": 0,
+      "ts": "2026-06-01T09:00:00Z",
       "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
@@ -532,6 +534,8 @@ Published retained after every successful solve. Contains the complete 96-step d
 }
 ```
 
+`solve_time_utc` is the 15-minute slot boundary that step `t=0` refers to, and `ts` is the wall-clock start of each step derived from it. Both are anchored to the solve, not to the moment of publication. mimirheim re-publishes the retained schedule whenever the broker connection is restored, so a consumer should compare `solve_time_utc` against its own clock rather than assuming the first step is current.
+
 `solve_status` is one of `"optimal"` (proven optimal), `"feasible"` (time-limited incumbent), or `"infeasible"` (no feasible solution; schedule is empty and previous retained schedule remains unchanged).
 
 Device `kw` sign convention: **positive = producing / discharging**, **negative = consuming / charging**.
@@ -542,13 +546,15 @@ Published retained alongside the schedule. Contains the current-step summary for
 
 ```json
 {
-  "t": 0,
+  "t": "2026-06-01T09:00:00Z",
   "grid_import_kw": 0.0,
   "grid_export_kw": 0.0,
   "strategy": "minimize_cost",
   "solve_status": "optimal"
 }
 ```
+
+`t` carries the wall-clock start of the schedule's first step, taken from the solve rather than from the publish time. After a broker reconnect the retained payload is re-published unchanged, so `t` may be in the past.
 
 ### Per-device setpoint — `{prefix}/device/{device_name}/setpoint`
 
