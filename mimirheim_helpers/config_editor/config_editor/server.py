@@ -287,8 +287,6 @@ class ConfigEditorServer:
     ) -> None:
         self._config_dir = Path(config_dir)
         self._allowed_ip = allowed_ip
-        self._reports_dir: Path | None = self._detect_reports_dir()
-        self._dump_dir: Path | None = self._detect_dump_dir()
         self._schema: dict[str, Any] = MimirheimConfig.model_json_schema()
 
         # Load helper model registry. Dict maps filename → (model_cls, competitors).
@@ -352,25 +350,47 @@ class ConfigEditorServer:
     def _read_reporter_yaml(self) -> dict:
         """Read and parse reporter.yaml from the config directory.
 
-        Returns an empty dict if the file is absent or cannot be parsed.
+        Returns an empty dict if the file is absent, unreadable, or cannot be
+        parsed. An unreadable file used to raise OSError out of the request
+        handler; "reports not configured" is the honest answer and does not
+        take the thread down.
         """
         reporter_yaml = self._config_dir / "reporter.yaml"
-        if not reporter_yaml.exists():
-            return {}
         try:
             return yaml.safe_load(reporter_yaml.read_text()) or {}
-        except yaml.YAMLError:
+        except FileNotFoundError:
+            return {}
+        except (OSError, yaml.YAMLError) as exc:
+            logger.warning("Could not read %s: %s", reporter_yaml, exc)
             return {}
 
-    def _detect_reports_dir(self) -> Path | None:
-        """Return reporting.output_dir from reporter.yaml, or None if absent."""
-        output_dir = (self._read_reporter_yaml().get("reporting") or {}).get("output_dir")
-        return Path(output_dir) if output_dir else None
+    def _reporting_path(self, key: str) -> Path | None:
+        """Return a path from the ``reporting`` section of reporter.yaml.
 
-    def _detect_dump_dir(self) -> Path | None:
-        """Return reporting.dump_dir from reporter.yaml, or None if absent."""
-        dump_dir = (self._read_reporter_yaml().get("reporting") or {}).get("dump_dir")
-        return Path(dump_dir) if dump_dir else None
+        Read on each access rather than cached at construction. The editor
+        writes reporter.yaml itself, so a cached value meant that enabling the
+        reporter, or moving its output directory, had no effect until the
+        container restarted -- with nothing in the UI to explain why. This is a
+        low-traffic admin interface and the file is small.
+
+        Args:
+            key: The key to read from the ``reporting`` section.
+
+        Returns:
+            The configured path, or None when unset.
+        """
+        value = (self._read_reporter_yaml().get("reporting") or {}).get(key)
+        return Path(value) if value else None
+
+    @property
+    def _reports_dir(self) -> Path | None:
+        """Current reporting.output_dir, or None if not configured."""
+        return self._reporting_path("output_dir")
+
+    @property
+    def _dump_dir(self) -> Path | None:
+        """Current reporting.dump_dir, or None if not configured."""
+        return self._reporting_path("dump_dir")
 
     def serve_forever(self) -> None:
         """Start serving requests. Blocks until shutdown() is called."""
