@@ -75,13 +75,24 @@ do not supply is simply ignored by its service (see above).
 ```sh
 docker run -d \
   --name mimirheim \
-  -v /path/to/your/configs:/config:ro \
+  -v /path/to/your/configs:/config \
   -e TZ=Europe/Amsterdam \
   mimirheim
 ```
 
 Only `/config/mimirheim.yaml` is required for the solver to operate. Add the other
 config files incrementally as you enable more helpers.
+
+`/config` is mounted read-write, not `:ro`. Two services in the all-in-one image
+write there: the config editor rewrites the YAML files in place, and zonneplan
+persists its refreshed OAuth token to `/config/zonneplan_token.json` by default.
+Both write atomically — create a temporary file in the directory, then rename it
+over the target — so write permission is needed on the directory itself, not
+only on the files. Mount `:ro` and the config editor returns an error on save
+and zonneplan cannot persist a refreshed token.
+
+The single-service examples below keep `:ro`, because none of the services shown
+there writes to `/config`.
 
 ### Running services in separate containers
 

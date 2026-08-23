@@ -764,7 +764,6 @@ dependencies = [
     { name = "paho-mqtt" },
     { name = "pydantic" },
     { name = "pyyaml" },
-    { name = "respx" },
 ]
 
 [package.optional-dependencies]
@@ -870,7 +869,6 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "requests", marker = "extra == 'helpers'", specifier = ">=2.34.2" },
     { name = "requests", marker = "extra == 'zonneplan'", specifier = ">=2.34.2" },
-    { name = "respx", specifier = ">=0.23.1" },
     { name = "ruamel-yaml", marker = "extra == 'config-editor'", specifier = ">=0.18" },
     { name = "scikit-learn", marker = "extra == 'helpers'", specifier = ">=1.9.0" },
     { name = "scikit-learn", marker = "extra == 'pv-ml-learner'", specifier = ">=1.9.0" },
@@ -891,7 +889,7 @@ dev = [
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-asyncio", specifier = ">=1.4.0" },
     { name = "pytest-benchmark", specifier = ">=4.0" },
-    { name = "respx", specifier = ">=0.21" },
+    { name = "respx", specifier = ">=0.23.1" },
     { name = "ruff", specifier = ">=0.14" },
 ]
 

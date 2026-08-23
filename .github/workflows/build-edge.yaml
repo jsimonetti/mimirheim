@@ -81,13 +81,27 @@ jobs:
             org.opencontainers.image.source="https://github.com/jsimonetti/mimirheim" \
             org.opencontainers.image.version="${{ env.BUILD_VERSION }}"
 
+      # SOURCE_DATE_EPOCH plus rewrite-timestamp=true normalises every file and
+      # directory timestamp inside the exported layers. Without it the ~650 MB
+      # dependency layer gets a fresh blob digest on every rebuild, because uv
+      # stamps directory mtimes with the wall-clock install time even when every
+      # installed file is byte-identical. A new digest means a full re-push and a
+      # full re-pull for users, for a layer whose contents did not change.
+      #
+      # The value is a fixed constant on purpose. Using the commit timestamp —
+      # as the reproducible-builds docs suggest — would give every commit a
+      # different epoch and so change every layer on every commit, which is the
+      # opposite of what is wanted here. The human-readable build date is
+      # carried by the org.opencontainers.image.created label instead.
       - name: Build and Push
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        env:
+          SOURCE_DATE_EPOCH: "0"
         with:
-          push: true
           platforms: linux/arm64,linux/amd64
           labels: ${{ steps.meta.outputs.labels }}
           tags: ${{ steps.meta.outputs.tags }}
+          outputs: type=image,push=true,rewrite-timestamp=true
           cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache
           cache-to: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache,mode=max
           context: .

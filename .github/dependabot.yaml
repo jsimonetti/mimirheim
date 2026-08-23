@@ -6,6 +6,14 @@ updates:
   schedule:
     interval: "monthly"
 
+# Keeps the digest pins in container/Dockerfile current. Without this the
+# pins would freeze the base images indefinitely, trading unprovoked cache
+# invalidation for missed security updates.
+- package-ecosystem: "docker"
+  directory: "/container"
+  schedule:
+    interval: "weekly"
+
 - package-ecosystem: "uv"
   directory: "/"
   schedule:

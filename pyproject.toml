@@ -7,7 +7,6 @@ dependencies = [
     "pydantic>=2.13.4",
     "paho-mqtt>=2.0",
     "pyyaml>=6.0.3",
-    "respx>=0.23.1",
 ]
 
 # ---------------------------------------------------------------------------
@@ -114,7 +113,9 @@ dev = [
     "amqtt>=0.11",
     "plotly>=6.9.0",
     "freezegun>=1.4",
-    "respx>=0.21",
+    # Was also a core runtime dependency until it was recognised as test-only.
+    # The floor stays at the version core pinned so the lock does not regress.
+    "respx>=0.23.1",
     "jinja2>=3.0",
 ]
 
