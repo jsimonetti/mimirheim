@@ -100,13 +100,11 @@ def test_plotly_js_is_real_library(tmp_path: Path) -> None:
 
 
 def test_render_and_save_restores_deleted_static_files(
-    tmp_path: Path, fixture_dump_pair: tuple[Path, Path]
+    tmp_path: Path, fixture_inp: dict, fixture_out: dict
 ) -> None:
     """Static assets deleted between renders are reinstalled by _render_and_save."""
 
     from reporter.daemon import ReporterDaemon
-
-    input_path, output_path = fixture_dump_pair
 
     cfg = MagicMock()
     cfg.output_dir = tmp_path
@@ -117,7 +115,10 @@ def test_render_and_save_restores_deleted_static_files(
     # Perform a first render so the static files are created.
     ts = "2026-04-03T15:30:00Z"
     safe_ts = "2026-04-03T15-30-00Z"
-    daemon._render_and_save(ts, safe_ts, f"{safe_ts}_report.html", input_path, output_path)
+    report_filename = f"{safe_ts}_report.html"
+    daemon._render_and_save(
+        ts, report_filename, tmp_path / report_filename, fixture_inp, fixture_out
+    )
 
     assert (tmp_path / "index.html").exists()
     assert (tmp_path / "index.css").exists()
@@ -131,7 +132,10 @@ def test_render_and_save_restores_deleted_static_files(
     # A second render should restore all three files.
     ts2 = "2026-04-03T15:45:00Z"
     safe_ts2 = "2026-04-03T15-45-00Z"
-    daemon._render_and_save(ts2, safe_ts2, f"{safe_ts2}_report.html", input_path, output_path)
+    report_filename2 = f"{safe_ts2}_report.html"
+    daemon._render_and_save(
+        ts2, report_filename2, tmp_path / report_filename2, fixture_inp, fixture_out
+    )
 
     assert (tmp_path / "index.html").exists(), "index.html was not restored after deletion"
     assert (tmp_path / "index.css").exists(), "index.css was not restored after deletion"
