@@ -99,6 +99,35 @@ class HomeAssistantConfig(BaseModel):
     )
 
 
+def _parse_port(port_str: str) -> int:
+    """Parse the MQTT_PORT environment variable into a usable TCP port.
+
+    Args:
+        port_str: The raw environment variable value.
+
+    Returns:
+        The port as an int.
+
+    Raises:
+        ValueError: If the value is not an integer, or not in 1..65535. Naming
+            the variable and quoting the value matters here: this runs before
+            Pydantic sees the config, so without it the operator gets a bare
+            "invalid literal for int()" with no clue which setting is wrong.
+    """
+    try:
+        port = int(port_str)
+    except ValueError:
+        raise ValueError(
+            f"MQTT_PORT is not a number: {port_str!r}."
+        ) from None
+    if not 1 <= port <= 65535:
+        raise ValueError(
+            f"MQTT_PORT is not a valid TCP port: {port_str!r}. "
+            "It must be between 1 and 65535."
+        )
+    return port
+
+
 def apply_mqtt_env_overrides(raw: dict) -> dict:
     """Override the mqtt: section from environment variables if present.
 
@@ -117,12 +146,23 @@ def apply_mqtt_env_overrides(raw: dict) -> dict:
 
     Returns:
         The same dict with any MQTT env var overrides applied.
+
+    Raises:
+        ValueError: If ``raw`` is not a mapping (an empty or comment-only
+            config file), or if ``MQTT_PORT`` is set to something that is not a
+            valid TCP port.
     """
+    if not isinstance(raw, dict):
+        raise ValueError(
+            "The configuration file contains no configuration. It is empty, "
+            "holds only comments, or is not a YAML mapping."
+        )
+
     overrides: dict = {}
     if host := os.environ.get("MQTT_HOST"):
         overrides["host"] = host
     if port_str := os.environ.get("MQTT_PORT"):
-        overrides["port"] = int(port_str)
+        overrides["port"] = _parse_port(port_str)
     if username := os.environ.get("MQTT_USERNAME"):
         overrides["username"] = username
     if password := os.environ.get("MQTT_PASSWORD"):
@@ -131,7 +171,12 @@ def apply_mqtt_env_overrides(raw: dict) -> dict:
     if ssl_str := os.environ.get("MQTT_SSL"):
         overrides["tls"] = ssl_str.lower() == "true"
     if overrides:
-        raw.setdefault("mqtt", {})
+        # A bare `mqtt:` key in YAML parses to None, not to {}. Treat a null
+        # section as an absent one so a config that leaves every broker setting
+        # to the Supervisor is valid; previously this raised AttributeError on
+        # the update() below.
+        if raw.get("mqtt") is None:
+            raw["mqtt"] = {}
         raw["mqtt"].update(overrides)
     return raw
 
