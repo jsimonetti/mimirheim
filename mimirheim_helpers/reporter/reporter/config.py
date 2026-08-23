@@ -80,7 +80,7 @@ class ReporterConfig(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _derive_hioo_topics(self) -> "ReporterConfig":
+    def _derive_hioo_topics(self) -> ReporterConfig:
         """Fill in mimirheim-side topics that were not explicitly set.
 
         Derives ``reporting.notify_topic`` from ``mimir_topic_prefix`` when it
@@ -93,7 +93,7 @@ class ReporterConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _set_client_id_default(self) -> "ReporterConfig":
+    def _set_client_id_default(self) -> ReporterConfig:
         """Set the default MQTT client identifier when not explicitly configured."""
         if not self.mqtt.client_id:
             self.mqtt.client_id = "mimir-reporter"
