@@ -166,10 +166,19 @@ def build_report_html(inp: dict, out: dict) -> str:
             soc_kwh_list = soc_histories[name]
             soc_pct = [
                 round(v / cap * 100.0, 1) if cap > 0 else 0.0
-                for v in soc_kwh_list[1:]
+                for v in soc_kwh_list
             ]
-            # soc_kwh_list[i+1] is the SOC after step i completes, so it
-            # belongs at the step-end boundary (xs[i+1]), not the start (xs[i]).
+            # _read_soc_from_schedule returns exactly one value per step, where
+            # soc_kwh_list[i] is the SOC after step i completes. So it belongs
+            # at the end boundary of step i, which is xs[i+1], not at xs[i]
+            # where the step starts. The axis below is therefore xs shifted by
+            # one, extended with a final timestamp one step past the last step
+            # start so that the closing value has somewhere to sit.
+            #
+            # Do not slice soc_kwh_list. The removed _reconstruct_soc returned
+            # len(schedule) + 1 values with the initial SOC first, and a [1:]
+            # here was correct for that. Against the current n values it drops
+            # the first step and shifts every remaining point one slot early.
             if xs:
                 _last_end = (
                     datetime.fromisoformat(xs[-1].replace("Z", "+00:00"))
