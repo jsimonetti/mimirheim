@@ -74,7 +74,7 @@ def test_data_table_pv_device_kw_kwh_columns_in_header() -> None:
     schedule = _make_schedule_with_pv(kw=2.5, name="roof")
     inp = _make_inp()
 
-    table = _build_data_table(inp, {}, schedule, _XS_2, {}, {})
+    table = _build_data_table(inp, schedule, _XS_2, {}, {})
 
     headers = list(table.header.values)
     assert "roof<br>kW" in headers, f"Missing 'roof<br>kW' in headers: {headers}"
@@ -87,7 +87,7 @@ def test_data_table_pv_device_kw_values() -> None:
     schedule = _make_schedule_with_pv(kw=kw, name="roof", n=2)
     inp = _make_inp()
 
-    table = _build_data_table(inp, {}, schedule, _XS_2, {}, {})
+    table = _build_data_table(inp, schedule, _XS_2, {}, {})
 
     headers = list(table.header.values)
     idx = headers.index("roof<br>kW")
@@ -102,7 +102,7 @@ def test_data_table_pv_device_kwh_values() -> None:
     schedule = _make_schedule_with_pv(kw=kw, name="roof", n=2)
     inp = _make_inp()
 
-    table = _build_data_table(inp, {}, schedule, _XS_2, {}, {})
+    table = _build_data_table(inp, schedule, _XS_2, {}, {})
 
     headers = list(table.header.values)
     idx = headers.index("roof<br>kWh")
@@ -122,7 +122,7 @@ def test_data_table_pv_on_off_column_appears_when_on_off_active_present() -> Non
     schedule = _make_schedule_with_pv(kw=2.5, name="roof", on_off_active=True)
     inp = _make_inp()
 
-    table = _build_data_table(inp, {}, schedule, _XS_2, {}, {})
+    table = _build_data_table(inp, schedule, _XS_2, {}, {})
 
     headers = list(table.header.values)
     assert "roof<br>on/off" in headers, f"Missing on/off column in headers: {headers}"
@@ -133,7 +133,7 @@ def test_data_table_pv_on_off_column_absent_when_not_in_setpoint() -> None:
     schedule = _make_schedule_with_pv(kw=2.5, name="roof")  # no on_off_active
     inp = _make_inp()
 
-    table = _build_data_table(inp, {}, schedule, _XS_2, {}, {})
+    table = _build_data_table(inp, schedule, _XS_2, {}, {})
 
     headers = list(table.header.values)
     assert "roof<br>on/off" not in headers, f"Unexpected on/off column: {headers}"
@@ -144,7 +144,7 @@ def test_data_table_pv_on_off_column_shows_on_when_active() -> None:
     schedule = _make_schedule_with_pv(kw=2.5, name="roof", on_off_active=True, n=2)
     inp = _make_inp()
 
-    table = _build_data_table(inp, {}, schedule, _XS_2, {}, {})
+    table = _build_data_table(inp, schedule, _XS_2, {}, {})
 
     headers = list(table.header.values)
     idx = headers.index("roof<br>on/off")
@@ -158,7 +158,7 @@ def test_data_table_pv_on_off_column_shows_off_when_inactive() -> None:
     schedule = _make_schedule_with_pv(kw=0.0, name="roof", on_off_active=False, n=2)
     inp = _make_inp()
 
-    table = _build_data_table(inp, {}, schedule, _XS_2, {}, {})
+    table = _build_data_table(inp, schedule, _XS_2, {}, {})
 
     headers = list(table.header.values)
     idx = headers.index("roof<br>on/off")
@@ -185,7 +185,7 @@ def test_data_table_pv_on_off_mixed_steps() -> None:
     ]
     inp = _make_inp()
 
-    table = _build_data_table(inp, {}, schedule, _XS_2, {}, {})
+    table = _build_data_table(inp, schedule, _XS_2, {}, {})
 
     headers = list(table.header.values)
     idx = headers.index("roof<br>on/off")
@@ -204,7 +204,7 @@ def test_data_table_pv_zex_column_appears_when_zero_exchange_active_present() ->
     schedule = _make_schedule_with_pv(kw=0.0, name="roof", zero_exchange_active=True)
     inp = _make_inp()
 
-    table = _build_data_table(inp, {}, schedule, _XS_2, {}, {})
+    table = _build_data_table(inp, schedule, _XS_2, {}, {})
 
     headers = list(table.header.values)
     assert "roof<br>ZEX" in headers, f"Missing ZEX column in headers: {headers}"
@@ -215,7 +215,7 @@ def test_data_table_pv_zex_column_absent_when_not_in_setpoint() -> None:
     schedule = _make_schedule_with_pv(kw=2.5, name="roof")
     inp = _make_inp()
 
-    table = _build_data_table(inp, {}, schedule, _XS_2, {}, {})
+    table = _build_data_table(inp, schedule, _XS_2, {}, {})
 
     headers = list(table.header.values)
     assert "roof<br>ZEX" not in headers, f"Unexpected ZEX column: {headers}"
@@ -239,7 +239,7 @@ def test_data_table_pv_zex_column_values() -> None:
     ]
     inp = _make_inp()
 
-    table = _build_data_table(inp, {}, schedule, _XS_2, {}, {})
+    table = _build_data_table(inp, schedule, _XS_2, {}, {})
 
     headers = list(table.header.values)
     idx = headers.index("roof<br>ZEX")
@@ -258,7 +258,7 @@ def test_data_table_pv_power_limit_column_appears_when_present() -> None:
     schedule = _make_schedule_with_pv(kw=2.5, name="roof", power_limit_kw=3.0)
     inp = _make_inp()
 
-    table = _build_data_table(inp, {}, schedule, _XS_2, {}, {})
+    table = _build_data_table(inp, schedule, _XS_2, {}, {})
 
     headers = list(table.header.values)
     assert "roof<br>lim kW" in headers, f"Missing lim kW column in headers: {headers}"
@@ -269,7 +269,7 @@ def test_data_table_pv_power_limit_column_absent_when_not_in_setpoint() -> None:
     schedule = _make_schedule_with_pv(kw=2.5, name="roof")  # no power_limit_kw
     inp = _make_inp()
 
-    table = _build_data_table(inp, {}, schedule, _XS_2, {}, {})
+    table = _build_data_table(inp, schedule, _XS_2, {}, {})
 
     headers = list(table.header.values)
     assert "roof<br>lim kW" not in headers, f"Unexpected lim kW column: {headers}"
@@ -280,7 +280,7 @@ def test_data_table_pv_power_limit_column_values() -> None:
     schedule = _make_schedule_with_pv(kw=2.5, name="roof", power_limit_kw=3.0, n=2)
     inp = _make_inp()
 
-    table = _build_data_table(inp, {}, schedule, _XS_2, {}, {})
+    table = _build_data_table(inp, schedule, _XS_2, {}, {})
 
     headers = list(table.header.values)
     idx = headers.index("roof<br>lim kW")
@@ -308,7 +308,7 @@ def test_data_table_pv_power_limit_column_shows_dash_when_none() -> None:
     ]
     inp = _make_inp()
 
-    table = _build_data_table(inp, {}, schedule, _XS_2, {}, {})
+    table = _build_data_table(inp, schedule, _XS_2, {}, {})
 
     headers = list(table.header.values)
     idx = headers.index("roof<br>lim kW")
@@ -338,7 +338,7 @@ def test_data_table_no_pv_device_columns_when_no_pv_in_schedule() -> None:
     ]
     inp = _make_inp(n=1)
 
-    table = _build_data_table(inp, {}, schedule, _XS_2[:1], {}, {})
+    table = _build_data_table(inp, schedule, _XS_2[:1], {}, {})
 
     headers = list(table.header.values)
     # The aggregate PV forecast column is always present.
@@ -371,7 +371,7 @@ def test_data_table_grid_columns_appear_after_pv_device_columns() -> None:
     schedule = _make_schedule_with_pv(kw=2.5, name="roof", on_off_active=True)
     inp = _make_inp()
 
-    table = _build_data_table(inp, {}, schedule, _XS_2, {}, {})
+    table = _build_data_table(inp, schedule, _XS_2, {}, {})
 
     headers = list(table.header.values)
     pv_kw_idx = headers.index("roof<br>kW")
@@ -398,7 +398,7 @@ def test_data_table_multiple_pv_arrays() -> None:
     ]
     inp = _make_inp(n=1)
 
-    table = _build_data_table(inp, {}, schedule, _XS_2[:1], {}, {})
+    table = _build_data_table(inp, schedule, _XS_2[:1], {}, {})
 
     headers = list(table.header.values)
     assert "roof<br>kW" in headers

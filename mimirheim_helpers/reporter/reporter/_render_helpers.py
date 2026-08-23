@@ -66,7 +66,6 @@ def _build_energy_flows_traces(
 
     Args:
         inp: Parsed input dump JSON.
-        out: Parsed output dump JSON.
         xs: Timestamp strings aligned to the schedule steps.
 
     Returns:
@@ -392,7 +391,6 @@ def _closed_loop_shapes_and_annotations(
 
 def _build_data_table(
     inp: dict,
-    out: dict,
     schedule: list[dict],
     xs: list[str],
     device_meta: dict[str, dict],

@@ -197,7 +197,7 @@ class ReporterDaemon(MqttDaemon):
             # Still update the inventory in case inventory.js was incomplete —
             # for example when the daemon restarted after dump files were deleted
             # and stub entries were written by rebuild_from_disk.
-            inventory.update(cfg.output_dir, ts, report_filename, inp, out)
+            inventory.update(cfg.output_dir, ts, report_filename, out)
         else:
             self._render_and_save(ts, report_filename, report_path, inp, out)
 
@@ -233,7 +233,7 @@ class ReporterDaemon(MqttDaemon):
             logger.exception("Failed to render report for %s.", ts)
             return
 
-        inventory.update(cfg.output_dir, ts, report_filename, inp, out)
+        inventory.update(cfg.output_dir, ts, report_filename, out)
         gc.collect(cfg.output_dir, cfg.max_reports)
         self._install_index_html()
         logger.info("Rendered report: %s", report_path)

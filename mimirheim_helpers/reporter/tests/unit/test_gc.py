@@ -42,7 +42,7 @@ def _populate(tmp_path, safe_tss: list[str]) -> list[str]:
         filename = f"{safe_ts}_report.html"
         html_path = tmp_path / filename
         html_path.write_text("<html></html>")
-        inv.update(tmp_path, ts_iso, filename, {}, _minimal_out())
+        inv.update(tmp_path, ts_iso, filename, _minimal_out())
         filenames.append(filename)
     return filenames
 

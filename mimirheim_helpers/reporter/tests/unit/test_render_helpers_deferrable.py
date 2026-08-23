@@ -162,9 +162,8 @@ def test_data_table_deferrable_load_columns_in_header() -> None:
     deferrable load found in the schedule."""
     schedule = _make_schedule_with_deferrable(kw=-1.5, name="wash")
     inp = _make_inp()
-    out = _make_out_from_schedule(schedule)
 
-    table = _build_data_table(inp, out, schedule, _XS_2, {}, {})
+    table = _build_data_table(inp, schedule, _XS_2, {}, {})
 
     headers = table.header.values
     assert "wash<br>kW" in headers, f"Headers: {headers}"
@@ -176,9 +175,8 @@ def test_data_table_deferrable_load_kw_values() -> None:
     kw = -1.5
     schedule = _make_schedule_with_deferrable(kw=kw, name="wash", n=2)
     inp = _make_inp()
-    out = _make_out_from_schedule(schedule)
 
-    table = _build_data_table(inp, out, schedule, _XS_2, {}, {})
+    table = _build_data_table(inp, schedule, _XS_2, {}, {})
 
     headers = list(table.header.values)
     kw_idx = headers.index("wash<br>kW")
@@ -192,9 +190,8 @@ def test_data_table_deferrable_load_kwh_values() -> None:
     kw = -1.5
     schedule = _make_schedule_with_deferrable(kw=kw, name="wash", n=2)
     inp = _make_inp()
-    out = _make_out_from_schedule(schedule)
 
-    table = _build_data_table(inp, out, schedule, _XS_2, {}, {})
+    table = _build_data_table(inp, schedule, _XS_2, {}, {})
 
     headers = list(table.header.values)
     kwh_idx = headers.index("wash<br>kWh")
@@ -216,9 +213,8 @@ def test_data_table_no_deferrable_load_columns_when_absent() -> None:
         }
     ]
     inp = _make_inp(n=1)
-    out = _make_out_from_schedule(schedule)
 
-    table = _build_data_table(inp, out, schedule, _XS_2[:1], {}, {})
+    table = _build_data_table(inp, schedule, _XS_2[:1], {}, {})
 
     headers = list(table.header.values)
     # Deferrable load columns follow the pattern "{name}<br>kW" where the name
@@ -242,9 +238,8 @@ def test_data_table_grid_columns_still_present_with_deferrable_load() -> None:
     load columns — they must not be displaced."""
     schedule = _make_schedule_with_deferrable(kw=-1.5, name="wash")
     inp = _make_inp()
-    out = _make_out_from_schedule(schedule)
 
-    table = _build_data_table(inp, out, schedule, _XS_2, {}, {})
+    table = _build_data_table(inp, schedule, _XS_2, {}, {})
 
     headers = list(table.header.values)
     assert "Grid imp<br>kW" in headers
