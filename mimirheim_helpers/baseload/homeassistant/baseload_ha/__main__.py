@@ -115,6 +115,13 @@ def main() -> None:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    # httpx logs a line per request at INFO, which here means one
+    # "HTTP Request: POST .../api/recorder/statistics_during_period 200 OK" for
+    # every cycle. Nothing secret leaks -- the HA token travels in an
+    # Authorization header, not the URL -- but it doubles the output of a
+    # daemon whose own log is one line per cycle. pv_ml_learner already does
+    # this.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
     HaBaseloadDaemon(load_helper_config(args.config, BaseloadConfig, logger)).run()
 

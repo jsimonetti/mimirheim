@@ -149,3 +149,36 @@ class TestSourceRule:
             "Under `python -m <pkg>` that resolves to the logger named "
             "'__main__'. Name the package explicitly."
         )
+
+
+class TestThirdPartyLoggersAreQuiet:
+    """Helpers that use httpx must not let it log a line per request at INFO."""
+
+    @pytest.mark.parametrize(
+        "relpath",
+        [
+            "mimirheim_helpers/baseload/homeassistant/baseload_ha/__main__.py",
+            "mimirheim_helpers/pv/pv_ml_learner/pv_ml_learner/__main__.py",
+        ],
+        ids=["baseload_ha", "pv_ml_learner"],
+    )
+    def test_httpx_is_set_to_warning(self, relpath: str) -> None:
+        source = (_REPO_ROOT / relpath).read_text()
+
+        assert 'logging.getLogger("httpx").setLevel(logging.WARNING)' in source, (
+            f"{relpath} uses httpx but does not quiet it. httpx logs every "
+            "request at INFO, which for pv_ml_learner would also put the "
+            "Meteoserver API key in the log."
+        )
+
+    def test_every_httpx_user_is_covered_by_the_test_above(self) -> None:
+        """Guard against a third httpx helper appearing without being quieted."""
+        users = {
+            path.parts[-2]
+            for path in _REPO_ROOT.glob("mimirheim_helpers/**/*.py")
+            if "/tests/" not in str(path) and "import httpx" in path.read_text()
+        }
+        assert users == {"baseload_ha", "pv_ml_learner"}, (
+            f"httpx importers changed to {sorted(users)}; update the "
+            "parametrised test above."
+        )
