@@ -169,10 +169,12 @@ Every module must have a module-level docstring that explains its purpose, its p
 
 All commands must be run inside the managed virtual environment. The project uses `uv` for dependency management. If the `.venv` directory does not exist, run `uv sync` first to create it and install all dependencies from the committed lockfile.
 
-The project targets **Python 3.12**. If `uv sync` picks a different interpreter, pin it explicitly:
+The project targets **Python 3.14**, pinned in `.python-version` and matched by the
+container base image. `uv` reads that file, so `uv sync` selects the right interpreter
+on its own and downloads it if the machine does not have it. To be explicit:
 
 ```bash
-uv sync --python 3.12 --all-extras   # first-time setup: installs core + all helper dependencies
+uv sync --python 3.14 --all-extras   # first-time setup: installs core + all helper dependencies
 uv sync --all-extras                  # subsequent syncs reuse the pinned interpreter
 uv run pytest                         # run tests
 uv run ruff check .                   # run the linter

@@ -600,7 +600,7 @@ Published retained. `"online"` on broker connect (birth message). `"offline"` on
 
 ### Requirements
 
-- Python 3.12
+- Python 3.14 (pinned in `.python-version`; `uv` will fetch it automatically)
 - `uv` (dependency management)
 
 ### Setup

@@ -70,7 +70,7 @@ FROM ghcr.io/hassio-addons/base:stable@sha256:47ed45a406ec6a43666e00f1b615240647
 # Third-party packages are large; keeping them in a separate stage means a
 # source-only change never invalidates this cached layer.
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim-bookworm@sha256:a116514e19457bcb7af7efe9c3dd0b9b71e85b317694e7882a1c52aa15a78134 AS deps-builder
+FROM python:3.14-slim-bookworm@sha256:23c59390fc717bf09f9336908199a0ae75d9c4264bf296123f94ad772fea3b52 AS deps-builder
 
 WORKDIR /build
 
@@ -88,15 +88,15 @@ COPY pyproject.toml uv.lock ./
 # cbc_dist must stay: it is the fallback when the CPU has no AVX2 support.
 #
 # The interpreter is named explicitly and must match the python tag in the FROM
-# lines. This used to read `python${PYTHON_VERSION}`, but PYTHON_VERSION was a
-# global ARG declared before the first FROM, and Docker only exposes those to
-# FROM instructions — inside a stage it expanded to the empty string, so the
-# flag silently resolved to whatever `python` happened to be. Naming the
-# interpreter means a base image bump that forgets this line fails the build
-# instead of quietly building against a different interpreter.
+# lines. UV_PYTHON_DOWNLOADS=never is what gives that teeth: uv's default is to
+# silently download a managed interpreter when the requested one is missing, so
+# without it a base image bump that forgets this line would quietly produce an
+# image whose base Python is unused and whose venv runs a downloaded one. With
+# it, that mistake fails the build.
+ENV UV_PYTHON_DOWNLOADS=never
 RUN --mount=from=uvbin,source=/uv,target=/usr/local/bin/uv \
     --mount=type=cache,target=/root/.cache/uv \
-    uv venv /app/.venv --python python3.12 && \
+    uv venv /app/.venv --python python3.14 && \
     UV_PROJECT_ENVIRONMENT=/app/.venv uv sync --all-extras --no-dev --frozen --no-install-project && \
     rm -rf /app/.venv/lib/python*/site-packages/cbcbox/cbc_dist_debug*
 
@@ -104,7 +104,7 @@ RUN --mount=from=uvbin,source=/uv,target=/usr/local/bin/uv \
 # Stage 2: wheel builder — rebuilt on every source change, but produces only
 # a small wheel (~2 MB). No venv needed here; uv build is self-contained.
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim-bookworm@sha256:a116514e19457bcb7af7efe9c3dd0b9b71e85b317694e7882a1c52aa15a78134 AS wheel-builder
+FROM python:3.14-slim-bookworm@sha256:23c59390fc717bf09f9336908199a0ae75d9c4264bf296123f94ad772fea3b52 AS wheel-builder
 
 WORKDIR /build
 
@@ -118,7 +118,7 @@ RUN --mount=from=uvbin,source=/uv,target=/usr/local/bin/uv \
 # ---------------------------------------------------------------------------
 # Stage 3: final image
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim-bookworm@sha256:a116514e19457bcb7af7efe9c3dd0b9b71e85b317694e7882a1c52aa15a78134
+FROM python:3.14-slim-bookworm@sha256:23c59390fc717bf09f9336908199a0ae75d9c4264bf296123f94ad772fea3b52
 
 ARG S6_OVERLAY_VERSION
 ARG TARGETARCH
