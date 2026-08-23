@@ -92,13 +92,22 @@ jobs:
             org.opencontainers.image.source="https://github.com/jsimonetti/mimirheim" \
             org.opencontainers.image.version="${{ env.BUILD_VERSION }}"
 
+      # See build-edge.yaml for why SOURCE_DATE_EPOCH is a fixed constant.
+      #
+      # This job had no cache configuration at all, so every release rebuilt the
+      # whole dependency set from scratch. It reads the shared cache like the PR
+      # build does, and does not write to it: a release is built from the same
+      # commit main already cached.
       - name: Build and Push
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        env:
+          SOURCE_DATE_EPOCH: "0"
         with:
-          push: true
           platforms: linux/arm64,linux/amd64
           labels: ${{ steps.meta.outputs.labels }}
           tags: ${{ steps.meta.outputs.tags }}
+          outputs: type=image,push=true,rewrite-timestamp=true
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache
           context: .
           file: container/Dockerfile
 

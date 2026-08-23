@@ -22,4 +22,15 @@ unsorted_notes.ignore.txt
 develop.yaml
 examples/
 
+# Local-only working directories. Both are gitignored, so they never reach CI,
+# but .dockerignore is not .gitignore: a local `docker build` uploads them as
+# part of the build context. dev/ in particular holds a copy of the Home
+# Assistant recorder database and can run to several gigabytes.
+dev/
+wiki/
+mimirheim_dumps/
+.coverage
+.ruff_cache/
+.benchmarks/
+
 # The container/ directory (Dockerfile + s6 service definitions) is included.

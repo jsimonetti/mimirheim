@@ -77,14 +77,22 @@ jobs:
             org.opencontainers.image.source="https://github.com/jsimonetti/mimirheim" \
             org.opencontainers.image.version="${{ env.BUILD_VERSION }}"
 
+      # See build-edge.yaml for why SOURCE_DATE_EPOCH is a fixed constant.
+      #
+      # This job reads the shared build cache but deliberately does not write to
+      # it. Every PR build used to push to the same :buildcache tag that main
+      # depends on, so concurrent or cancelled PR builds raced each other and
+      # could leave main rebuilding from a cache a PR had just overwritten.
+      # Reading only costs nothing and removes that interaction entirely.
       - name: Build and Push
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        env:
+          SOURCE_DATE_EPOCH: "0"
         with:
-          push: true
           platforms: linux/arm64,linux/amd64
           labels: ${{ steps.meta.outputs.labels }}
           tags: ${{ steps.meta.outputs.tags }}
+          outputs: type=image,push=true,rewrite-timestamp=true
           cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache
-          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache,mode=max
           context: .
           file: container/Dockerfile
