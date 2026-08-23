@@ -5,8 +5,8 @@ per schedule entry, starts a BackgroundScheduler, then blocks on the stop_event
 until the caller requests shutdown. On stop, it shuts down the scheduler cleanly
 and waits for any in-flight job to complete.
 
-APScheduler handles all timer, drift, and coalescing logic. The custom min-heap
-and threading.Event sleep loop that previously existed here have been removed.
+APScheduler handles all timer, drift, and coalescing logic, so this module
+holds no timing code of its own.
 
 What this module does not do:
 - It does not parse configuration — that is config.py's responsibility.
@@ -90,9 +90,8 @@ def run(
             each trigger that fires.
         schedules: List of (cron_expr, topic) pairs from the config. Typically
             obtained via SchedulerConfig.parsed_schedules().
-        stop_event: Setting this event causes the loop to exit after the
-            current sleep completes. SIGTERM and SIGINT handlers in __main__
-            set this event.
+        stop_event: Setting this event causes run() to return. SIGTERM and
+            SIGINT handlers in __main__ set it.
         _scheduler: Optional BackgroundScheduler to use instead of creating a
             new one. Pass a controlled instance in tests to add pre-configured
             jobs or inspect registered jobs after run() returns. The caller

@@ -71,6 +71,6 @@ schedules:
   # Solve every 15 minutes. mimirheim only solves when all readiness conditions are
   # met; a trigger that arrives before inputs are ready is silently discarded.
   # Derived from mqtt.topic_prefix via helper_common.topics.trigger_topic():
-  #   "mimirheim" (default prefix)  →  mimir/input/trigger
+  #   default prefix "mimir"  →  mimir/input/trigger
   # -------------------------------------------------------------------------
   - "*/15 * * * *": mimir/input/trigger

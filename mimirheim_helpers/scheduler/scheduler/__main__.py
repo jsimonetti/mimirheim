@@ -97,8 +97,7 @@ def main() -> None:
     Parses ``--config``, loads and validates the configuration, connects to
     the MQTT broker, then enters the schedule loop. The loop publishes an
     empty trigger message to each configured topic when its cron expression
-    fires. On SIGTERM or SIGINT, the stop event is set and the loop exits
-    after the current sleep completes.
+    fires. On SIGTERM or SIGINT, the stop event is set and the loop returns.
     """
     parser = argparse.ArgumentParser(
         description="mimirheim scheduler — publish MQTT trigger messages on a cron schedule.",
