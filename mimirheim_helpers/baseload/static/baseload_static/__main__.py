@@ -27,7 +27,10 @@ from baseload_static.config import BaseloadConfig
 from baseload_static.forecast import build_forecast
 from baseload_static.publisher import publish_forecast
 
-logger = logging.getLogger(__name__)
+# Named explicitly, not derived from __name__: this module runs as
+# `python -m baseload_static`, where __name__ is "__main__" and the records would
+# not join the ones MqttDaemon emits under the package name.
+logger = logging.getLogger("baseload_static")
 
 
 class StaticBaseloadDaemon(HelperDaemon):

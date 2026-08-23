@@ -30,7 +30,10 @@ from baseload_ha.fetcher import FetchError, fetch_statistics
 from baseload_ha.forecast import build_forecast
 from baseload_ha.publisher import publish_forecast
 
-logger = logging.getLogger(__name__)
+# Named explicitly, not derived from __name__: this module runs as
+# `python -m baseload_ha`, where __name__ is "__main__" and the records would
+# not join the ones MqttDaemon emits under the package name.
+logger = logging.getLogger("baseload_ha")
 
 
 class HaBaseloadDaemon(HelperDaemon):

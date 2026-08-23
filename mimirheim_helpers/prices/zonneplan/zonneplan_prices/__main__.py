@@ -38,7 +38,10 @@ from zonneplan_prices.fetcher import fetch_prices
 from zonneplan_prices.publisher import publish_prices
 from zonneplan_prices.token import is_token_valid, load_token, save_token
 
-logger = logging.getLogger(__name__)
+# Named explicitly, not derived from __name__: this module runs as
+# `python -m zonneplan_prices`, where __name__ is "__main__" and the records would
+# not join the ones MqttDaemon emits under the package name.
+logger = logging.getLogger("zonneplan_prices")
 
 
 class ZonneplanPricesDaemon(HelperDaemon):
