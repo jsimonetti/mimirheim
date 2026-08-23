@@ -218,9 +218,9 @@ class HybridInverterDevice:
 
             pv_dc[t]
             + bat_discharge_dc[t]
-            + ac_to_dc[t] × η_inv           (AC→DC conversion)
+            + ac_to_dc[t] × eff_inv     (AC→DC conversion)
             − bat_charge_dc[t]
-            − dc_to_ac[t] / η_inv           (DC consumed to produce AC export)
+            − dc_to_ac[t] / eff_inv     (DC consumed to produce AC export)
             == 0
 
         This constraint couples PV, battery, and inverter in a way that is
@@ -230,14 +230,15 @@ class HybridInverterDevice:
         **SOC dynamics**: Energy accounting for the battery across the horizon:
 
             soc[t] = soc[t−1]
-                     + (bat_charge_dc[t] × η_bat_c
-                        − bat_discharge_dc[t] / η_bat_d)
+                     + (bat_charge_dc[t] × eff_bat_charge
+                        − bat_discharge_dc[t] / eff_bat_discharge)
                      × dt
 
-        bat_charge_dc is measured at the DC bus; only the fraction η_bat_c
-        reaches the cells. bat_discharge_dc is the power on the DC bus; the
-        cells must supply bat_discharge_dc / η_bat_d (η_bat_d < 1 means more
-        cell energy is consumed than appears on the DC bus).
+        bat_charge_dc is measured at the DC bus; only the fraction
+        eff_bat_charge reaches the cells. bat_discharge_dc is the power on the
+        DC bus; the cells must supply bat_discharge_dc / eff_bat_discharge.
+        Because that efficiency is below 1, more cell energy is consumed than
+        appears on the DC bus.
 
         For t=0, uses ``inputs.soc_kwh`` as the initial state.
 
@@ -250,8 +251,8 @@ class HybridInverterDevice:
         **Inverter Big-M guard**: Prevents simultaneous AC import and export.
         A binary variable ``inv_mode[t]`` gates each AC direction:
 
-            ac_to_dc[t]  ≤ (max_charge_kw / η_inv)                    × inv_mode[t]
-            dc_to_ac[t]  ≤ (max_discharge_kw + max_pv_kw) × η_inv     × (1 − inv_mode[t])
+            ac_to_dc[t]  ≤ (max_charge_kw / eff_inv)               × inv_mode[t]
+            dc_to_ac[t]  ≤ (max_discharge_kw + max_pv_kw) × eff_inv × (1 − inv_mode[t])
 
         Without this guard, an LP relaxation could simultaneously import and
         export at equal prices, which is physically impossible because a single
@@ -264,17 +265,21 @@ class HybridInverterDevice:
                 ``ctx.horizon``.
         """
         cfg = self.config
-        η_inv = cfg.inverter_efficiency
-        η_bat_c = cfg.battery_charge_efficiency
-        η_bat_d = cfg.battery_discharge_efficiency
+        # Naming: eff_* are efficiencies in (0, 1]; one_over_eff_* are their
+        # reciprocals, precomputed because they appear inside constraints built
+        # once per step. Note that "inv" elsewhere in this module means the
+        # inverter (inv_mode, ac_to_dc), never "inverse".
+        eff_inv = cfg.inverter_efficiency
+        eff_bat_charge = cfg.battery_charge_efficiency
+        eff_bat_discharge = cfg.battery_discharge_efficiency
 
         # Precompute reciprocals to avoid solver-variable division (python-mip
         # expressions support multiplication by a scalar, not division).
-        inv_η_inv = 1.0 / η_inv
-        inv_η_bat_d = 1.0 / η_bat_d
+        one_over_eff_inv = 1.0 / eff_inv
+        one_over_eff_bat_discharge = 1.0 / eff_bat_discharge
 
-        max_ac_import_kw = cfg.max_charge_kw * inv_η_inv
-        max_ac_export_kw = (cfg.max_discharge_kw + cfg.max_pv_kw) * η_inv
+        max_ac_import_kw = cfg.max_charge_kw * one_over_eff_inv
+        max_ac_export_kw = (cfg.max_discharge_kw + cfg.max_pv_kw) * eff_inv
 
         for t in ctx.T:
             # --- PV forecast clip ---
@@ -292,24 +297,24 @@ class HybridInverterDevice:
             ctx.solver.add_constraint(
                 self.pv_dc[t]
                 + self.bat_discharge_dc[t]
-                + self.ac_to_dc[t] * η_inv
+                + self.ac_to_dc[t] * eff_inv
                 - self.bat_charge_dc[t]
-                - inv_η_inv * self.dc_to_ac[t]
+                - one_over_eff_inv * self.dc_to_ac[t]
                 == 0
             )
 
             # --- SOC dynamics ---
-            # Energy stored in the cells increases by bat_charge_dc × η_bat_c
-            # and decreases by bat_discharge_dc / η_bat_d per unit time.
-            # The ratio (1 / η_bat_d) > 1 because the cells must release more
+            # Energy stored in the cells increases by bat_charge_dc × eff_bat_charge
+            # and decreases by bat_discharge_dc / eff_bat_discharge per unit time.
+            # The ratio (1 / eff_bat_discharge) > 1 because the cells must release more
             # energy than appears on the DC bus due to discharge losses.
             if t == 0:
                 ctx.solver.add_constraint(
                     self.soc[t]
                     == inputs.soc_kwh
                     + (
-                        self.bat_charge_dc[t] * η_bat_c
-                        - inv_η_bat_d * self.bat_discharge_dc[t]
+                        self.bat_charge_dc[t] * eff_bat_charge
+                        - one_over_eff_bat_discharge * self.bat_discharge_dc[t]
                     )
                     * ctx.dt
                 )
@@ -318,8 +323,8 @@ class HybridInverterDevice:
                     self.soc[t]
                     == self.soc[t - 1]
                     + (
-                        self.bat_charge_dc[t] * η_bat_c
-                        - inv_η_bat_d * self.bat_discharge_dc[t]
+                        self.bat_charge_dc[t] * eff_bat_charge
+                        - one_over_eff_bat_discharge * self.bat_discharge_dc[t]
                     )
                     * ctx.dt
                 )
