@@ -80,6 +80,7 @@ class SchedulerConfig(BaseModel):
 
     mqtt: MqttConfig = Field(description="MQTT broker connection parameters.", json_schema_extra={"ui_label": "MQTT", "ui_group": "basic"})
     schedules: list[dict[str, str]] = Field(
+        min_length=1,
         description=(
             "List of schedule entries. Each entry is a single-key dict: "
             "{cron_expression: mqtt_topic}."
@@ -95,13 +96,14 @@ class SchedulerConfig(BaseModel):
         Both halves of an entry are checked, because a fault in either one is
         equally fatal and equally invisible until the schedule first fires.
 
+        The list being non-empty is enforced by ``min_length`` on the field, so
+        it is not re-checked here.
+
         Raises:
-            ValueError: If the list is empty, if any entry has more than one
-                key, if any key is not a valid five-field cron expression, or
-                if any value is a topic MQTT cannot publish to.
+            ValueError: If any entry has more than one key, if any key is not a
+                valid five-field cron expression, or if any value is a topic
+                MQTT cannot publish to.
         """
-        if not v:
-            raise ValueError("schedules must not be empty")
         for i, entry in enumerate(v):
             if len(entry) != 1:
                 raise ValueError(
@@ -120,7 +122,7 @@ class SchedulerConfig(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def _set_client_id_default(self) -> "SchedulerConfig":
+    def _set_client_id_default(self) -> SchedulerConfig:
         """Set the default MQTT client identifier when not explicitly configured."""
         if not self.mqtt.client_id:
             self.mqtt.client_id = "mimir-scheduler"

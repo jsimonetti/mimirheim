@@ -80,9 +80,20 @@ def test_multi_key_dict_rejected() -> None:
 
 
 def test_empty_schedules_list_rejected() -> None:
-    """An empty schedules list raises ValidationError."""
-    with pytest.raises(ValidationError, match="must not be empty"):
+    """An empty schedules list raises ValidationError.
+
+    The rule lives in ``min_length`` on the field rather than in the validator,
+    so that it also reaches the generated JSON schema as ``minItems`` and the
+    config editor can report it before the daemon is started.
+    """
+    with pytest.raises(ValidationError, match="at least 1 item"):
         SchedulerConfig.model_validate(_base_raw(schedules=[]))
+
+
+def test_non_empty_constraint_reaches_the_json_schema() -> None:
+    """The config editor builds its UI from the schema, not from the validator."""
+    schema = SchedulerConfig.model_json_schema()
+    assert schema["properties"]["schedules"]["minItems"] == 1
 
 
 def test_unknown_top_level_field_rejected() -> None:
