@@ -10,7 +10,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
 
 from reporter.daemon import ReporterDaemon
 
@@ -104,7 +103,6 @@ def test_render_and_save_restores_deleted_static_files(
     tmp_path: Path, fixture_dump_pair: tuple[Path, Path]
 ) -> None:
     """Static assets deleted between renders are reinstalled by _render_and_save."""
-    import json
 
     from reporter.daemon import ReporterDaemon
 

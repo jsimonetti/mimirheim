@@ -27,7 +27,7 @@ import logging
 import time
 from pathlib import Path
 
-from zonneplan_prices.api import FetchError, ZonneplanClient
+from zonneplan_prices.api import ZonneplanClient
 from zonneplan_prices.token import (
     delete_pending,
     is_pending_fresh,

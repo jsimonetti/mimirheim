@@ -1,6 +1,5 @@
 """Unit tests for mimirheim/core/solver_backend.py — SolverBackend Protocol and CBCSolverBackend."""
 
-import pytest
 
 from mimirheim.core.solver_backend import CBCSolverBackend, SolverBackend
 

@@ -6,7 +6,6 @@ CBCSolverBackend and ModelContext with T=8, dt=0.25 (2-hour horizon).
 
 from datetime import UTC, datetime, timedelta
 
-import pytest
 
 from mimirheim.config.schema import EfficiencySegment, EvConfig
 from mimirheim.core.bundle import EvInputs

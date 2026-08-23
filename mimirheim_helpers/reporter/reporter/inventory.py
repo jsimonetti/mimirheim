@@ -115,12 +115,6 @@ def _build_entry(
         s.get("grid_export_kw", 0.0) * _STEP_HOURS for s in schedule
     )
 
-    pv_total_kwh = sum(
-        max(0.0, sp.get("kw", 0.0)) * _STEP_HOURS
-        for s in schedule
-        for sp in s.get("devices", {}).values()
-        if sp.get("type") == "pv"
-    )
     load_total_kwh = sum(
         max(0.0, -sp.get("kw", 0.0)) * _STEP_HOURS
         for s in schedule

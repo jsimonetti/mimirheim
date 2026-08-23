@@ -198,7 +198,6 @@ class CombiHeatPumpDevice:
                 the DHW tank; ``heat_needed_kwh`` sets the SH demand lower bound.
         """
         cfg = self.config
-        n = len(ctx.T)
 
         # Pre-compute thermal parameters (pure Python floats — not solver variables).
         thermal_cap_kwh_per_k = cfg.volume_liters * _WATER_THERMAL_CAP_KWH_PER_LITRE_K

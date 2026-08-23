@@ -25,10 +25,10 @@ What this module does not do:
 """
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
-from mimirheim.config.schema import BatteryConfig, EvConfig, MimirheimConfig, PvConfig
-from mimirheim.core.bundle import DeviceSetpoint, EvInputs, ScheduleStep, SolveBundle, SolveResult
+from mimirheim.config.schema import BatteryConfig, EvConfig, MimirheimConfig
+from mimirheim.core.bundle import DeviceSetpoint, ScheduleStep, SolveBundle, SolveResult
 
 logger = logging.getLogger("mimirheim.control_arbitration")
 

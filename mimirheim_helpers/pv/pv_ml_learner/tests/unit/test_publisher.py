@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime
 import json
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
 import pytest
 

@@ -378,7 +378,7 @@ def generate_scenario_3() -> None:
     # AC-coupled PV (east + west combined into pv_forecast)
     pv_east = solar_curve(n, peak_kw=4.0, peak_hour=10.5, half_width_h=4.5)
     pv_west = solar_curve(n, peak_kw=4.0, peak_hour=15.5, half_width_h=4.5)
-    pv_ac = [round(e + w, 3) for e, w in zip(pv_east, pv_west)]
+    pv_ac = [round(e + w, 3) for e, w in zip(pv_east, pv_west, strict=True)]
 
     # Space heating: 35 kWh total across 7 days, mild April
     sh_heat_total = 35.0

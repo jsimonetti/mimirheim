@@ -56,7 +56,6 @@ from pv_ml_learner.storage import (
     get_knmi_range,
     get_latest_actuals_ts,
     get_latest_knmi_ts,
-    get_latest_meteoserver_fetch,
     get_pv_actuals_range,
     insert_meteoserver_fetch,
     prune_meteoserver,
@@ -611,8 +610,6 @@ class PvLearnerDaemon(MqttDaemon):
             Number of hourly forecast steps published, or ``None`` if the
             model is not ready or inference failed.
         """
-        cfg = self._config
-
         try:
             steps = predict_forecast(
                 mc_rows,

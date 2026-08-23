@@ -24,13 +24,10 @@ from typing import Any
 
 from mimirheim.config.schema import MimirheimConfig
 from mimirheim.core.bundle import (
-    BatteryInputs,
     DeviceSetpoint,
-    HybridInverterInputs,
     ScheduleStep,
     SolveBundle,
     SolveResult,
-    ThermalBoilerInputs,
 )
 from mimirheim.core.context import ModelContext
 from mimirheim.core.objective import ObjectiveBuilder

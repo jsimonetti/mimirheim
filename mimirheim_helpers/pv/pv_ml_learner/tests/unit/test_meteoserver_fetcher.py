@@ -5,7 +5,6 @@ Uses respx to mock httpx calls. No real API calls are made.
 
 from __future__ import annotations
 
-import json
 import pytest
 import respx
 import httpx

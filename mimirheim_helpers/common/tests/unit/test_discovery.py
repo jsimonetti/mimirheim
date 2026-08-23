@@ -14,10 +14,9 @@ Verifies that publish_trigger_discovery() correctly:
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
 import jinja2
-import pytest
 
 from helper_common.discovery import (
     POWER_NO_CONFIDENCE_FORECAST_ATTRIBUTES_TEMPLATE,

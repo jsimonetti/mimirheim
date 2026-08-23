@@ -4,9 +4,7 @@ All tests must fail before the implementation exists (TDD). Tests use a real
 CBCSolverBackend and ModelContext with T=4, dt=0.25 unless noted otherwise.
 """
 
-from datetime import UTC, datetime
 
-import pytest
 
 from mimirheim.config.schema import BatteryConfig, EfficiencySegment
 from mimirheim.core.bundle import BatteryInputs

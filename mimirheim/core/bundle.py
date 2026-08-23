@@ -19,7 +19,7 @@ vocabulary between the IO layer (which populates the models) and the solver core
 (which consumes them). Neither layer needs to know about the other.
 """
 
-from datetime import UTC, datetime
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 

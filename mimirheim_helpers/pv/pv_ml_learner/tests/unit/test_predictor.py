@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import calendar
 import datetime
-import json
 import time
 
-import joblib
 import pytest
 
 from pv_ml_learner.config import HyperparamConfig, TrainingConfig

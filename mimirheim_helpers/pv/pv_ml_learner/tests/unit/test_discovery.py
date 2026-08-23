@@ -7,9 +7,8 @@ when ha_discovery.enabled is False.
 """
 from __future__ import annotations
 
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
-import pytest
 
 from pv_ml_learner.config import PvLearnerConfig
 

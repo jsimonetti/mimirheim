@@ -18,7 +18,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import joblib
-import pandas as pd
 
 # predictor has no config imports needed beyond standard library
 from pv_ml_learner.features import build_inference_row

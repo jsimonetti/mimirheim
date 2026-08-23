@@ -43,7 +43,6 @@ Rendering improvements over the original analyse_dump.py:
 """
 from __future__ import annotations
 
-import statistics
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -392,10 +391,7 @@ def build_combined_figure(inp: dict, out: dict) -> go.Figure:
     all_annotations: list[dict] = []
 
     if device_meta:
-        for idx, (name, m) in enumerate(device_meta.items()):
-            soc_row_idx = 1 + idx  # 0-based, within the SOC rows section
-            chart_row_number = idx  # 0-based chart row after the energy-flow rows
-
+        for idx, name in enumerate(device_meta):
             # Row index in row_domains: 0=summary, 1=naive, 2=optimised, 3+idx=SOC
             domain_row_idx = 3 + idx
             if domain_row_idx < len(row_domains):
@@ -536,9 +532,9 @@ def _build_summary_tables(
             f"{saving:.4f} \u20ac",
         ],
     ]
-    # Bold the last two rows (effective cost and saving).
-    left_bold_mask = [False] * 7 + [True, True]
-
+    # The last two rows (effective cost and saving) are emphasised through the
+    # cell fill and font colour set below. go.Table has no per-cell font weight,
+    # so colour is the only available emphasis.
     left_table = go.Table(
         header=dict(
             values=left_headers,
@@ -571,7 +567,6 @@ def _build_summary_tables(
     m = compute_schedule_metrics(schedule)
     total_import_kwh = m.grid_import_kwh
     total_export_kwh = m.grid_export_kwh
-    pv_total_kwh = m.pv_total_kwh
     self_consumption_pct = m.self_consumption_pct
     self_suf_pct = m.self_sufficiency_pct
 
@@ -588,7 +583,7 @@ def _build_summary_tables(
 
     # Per-device charge/discharge totals.
     device_meta = _build_device_meta(inp)
-    for name, m in device_meta.items():
+    for name in device_meta:
         charge_kwh = sum(
             max(0.0, -sp.get("kw", 0.0)) * STEP_HOURS
             for s in schedule

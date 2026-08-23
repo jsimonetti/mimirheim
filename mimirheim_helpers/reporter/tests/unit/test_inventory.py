@@ -8,7 +8,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
 
 from reporter import inventory as inv
 
@@ -209,7 +208,6 @@ def test_rebuild_from_disk_preserves_existing_entry_when_dump_gone(tmp_path: Pat
 def test_rebuild_from_disk_removes_entry_for_deleted_html(tmp_path: Path) -> None:
     """rebuild_from_disk() must remove entries whose HTML file no longer exists."""
     safe_ts = "2026-04-02T14-00-00Z"
-    ts = "2026-04-02T14:00:00Z"
     report_file = f"{safe_ts}_report.html"
     dump_dir = tmp_path / "dumps"
     dump_dir.mkdir()

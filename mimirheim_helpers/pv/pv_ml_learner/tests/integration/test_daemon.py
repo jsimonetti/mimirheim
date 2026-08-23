@@ -12,7 +12,6 @@ import calendar
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from pv_ml_learner.config import (
     ArrayConfig,

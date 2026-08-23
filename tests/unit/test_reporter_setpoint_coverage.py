@@ -26,8 +26,6 @@ field is silently overlooked.
 """
 from __future__ import annotations
 
-import pytest
-from pydantic import BaseModel
 
 from mimirheim.core.bundle import DeviceSetpoint
 

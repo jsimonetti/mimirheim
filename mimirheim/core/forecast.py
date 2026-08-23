@@ -27,7 +27,7 @@ It does not import from ``mimirheim.io`` or ``mimirheim.config``.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from mimirheim.core.bundle import PowerForecastStep, PriceStep

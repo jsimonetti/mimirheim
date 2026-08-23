@@ -4,7 +4,7 @@ The httpx client is mocked so no real HTTP calls are made.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

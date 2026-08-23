@@ -12,7 +12,6 @@ What this module does not do:
 
 from __future__ import annotations
 
-import calendar
 import time
 from dataclasses import dataclass
 

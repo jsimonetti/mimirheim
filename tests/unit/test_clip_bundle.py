@@ -7,7 +7,6 @@ array that scales with the horizon length.
 
 from datetime import UTC, datetime
 
-import pytest
 
 from mimirheim.__main__ import _clip_bundle
 from mimirheim.core.bundle import SolveBundle

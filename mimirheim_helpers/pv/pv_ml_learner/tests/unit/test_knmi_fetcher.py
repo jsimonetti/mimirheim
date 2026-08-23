@@ -6,7 +6,7 @@ at the import boundary. No real API calls are made.
 
 from __future__ import annotations
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 import pandas as pd
 import pytest
 
@@ -25,7 +25,6 @@ def _make_df(rows: list[dict]) -> pd.DataFrame:
     Returns:
         DataFrame matching knmi-py return format.
     """
-    import datetime
 
     index = pd.DatetimeIndex([r["ts"] for r in rows], name="YYYYMMDD_HH")
     data = {

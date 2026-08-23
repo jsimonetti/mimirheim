@@ -20,28 +20,10 @@ The tests cover:
 
 from datetime import datetime, timezone
 
-import pytest
 
 from mimirheim.config.schema import (
-    BatteryCapabilitiesConfig,
-    BatteryConfig,
-    BatteryOutputsConfig,
-    ControlConfig,
-    EfficiencySegment,
-    EvCapabilitiesConfig,
-    EvConfig,
-    EvOutputsConfig,
-    GridConfig,
     MimirheimConfig,
-    MqttConfig,
-    ObjectivesConfig,
-    OutputsConfig,
-    PvCapabilitiesConfig,
-    PvConfig,
-    PvOutputsConfig,
-    StaticLoadConfig,
 )
-from mimirheim.config.schema import HybridInverterCapabilitiesConfig, HybridInverterConfig, HybridInverterOutputsConfig
 from mimirheim.core.bundle import DeviceSetpoint, EvInputs, ScheduleStep, SolveBundle, SolveResult
 from mimirheim.core.control_arbitration import (
     _TYPE_PRIORITY,

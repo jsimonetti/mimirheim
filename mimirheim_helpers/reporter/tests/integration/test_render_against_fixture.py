@@ -6,10 +6,8 @@ document given a real dump pair, and that the HTML references
 """
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
-import pytest
 
 from reporter.render import build_report_html
 

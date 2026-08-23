@@ -8,7 +8,6 @@ cooling_rate_k_per_hour=2.0, setpoint_c=55.0, min_temp_c=40.0.
 The default initial temperature is 45.0°C.
 """
 
-import math
 
 from mimirheim.config.schema import ThermalBoilerConfig
 from mimirheim.core.bundle import ThermalBoilerInputs

@@ -110,8 +110,11 @@ class PvFetcherDaemon(HelperDaemon):
             nonzero = {ts: w for ts, w in watts.items() if w > 0}
             sorted_keys = sorted(watts)
             if len(sorted_keys) >= 2:
+                # strict=False is deliberate: this pairs the list with its
+                # own tail, so the second argument is always one shorter.
                 inferred_step = min(
-                    b - a for a, b in zip(sorted_keys, sorted_keys[1:])
+                    b - a
+                    for a, b in zip(sorted_keys, sorted_keys[1:], strict=False)
                 )
             else:
                 inferred_step = None

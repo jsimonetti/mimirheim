@@ -65,7 +65,7 @@ def test_golden_scenario(
 
     # Compare schedule step-by-step.
     assert len(result.schedule) == len(golden.schedule)
-    for step, g_step in zip(result.schedule, golden.schedule):
+    for step, g_step in zip(result.schedule, golden.schedule, strict=True):
         assert step.t == g_step.t
         assert step.grid_import_kw == pytest.approx(g_step.grid_import_kw, abs=1e-4)
         assert step.grid_export_kw == pytest.approx(g_step.grid_export_kw, abs=1e-4)

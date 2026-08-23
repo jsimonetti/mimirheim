@@ -28,7 +28,6 @@ from mimirheim.config.schema import (
     OutputsConfig,
     SocTopicConfig,
 )
-from mimirheim.core.bundle import PriceStep
 from mimirheim.core.readiness import ReadinessState
 from mimirheim.io.mqtt_client import MqttClient
 

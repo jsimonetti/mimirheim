@@ -18,7 +18,6 @@ import urllib.request
 from pathlib import Path
 
 import pytest
-import yaml
 
 from config_editor.server import ConfigEditorServer
 

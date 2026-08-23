@@ -7,7 +7,7 @@ All tests must fail before forecast.py exists.
 """
 
 import pytest
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from mimirheim.core.bundle import PowerForecastStep, PriceStep
 from mimirheim.core.forecast import (

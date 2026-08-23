@@ -7,7 +7,6 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from helper_common.config import HomeAssistantConfig
 from nordpool.config import MqttConfig, NordpoolApiConfig, NordpoolConfig
 
 

@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import sys
 
 from reporter.config import load_config
 from reporter.daemon import ReporterDaemon
