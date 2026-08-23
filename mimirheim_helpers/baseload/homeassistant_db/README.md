@@ -196,7 +196,7 @@ Install dependencies and run from the tool directory:
 ```bash
 cd mimirheim_helpers/baseload/homeassistant_db
 uv sync --group dev
-uv run python -m baseload_ha --config config.yaml
+uv run python -m baseload_ha_db --config config.yaml
 ```
 
 For PostgreSQL or MariaDB, install the matching driver extra first:
@@ -302,7 +302,7 @@ Published retained to `output_topic`. Steps are hourly. mimirheim resamples to i
 ## 5. Running
 
 ```bash
-uv run python -m mimirheim_helpers.baseload.homeassistant --config mimirheim_helpers/baseload/homeassistant/config.yaml
+uv run python -m baseload_ha_db --config mimirheim_helpers/baseload/homeassistant_db/config.yaml
 ```
 
 ### Systemd unit example
@@ -314,7 +314,7 @@ After=network.target mosquitto.service
 
 [Service]
 WorkingDirectory=/opt/mimirheim
-ExecStart=/opt/mimirheim/.venv/bin/python -m mimirheim_helpers.baseload.homeassistant --config /etc/mimirheim/baseload_ha.yaml
+ExecStart=/opt/mimirheim/.venv/bin/python -m baseload_ha_db --config /etc/mimirheim/baseload_ha_db.yaml
 Restart=on-failure
 RestartSec=30
 

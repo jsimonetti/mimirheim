@@ -165,7 +165,7 @@ One payload per array, published retained to each array's `output_topic`. Steps 
 ## 5. Running
 
 ```bash
-uv run python -m mimirheim_helpers.pv.forecast_solar --config mimirheim_helpers/pv/forecast.solar/config.yaml
+uv run python -m pv_fetcher --config mimirheim_helpers/pv/forecast.solar/config.yaml
 ```
 
 ### Systemd unit example
@@ -177,7 +177,7 @@ After=network.target mosquitto.service
 
 [Service]
 WorkingDirectory=/opt/mimirheim
-ExecStart=/opt/mimirheim/.venv/bin/python -m mimirheim_helpers.pv.forecast_solar --config /etc/mimirheim/forecast_solar.yaml
+ExecStart=/opt/mimirheim/.venv/bin/python -m pv_fetcher --config /etc/mimirheim/forecast_solar.yaml
 Restart=on-failure
 RestartSec=30
 

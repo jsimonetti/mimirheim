@@ -140,7 +140,7 @@ The tool publishes a JSON array retained to `output_topic`. Each element is one 
 
 ```bash
 # From the mimirheim repo root:
-uv run python -m mimirheim_helpers.prices.nordpool --config mimirheim_helpers/prices/nordpool/config.yaml
+uv run python -m nordpool --config mimirheim_helpers/prices/nordpool/config.yaml
 ```
 
 The process logs to stdout and does not daemonise. Use a process supervisor (systemd, Docker, s6) to run it persistently.
@@ -154,7 +154,7 @@ After=network.target mosquitto.service
 
 [Service]
 WorkingDirectory=/opt/mimirheim
-ExecStart=/opt/mimirheim/.venv/bin/python -m mimirheim_helpers.prices.nordpool --config /etc/mimirheim/nordpool.yaml
+ExecStart=/opt/mimirheim/.venv/bin/python -m nordpool --config /etc/mimirheim/nordpool.yaml
 Restart=on-failure
 RestartSec=30
 
