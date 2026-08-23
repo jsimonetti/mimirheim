@@ -43,6 +43,7 @@ Rendering improvements over the original analyse_dump.py:
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -50,6 +51,8 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from reporter.metrics import avg_segment_efficiency, compute_economic_metrics, compute_schedule_metrics
+
+logger = logging.getLogger(__name__)
 
 # Each solver time step is 15 minutes.
 STEP_MINUTES = 15
@@ -153,21 +156,15 @@ def build_combined_figure(inp: dict, out: dict) -> go.Figure:
         A single Plotly Figure ready to write as an HTML file.
     """
     schedule = out.get("schedule", [])
-    n_prices = len(inp["horizon_prices"])
-    times = _timestamps(inp["solve_time_utc"], n_prices)
 
     import_prices = inp["horizon_prices"]
     export_prices = inp["horizon_export_prices"]
 
-    # Build x-axis labels from the schedule step timestamps.
-    if schedule and isinstance(schedule[0].get("t"), str):
-        xs = [s["t"] for s in schedule]
-    else:
-        ts_fmt = [t.strftime("%Y-%m-%dT%H:%M:%SZ") for t in times]
-        xs = [
-            s.get("t", ts_fmt[i]) if isinstance(s.get("t"), int) else s.get("t", ts_fmt[i])
-            for i, s in enumerate(schedule)
-        ]
+    # X-axis labels are the step timestamps the dump already carries. Each
+    # step records an absolute ISO time, so there is nothing to derive: no
+    # step count to assume, no step spacing to assume, and no way for the
+    # axis to drift from the data plotted on it.
+    xs = [s["t"] for s in schedule]
 
     device_meta = _build_device_meta(inp)
     soc_histories = _read_soc_from_schedule(schedule, device_meta)
@@ -1386,21 +1383,6 @@ def _build_data_table(
 # ---------------------------------------------------------------------------
 
 
-def _timestamps(solve_time_utc: str, n_steps: int) -> list[datetime]:
-    """Build a list of UTC datetimes, one per 15-minute step.
-
-    Args:
-        solve_time_utc: ISO 8601 UTC datetime string from the input dump.
-        n_steps: Number of 15-minute steps in the horizon.
-
-    Returns:
-        A list of ``datetime`` objects, one per step, starting at
-        ``solve_time_utc``.
-    """
-    t0 = datetime.fromisoformat(solve_time_utc.replace("Z", "+00:00"))
-    return [t0 + timedelta(minutes=STEP_MINUTES * i) for i in range(n_steps)]
-
-
 def _hex_to_rgb(hex_color: str) -> str:
     """Convert a ``#rrggbb`` hex string to a ``r,g,b`` string for rgba() CSS.
 
@@ -1479,9 +1461,17 @@ def _read_soc_from_schedule(
     function extracts those values, which are the solver's exact computed SOC
     at the end of each step.
 
-    When ``soc_kwh`` is absent from a step (e.g. legacy payloads or
-    non-storage devices), the value falls back to 0.0 so that callers always
-    receive a complete list of the expected length.
+    Every device in ``device_meta`` is a storage device, so every one of them
+    should carry ``soc_kwh`` on every step. When the field is absent the value
+    falls back to 0.0, because callers need a list of the expected length, and
+    a warning is logged naming the device.
+
+    The warning matters more than it looks. A silent zero renders as a flat
+    line along the axis, which is indistinguishable from a correctly measured
+    idle battery, so the chart reads as data rather than as a gap. That is
+    exactly how dumps written before ``debug_dump`` learned to emit
+    ``soc_kwh`` produced months of plausible-looking, empty SOC charts. A
+    genuine 0.0 is data and does not warn; only an absent key does.
 
     Returns a dict of SOC lists, one entry per device. Each list has
     ``len(schedule)`` entries: the end-of-step SOC for each step.
@@ -1496,10 +1486,25 @@ def _read_soc_from_schedule(
     """
     histories: dict[str, list[float]] = {}
     for name in device_meta:
-        history = [
-            step.get("devices", {}).get(name, {}).get("soc_kwh") or 0.0
-            for step in schedule
-        ]
+        history: list[float] = []
+        missing = 0
+        for step in schedule:
+            value = step.get("devices", {}).get(name, {}).get("soc_kwh")
+            if value is None:
+                missing += 1
+                history.append(0.0)
+            else:
+                history.append(value)
+        if missing:
+            logger.warning(
+                "Device %r is missing soc_kwh on %d of %d schedule steps; "
+                "those steps are charted as 0 kWh and the SOC series will be "
+                "wrong. The dump predates debug_dump writing soc_kwh, or the "
+                "device is absent from the schedule.",
+                name,
+                missing,
+                len(schedule),
+            )
         histories[name] = history
     return histories
 
