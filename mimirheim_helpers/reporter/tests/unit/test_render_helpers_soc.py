@@ -9,6 +9,7 @@ of an idle battery rather than like absent data.
 from __future__ import annotations
 
 import logging
+import re
 
 from reporter._render_helpers import _read_soc_from_schedule
 
@@ -157,46 +158,61 @@ def test_x_axis_comes_from_the_schedule_timestamps() -> None:
     no reason to rebuild a time axis from solve_time_utc and an assumed step
     spacing.
     """
-    from reporter._render_helpers import build_combined_figure
+    from reporter.render import build_report_html
 
     inp, out = _minimal_dumps(4)
-    fig = build_combined_figure(inp, out)
+    html = build_report_html(inp, out)
 
-    expected = [s["t"] for s in out["schedule"]]
-    dated = [tr for tr in fig.data if getattr(tr, "x", None) and list(tr.x) == expected]
-    assert dated, "no trace was plotted against the schedule's own timestamps"
+    for step in out["schedule"]:
+        assert step["t"] in html, f"step timestamp {step['t']} missing from the report"
+
+
+def _x_arrays(html: str) -> list[str]:
+    """Return the raw text of every Plotly trace "x" array found in the page.
+
+    The traces are emitted as JSON inside the Plotly.newPlot call, so the x
+    arrays can be pulled out textually. Crude, but it lets a test distinguish
+    "this timestamp is on a chart axis" from "this timestamp is in a caption",
+    which is the whole point here.
+    """
+    return re.findall(r'"x":\s*\[(.*?)\]', html, flags=re.S)
 
 
 def test_x_axis_ignores_a_stale_solve_time_in_the_input() -> None:
     """The schedule's timestamps win over solve_time_utc if the two disagree.
 
-    Guards the ordering: reading the per-step field must not be a fallback
+    Guards the ordering: reading the per-step field must not become a fallback
     behind a recomputation from the input.
+
+    solve_time_utc has legitimate uses elsewhere on the page. It labels the
+    title, the heading, and the "Solve time (UTC)" summary row, so this asserts
+    on the chart axes specifically rather than on the document as a whole.
     """
-    from reporter._render_helpers import build_combined_figure
+    from reporter.render import build_report_html
 
     inp, out = _minimal_dumps(4)
     inp["solve_time_utc"] = "1999-01-01T00:00:00Z"
 
-    fig = build_combined_figure(inp, out)
+    html = build_report_html(inp, out)
+    axes = _x_arrays(html)
 
-    expected = [s["t"] for s in out["schedule"]]
-    dated = [tr for tr in fig.data if getattr(tr, "x", None) and list(tr.x) == expected]
-    assert dated, "the stale input solve_time_utc leaked into the time axis"
-    assert not any(
-        "1999" in str(x) for tr in fig.data for x in (getattr(tr, "x", None) or [])
+    assert axes, "no chart axes found in the report"
+    for axis in axes:
+        assert "1999" not in axis, "solve_time_utc reached a chart axis"
+    assert any(out["schedule"][0]["t"] in axis for axis in axes), (
+        "no axis was built from the schedule's own timestamps"
     )
 
 
 def test_empty_schedule_still_renders() -> None:
     """An infeasible solve has no steps; rendering must not raise."""
-    from reporter._render_helpers import build_combined_figure
+    from reporter.render import build_report_html
 
     inp, out = _minimal_dumps(4)
     out["schedule"] = []
     out["solve_status"] = "infeasible"
 
-    build_combined_figure(inp, out)
+    build_report_html(inp, out)
 
 
 def test_report_html_renders_without_recomputed_times() -> None:
