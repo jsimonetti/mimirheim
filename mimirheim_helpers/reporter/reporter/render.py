@@ -187,7 +187,7 @@ def build_report_html(inp: dict, out: dict) -> str:
                     datetime.fromisoformat(xs[-1].replace("Z", "+00:00"))
                     + timedelta(minutes=STEP_MINUTES)
                 ).strftime("%Y-%m-%dT%H:%M:%SZ")
-                soc_xs = (xs[1:] + [_last_end])[: len(soc_pct)]
+                soc_xs = [*xs[1:], _last_end][: len(soc_pct)]
             else:
                 soc_xs = []
 

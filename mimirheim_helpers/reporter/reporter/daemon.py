@@ -284,7 +284,10 @@ class ReporterDaemon(MqttDaemon):
             dest: Destination path to write plotly.min.js to.
         """
         try:
-            import plotly as _plotly  # noqa: PLC0415
+            # Imported here rather than at module scope: plotly is only needed
+            # to locate its bundled JS, and the daemon should still start if
+            # the optional reporter extra is not installed.
+            import plotly as _plotly
         except ImportError:
             logger.warning(
                 "plotly package is not installed; cannot install plotly.min.js."
