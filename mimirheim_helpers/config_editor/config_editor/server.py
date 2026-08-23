@@ -61,6 +61,15 @@ MQTT_ENV_REDACTED = "__supervisor_provided__"
 # host, port and tls are not secrets and the form needs to display them.
 _REDACTED_MQTT_FIELDS = ("password",)
 
+# Largest request body accepted on a POST.
+#
+# self.rfile.read(length) previously read whatever the client declared straight
+# into memory, with no cap. The largest thing this API legitimately receives is
+# a full mimirheim.yaml as JSON, which is a few tens of kilobytes; 1 MiB leaves
+# a wide margin while keeping a bad or hostile Content-Length from exhausting a
+# Home Assistant add-on box.
+MAX_REQUEST_BODY_BYTES = 1024 * 1024
+
 # Path to the static files bundled with this package.
 _STATIC_DIR = Path(__file__).parent / "static"
 
@@ -317,10 +326,40 @@ class ConfigEditorServer:
                     self.send_response(403)
                     self.end_headers()
                     return
-                length = int(self.headers.get("Content-Length", 0))
+                raw_length = self.headers.get("Content-Length", "0")
+                try:
+                    length = int(raw_length)
+                except ValueError:
+                    # A non-numeric header used to raise ValueError here, which
+                    # took out the handler thread and reset the connection with
+                    # no response at all.
+                    logger.warning("Rejecting POST: bad Content-Length %r.", raw_length)
+                    self._reject(400, "bad Content-Length")
+                    return
+                if length < 0:
+                    logger.warning("Rejecting POST: negative Content-Length %r.", raw_length)
+                    self._reject(400, "bad Content-Length")
+                    return
+                if length > MAX_REQUEST_BODY_BYTES:
+                    logger.warning(
+                        "Rejecting POST: body of %d bytes exceeds the %d byte limit.",
+                        length,
+                        MAX_REQUEST_BODY_BYTES,
+                    )
+                    self._reject(413, "request body too large")
+                    return
                 raw = self.rfile.read(length)
                 status, headers, body = server_self.handle_request("POST", self.path, body=raw)
                 self._send(status, headers, body)
+
+            def _reject(self, status: int, message: str) -> None:
+                """Send a JSON error response without touching the request body."""
+                payload = json.dumps({"ok": False, "error": message}).encode()
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
 
             def _send(self, status: int, headers: dict[str, str], body: bytes) -> None:
                 def _sanitize_header_component(component: str) -> str:
