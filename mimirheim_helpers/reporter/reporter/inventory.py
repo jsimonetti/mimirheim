@@ -86,7 +86,6 @@ def _write_inventory(output_dir: Path, entries: list[dict]) -> None:
 def _build_entry(
     ts: str,
     report_file: str,
-    inp: dict,
     out: dict,
 ) -> dict:
     """Build a single inventory entry dict from a dump pair.
@@ -95,7 +94,6 @@ def _build_entry(
         ts: ISO 8601 timestamp string, e.g. ``"2026-04-02T14:00:00Z"``.
         report_file: Filename of the HTML report, e.g.
             ``"2026-04-02T14-00-00Z_report.html"``.
-        inp: Parsed input dump JSON.
         out: Parsed output dump JSON.
 
     Returns:
@@ -156,7 +154,6 @@ def update(
     output_dir: Path,
     ts: str,
     report_file: str,
-    inp: dict,
     out: dict,
 ) -> None:
     """Append or update one inventory entry and rewrite ``inventory.js``.
@@ -168,11 +165,10 @@ def update(
         output_dir: Directory containing ``inventory.js``.
         ts: ISO 8601 timestamp for the new entry.
         report_file: Filename of the HTML report.
-        inp: Parsed input dump JSON.
         out: Parsed output dump JSON.
     """
     entries = _read_inventory(output_dir)
-    new_entry = _build_entry(ts, report_file, inp, out)
+    new_entry = _build_entry(ts, report_file, out)
     # Remove any existing entry with the same ts.
     entries = [e for e in entries if e.get("ts") != ts]
     entries.append(new_entry)
@@ -270,11 +266,13 @@ def rebuild_from_disk(output_dir: Path, dump_dir: Path) -> None:
         # Case 2: entry missing or is a stub — try to build from the dump pair.
         input_path = dump_dir / f"{safe_ts}_input.json"
         output_path = dump_dir / f"{safe_ts}_output.json"
+        # Both files must exist: the entry links to the input dump as well,
+        # so an entry pointing at a missing file would be a dead link. Only
+        # the output is parsed, because that is all the entry is built from.
         if input_path.exists() and output_path.exists():
             try:
-                inp = json.loads(input_path.read_text())
                 out = json.loads(output_path.read_text())
-                entries.append(_build_entry(ts, report_path.name, inp, out))
+                entries.append(_build_entry(ts, report_path.name, out))
                 n_built += 1
                 continue
             except (OSError, json.JSONDecodeError) as exc:

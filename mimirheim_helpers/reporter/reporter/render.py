@@ -357,7 +357,7 @@ def build_report_html(inp: dict, out: dict) -> str:
     # ------------------------------------------------------------------
     # Section 5: step-by-step data table
     # ------------------------------------------------------------------
-    table_trace = _build_data_table(inp, out, schedule, xs, device_meta, soc_histories)
+    table_trace = _build_data_table(inp, schedule, xs, device_meta, soc_histories)
     table_height = max(400, len(schedule) * 23 + 60)
     table_fig = go.Figure(data=[table_trace])
     table_fig.update_layout(
