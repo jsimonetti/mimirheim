@@ -1,137 +1,345 @@
 {
   "strategy": "minimize_cost",
+  "solve_time_utc": "2026-04-03T15:30:00Z",
+  "objective_value": -94.196041,
   "solve_status": "optimal",
-  "objective_value": 0.956064,
   "dispatch_suppressed": false,
-  "naive_cost_eur": 2.287831,
-  "optimised_cost_eur": 1.434838,
-  "soc_credit_eur": 0.499518,
+  "naive_cost_eur": -4.858976,
+  "optimised_cost_eur": -9.960677,
+  "soc_credit_eur": 9.940904,
+  "deferrable_recommended_starts": {
+    "dishwasher": "2026-04-03T19:00:00Z"
+  },
   "schedule": [
     {
       "t": "2026-04-03T15:30:00Z",
-      "import_price_eur_per_kwh": 0.231214,
-      "export_price_eur_per_kwh": 0.009518,
-      "grid_import_kw": 0.0,
+      "import_price_eur_per_kwh": 0.14,
+      "export_price_eur_per_kwh": 0.08,
+      "grid_import_kw": 6.572,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.754,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 5.7875
         },
         "roof_pv": {
+          "kw": 4.889,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 4.889,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 23.5575
+        },
+        "dishwasher": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.754,
+          "kw": -0.35,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T15:45:00Z",
-      "import_price_eur_per_kwh": 0.248299,
-      "export_price_eur_per_kwh": 0.026603,
-      "grid_import_kw": 0.0,
+      "import_price_eur_per_kwh": 0.1517,
+      "export_price_eur_per_kwh": 0.0917,
+      "grid_import_kw": 6.917,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.754,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 6.975
         },
         "roof_pv": {
+          "kw": 4.727,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 4.727,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 26.115
+        },
+        "dishwasher": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.754,
+          "kw": -0.371,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T16:00:00Z",
-      "import_price_eur_per_kwh": 0.235158,
-      "export_price_eur_per_kwh": 0.013462,
-      "grid_import_kw": 0.0,
+      "import_price_eur_per_kwh": 0.1633,
+      "export_price_eur_per_kwh": 0.1033,
+      "grid_import_kw": 7.302,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.496,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 8.1625
         },
         "roof_pv": {
+          "kw": 4.545,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 4.545,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 28.6725
+        },
+        "dishwasher": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.496,
+          "kw": -0.392,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T16:15:00Z",
-      "import_price_eur_per_kwh": 0.255898,
-      "export_price_eur_per_kwh": 0.034202,
-      "grid_import_kw": 0.0,
+      "import_price_eur_per_kwh": 0.175,
+      "export_price_eur_per_kwh": 0.115,
+      "grid_import_kw": 7.722,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.496,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 9.35
         },
         "roof_pv": {
+          "kw": 4.345,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 4.345,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 31.23
+        },
+        "dishwasher": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.496,
+          "kw": -0.412,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T16:30:00Z",
-      "import_price_eur_per_kwh": 0.266001,
-      "export_price_eur_per_kwh": 0.044305,
+      "import_price_eur_per_kwh": 0.1867,
+      "export_price_eur_per_kwh": 0.1267,
       "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.496,
+          "kw": 0.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 9.35
         },
         "roof_pv": {
+          "kw": 4.125,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 4.125,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -7.817,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 33.0475
+        },
+        "dishwasher": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.496,
+          "kw": -0.433,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T16:45:00Z",
-      "import_price_eur_per_kwh": 0.269535,
-      "export_price_eur_per_kwh": 0.047838,
+      "import_price_eur_per_kwh": 0.1983,
+      "export_price_eur_per_kwh": 0.1383,
       "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.496,
+          "kw": 0.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 9.35
         },
         "roof_pv": {
+          "kw": 3.886,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 3.886,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -7.318,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 34.7489
+        },
+        "dishwasher": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "deferrable_load"
+        },
+        "base_load": {
+          "kw": -0.454,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T17:00:00Z",
+      "import_price_eur_per_kwh": 0.21,
+      "export_price_eur_per_kwh": 0.15,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "soc_kwh": 9.35
+        },
+        "roof_pv": {
+          "kw": 3.628,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 3.628,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -6.781,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 36.3255
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
+        },
+        "base_load": {
+          "kw": -0.475,
+          "type": "static_load"
+        }
+      }
+    },
+    {
+      "t": "2026-04-03T17:15:00Z",
+      "import_price_eur_per_kwh": 0.2217,
+      "export_price_eur_per_kwh": 0.1617,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "home_battery": {
+          "kw": 0.0,
+          "type": "battery",
+          "soc_kwh": 9.35
+        },
+        "roof_pv": {
+          "kw": 3.352,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 3.352,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -6.208,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 37.7688
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
           "kw": -0.496,
@@ -140,2531 +348,3697 @@
       }
     },
     {
-      "t": "2026-04-03T17:00:00Z",
-      "import_price_eur_per_kwh": 0.292912,
-      "export_price_eur_per_kwh": 0.071216,
-      "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": 0.417,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.0,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.417,
-          "type": "static_load"
-        }
-      }
-    },
-    {
-      "t": "2026-04-03T17:15:00Z",
-      "import_price_eur_per_kwh": 0.280969,
-      "export_price_eur_per_kwh": 0.059273,
-      "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": 0.417,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.0,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.417,
-          "type": "static_load"
-        }
-      }
-    },
-    {
       "t": "2026-04-03T17:30:00Z",
-      "import_price_eur_per_kwh": 0.286329,
-      "export_price_eur_per_kwh": 0.064633,
+      "import_price_eur_per_kwh": 0.2333,
+      "export_price_eur_per_kwh": 0.1733,
       "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.417,
+          "kw": 0.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 9.35
         },
         "roof_pv": {
+          "kw": 3.056,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 3.056,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -5.595,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 39.0697
+        },
+        "dishwasher": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.417,
+          "kw": -0.517,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T17:45:00Z",
-      "import_price_eur_per_kwh": 0.28593,
-      "export_price_eur_per_kwh": 0.064234,
+      "import_price_eur_per_kwh": 0.245,
+      "export_price_eur_per_kwh": 0.185,
       "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
+      "grid_export_kw": 4.943,
       "devices": {
         "home_battery": {
-          "kw": 0.417,
+          "kw": 0.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 9.35
         },
         "roof_pv": {
+          "kw": 2.74,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 2.74,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 39.0697
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.417,
+          "kw": -0.537,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T18:00:00Z",
-      "import_price_eur_per_kwh": 0.297594,
-      "export_price_eur_per_kwh": 0.075898,
+      "import_price_eur_per_kwh": 0.2567,
+      "export_price_eur_per_kwh": 0.1967,
       "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
+      "grid_export_kw": 4.254,
       "devices": {
         "home_battery": {
-          "kw": 0.44,
+          "kw": 0.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 9.35
         },
         "roof_pv": {
+          "kw": 2.406,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 2.406,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 39.0697
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.44,
+          "kw": -0.558,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T18:15:00Z",
-      "import_price_eur_per_kwh": 0.283631,
-      "export_price_eur_per_kwh": 0.061935,
+      "import_price_eur_per_kwh": 0.2683,
+      "export_price_eur_per_kwh": 0.2083,
       "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
+      "grid_export_kw": 8.527,
       "devices": {
         "home_battery": {
-          "kw": 0.44,
+          "kw": 5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 8.0342
         },
         "roof_pv": {
+          "kw": 2.053,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 2.053,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 39.0697
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.44,
+          "kw": -0.579,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T18:30:00Z",
-      "import_price_eur_per_kwh": 0.277521,
-      "export_price_eur_per_kwh": 0.055824,
+      "import_price_eur_per_kwh": 0.28,
+      "export_price_eur_per_kwh": 0.22,
       "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
+      "grid_export_kw": 17.0,
       "devices": {
         "home_battery": {
-          "kw": 0.44,
+          "kw": 5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 6.7184
         },
         "roof_pv": {
+          "kw": 1.681,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 1.681,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 8.988,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 36.6535
+        },
+        "dishwasher": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.44,
+          "kw": -0.35,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T18:45:00Z",
-      "import_price_eur_per_kwh": 0.272209,
-      "export_price_eur_per_kwh": 0.050513,
+      "import_price_eur_per_kwh": 0.2917,
+      "export_price_eur_per_kwh": 0.2317,
       "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
+      "grid_export_kw": 17.0,
       "devices": {
         "home_battery": {
-          "kw": 0.44,
+          "kw": 5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 5.4026
         },
         "roof_pv": {
+          "kw": 1.289,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 1.289,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 9.793,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 34.021
+        },
+        "dishwasher": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.44,
+          "kw": -0.371,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T19:00:00Z",
-      "import_price_eur_per_kwh": 0.279699,
-      "export_price_eur_per_kwh": 0.058002,
-      "grid_import_kw": 0.0,
+      "import_price_eur_per_kwh": 0.1433,
+      "export_price_eur_per_kwh": 0.0833,
+      "grid_import_kw": 16.436,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.455,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 6.5901
         },
         "roof_pv": {
-          "kw": 0.0,
-          "type": "pv"
+          "kw": 0.878,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.878,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 36.5785
+        },
+        "dishwasher": {
+          "kw": -1.8,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.455,
+          "kw": -0.392,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T19:15:00Z",
-      "import_price_eur_per_kwh": 0.267417,
-      "export_price_eur_per_kwh": 0.045721,
-      "grid_import_kw": 0.0,
+      "import_price_eur_per_kwh": 0.155,
+      "export_price_eur_per_kwh": 0.095,
+      "grid_import_kw": 17.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.455,
+          "kw": -4.686,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 7.7031
         },
         "roof_pv": {
-          "kw": 0.0,
-          "type": "pv"
+          "kw": 0.449,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.449,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 39.136
+        },
+        "dishwasher": {
+          "kw": -1.8,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.455,
+          "kw": -0.412,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T19:30:00Z",
-      "import_price_eur_per_kwh": 0.262359,
-      "export_price_eur_per_kwh": 0.040663,
-      "grid_import_kw": 0.0,
+      "import_price_eur_per_kwh": 0.1667,
+      "export_price_eur_per_kwh": 0.1067,
+      "grid_import_kw": 17.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.455,
+          "kw": -4.967,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 8.8827
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 41.6935
+        },
+        "dishwasher": {
+          "kw": -0.6,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.455,
+          "kw": -0.433,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T19:45:00Z",
-      "import_price_eur_per_kwh": 0.261645,
-      "export_price_eur_per_kwh": 0.039949,
-      "grid_import_kw": 0.0,
+      "import_price_eur_per_kwh": 0.1783,
+      "export_price_eur_per_kwh": 0.1183,
+      "grid_import_kw": 16.7583,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.455,
+          "kw": -4.7043,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 10.0
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 44.251
+        },
+        "dishwasher": {
+          "kw": -0.6,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.455,
+          "kw": -0.454,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T20:00:00Z",
-      "import_price_eur_per_kwh": 0.264235,
-      "export_price_eur_per_kwh": 0.042539,
-      "grid_import_kw": 0.0,
+      "import_price_eur_per_kwh": 0.19,
+      "export_price_eur_per_kwh": 0.13,
+      "grid_import_kw": 0.475,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.393,
+          "kw": 0.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 10.0
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 44.251
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.393,
+          "kw": -0.475,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T20:15:00Z",
-      "import_price_eur_per_kwh": 0.258487,
-      "export_price_eur_per_kwh": 0.036791,
+      "import_price_eur_per_kwh": 0.2017,
+      "export_price_eur_per_kwh": 0.1417,
       "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.393,
+          "kw": 0.496,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 9.8695
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 44.251
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.393,
+          "kw": -0.496,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T20:30:00Z",
-      "import_price_eur_per_kwh": 0.256709,
-      "export_price_eur_per_kwh": 0.035012,
+      "import_price_eur_per_kwh": 0.2133,
+      "export_price_eur_per_kwh": 0.1533,
       "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.393,
+          "kw": 0.517,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 9.7334
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 44.251
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.393,
+          "kw": -0.517,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T20:45:00Z",
-      "import_price_eur_per_kwh": 0.250066,
-      "export_price_eur_per_kwh": 0.02837,
+      "import_price_eur_per_kwh": 0.225,
+      "export_price_eur_per_kwh": 0.165,
       "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.393,
+          "kw": 0.537,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 9.5921
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 44.251
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.393,
+          "kw": -0.537,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T21:00:00Z",
-      "import_price_eur_per_kwh": 0.250235,
-      "export_price_eur_per_kwh": 0.028539,
+      "import_price_eur_per_kwh": 0.2367,
+      "export_price_eur_per_kwh": 0.1767,
       "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.343,
+          "kw": 0.558,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 9.4453
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 44.251
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.343,
+          "kw": -0.558,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T21:15:00Z",
-      "import_price_eur_per_kwh": 0.242975,
-      "export_price_eur_per_kwh": 0.021279,
+      "import_price_eur_per_kwh": 0.2483,
+      "export_price_eur_per_kwh": 0.1883,
       "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.343,
+          "kw": 0.579,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 9.2929
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 44.251
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.343,
+          "kw": -0.579,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T21:30:00Z",
-      "import_price_eur_per_kwh": 0.22756,
-      "export_price_eur_per_kwh": 0.005864,
+      "import_price_eur_per_kwh": 0.26,
+      "export_price_eur_per_kwh": 0.2,
       "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
+      "grid_export_kw": 3.739,
       "devices": {
         "home_battery": {
-          "kw": 0.343,
+          "kw": 4.089,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 8.2168
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 44.251
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.343,
+          "kw": -0.35,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T21:45:00Z",
-      "import_price_eur_per_kwh": 0.212894,
-      "export_price_eur_per_kwh": -0.008802,
+      "import_price_eur_per_kwh": 0.2717,
+      "export_price_eur_per_kwh": 0.2117,
       "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
+      "grid_export_kw": 15.629,
       "devices": {
         "home_battery": {
-          "kw": 0.343,
+          "kw": 5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 6.9011
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 41.294
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.343,
+          "kw": -0.371,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T22:00:00Z",
-      "import_price_eur_per_kwh": 0.16902,
-      "export_price_eur_per_kwh": -0.052676,
-      "grid_import_kw": 0.23,
-      "grid_export_kw": 0.0,
+      "import_price_eur_per_kwh": 0.2833,
+      "export_price_eur_per_kwh": 0.2233,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 15.608,
       "devices": {
         "home_battery": {
-          "kw": 0.0,
+          "kw": 5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 5.5853
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 38.337
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.23,
+          "kw": -0.392,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T22:15:00Z",
-      "import_price_eur_per_kwh": 0.157174,
-      "export_price_eur_per_kwh": -0.064522,
-      "grid_import_kw": 0.6183,
-      "grid_export_kw": 0.0,
+      "import_price_eur_per_kwh": 0.295,
+      "export_price_eur_per_kwh": 0.235,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 15.588,
       "devices": {
         "home_battery": {
-          "kw": -0.3883,
+          "kw": 5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 4.2695
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 35.38
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.23,
+          "kw": -0.412,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T22:30:00Z",
-      "import_price_eur_per_kwh": 0.151995,
-      "export_price_eur_per_kwh": -0.069701,
-      "grid_import_kw": 2.73,
+      "import_price_eur_per_kwh": 0.1467,
+      "export_price_eur_per_kwh": 0.0867,
+      "grid_import_kw": 16.433,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": -2.5,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 5.457
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 37.9375
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.23,
+          "kw": -0.433,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T22:45:00Z",
-      "import_price_eur_per_kwh": 0.147627,
-      "export_price_eur_per_kwh": -0.074069,
-      "grid_import_kw": 2.73,
+      "import_price_eur_per_kwh": 0.1583,
+      "export_price_eur_per_kwh": 0.0983,
+      "grid_import_kw": 16.454,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": -2.5,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 6.6445
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 40.495
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.23,
+          "kw": -0.454,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T23:00:00Z",
-      "import_price_eur_per_kwh": 0.164494,
-      "export_price_eur_per_kwh": -0.057202,
-      "grid_import_kw": 0.204,
+      "import_price_eur_per_kwh": 0.17,
+      "export_price_eur_per_kwh": 0.11,
+      "grid_import_kw": 16.475,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.0,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 7.832
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 43.0525
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.204,
+          "kw": -0.475,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T23:15:00Z",
-      "import_price_eur_per_kwh": 0.157525,
-      "export_price_eur_per_kwh": -0.064171,
-      "grid_import_kw": 0.204,
+      "import_price_eur_per_kwh": 0.1817,
+      "export_price_eur_per_kwh": 0.1217,
+      "grid_import_kw": 4.5601,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
           "kw": 0.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 7.832
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -4.0641,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 43.9974
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.204,
+          "kw": -0.496,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T23:30:00Z",
-      "import_price_eur_per_kwh": 0.156012,
-      "export_price_eur_per_kwh": -0.065684,
-      "grid_import_kw": 2.704,
+      "import_price_eur_per_kwh": 0.1933,
+      "export_price_eur_per_kwh": 0.1333,
+      "grid_import_kw": 0.517,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": -2.5,
+          "kw": 0.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 7.832
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 43.9974
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.204,
+          "kw": -0.517,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-03T23:45:00Z",
-      "import_price_eur_per_kwh": 0.151838,
-      "export_price_eur_per_kwh": -0.069858,
-      "grid_import_kw": 2.704,
+      "import_price_eur_per_kwh": 0.205,
+      "export_price_eur_per_kwh": 0.145,
+      "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": -2.5,
+          "kw": 0.537,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 7.6907
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 43.9974
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.204,
+          "kw": -0.537,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T00:00:00Z",
-      "import_price_eur_per_kwh": 0.15744,
-      "export_price_eur_per_kwh": -0.064256,
-      "grid_import_kw": 0.232,
+      "import_price_eur_per_kwh": 0.2167,
+      "export_price_eur_per_kwh": 0.1567,
+      "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.0,
+          "kw": 0.558,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 7.5438
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 43.9974
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.232,
+          "kw": -0.558,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T00:15:00Z",
-      "import_price_eur_per_kwh": 0.159848,
-      "export_price_eur_per_kwh": -0.061848,
-      "grid_import_kw": 0.232,
+      "import_price_eur_per_kwh": 0.2283,
+      "export_price_eur_per_kwh": 0.1683,
+      "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.0,
+          "kw": 0.579,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 7.3914
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 43.9974
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.232,
+          "kw": -0.579,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T00:30:00Z",
-      "import_price_eur_per_kwh": 0.159594,
-      "export_price_eur_per_kwh": -0.062102,
-      "grid_import_kw": 0.232,
+      "import_price_eur_per_kwh": 0.24,
+      "export_price_eur_per_kwh": 0.18,
+      "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.0,
+          "kw": 0.35,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 7.2993
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 43.9974
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.232,
+          "kw": -0.35,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T00:45:00Z",
-      "import_price_eur_per_kwh": 0.156726,
-      "export_price_eur_per_kwh": -0.06497,
-      "grid_import_kw": 2.732,
+      "import_price_eur_per_kwh": 0.2517,
+      "export_price_eur_per_kwh": 0.1917,
+      "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": -2.5,
+          "kw": 0.371,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 7.2017
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 43.9974
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.232,
+          "kw": -0.371,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T01:00:00Z",
-      "import_price_eur_per_kwh": 0.168766,
-      "export_price_eur_per_kwh": -0.05293,
-      "grid_import_kw": 0.23,
-      "grid_export_kw": 0.0,
+      "import_price_eur_per_kwh": 0.2633,
+      "export_price_eur_per_kwh": 0.2033,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 4.608,
       "devices": {
         "home_battery": {
-          "kw": 0.0,
+          "kw": 5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 5.8859
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 43.9974
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.23,
+          "kw": -0.392,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T01:15:00Z",
-      "import_price_eur_per_kwh": 0.192796,
-      "export_price_eur_per_kwh": -0.0289,
-      "grid_import_kw": 0.23,
-      "grid_export_kw": 0.0,
+      "import_price_eur_per_kwh": 0.275,
+      "export_price_eur_per_kwh": 0.215,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 15.588,
       "devices": {
         "home_battery": {
-          "kw": 0.0,
+          "kw": 5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 4.5701
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 41.0405
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.23,
+          "kw": -0.412,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T01:30:00Z",
-      "import_price_eur_per_kwh": 0.196269,
-      "export_price_eur_per_kwh": -0.025427,
-      "grid_import_kw": 0.23,
-      "grid_export_kw": 0.0,
+      "import_price_eur_per_kwh": 0.2867,
+      "export_price_eur_per_kwh": 0.2267,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 15.567,
       "devices": {
         "home_battery": {
-          "kw": 0.0,
+          "kw": 5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 3.2543
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 38.0835
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.23,
+          "kw": -0.433,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T01:45:00Z",
-      "import_price_eur_per_kwh": 0.199681,
-      "export_price_eur_per_kwh": -0.022015,
+      "import_price_eur_per_kwh": 0.2983,
+      "export_price_eur_per_kwh": 0.2383,
       "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
+      "grid_export_kw": 15.546,
       "devices": {
         "home_battery": {
-          "kw": 0.23,
+          "kw": 5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 1.9386
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 35.1265
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.23,
+          "kw": -0.454,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T02:00:00Z",
-      "import_price_eur_per_kwh": 0.188513,
-      "export_price_eur_per_kwh": -0.033183,
-      "grid_import_kw": 0.227,
+      "import_price_eur_per_kwh": 0.15,
+      "export_price_eur_per_kwh": 0.09,
+      "grid_import_kw": 16.475,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.0,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 3.1261
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 37.684
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.227,
+          "kw": -0.475,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T02:15:00Z",
-      "import_price_eur_per_kwh": 0.208139,
-      "export_price_eur_per_kwh": -0.013557,
-      "grid_import_kw": 0.0,
+      "import_price_eur_per_kwh": 0.1617,
+      "export_price_eur_per_kwh": 0.1017,
+      "grid_import_kw": 16.496,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.227,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 4.3136
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 40.2415
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.227,
+          "kw": -0.496,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T02:30:00Z",
-      "import_price_eur_per_kwh": 0.210063,
-      "export_price_eur_per_kwh": -0.011633,
-      "grid_import_kw": 0.0,
+      "import_price_eur_per_kwh": 0.1733,
+      "export_price_eur_per_kwh": 0.1133,
+      "grid_import_kw": 16.517,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.227,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 5.5011
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 42.799
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.227,
+          "kw": -0.517,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T02:45:00Z",
-      "import_price_eur_per_kwh": 0.222115,
-      "export_price_eur_per_kwh": 0.000418,
-      "grid_import_kw": 0.0,
+      "import_price_eur_per_kwh": 0.185,
+      "export_price_eur_per_kwh": 0.125,
+      "grid_import_kw": 0.537,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.227,
+          "kw": 0.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 5.5011
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 42.799
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.227,
+          "kw": -0.537,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T03:00:00Z",
-      "import_price_eur_per_kwh": 0.192954,
-      "export_price_eur_per_kwh": -0.028742,
-      "grid_import_kw": 0.209,
+      "import_price_eur_per_kwh": 0.1967,
+      "export_price_eur_per_kwh": 0.1367,
+      "grid_import_kw": 0.558,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
           "kw": 0.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 5.5011
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 42.799
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.209,
+          "kw": -0.558,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T03:15:00Z",
-      "import_price_eur_per_kwh": 0.216524,
-      "export_price_eur_per_kwh": -0.005172,
+      "import_price_eur_per_kwh": 0.2083,
+      "export_price_eur_per_kwh": 0.1483,
       "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.209,
+          "kw": 0.579,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 5.3487
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 42.799
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.209,
+          "kw": -0.579,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T03:30:00Z",
-      "import_price_eur_per_kwh": 0.226313,
-      "export_price_eur_per_kwh": 0.004617,
+      "import_price_eur_per_kwh": 0.22,
+      "export_price_eur_per_kwh": 0.16,
       "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.209,
+          "kw": 0.35,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 5.2566
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 42.799
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.209,
+          "kw": -0.35,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T03:45:00Z",
-      "import_price_eur_per_kwh": 0.299119,
-      "export_price_eur_per_kwh": 0.077423,
+      "import_price_eur_per_kwh": 0.2317,
+      "export_price_eur_per_kwh": 0.1717,
       "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.209,
+          "kw": 0.371,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 5.1589
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 42.799
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.209,
+          "kw": -0.371,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T04:00:00Z",
-      "import_price_eur_per_kwh": 0.214964,
-      "export_price_eur_per_kwh": -0.006733,
+      "import_price_eur_per_kwh": 0.2433,
+      "export_price_eur_per_kwh": 0.1833,
       "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.217,
+          "kw": 0.392,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 5.0558
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 42.799
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.217,
+          "kw": -0.392,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T04:15:00Z",
-      "import_price_eur_per_kwh": 0.248662,
-      "export_price_eur_per_kwh": 0.026966,
+      "import_price_eur_per_kwh": 0.255,
+      "export_price_eur_per_kwh": 0.195,
       "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.217,
+          "kw": 0.412,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 4.9474
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 42.799
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.217,
+          "kw": -0.412,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T04:30:00Z",
-      "import_price_eur_per_kwh": 0.278864,
-      "export_price_eur_per_kwh": 0.057167,
+      "import_price_eur_per_kwh": 0.2667,
+      "export_price_eur_per_kwh": 0.2067,
       "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
+      "grid_export_kw": 4.567,
       "devices": {
         "home_battery": {
-          "kw": 0.217,
+          "kw": 5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 3.6316
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 42.799
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.217,
+          "kw": -0.433,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T04:45:00Z",
-      "import_price_eur_per_kwh": 0.414069,
-      "export_price_eur_per_kwh": 0.192373,
+      "import_price_eur_per_kwh": 0.2783,
+      "export_price_eur_per_kwh": 0.2183,
       "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
+      "grid_export_kw": 15.546,
       "devices": {
         "home_battery": {
-          "kw": 0.217,
+          "kw": 5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 2.3158
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 39.842
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.217,
+          "kw": -0.454,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T05:00:00Z",
-      "import_price_eur_per_kwh": 0.304056,
-      "export_price_eur_per_kwh": 0.08236,
+      "import_price_eur_per_kwh": 0.29,
+      "export_price_eur_per_kwh": 0.23,
       "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
+      "grid_export_kw": 15.525,
       "devices": {
         "home_battery": {
-          "kw": 0.282,
+          "kw": 5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 1.0
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 36.885
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.282,
+          "kw": -0.475,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T05:15:00Z",
-      "import_price_eur_per_kwh": 0.390268,
-      "export_price_eur_per_kwh": 0.168572,
-      "grid_import_kw": 0.0,
+      "import_price_eur_per_kwh": 0.1417,
+      "export_price_eur_per_kwh": 0.0817,
+      "grid_import_kw": 16.496,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.282,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 2.1875
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 39.4425
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.282,
+          "kw": -0.496,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T05:30:00Z",
-      "import_price_eur_per_kwh": 0.438838,
-      "export_price_eur_per_kwh": 0.217142,
-      "grid_import_kw": 0.0,
-      "grid_export_kw": 2.218,
+      "import_price_eur_per_kwh": 0.1533,
+      "export_price_eur_per_kwh": 0.0933,
+      "grid_import_kw": 16.517,
+      "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 2.5,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": false
+          "soc_kwh": 3.375
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 42.0
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.282,
+          "kw": -0.517,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T05:45:00Z",
-      "import_price_eur_per_kwh": 0.45003,
-      "export_price_eur_per_kwh": 0.228334,
-      "grid_import_kw": 0.0,
-      "grid_export_kw": 2.218,
+      "import_price_eur_per_kwh": 0.165,
+      "export_price_eur_per_kwh": 0.105,
+      "grid_import_kw": 16.537,
+      "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 2.5,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": false
+          "soc_kwh": 4.5625
         },
         "roof_pv": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 44.5575
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.282,
+          "kw": -0.537,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T06:00:00Z",
-      "import_price_eur_per_kwh": 0.500076,
-      "export_price_eur_per_kwh": 0.27838,
-      "grid_import_kw": 0.0,
-      "grid_export_kw": 2.1793,
+      "import_price_eur_per_kwh": 0.1767,
+      "export_price_eur_per_kwh": 0.1167,
+      "grid_import_kw": 4.1641,
+      "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 2.5,
+          "kw": -3.6061,
           "type": "battery",
-          "zero_export_mode": false
+          "soc_kwh": 5.4189
         },
         "roof_pv": {
-          "kw": 0.0553,
-          "type": "pv"
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 44.5575
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.376,
+          "kw": -0.558,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T06:15:00Z",
-      "import_price_eur_per_kwh": 0.3258,
-      "export_price_eur_per_kwh": 0.104103,
-      "grid_import_kw": 0.0,
+      "import_price_eur_per_kwh": 0.1883,
+      "export_price_eur_per_kwh": 0.1283,
+      "grid_import_kw": 0.579,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.3207,
+          "kw": 0.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 5.4189
         },
         "roof_pv": {
-          "kw": 0.0553,
-          "type": "pv"
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 44.5575
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.376,
+          "kw": -0.579,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T06:30:00Z",
-      "import_price_eur_per_kwh": 0.291532,
-      "export_price_eur_per_kwh": 0.069836,
+      "import_price_eur_per_kwh": 0.2,
+      "export_price_eur_per_kwh": 0.14,
       "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.3207,
+          "kw": 0.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 5.4189
         },
         "roof_pv": {
-          "kw": 0.0553,
-          "type": "pv"
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.35,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 44.4634
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.376,
+          "kw": -0.35,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T06:45:00Z",
-      "import_price_eur_per_kwh": 0.253296,
-      "export_price_eur_per_kwh": 0.0316,
+      "import_price_eur_per_kwh": 0.2117,
+      "export_price_eur_per_kwh": 0.1517,
       "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.3207,
+          "kw": 0.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 5.4189
         },
         "roof_pv": {
-          "kw": 0.0553,
-          "type": "pv"
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.371,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 44.3637
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.376,
+          "kw": -0.371,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T07:00:00Z",
-      "import_price_eur_per_kwh": 0.452717,
-      "export_price_eur_per_kwh": 0.23102,
+      "import_price_eur_per_kwh": 0.2233,
+      "export_price_eur_per_kwh": 0.1633,
       "grid_import_kw": 0.0,
-      "grid_export_kw": 2.3269,
+      "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 2.5,
+          "kw": 0.0,
           "type": "battery",
-          "zero_export_mode": false
+          "soc_kwh": 5.4189
         },
         "roof_pv": {
-          "kw": 0.2609,
-          "type": "pv"
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.392,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 44.2583
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.434,
+          "kw": -0.392,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T07:15:00Z",
-      "import_price_eur_per_kwh": 0.315018,
-      "export_price_eur_per_kwh": 0.093322,
+      "import_price_eur_per_kwh": 0.235,
+      "export_price_eur_per_kwh": 0.175,
       "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.1731,
+          "kw": 0.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 5.4189
         },
         "roof_pv": {
-          "kw": 0.2609,
-          "type": "pv"
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.412,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 44.1476
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.434,
+          "kw": -0.412,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T07:30:00Z",
-      "import_price_eur_per_kwh": 0.262299,
-      "export_price_eur_per_kwh": 0.040603,
+      "import_price_eur_per_kwh": 0.2467,
+      "export_price_eur_per_kwh": 0.1867,
       "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.1731,
+          "kw": 0.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 5.4189
         },
         "roof_pv": {
-          "kw": 0.2609,
-          "type": "pv"
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.0,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.433,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 44.0312
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.434,
+          "kw": -0.433,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T07:45:00Z",
-      "import_price_eur_per_kwh": 0.219199,
-      "export_price_eur_per_kwh": -0.002498,
+      "import_price_eur_per_kwh": 0.2583,
+      "export_price_eur_per_kwh": 0.1983,
       "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
+      "grid_export_kw": 16.444,
       "devices": {
         "home_battery": {
-          "kw": 0.1731,
+          "kw": 5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 4.1032
         },
         "roof_pv": {
-          "kw": 0.2609,
-          "type": "pv"
+          "kw": 0.449,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.449,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 41.0742
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.434,
+          "kw": -0.454,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T08:00:00Z",
-      "import_price_eur_per_kwh": 0.338299,
-      "export_price_eur_per_kwh": 0.116603,
+      "import_price_eur_per_kwh": 0.27,
+      "export_price_eur_per_kwh": 0.21,
       "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
+      "grid_export_kw": 17.0,
       "devices": {
         "home_battery": {
-          "kw": -0.4323,
+          "kw": 4.719,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 2.8613
         },
         "roof_pv": {
-          "kw": 0.8153,
-          "type": "pv"
+          "kw": 0.878,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 0.878,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 38.1172
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.383,
+          "kw": -0.475,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T08:15:00Z",
-      "import_price_eur_per_kwh": 0.256648,
-      "export_price_eur_per_kwh": 0.034952,
+      "import_price_eur_per_kwh": 0.2817,
+      "export_price_eur_per_kwh": 0.2217,
       "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
+      "grid_export_kw": 17.0,
       "devices": {
         "home_battery": {
-          "kw": -0.4323,
+          "kw": 3.918,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 1.8303
         },
         "roof_pv": {
-          "kw": 0.8153,
-          "type": "pv"
+          "kw": 1.289,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 1.289,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 35.1602
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.383,
+          "kw": -0.496,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T08:30:00Z",
-      "import_price_eur_per_kwh": 0.232569,
-      "export_price_eur_per_kwh": 0.010873,
+      "import_price_eur_per_kwh": 0.2933,
+      "export_price_eur_per_kwh": 0.2333,
       "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
+      "grid_export_kw": 17.0,
       "devices": {
         "home_battery": {
-          "kw": -0.4323,
+          "kw": 3.155,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 1.0
         },
         "roof_pv": {
-          "kw": 0.8153,
-          "type": "pv"
+          "kw": 1.681,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 1.681,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 32.2032
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.383,
+          "kw": -0.517,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T08:45:00Z",
-      "import_price_eur_per_kwh": 0.215048,
-      "export_price_eur_per_kwh": -0.006648,
-      "grid_import_kw": 0.0,
+      "import_price_eur_per_kwh": 0.145,
+      "export_price_eur_per_kwh": 0.085,
+      "grid_import_kw": 12.431,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": -0.4323,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 2.1875
         },
         "roof_pv": {
-          "kw": 0.8153,
-          "type": "pv"
+          "kw": 2.053,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 2.053,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 34.7607
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.383,
+          "kw": -0.537,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T09:00:00Z",
-      "import_price_eur_per_kwh": 0.226519,
-      "export_price_eur_per_kwh": 0.004823,
-      "grid_import_kw": 0.0,
+      "import_price_eur_per_kwh": 0.1567,
+      "export_price_eur_per_kwh": 0.0967,
+      "grid_import_kw": 11.746,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": -0.3134,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 3.375
         },
         "roof_pv": {
-          "kw": 0.6624,
-          "type": "pv"
+          "kw": 2.406,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 2.406,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 37.3182
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.349,
+          "kw": -0.558,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T09:15:00Z",
-      "import_price_eur_per_kwh": 0.212604,
-      "export_price_eur_per_kwh": -0.009092,
-      "grid_import_kw": 0.0,
+      "import_price_eur_per_kwh": 0.1683,
+      "export_price_eur_per_kwh": 0.1083,
+      "grid_import_kw": 7.1962,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": -0.3134,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 4.5625
         },
         "roof_pv": {
-          "kw": 0.6624,
-          "type": "pv"
+          "kw": 2.74,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 2.74,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -7.0972,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 38.9683
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.349,
+          "kw": -0.579,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T09:30:00Z",
-      "import_price_eur_per_kwh": 0.183552,
-      "export_price_eur_per_kwh": -0.038144,
+      "import_price_eur_per_kwh": 0.18,
+      "export_price_eur_per_kwh": 0.12,
       "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": -0.3134,
+          "kw": -0.5956,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 4.7039
         },
         "roof_pv": {
-          "kw": 0.6624,
-          "type": "pv"
+          "kw": 3.056,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 3.056,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -5.1664,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 40.1695
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.349,
+          "kw": -0.35,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T09:45:00Z",
-      "import_price_eur_per_kwh": 0.149382,
-      "export_price_eur_per_kwh": -0.072315,
+      "import_price_eur_per_kwh": 0.1917,
+      "export_price_eur_per_kwh": 0.1317,
       "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": -0.3134,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 5.8914
         },
         "roof_pv": {
-          "kw": 0.6624,
-          "type": "pv"
+          "kw": 3.352,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 3.352,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -1.333,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 40.4794
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.349,
+          "kw": -0.371,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T10:00:00Z",
-      "import_price_eur_per_kwh": 0.177514,
-      "export_price_eur_per_kwh": -0.044182,
+      "import_price_eur_per_kwh": 0.2033,
+      "export_price_eur_per_kwh": 0.1433,
       "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.2113,
+          "kw": 0.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 5.8914
         },
         "roof_pv": {
-          "kw": 0.3207,
-          "type": "pv"
+          "kw": 3.628,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 3.628,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -6.864,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 42.0753
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.532,
+          "kw": -0.392,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T10:15:00Z",
-      "import_price_eur_per_kwh": 0.159848,
-      "export_price_eur_per_kwh": -0.061848,
-      "grid_import_kw": 0.2113,
+      "import_price_eur_per_kwh": 0.215,
+      "export_price_eur_per_kwh": 0.155,
+      "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.0,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 7.0789
         },
         "roof_pv": {
-          "kw": 0.3207,
-          "type": "pv"
+          "kw": 3.886,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 3.886,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -2.36,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 42.624
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.532,
+          "kw": -0.412,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T10:30:00Z",
-      "import_price_eur_per_kwh": 0.142436,
-      "export_price_eur_per_kwh": -0.07926,
-      "grid_import_kw": 0.2113,
+      "import_price_eur_per_kwh": 0.2267,
+      "export_price_eur_per_kwh": 0.1667,
+      "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.0,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 8.2664
         },
         "roof_pv": {
-          "kw": 0.3207,
-          "type": "pv"
+          "kw": 4.125,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 4.125,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -2.817,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 43.279
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.532,
+          "kw": -0.433,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T10:45:00Z",
-      "import_price_eur_per_kwh": 0.13664,
-      "export_price_eur_per_kwh": -0.085056,
-      "grid_import_kw": 0.2113,
-      "grid_export_kw": 0.0,
+      "import_price_eur_per_kwh": 0.2383,
+      "export_price_eur_per_kwh": 0.1783,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 8.236,
       "devices": {
         "home_battery": {
           "kw": 0.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 8.2664
         },
         "roof_pv": {
-          "kw": 0.3207,
-          "type": "pv"
+          "kw": 4.345,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 4.345,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 43.279
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.532,
+          "kw": -0.454,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T11:00:00Z",
-      "import_price_eur_per_kwh": 0.135926,
-      "export_price_eur_per_kwh": -0.08577,
+      "import_price_eur_per_kwh": 0.25,
+      "export_price_eur_per_kwh": 0.19,
       "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
+      "grid_export_kw": 13.615,
       "devices": {
         "home_battery": {
-          "kw": -0.5233,
+          "kw": 5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 6.9507
         },
         "roof_pv": {
-          "kw": 0.9713,
-          "type": "pv"
+          "kw": 4.545,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 4.545,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 43.279
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.448,
+          "kw": -0.475,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T11:15:00Z",
-      "import_price_eur_per_kwh": 0.13583,
-      "export_price_eur_per_kwh": -0.085867,
+      "import_price_eur_per_kwh": 0.2617,
+      "export_price_eur_per_kwh": 0.2017,
       "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
+      "grid_export_kw": 17.0,
       "devices": {
         "home_battery": {
-          "kw": -0.5233,
+          "kw": 5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 5.6349
         },
         "roof_pv": {
-          "kw": 0.9713,
-          "type": "pv"
+          "kw": 4.727,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 4.727,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 3.042,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 42.4612
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.448,
+          "kw": -0.496,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T11:30:00Z",
-      "import_price_eur_per_kwh": 0.135757,
-      "export_price_eur_per_kwh": -0.085939,
-      "grid_import_kw": 1.9767,
-      "grid_export_kw": 0.0,
+      "import_price_eur_per_kwh": 0.2733,
+      "export_price_eur_per_kwh": 0.2133,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 17.0,
       "devices": {
         "home_battery": {
-          "kw": -2.5,
+          "kw": 5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 4.3191
         },
         "roof_pv": {
-          "kw": 0.9713,
-          "type": "pv"
+          "kw": 4.889,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 4.889,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 2.739,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 41.7249
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.448,
+          "kw": -0.517,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T11:45:00Z",
-      "import_price_eur_per_kwh": 0.135696,
-      "export_price_eur_per_kwh": -0.086,
-      "grid_import_kw": 1.9767,
-      "grid_export_kw": 0.0,
+      "import_price_eur_per_kwh": 0.285,
+      "export_price_eur_per_kwh": 0.225,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 17.0,
       "devices": {
         "home_battery": {
-          "kw": -2.5,
+          "kw": 5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 3.0033
         },
         "roof_pv": {
-          "kw": 0.9713,
-          "type": "pv"
+          "kw": 5.032,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 5.032,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 2.473,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 41.0601
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.448,
+          "kw": -0.537,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T12:00:00Z",
-      "import_price_eur_per_kwh": 0.135781,
-      "export_price_eur_per_kwh": -0.085915,
+      "import_price_eur_per_kwh": 0.2967,
+      "export_price_eur_per_kwh": 0.2367,
       "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
+      "grid_export_kw": 17.0,
       "devices": {
         "home_battery": {
-          "kw": -0.2962,
+          "kw": 5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 1.6875
         },
         "roof_pv": {
-          "kw": 0.7962,
-          "type": "pv"
+          "kw": 5.156,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 5.156,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 2.246,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 40.4564
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.5,
+          "kw": -0.558,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T12:15:00Z",
-      "import_price_eur_per_kwh": 0.135769,
-      "export_price_eur_per_kwh": -0.085927,
-      "grid_import_kw": 1.558,
+      "import_price_eur_per_kwh": 0.1483,
+      "export_price_eur_per_kwh": 0.0883,
+      "grid_import_kw": 6.057,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": -1.8542,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 2.875
         },
         "roof_pv": {
-          "kw": 0.7962,
-          "type": "pv"
+          "kw": 5.261,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 5.261,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 43.0139
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.5,
+          "kw": -0.579,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T12:30:00Z",
-      "import_price_eur_per_kwh": 0.135769,
-      "export_price_eur_per_kwh": -0.085927,
-      "grid_import_kw": 0.0,
+      "import_price_eur_per_kwh": 0.16,
+      "export_price_eur_per_kwh": 0.1,
+      "grid_import_kw": 5.656,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": -0.2962,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 4.0625
         },
         "roof_pv": {
-          "kw": 0.7962,
-          "type": "pv"
+          "kw": 5.347,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 5.347,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -11.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 45.5714
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.5,
+          "kw": -0.35,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T12:45:00Z",
-      "import_price_eur_per_kwh": 0.135769,
-      "export_price_eur_per_kwh": -0.085927,
+      "import_price_eur_per_kwh": 0.1717,
+      "export_price_eur_per_kwh": 0.1117,
       "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": -0.2962,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 5.25
         },
         "roof_pv": {
-          "kw": 0.7962,
-          "type": "pv"
+          "kw": 5.414,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 5.414,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -5.457,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 46.8401
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.5,
+          "kw": -0.371,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T13:00:00Z",
-      "import_price_eur_per_kwh": 0.135648,
-      "export_price_eur_per_kwh": -0.086048,
-      "grid_import_kw": 2.5434,
+      "import_price_eur_per_kwh": 0.1833,
+      "export_price_eur_per_kwh": 0.1233,
+      "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": -2.5,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 6.4375
         },
         "roof_pv": {
-          "kw": 0.4306,
-          "type": "pv"
+          "kw": 5.462,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 5.462,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -5.532,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 48.1263
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.474,
+          "kw": -0.392,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T13:15:00Z",
-      "import_price_eur_per_kwh": 0.135648,
-      "export_price_eur_per_kwh": -0.086048,
-      "grid_import_kw": 2.5434,
+      "import_price_eur_per_kwh": 0.195,
+      "export_price_eur_per_kwh": 0.135,
+      "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": -2.5,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 7.625
         },
         "roof_pv": {
-          "kw": 0.4306,
-          "type": "pv"
+          "kw": 5.49,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 5.49,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -5.568,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 49.4209
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.474,
+          "kw": -0.412,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T13:30:00Z",
-      "import_price_eur_per_kwh": 0.135648,
-      "export_price_eur_per_kwh": -0.086048,
-      "grid_import_kw": 2.5434,
+      "import_price_eur_per_kwh": 0.2067,
+      "export_price_eur_per_kwh": 0.1467,
+      "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": -2.5,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 8.8125
         },
         "roof_pv": {
-          "kw": 0.4306,
-          "type": "pv"
+          "kw": 5.5,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 5.5,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -5.567,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 50.7152
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.474,
+          "kw": -0.433,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T13:45:00Z",
-      "import_price_eur_per_kwh": 0.135781,
-      "export_price_eur_per_kwh": -0.085915,
-      "grid_import_kw": 0.0434,
+      "import_price_eur_per_kwh": 0.2183,
+      "export_price_eur_per_kwh": 0.1583,
+      "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "home_battery": {
-          "kw": 0.0,
+          "kw": -5.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 10.0
         },
         "roof_pv": {
-          "kw": 0.4306,
-          "type": "pv"
+          "kw": 5.49,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 5.49,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": -5.526,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 52.0
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.474,
+          "kw": -0.454,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T14:00:00Z",
-      "import_price_eur_per_kwh": 0.135116,
-      "export_price_eur_per_kwh": -0.08658,
-      "grid_import_kw": 2.6462,
-      "grid_export_kw": 0.0,
+      "import_price_eur_per_kwh": 0.23,
+      "export_price_eur_per_kwh": 0.17,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 10.449,
       "devices": {
         "home_battery": {
-          "kw": -2.5,
+          "kw": 0.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 10.0
         },
         "roof_pv": {
-          "kw": 0.2208,
-          "type": "pv"
+          "kw": 5.462,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 5.462,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 52.0
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.367,
+          "kw": -0.475,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T14:15:00Z",
-      "import_price_eur_per_kwh": 0.138467,
-      "export_price_eur_per_kwh": -0.083229,
-      "grid_import_kw": 0.1462,
-      "grid_export_kw": 0.0,
+      "import_price_eur_per_kwh": 0.2417,
+      "export_price_eur_per_kwh": 0.1817,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 10.332,
       "devices": {
         "home_battery": {
           "kw": 0.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 10.0
         },
         "roof_pv": {
-          "kw": 0.2208,
-          "type": "pv"
+          "kw": 5.414,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 5.414,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 52.0
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.367,
+          "kw": -0.496,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T14:30:00Z",
-      "import_price_eur_per_kwh": 0.142376,
-      "export_price_eur_per_kwh": -0.079321,
-      "grid_import_kw": 0.1462,
-      "grid_export_kw": 0.0,
+      "import_price_eur_per_kwh": 0.2533,
+      "export_price_eur_per_kwh": 0.1933,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 10.177,
       "devices": {
         "home_battery": {
           "kw": 0.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 10.0
         },
         "roof_pv": {
-          "kw": 0.2208,
-          "type": "pv"
+          "kw": 5.347,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 5.347,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 52.0
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.367,
+          "kw": -0.517,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T14:45:00Z",
-      "import_price_eur_per_kwh": 0.17605,
-      "export_price_eur_per_kwh": -0.045646,
-      "grid_import_kw": 0.1462,
-      "grid_export_kw": 0.0,
+      "import_price_eur_per_kwh": 0.265,
+      "export_price_eur_per_kwh": 0.205,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 9.985,
       "devices": {
         "home_battery": {
           "kw": 0.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 10.0
         },
         "roof_pv": {
-          "kw": 0.2208,
-          "type": "pv"
+          "kw": 5.261,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 5.261,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 52.0
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.367,
+          "kw": -0.537,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T15:00:00Z",
-      "import_price_eur_per_kwh": 0.149708,
-      "export_price_eur_per_kwh": -0.071988,
-      "grid_import_kw": 0.7259,
-      "grid_export_kw": 0.0,
+      "import_price_eur_per_kwh": 0.2767,
+      "export_price_eur_per_kwh": 0.2167,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 9.754,
       "devices": {
         "home_battery": {
           "kw": 0.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 10.0
         },
         "roof_pv": {
-          "kw": 0.1011,
-          "type": "pv"
+          "kw": 5.156,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 5.156,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
+          "kw": 0.0,
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 52.0
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.827,
+          "kw": -0.558,
           "type": "static_load"
         }
       }
     },
     {
       "t": "2026-04-04T15:15:00Z",
-      "import_price_eur_per_kwh": 0.186032,
-      "export_price_eur_per_kwh": -0.035664,
-      "grid_import_kw": 0.7259,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": 0.0,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.1011,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.827,
-          "type": "static_load"
-        }
-      }
-    },
-    {
-      "t": "2026-04-04T15:30:00Z",
-      "import_price_eur_per_kwh": 0.231432,
-      "export_price_eur_per_kwh": 0.009735,
-      "grid_import_kw": 0.7259,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": 0.0,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.1011,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.827,
-          "type": "static_load"
-        }
-      }
-    },
-    {
-      "t": "2026-04-04T15:45:00Z",
-      "import_price_eur_per_kwh": 0.239442,
-      "export_price_eur_per_kwh": 0.017746,
-      "grid_import_kw": 0.7259,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": 0.0,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.1011,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.827,
-          "type": "static_load"
-        }
-      }
-    },
-    {
-      "t": "2026-04-04T16:00:00Z",
-      "import_price_eur_per_kwh": 0.199597,
-      "export_price_eur_per_kwh": -0.0221,
-      "grid_import_kw": 0.775,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": 0.0,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.0,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.775,
-          "type": "static_load"
-        }
-      }
-    },
-    {
-      "t": "2026-04-04T16:15:00Z",
-      "import_price_eur_per_kwh": 0.232569,
-      "export_price_eur_per_kwh": 0.010873,
-      "grid_import_kw": 0.775,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": 0.0,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.0,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.775,
-          "type": "static_load"
-        }
-      }
-    },
-    {
-      "t": "2026-04-04T16:30:00Z",
-      "import_price_eur_per_kwh": 0.260992,
-      "export_price_eur_per_kwh": 0.039296,
+      "import_price_eur_per_kwh": 0.2883,
+      "export_price_eur_per_kwh": 0.2283,
       "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": 0.775,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.0,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.775,
-          "type": "static_load"
-        }
-      }
-    },
-    {
-      "t": "2026-04-04T16:45:00Z",
-      "import_price_eur_per_kwh": 0.305423,
-      "export_price_eur_per_kwh": 0.083727,
-      "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": 0.775,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.0,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.775,
-          "type": "static_load"
-        }
-      }
-    },
-    {
-      "t": "2026-04-04T17:00:00Z",
-      "import_price_eur_per_kwh": 0.269111,
-      "export_price_eur_per_kwh": 0.047415,
-      "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": 0.417,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.0,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.417,
-          "type": "static_load"
-        }
-      }
-    },
-    {
-      "t": "2026-04-04T17:15:00Z",
-      "import_price_eur_per_kwh": 0.280981,
-      "export_price_eur_per_kwh": 0.059285,
-      "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": 0.417,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.0,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.417,
-          "type": "static_load"
-        }
-      }
-    },
-    {
-      "t": "2026-04-04T17:30:00Z",
-      "import_price_eur_per_kwh": 0.313712,
-      "export_price_eur_per_kwh": 0.092015,
-      "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": 0.417,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.0,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.417,
-          "type": "static_load"
-        }
-      }
-    },
-    {
-      "t": "2026-04-04T17:45:00Z",
-      "import_price_eur_per_kwh": 0.317148,
-      "export_price_eur_per_kwh": 0.095452,
-      "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": 0.417,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.0,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.417,
-          "type": "static_load"
-        }
-      }
-    },
-    {
-      "t": "2026-04-04T18:00:00Z",
-      "import_price_eur_per_kwh": 0.324348,
-      "export_price_eur_per_kwh": 0.102651,
-      "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": 0.422,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.0,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.422,
-          "type": "static_load"
-        }
-      }
-    },
-    {
-      "t": "2026-04-04T18:15:00Z",
-      "import_price_eur_per_kwh": 0.283788,
-      "export_price_eur_per_kwh": 0.062092,
-      "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": 0.422,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.0,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.422,
-          "type": "static_load"
-        }
-      }
-    },
-    {
-      "t": "2026-04-04T18:30:00Z",
-      "import_price_eur_per_kwh": 0.275839,
-      "export_price_eur_per_kwh": 0.054143,
-      "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": 0.422,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.0,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.422,
-          "type": "static_load"
-        }
-      }
-    },
-    {
-      "t": "2026-04-04T18:45:00Z",
-      "import_price_eur_per_kwh": 0.253066,
-      "export_price_eur_per_kwh": 0.03137,
-      "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": 0.422,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.0,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.422,
-          "type": "static_load"
-        }
-      }
-    },
-    {
-      "t": "2026-04-04T19:00:00Z",
-      "import_price_eur_per_kwh": 0.283135,
-      "export_price_eur_per_kwh": 0.061439,
-      "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": 0.437,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.0,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.437,
-          "type": "static_load"
-        }
-      }
-    },
-    {
-      "t": "2026-04-04T19:15:00Z",
-      "import_price_eur_per_kwh": 0.251022,
-      "export_price_eur_per_kwh": 0.029325,
-      "grid_import_kw": 0.437,
-      "grid_export_kw": 0.0,
+      "grid_export_kw": 9.485,
       "devices": {
         "home_battery": {
           "kw": 0.0,
           "type": "battery",
-          "zero_export_mode": true
+          "soc_kwh": 10.0
         },
         "roof_pv": {
+          "kw": 5.032,
+          "type": "pv",
+          "power_limit_kw": 6.0,
+          "pv_is_curtailed": false
+        },
+        "garage_pv": {
+          "kw": 5.032,
+          "type": "pv",
+          "zero_exchange_active": false,
+          "on_off_active": true,
+          "pv_is_curtailed": false
+        },
+        "car": {
           "kw": 0.0,
-          "type": "pv"
+          "type": "ev_charger",
+          "zero_exchange_active": false,
+          "loadbalance_active": false,
+          "soc_kwh": 52.0
+        },
+        "dishwasher": {
+          "kw": 0.0,
+          "type": "deferrable_load"
         },
         "base_load": {
-          "kw": -0.437,
-          "type": "static_load"
-        }
-      }
-    },
-    {
-      "t": "2026-04-04T19:30:00Z",
-      "import_price_eur_per_kwh": 0.2426,
-      "export_price_eur_per_kwh": 0.020904,
-      "grid_import_kw": 0.437,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": 0.0,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.0,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.437,
-          "type": "static_load"
-        }
-      }
-    },
-    {
-      "t": "2026-04-04T19:45:00Z",
-      "import_price_eur_per_kwh": 0.218811,
-      "export_price_eur_per_kwh": -0.002885,
-      "grid_import_kw": 0.437,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": 0.0,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.0,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.437,
-          "type": "static_load"
-        }
-      }
-    },
-    {
-      "t": "2026-04-04T20:00:00Z",
-      "import_price_eur_per_kwh": 0.257229,
-      "export_price_eur_per_kwh": 0.035533,
-      "grid_import_kw": 0.0,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": 0.368,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.0,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.368,
-          "type": "static_load"
-        }
-      }
-    },
-    {
-      "t": "2026-04-04T20:15:00Z",
-      "import_price_eur_per_kwh": 0.22151,
-      "export_price_eur_per_kwh": -0.000187,
-      "grid_import_kw": 0.368,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": 0.0,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.0,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.368,
-          "type": "static_load"
-        }
-      }
-    },
-    {
-      "t": "2026-04-04T20:30:00Z",
-      "import_price_eur_per_kwh": 0.212604,
-      "export_price_eur_per_kwh": -0.009092,
-      "grid_import_kw": 0.368,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": 0.0,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.0,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.368,
-          "type": "static_load"
-        }
-      }
-    },
-    {
-      "t": "2026-04-04T20:45:00Z",
-      "import_price_eur_per_kwh": 0.199137,
-      "export_price_eur_per_kwh": -0.022559,
-      "grid_import_kw": 2.4186,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": -2.0506,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.0,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.368,
-          "type": "static_load"
-        }
-      }
-    },
-    {
-      "t": "2026-04-04T21:00:00Z",
-      "import_price_eur_per_kwh": 0.214262,
-      "export_price_eur_per_kwh": -0.007434,
-      "grid_import_kw": 0.306,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": 0.0,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.0,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.306,
-          "type": "static_load"
-        }
-      }
-    },
-    {
-      "t": "2026-04-04T21:15:00Z",
-      "import_price_eur_per_kwh": 0.186952,
-      "export_price_eur_per_kwh": -0.034744,
-      "grid_import_kw": 2.806,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": -2.5,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.0,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.306,
-          "type": "static_load"
-        }
-      }
-    },
-    {
-      "t": "2026-04-04T21:30:00Z",
-      "import_price_eur_per_kwh": 0.178119,
-      "export_price_eur_per_kwh": -0.043577,
-      "grid_import_kw": 2.806,
-      "grid_export_kw": 0.0,
-      "devices": {
-        "home_battery": {
-          "kw": -2.5,
-          "type": "battery",
-          "zero_export_mode": true
-        },
-        "roof_pv": {
-          "kw": 0.0,
-          "type": "pv"
-        },
-        "base_load": {
-          "kw": -0.306,
+          "kw": -0.579,
           "type": "static_load"
         }
       }
