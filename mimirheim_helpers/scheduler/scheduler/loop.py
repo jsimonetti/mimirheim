@@ -95,8 +95,13 @@ def run(
             set this event.
         _scheduler: Optional BackgroundScheduler to use instead of creating a
             new one. Pass a controlled instance in tests to add pre-configured
-            jobs or inspect registered jobs after run() returns.
+            jobs or inspect registered jobs after run() returns. The caller
+            owns anything it passes, including shutting it down; the scheduler
+            fixture in the test suite's conftest does that.
     """
+    # Only a scheduler created here is shut down here. shutdown() empties the
+    # job store, so shutting down a caller's instance would destroy the jobs it
+    # passed the instance in to inspect.
     owned = _scheduler is None
     scheduler = _scheduler if _scheduler is not None else BackgroundScheduler(timezone="UTC")
 
@@ -115,6 +120,9 @@ def run(
         job_topic[job_id] = topic
 
     def _on_event(event: JobExecutionEvent) -> None:
+        # Jobs registered above are keyed by id so the log can name the topic.
+        # An injected scheduler may carry jobs this function did not register,
+        # which have no topic; fall back to the job id for those.
         topic = job_topic.get(event.job_id, event.job_id)  # type: ignore[arg-type]
         if event.exception:
             logger.error(
