@@ -70,7 +70,7 @@ FROM ghcr.io/hassio-addons/base:stable@sha256:47ed45a406ec6a43666e00f1b615240647
 # Third-party packages are large; keeping them in a separate stage means a
 # source-only change never invalidates this cached layer.
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim-bookworm@sha256:a116514e19457bcb7af7efe9c3dd0b9b71e85b317694e7882a1c52aa15a78134 AS deps-builder
+FROM python:3.14-slim-bookworm@sha256:23c59390fc717bf09f9336908199a0ae75d9c4264bf296123f94ad772fea3b52 AS deps-builder
 
 WORKDIR /build
 
@@ -104,7 +104,7 @@ RUN --mount=from=uvbin,source=/uv,target=/usr/local/bin/uv \
 # Stage 2: wheel builder — rebuilt on every source change, but produces only
 # a small wheel (~2 MB). No venv needed here; uv build is self-contained.
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim-bookworm@sha256:a116514e19457bcb7af7efe9c3dd0b9b71e85b317694e7882a1c52aa15a78134 AS wheel-builder
+FROM python:3.14-slim-bookworm@sha256:23c59390fc717bf09f9336908199a0ae75d9c4264bf296123f94ad772fea3b52 AS wheel-builder
 
 WORKDIR /build
 
@@ -118,7 +118,7 @@ RUN --mount=from=uvbin,source=/uv,target=/usr/local/bin/uv \
 # ---------------------------------------------------------------------------
 # Stage 3: final image
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim-bookworm@sha256:a116514e19457bcb7af7efe9c3dd0b9b71e85b317694e7882a1c52aa15a78134
+FROM python:3.14-slim-bookworm@sha256:23c59390fc717bf09f9336908199a0ae75d9c4264bf296123f94ad772fea3b52
 
 ARG S6_OVERLAY_VERSION
 ARG TARGETARCH
