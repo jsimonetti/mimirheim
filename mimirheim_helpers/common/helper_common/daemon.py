@@ -55,12 +55,18 @@ logger = logging.getLogger(__name__)
 _HA_STATUS_TOPIC = "homeassistant/status"
 
 
-class MqttDaemon(abc.ABC):
+class MqttDaemon:
     """MQTT lifecycle base class for mimirheim helper daemons.
 
     Provides paho client construction, connection management, signal handling,
     and clean shutdown.  Subclasses override ``_on_connect``, ``_on_disconnect``,
     and ``_on_message`` to add their own MQTT behaviour.
+
+    Deliberately concrete rather than abstract. Every callback has a working
+    default, so there is nothing a subclass is obliged to implement and an
+    ``abc.ABC`` declaration with no abstract methods would enforce nothing
+    while implying otherwise. ``HelperDaemon`` below is abstract for real: it
+    requires ``_run_cycle``.
 
     The config object must have a ``.mqtt`` attribute of type ``MqttConfig``.
     """
@@ -157,7 +163,21 @@ class MqttDaemon(abc.ABC):
         reason_code: Any,
         properties: Any,
     ) -> None:
-        if reason_code != 0:
+        """Log the outcome of a connection attempt.
+
+        Subclasses override this to subscribe to their topics and publish
+        discovery, and call ``super()._on_connect(...)`` first so that a
+        refused connection is reported before they act on it.
+
+        Args:
+            client: The paho client that connected.
+            userdata: Unused; part of the paho callback signature.
+            flags: Connect flags from the broker. Unused.
+            reason_code: A paho ``ReasonCode``. ``is_failure`` is True when the
+                broker refused the connection.
+            properties: MQTT v5 properties. Unused on v3.1.1 connections.
+        """
+        if reason_code.is_failure:
             self._logger.error("MQTT connect failed: %s", reason_code)
             return
         cfg: MqttConfig = self._config.mqtt
@@ -171,6 +191,20 @@ class MqttDaemon(abc.ABC):
         reason_code: Any,
         properties: Any,
     ) -> None:
+        """Warn when the broker connection drops unexpectedly.
+
+        A clean disconnect during shutdown is silent. Anything else is logged,
+        because paho reconnects on its own and the gap would otherwise leave no
+        trace.
+
+        Args:
+            client: The paho client that disconnected.
+            userdata: Unused; part of the paho callback signature.
+            disconnect_flags: Disconnect flags from paho. Unused.
+            reason_code: A paho ``ReasonCode`` describing why the connection
+                ended.
+            properties: MQTT v5 properties. Unused on v3.1.1 connections.
+        """
         if reason_code != 0:
             self._logger.warning(
                 "MQTT disconnected unexpectedly (reason_code=%s); reconnecting.",
@@ -183,7 +217,16 @@ class MqttDaemon(abc.ABC):
         userdata: Any,
         message: Any,
     ) -> None:
-        pass  # base no-op; subclasses override
+        """Handle an incoming message. No-op unless a subclass overrides it.
+
+        A daemon that only publishes (the static baseload helper, for example)
+        subscribes to nothing and never needs this.
+
+        Args:
+            client: The paho client that received the message.
+            userdata: Unused; part of the paho callback signature.
+            message: The paho ``MQTTMessage``.
+        """
 
     def _publish_stats(
         self,

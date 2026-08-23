@@ -115,7 +115,7 @@ class ReporterDaemon(MqttDaemon):
     ) -> None:
         """Subscribe to the dump-available notify_topic on connect."""
         super()._on_connect(client, userdata, flags, reason_code, properties)
-        if reason_code != 0:
+        if reason_code.is_failure:
             return
         notify_topic = self._reporter_config.notify_topic
         client.subscribe(notify_topic, qos=0)

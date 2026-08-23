@@ -204,7 +204,7 @@ class PvLearnerDaemon(MqttDaemon):
         properties: Any,
     ) -> None:
         super()._on_connect(client, userdata, flags, reason_code, properties)
-        if reason_code != 0:
+        if reason_code.is_failure:
             return
         cfg = self._config
         client.subscribe(cfg.training.train_trigger_topic, qos=1)
