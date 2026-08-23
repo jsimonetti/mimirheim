@@ -442,8 +442,10 @@ class ScheduleStep(BaseModel):
     """The complete power dispatch for a single 15-minute time step.
 
     Attributes:
-        t: Zero-based time step index within the horizon (0–95 for a 96-step
-            24-hour horizon).
+        t: Zero-based time step index within the horizon. The horizon length is
+            variable, set per solve by the available forecast coverage, so the
+            highest index differs between cycles. Use ``SolveResult.solve_time_utc``
+            plus ``t * 15 minutes`` to turn an index into a wall-clock time.
         grid_import_kw: Power imported from the grid in kW. Non-negative.
         grid_export_kw: Power exported to the grid in kW. Non-negative.
         devices: Per-device setpoints for this step, keyed by device name.

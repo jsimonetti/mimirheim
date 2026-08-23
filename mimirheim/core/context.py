@@ -30,9 +30,10 @@ class ModelContext:
             horizon. ``len(ctx.T)`` equals the number of prices in
             ``SolveBundle.horizon_prices``. Devices iterate ``for t in ctx.T``
             to create one variable or constraint per step.
-        dt: Time step duration in hours. For a 96-step quarter-hourly horizon,
-            ``dt == 0.25``. Used to convert power (kW) to energy (kWh) in SOC
-            update constraints and wear cost terms.
+        dt: Time step duration in hours. Always ``0.25``: mimirheim's grid is
+            fixed at 15 minutes and only the horizon length varies. Used to
+            convert power (kW) to energy (kWh) in SOC update constraints and
+            wear cost terms.
     """
 
     def __init__(self, solver: SolverBackend, horizon: int, dt: float) -> None:

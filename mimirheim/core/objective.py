@@ -148,14 +148,16 @@ class ObjectiveBuilder:
         A terminal SoC value term is also added for each storage device (battery
         and V2H-capable EV when plugged in):
 
-            −avg_import_price × soc[T-1]
+            −(avg_import_price / dt) × soc[T-1]
 
         The negative sign causes the minimiser to prefer higher terminal SoC.
         The coefficient is the average import price over the horizon — the
-        expected cost of re-acquiring 1 kWh after the horizon ends. Without
-        this term the solver treats end-of-horizon stored energy as worthless
-        and drains storage whenever there is any positive export price, even
-        when that price is below the cost of refilling.
+        expected cost of re-acquiring 1 kWh after the horizon ends — divided by
+        the step duration so that it is commensurate with the per-step power
+        terms above. See ``_terminal_soc_terms`` for why the division is
+        necessary. Without this term the solver treats end-of-horizon stored
+        energy as worthless and drains storage whenever there is any positive
+        export price, even when that price is below the cost of refilling.
 
         The confidence weighting means that steps with low-quality forecasts
         contribute less to the objective. A step with confidence=0 is treated
@@ -472,11 +474,22 @@ class ObjectiveBuilder:
         For each device that exposes a ``terminal_soc_var(ctx)`` method and
         returns a non-None solver variable, this method produces a term:
 
-            −avg_import_price × soc[T-1]
+            −(avg_import_price / dt) × soc[T-1]
 
         The negative sign causes the minimiser to prefer higher end-of-horizon
-        SoC. The coefficient is the average import price over the horizon
-        steps actually used by this solve cycle (not the full 96-step bundle).
+        SoC. The average is taken over the horizon steps actually used by this
+        solve cycle, which is variable in length.
+
+        **Why divide by dt?**
+
+        The economic terms in the objective are price times power: EUR/kWh
+        times kW, evaluated once per step. ``soc`` is an energy in kWh, so a
+        bare EUR/kWh coefficient on it is a factor of ``dt`` smaller than the
+        per-step terms it competes against. At the 15-minute step that is a
+        factor of four, enough that the terminal value fails to outweigh export
+        revenue whenever the export price is above roughly a quarter of the
+        average import price, and the solver drains storage at the end of the
+        horizon anyway.
 
         **Why average import price?**
 

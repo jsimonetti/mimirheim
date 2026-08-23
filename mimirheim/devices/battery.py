@@ -639,7 +639,9 @@ class Battery:
 
         The terminal value attached to this variable in the objective is the
         average import price over the horizon — the expected cost of
-        re-acquiring 1 kWh after the horizon ends.
+        re-acquiring 1 kWh after the horizon ends — divided by the step
+        duration so that it is commensurate with the per-step power terms.
+        ``ObjectiveBuilder._terminal_soc_terms`` explains the division.
 
         Args:
             ctx: The current solve context. Used to identify the last step.
