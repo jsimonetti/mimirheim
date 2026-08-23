@@ -15,6 +15,8 @@ import logging
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
+import paho.mqtt.client as mqtt
+
 import pytest
 
 
@@ -86,10 +88,22 @@ def _close_coro_and_raise(exc: Exception):
     return _runner
 
 
+def _mqtt_client() -> MagicMock:
+    """Return a mock paho client whose publish() reports success.
+
+    publish_checked inspects the rc of the MQTTMessageInfo that publish()
+    returns. A bare MagicMock yields a mock attribute there, which is exactly
+    why no test in this suite could ever have exercised a publish failure.
+    """
+    client = MagicMock()
+    client.publish.return_value.rc = mqtt.MQTT_ERR_SUCCESS
+    return client
+
+
 def test_ratelimit_aborts_remaining_arrays() -> None:
     """When the first array hits the rate limit the second must not be fetched."""
     daemon = _make_daemon()
-    client = MagicMock()
+    client = _mqtt_client()
 
     fetch_call_count = 0
 
@@ -112,7 +126,7 @@ def test_ratelimit_aborts_remaining_arrays() -> None:
 def test_ratelimit_suppresses_hioo_trigger() -> None:
     """A ratelimit during the fetch cycle must not fire the mimirheim trigger."""
     daemon = _make_daemon(signal_mimir=True)
-    client = MagicMock()
+    client = _mqtt_client()
 
     with patch(
         "pv_fetcher.__main__.asyncio.run",
@@ -127,7 +141,7 @@ def test_ratelimit_suppresses_hioo_trigger() -> None:
 def test_run_cycle_returns_none_on_success() -> None:
     """_run_cycle must return None when at least one array succeeds."""
     daemon = _make_daemon()
-    client = MagicMock()
+    client = _mqtt_client()
 
     with patch(
         "pv_fetcher.__main__.asyncio.run",
@@ -143,7 +157,7 @@ def test_run_cycle_returns_none_on_success() -> None:
 def test_run_cycle_returns_reset_at_on_ratelimit() -> None:
     """_run_cycle must return reset_at when rate-limited."""
     daemon = _make_daemon()
-    client = MagicMock()
+    client = _mqtt_client()
 
     with patch(
         "pv_fetcher.__main__.asyncio.run",
@@ -159,7 +173,7 @@ def test_run_cycle_returns_reset_at_on_ratelimit() -> None:
 def test_generic_fetch_error_continues_to_next_array() -> None:
     """A non-ratelimit FetchError for one array must not abort the other."""
     daemon = _make_daemon()
-    client = MagicMock()
+    client = _mqtt_client()
 
     call_count = 0
 
@@ -247,7 +261,7 @@ def test_all_zero_forecast_is_published() -> None:
     which left the topic advertising PV production that was not coming.
     """
     daemon = _make_daemon()
-    client = MagicMock()
+    client = _mqtt_client()
 
     with patch(
         "pv_fetcher.__main__.asyncio.run",
@@ -263,7 +277,7 @@ def test_all_zero_forecast_is_published() -> None:
 def test_all_zero_forecast_payload_is_all_zero() -> None:
     """The published payload must be the zero curve, not a stale one."""
     daemon = _make_daemon()
-    client = MagicMock()
+    client = _mqtt_client()
 
     with patch(
         "pv_fetcher.__main__.asyncio.run",
@@ -279,7 +293,7 @@ def test_all_zero_forecast_payload_is_all_zero() -> None:
 def test_all_zero_forecast_signals_mimir_when_configured() -> None:
     """Publishing a forecast means the solver has something new to act on."""
     daemon = _make_daemon(signal_mimir=True)
-    client = MagicMock()
+    client = _mqtt_client()
 
     with patch(
         "pv_fetcher.__main__.asyncio.run",
@@ -294,7 +308,7 @@ def test_all_zero_forecast_signals_mimir_when_configured() -> None:
 def test_all_zero_forecast_reports_a_horizon() -> None:
     """A published forecast has a horizon; CycleResult must say so."""
     daemon = _make_daemon()
-    client = MagicMock()
+    client = _mqtt_client()
 
     with patch(
         "pv_fetcher.__main__.asyncio.run",
@@ -314,7 +328,7 @@ def test_empty_forecast_is_still_not_published() -> None:
     rejects, which would leave the PV topic invalid rather than stale.
     """
     daemon = _make_daemon()
-    client = MagicMock()
+    client = _mqtt_client()
 
     with patch(
         "pv_fetcher.__main__.asyncio.run",
@@ -328,7 +342,7 @@ def test_empty_forecast_is_still_not_published() -> None:
 def test_nonzero_forecast_is_still_published() -> None:
     """Regression guard on the path that already worked."""
     daemon = _make_daemon()
-    client = MagicMock()
+    client = _mqtt_client()
 
     with patch(
         "pv_fetcher.__main__.asyncio.run",
@@ -345,7 +359,7 @@ def test_all_zero_forecast_log_says_publishing_and_means_it(
 ) -> None:
     """The log line claimed a publish that did not happen."""
     daemon = _make_daemon()
-    client = MagicMock()
+    client = _mqtt_client()
 
     with caplog.at_level(logging.INFO, logger="pv_fetcher"):
         with patch(

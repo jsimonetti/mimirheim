@@ -11,6 +11,8 @@ import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
+import paho.mqtt.client as mqtt
+
 from pv_fetcher.publisher import publish_array
 
 
@@ -22,8 +24,20 @@ def _steps() -> list[dict]:
     ]
 
 
-def test_publish_array_retained_qos1() -> None:
+def _mqtt_client() -> MagicMock:
+    """Return a mock paho client whose publish() reports success.
+
+    publish_checked inspects the rc of the MQTTMessageInfo that publish()
+    returns. A bare MagicMock yields a mock attribute there, which is exactly
+    why no test in this suite could ever have exercised a publish failure.
+    """
     client = MagicMock()
+    client.publish.return_value.rc = mqtt.MQTT_ERR_SUCCESS
+    return client
+
+
+def test_publish_array_retained_qos1() -> None:
+    client = _mqtt_client()
     publish_array(client, "mimir/input/pv", _steps(), signal_mimir=False)
     client.publish.assert_called_once()
     _, kwargs = client.publish.call_args
@@ -32,14 +46,14 @@ def test_publish_array_retained_qos1() -> None:
 
 
 def test_publish_array_topic() -> None:
-    client = MagicMock()
+    client = _mqtt_client()
     publish_array(client, "mimir/input/pv", _steps(), signal_mimir=False)
     args, _ = client.publish.call_args
     assert args[0] == "mimir/input/pv"
 
 
 def test_publish_array_payload_is_valid_json() -> None:
-    client = MagicMock()
+    client = _mqtt_client()
     publish_array(client, "mimir/input/pv", _steps(), signal_mimir=False)
     args, _ = client.publish.call_args
     payload = json.loads(args[1])
@@ -52,13 +66,13 @@ def test_publish_array_payload_is_valid_json() -> None:
 
 
 def test_signal_mimir_false_no_trigger_publish() -> None:
-    client = MagicMock()
+    client = _mqtt_client()
     publish_array(client, "mimir/input/pv", _steps(), signal_mimir=False)
     assert client.publish.call_count == 1
 
 
 def test_signal_mimir_true_publishes_trigger() -> None:
-    client = MagicMock()
+    client = _mqtt_client()
     publish_array(
         client, "mimir/input/pv", _steps(),
         signal_mimir=True,
@@ -70,7 +84,7 @@ def test_signal_mimir_true_publishes_trigger() -> None:
 
 
 def test_signal_mimir_trigger_is_not_retained() -> None:
-    client = MagicMock()
+    client = _mqtt_client()
     publish_array(
         client, "mimir/input/pv", _steps(),
         signal_mimir=True,

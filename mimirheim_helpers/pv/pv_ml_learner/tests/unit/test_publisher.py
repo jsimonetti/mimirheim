@@ -6,6 +6,8 @@ import datetime
 import json
 from unittest.mock import MagicMock
 
+import paho.mqtt.client as mqtt
+
 import pytest
 
 from pv_ml_learner.predictor import ForecastStep
@@ -23,11 +25,23 @@ def _steps(n: int = 3) -> list[ForecastStep]:
     ]
 
 
+def _mqtt_client() -> MagicMock:
+    """Return a mock paho client whose publish() reports success.
+
+    publish_checked inspects the rc of the MQTTMessageInfo that publish()
+    returns. A bare MagicMock yields a mock attribute there, which is exactly
+    why no test in this suite could ever have exercised a publish failure.
+    """
+    client = MagicMock()
+    client.publish.return_value.rc = mqtt.MQTT_ERR_SUCCESS
+    return client
+
+
 class TestPayloadFormat:
     def test_json_contains_exactly_ts_kw_confidence(self) -> None:
         from pv_ml_learner.publisher import publish_forecast
 
-        client = MagicMock()
+        client = _mqtt_client()
         publish_forecast(client, "pv/forecast", _steps(3), signal_mimir=False)
 
         payload_str = client.publish.call_args[0][1]
@@ -41,7 +55,7 @@ class TestPayloadFormat:
     def test_ts_is_utc_iso8601(self) -> None:
         from pv_ml_learner.publisher import publish_forecast
 
-        client = MagicMock()
+        client = _mqtt_client()
         publish_forecast(client, "pv/forecast", _steps(1), signal_mimir=False)
 
         payload = json.loads(client.publish.call_args[0][1])
@@ -55,7 +69,7 @@ class TestPayloadFormat:
     def test_published_retained_qos1(self) -> None:
         from pv_ml_learner.publisher import publish_forecast
 
-        client = MagicMock()
+        client = _mqtt_client()
         publish_forecast(client, "pv/forecast", _steps(3), signal_mimir=False)
 
         args, kwargs = client.publish.call_args
@@ -68,7 +82,7 @@ class TestSignalHioo:
     def test_signal_mimir_true_without_topic_raises_before_publish(self) -> None:
         from pv_ml_learner.publisher import publish_forecast
 
-        client = MagicMock()
+        client = _mqtt_client()
         with pytest.raises(ValueError):
             publish_forecast(
                 client,
@@ -83,7 +97,7 @@ class TestSignalHioo:
     def test_signal_mimir_publishes_trigger(self) -> None:
         from pv_ml_learner.publisher import publish_forecast
 
-        client = MagicMock()
+        client = _mqtt_client()
         publish_forecast(
             client,
             "pv/forecast",
@@ -100,6 +114,6 @@ class TestSignalHioo:
     def test_signal_mimir_false_publishes_once(self) -> None:
         from pv_ml_learner.publisher import publish_forecast
 
-        client = MagicMock()
+        client = _mqtt_client()
         publish_forecast(client, "pv/forecast", _steps(2), signal_mimir=False)
         assert client.publish.call_count == 1

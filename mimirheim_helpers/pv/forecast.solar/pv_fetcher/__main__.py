@@ -26,6 +26,7 @@ import paho.mqtt.client as mqtt
 
 from helper_common.cycle import CycleResult
 from helper_common.daemon import HelperDaemon
+from helper_common.publish import publish_checked
 
 from pv_fetcher.config import PvFetcherConfig, load_config
 from pv_fetcher.confidence import ConfidenceDecay, apply_confidence
@@ -178,7 +179,14 @@ class PvFetcherDaemon(HelperDaemon):
                 max_steps = len(steps)
 
         if any_success and config.signal_mimir:
-            client.publish(config.mimir_trigger_topic, payload=b"", qos=0, retain=False)
+            publish_checked(
+                client,
+                config.mimir_trigger_topic,
+                b"",
+                qos=0,
+                retain=False,
+                description="mimirheim solve trigger",
+            )
             logger.info("Published mimirheim trigger to %s", config.mimir_trigger_topic)
         if any_success and max_steps > 0:
             return CycleResult(horizon_hours=max_steps * 0.25)

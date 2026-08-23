@@ -17,6 +17,8 @@ import json
 import logging
 from typing import Any
 
+from helper_common.publish import publish_checked
+
 from pv_ml_learner.predictor import ForecastStep
 
 logger = logging.getLogger(__name__)
@@ -69,9 +71,23 @@ def publish_forecast(
     ]
     payload_str = json.dumps(payload_list)
 
-    client.publish(output_topic, payload_str, qos=1, retain=True)
+    publish_checked(
+        client,
+        output_topic,
+        payload_str,
+        qos=1,
+        retain=True,
+        description="PV forecast",
+    )
     logger.debug("Published %d forecast steps to %s.", len(steps), output_topic)
 
     if signal_mimir:
-        client.publish(mimir_trigger_topic, payload=b"", qos=0, retain=False)
+        publish_checked(
+            client,
+            mimir_trigger_topic,
+            b"",
+            qos=0,
+            retain=False,
+            description="mimirheim solve trigger",
+        )
         logger.debug("Published mimirheim trigger to %s.", mimir_trigger_topic)
