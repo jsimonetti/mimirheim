@@ -345,7 +345,21 @@ Published retained. Required for each configured EV charger that has `inputs` co
 20.0
 ```
 
-Set `unit: percent` in config to publish a percentage (0–100); mimirheim converts using `capacity_kwh`.
+or a JSON object that also carries the departure target:
+
+```json
+{
+  "soc": 55.0,
+  "target_soc_kwh": 51.8,
+  "window_latest": "2026-08-30T05:00:00Z"
+}
+```
+
+Set `unit: percent` in config to publish a percentage (0–100); mimirheim converts using `capacity_kwh`. The conversion applies to `soc` only — `target_soc_kwh` is always in kWh.
+
+When both `target_soc_kwh` and `window_latest` are present, the SOC must reach the target by the deadline (hard constraint). A target beyond what the charger can physically deliver within the window is clamped to the deliverable energy with a warning, which forces flat-out charging instead of failing the whole solve.
+
+The window bounds dispatch as well as the target: no charging is scheduled in a step starting before `window_earliest`, and no charging or V2H discharge is scheduled after `window_latest` — the vehicle has left. Because these topics are retained, a `window_latest` that has already passed is treated as an expired window rather than a permanent departure, so a stale value cannot disable the charger; publish a fresh window for the next trip.
 
 The plug state is published separately on `inputs.plugged_in_topic` as a boolean-like string: `true`/`false`, `on`/`off`, or `1`/`0`. When `false`, the EV device is excluded from the solve.
 

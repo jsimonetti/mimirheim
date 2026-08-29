@@ -43,6 +43,7 @@ This module imports from ``mimirheim.core`` and ``mimirheim.config`` but never f
 """
 
 import logging
+import math
 import threading
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -384,18 +385,89 @@ class ReadinessState:
                         soc_kwh, _ = entry
                         battery_inputs[name] = BatteryInputs(soc_kwh=soc_kwh)
 
-            # EV inputs: combine SOC float + plug bool into EvInputs.
+            # EV inputs: combine the parsed EV state (SOC + optional
+            # departure target) with the plug bool into EvInputs.
             ev_inputs: dict[str, EvInputs] = {}
             for name, cfg in self._config.ev_chargers.items():
                 if cfg.inputs is not None:
                     soc_entry = self._entries.get(cfg.inputs.soc.topic)
                     plug_entry = self._entries.get(cfg.inputs.plugged_in_topic)
                     if soc_entry is not None and plug_entry is not None:
-                        soc_kwh, _ = soc_entry
+                        ev_state, _ = soc_entry
                         available, _ = plug_entry
+                        # Deliverability clamp. The departure target is a hard
+                        # constraint; a target beyond what the charger can
+                        # physically deliver by the deadline would make the
+                        # entire solve infeasible, losing the schedule for
+                        # every device. Clamping to the deliverable energy
+                        # preserves the intent as far as physics allows: the
+                        # solver charges flat out for the whole window.
+                        # Conflicts with other hard constraints (e.g. grid
+                        # import capacity) are NOT absorbed here and still
+                        # surface as an infeasible solve by design.
+                        #
+                        # The clamp lives here, not in the device model:
+                        # build_and_solve is pure and must not log.
+                        # Step arithmetic mirrors devices.ev._datetime_to_step:
+                        # soc[window_step] includes charging during steps
+                        # 0..window_step, hence the +1.
+                        target_kwh = ev_state.target_soc_kwh
+                        if (
+                            target_kwh is not None
+                            and ev_state.window_latest is not None
+                        ):
+                            cfg_ev = self._config.ev_chargers[name]
+                            delta_h = (
+                                ev_state.window_latest - solve_start
+                            ).total_seconds() / 3600.0
+                            # Mirrors devices.ev._deadline_to_step: the last
+                            # step ENDING at or before the deadline.
+                            # May be negative: no step ends by the deadline,
+                            # so nothing beyond the current SOC is deliverable
+                            # (chargeable_steps floors at 0 below).
+                            window_step = int(delta_h / 0.25 + 1e-9) - 1
+                            # Mirrors devices.ev._earliest_to_step: the first
+                            # step STARTING at or after window_earliest.
+                            # Deliverable energy counts only steps permitted
+                            # by both window endpoints.
+                            earliest_step = 0
+                            if ev_state.window_earliest is not None:
+                                delta_e = (
+                                    ev_state.window_earliest - solve_start
+                                ).total_seconds() / 3600.0
+                                earliest_step = max(
+                                    0, math.ceil(delta_e / 0.25 - 1e-9)
+                                )
+                            chargeable_steps = max(
+                                0, window_step - earliest_step + 1
+                            )
+                            per_step_kwh = 0.25 * sum(
+                                seg.power_max_kw * seg.efficiency
+                                for seg in cfg_ev.charge_segments
+                            )
+                            deliverable = min(
+                                cfg_ev.capacity_kwh,
+                                ev_state.soc + chargeable_steps * per_step_kwh,
+                            )
+                            if target_kwh > deliverable:
+                                logger.warning(
+                                    "EV %s: departure target %.2f kWh is not "
+                                    "deliverable by %s (reachable: %.2f kWh "
+                                    "from %.2f kWh); clamping to the "
+                                    "deliverable energy.",
+                                    name,
+                                    target_kwh,
+                                    ev_state.window_latest,
+                                    deliverable,
+                                    ev_state.soc,
+                                )
+                                target_kwh = deliverable
                         ev_inputs[name] = EvInputs(
-                            soc_kwh=soc_kwh,
+                            soc_kwh=ev_state.soc,
                             available=available,
+                            target_soc_kwh=target_kwh,
+                            window_earliest=ev_state.window_earliest,
+                            window_latest=ev_state.window_latest,
                         )
 
             # Deferrable windows: include only loads that have both endpoints.

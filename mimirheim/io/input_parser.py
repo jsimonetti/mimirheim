@@ -8,7 +8,9 @@ state, or log. They raise ``ValueError`` on invalid JSON and
 
 Each function corresponds to one logical MQTT input category:
 
-- ``parse_battery_inputs`` / ``parse_ev_inputs``: live sensor readings (plain float).
+- ``parse_battery_inputs``: live sensor reading (plain float).
+- ``parse_ev_inputs``: EV state — plain SOC number or a JSON object that also
+  carries the departure target (``target_soc_kwh``, ``window_latest``).
 - ``parse_price_steps``: hourly (or arbitrary-resolution) price forecast.
 - ``parse_power_forecast``: hourly (or arbitrary-resolution) power forecast
   (used for both PV generation and static load forecasts).
@@ -24,6 +26,7 @@ dependency.
 """
 
 import json
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from mimirheim.core.bundle import PowerForecastStep, PriceStep
@@ -89,14 +92,51 @@ def parse_battery_inputs(payload: bytes | str) -> float:
         raise ValueError(f"Battery SOC payload is not a valid number: {text!r}") from exc
 
 
-def parse_ev_inputs(payload: bytes | str) -> float:
-    """Parse an EV state-of-charge payload into a float kWh value.
+@dataclass
+class ParsedEvState:
+    """EV state parsed from the SOC topic payload.
 
-    The payload must be a plain numeric string or a JSON number.
+    Attributes:
+        soc: State of charge as published. Unit conversion (percent → kWh)
+            is applied by the caller using the device capacity from config.
+        target_soc_kwh: SOC the vehicle must reach by ``window_latest``, in
+            kWh (never percent — it feeds the hard constraint directly).
+            None when the payload carries no departure target.
+        window_earliest: Optional earliest charging datetime (UTC).
+        window_latest: Optional departure deadline (UTC). The target
+            constraint requires both ``target_soc_kwh`` and this field.
+    """
+
+    soc: float
+    target_soc_kwh: float | None = None
+    window_earliest: datetime | None = None
+    window_latest: datetime | None = None
+
+
+def parse_ev_inputs(payload: bytes | str) -> ParsedEvState:
+    """Parse an EV state payload.
+
+    Two payload forms are accepted:
+
+    A plain numeric string or JSON number — state of charge only:
 
     .. code-block:: text
 
         20.0
+
+    A JSON object carrying the SOC and the optional departure target:
+
+    .. code-block:: json
+
+        {
+            "soc": 55.0,
+            "target_soc_kwh": 51.8,
+            "window_latest": "2026-08-30T05:00:00Z"
+        }
+
+    ``soc`` is mandatory in the object form. ``target_soc_kwh`` is always in
+    kWh, regardless of the configured SOC unit. Datetime fields follow the
+    same rules as ``parse_datetime`` (naive values are interpreted as UTC).
 
     The plug state is published on a separate ``plugged_in_topic`` and is
     parsed independently. See the inline ``_parse_plug`` handler in
@@ -106,17 +146,59 @@ def parse_ev_inputs(payload: bytes | str) -> float:
         payload: Raw MQTT payload from the EV SOC topic.
 
     Returns:
-        State of charge as a float. Unit conversion (percent → kWh) is
-        applied by the caller using the device capacity from config.
+        The parsed EV state.
 
     Raises:
-        ValueError: If the payload cannot be parsed as a number.
+        ValueError: If the payload is neither a number nor a valid state object.
     """
     text = _decode(payload).strip()
     try:
-        return float(text)
-    except ValueError as exc:
-        raise ValueError(f"EV SOC payload is not a valid number: {text!r}") from exc
+        return ParsedEvState(soc=float(text))
+    except ValueError:
+        pass
+
+    data = _parse_json(text)
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"EV state payload must be a number or a JSON object, got: {text!r}"
+        )
+    allowed = {"soc", "target_soc_kwh", "window_earliest", "window_latest"}
+    unknown = set(data) - allowed
+    if unknown:
+        # This is a system boundary: a typo such as 'target_soc_kw' must not
+        # silently drop the departure constraint.
+        raise ValueError(
+            f"EV state object contains unknown field(s) {sorted(unknown)!r}; "
+            f"allowed fields are {sorted(allowed)!r}."
+        )
+    if "soc" not in data:
+        raise ValueError(f"EV state object is missing the mandatory 'soc' field: {text!r}")
+    try:
+        soc = float(data["soc"])
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"EV state 'soc' is not a number: {data['soc']!r}") from exc
+
+    target = data.get("target_soc_kwh")
+    if target is not None:
+        try:
+            target = float(target)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"EV state 'target_soc_kwh' is not a number: {data['target_soc_kwh']!r}"
+            ) from exc
+        if target < 0:
+            raise ValueError(f"EV state 'target_soc_kwh' must be >= 0, got {target}")
+
+    def _optional_dt(field: str) -> datetime | None:
+        raw = data.get(field)
+        return parse_datetime(raw) if raw is not None else None
+
+    return ParsedEvState(
+        soc=soc,
+        target_soc_kwh=target,
+        window_earliest=_optional_dt("window_earliest"),
+        window_latest=_optional_dt("window_latest"),
+    )
 
 
 def parse_price_steps(payload: bytes | str) -> list[PriceStep]:

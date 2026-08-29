@@ -378,3 +378,82 @@ def test_deadline_inside_first_interval_clamps_to_current_soc() -> None:
 
     result = build_and_solve(bundle, config)
     assert result.solve_status in ("optimal", "feasible")
+
+
+def test_no_charging_after_the_departure_deadline() -> None:
+    """The car is gone after window_latest: no setpoints may follow it."""
+    ev = EvInputs(
+        soc_kwh=0.0,
+        available=True,
+        target_soc_kwh=4.0,
+        window_latest=datetime(2026, 6, 1, 13, tzinfo=timezone.utc),
+    )
+    result = build_and_solve(_solve_bundle(ev, horizon=8), _ev_config())
+    assert result.solve_status in ("optimal", "feasible")
+    # Deadline +1 h maps to step 3; steps 4..7 are after departure.
+    for step in result.schedule[4:]:
+        assert step.devices["car"].kw == pytest.approx(0.0, abs=1e-6)
+
+
+def test_expired_deadline_does_not_disable_the_charger() -> None:
+    """A stale retained window_latest must not zero the whole horizon.
+
+    window_latest is published retained, so a deadline that has already
+    passed is an expired window, not a permanent departure. The vehicle
+    must stay dispatchable until a fresh window arrives.
+
+    Forcing the issue structurally: export is capped at zero while PV
+    exceeds the base load, so the surplus has nowhere to go unless the EV
+    absorbs it. If an expired deadline zeroed the charge variables, the
+    solve would be infeasible.
+    """
+    config = MimirheimConfig.model_validate(
+        {
+            "mqtt": {"host": "localhost", "client_id": "test"},
+            "grid": {"import_limit_kw": 10.0, "export_limit_kw": 0.0},
+            "ev_chargers": {
+                "car": {
+                    "capacity_kwh": 60.0,
+                    "charge_segments": [{"power_max_kw": 8.0, "efficiency": 1.0}],
+                    "discharge_segments": [],
+                    "inputs": {"soc": {"unit": "kwh"}},
+                }
+            },
+            "pv_arrays": {"roof": {"max_power_kw": 6.0}},
+            "static_loads": {"base": {}},
+        }
+    )
+    ev = EvInputs(
+        soc_kwh=0.0,
+        available=True,
+        window_latest=datetime(2026, 6, 1, 11, tzinfo=timezone.utc),
+    )
+    bundle = _solve_bundle(ev, horizon=4).model_copy(
+        update={
+            "pv_forecast": [5.0] * 4,
+            "pv_forecasts": {"roof": [5.0] * 4},
+        }
+    )
+
+    result = build_and_solve(bundle, config)
+    assert result.solve_status in ("optimal", "feasible")
+    # The 4.5 kW surplus (5.0 PV - 0.5 base load) must land in the EV.
+    for step in result.schedule:
+        assert step.devices["car"].kw == pytest.approx(-4.5, abs=1e-6)
+
+
+def test_future_deadline_inside_first_step_blocks_all_dispatch() -> None:
+    """Departure before any step completes leaves nothing dispatchable.
+
+    Distinct from an expired retained deadline: the vehicle has not left
+    yet at solve time, so every full solver step is post-departure.
+    """
+    ev = EvInputs(
+        soc_kwh=0.0,
+        available=True,
+        window_latest=datetime(2026, 6, 1, 12, 5, tzinfo=timezone.utc),
+    )
+    result = build_and_solve(_solve_bundle(ev, horizon=4), _ev_config())
+    assert result.solve_status in ("optimal", "feasible")
+    for step in result.schedule:
+        assert step.devices["car"].kw == pytest.approx(0.0, abs=1e-6)
