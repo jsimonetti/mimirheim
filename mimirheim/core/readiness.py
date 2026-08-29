@@ -91,7 +91,7 @@ class ReadinessState:
             least once before a solve is permitted.
         _forecast_topics: Set of topics that carry timestamped forecast series.
         _prices_topic: Topic string for horizon prices.
-        _pv_topics: Ordered list of PV forecast topic strings.
+        _pv_topics: PV forecast topic per array, keyed by device name.
         _load_topics: Ordered list of static-load forecast topic strings.
         _current_strategy: The currently active strategy string.
         _strategy_topic: MQTT topic for strategy updates.
@@ -180,10 +180,12 @@ class ReadinessState:
                 )
 
         # Forecast topics: coverage-based readiness.
-        self._pv_topics: list[str] = [cfg.topic_forecast for cfg in config.pv_arrays.values()]
+        self._pv_topics: dict[str, str] = {
+            name: cfg.topic_forecast for name, cfg in config.pv_arrays.items()
+        }
         self._load_topics: list[str] = [cfg.topic_forecast for cfg in config.static_loads.values()]
         self._forecast_topics: set[str] = (
-            {self._prices_topic} | set(self._pv_topics) | set(self._load_topics)
+            {self._prices_topic} | set(self._pv_topics.values()) | set(self._load_topics)
         )
 
         # Deferrable load topics: window endpoints and optional start_time.
@@ -348,13 +350,20 @@ class ReadinessState:
                 price_steps, solve_start, n_steps
             )
 
-            # Resample PV forecast: sum all arrays.
+            # Resample PV forecast per array. Each PvDevice receives its own
+            # series; the summed series is kept for the naive-cost baseline
+            # and for dump-file compatibility. Summing into a single series
+            # and handing it to every device would count PV once per array
+            # in the power balance.
             pv_forecast = [0.0] * n_steps
-            for topic in self._pv_topics:
+            pv_forecasts: dict[str, list[float]] = {}
+            for pv_name, topic in self._pv_topics.items():
                 entry = self._entries.get(topic)
                 if entry is not None:
                     pv_steps: list[PowerForecastStep] = entry[0]
-                    for t, v in enumerate(resample_power(pv_steps, solve_start, n_steps)):
+                    series = resample_power(pv_steps, solve_start, n_steps)
+                    pv_forecasts[pv_name] = series
+                    for t, v in enumerate(series):
                         pv_forecast[t] += v
 
             # Resample base load forecast: sum all static loads.
@@ -514,6 +523,7 @@ class ReadinessState:
                 horizon_export_prices=horizon_export_prices,
                 horizon_confidence=horizon_confidence,
                 pv_forecast=pv_forecast,
+                pv_forecasts=pv_forecasts,
                 base_load_forecast=base_load_forecast,
                 battery_inputs=battery_inputs,
                 ev_inputs=ev_inputs,

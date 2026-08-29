@@ -243,10 +243,38 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
             )
         bat.add_constraints(ctx, inputs=bat_inputs)
 
+    unknown_pv = set(bundle.pv_forecasts) - set(config.pv_arrays)
+    if unknown_pv:
+        # A stale key (e.g. an array that was removed from the config after
+        # the dump was written) passes the bundle's sum-consistency check but
+        # would be silently dropped from the power balance below, while the
+        # naive-cost baseline still counts it via the summed pv_forecast.
+        raise ValueError(
+            f"bundle.pv_forecasts contains unknown PV array(s) "
+            f"{sorted(unknown_pv)!r}; configured arrays are "
+            f"{sorted(config.pv_arrays)!r}."
+        )
+
     for pv in pv_devices:
+        # Each array gets its own forecast series. Handing every device the
+        # summed bundle.pv_forecast would count total PV once per array in
+        # the power balance (and publish fleet-total setpoints per device).
+        forecast_kw = bundle.pv_forecasts.get(pv.name)
+        if forecast_kw is None:
+            if len(pv_devices) == 1:
+                # Backward compatibility: older dump files carry only the
+                # summed series. With a single array the sum IS the array.
+                forecast_kw = bundle.pv_forecast
+            else:
+                raise ValueError(
+                    f"PV array {pv.name!r} has no entry in bundle.pv_forecasts. "
+                    "Per-array forecasts are required when more than one "
+                    "pv_arrays device is configured; the summed pv_forecast "
+                    "cannot be attributed to individual arrays."
+                )
         pv.add_constraints(
             ctx,
-            inputs=PvInputs(forecast_kw=bundle.pv_forecast),
+            inputs=PvInputs(forecast_kw=forecast_kw),
         )
 
     for ev in ev_devices:
