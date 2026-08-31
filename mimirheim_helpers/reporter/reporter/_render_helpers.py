@@ -86,8 +86,15 @@ def _build_energy_flows_traces(
     # kw in the schedule is negative when consuming; we negate to get a
     # positive value for the bar chart so it stacks with the other demand bars.
     deferrable_kwh: dict[str, list[float]] = {}
+    # PV arrays and static loads are aggregated into a single bar each, so they
+    # accumulate per step rather than per device: a schedule with two PV arrays
+    # must still yield one y value per x position. has_pv/has_base record
+    # whether the schedule carried such a device at all, which the per-step
+    # totals can no longer express once absent devices contribute 0.0.
     opt_pv: list[float] = []
     opt_base: list[float] = []
+    has_pv = False
+    has_base = False
     grid_import_kwh: list[float] = []
     grid_export_kwh: list[float] = []
 
@@ -96,14 +103,18 @@ def _build_energy_flows_traces(
         g_exp = step.get("grid_export_kw", 0.0) * STEP_HOURS
         grid_import_kwh.append(g_imp)
         grid_export_kwh.append(g_exp)
+        step_pv = 0.0
+        step_base = 0.0
         for name, sp in step.get("devices", {}).items():
             kw = sp.get("kw", 0.0)
             kwh = kw * STEP_HOURS
             dtype = sp.get("type", "")
             if dtype == "pv":
-                opt_pv.append(kwh)
+                has_pv = True
+                step_pv += kwh
             elif dtype == "static_load":
-                opt_base.append(kwh)
+                has_base = True
+                step_base += kwh
             elif dtype == "battery":
                 battery_discharge.setdefault(name, []).append(max(0.0, kwh))
                 battery_charge.setdefault(name, []).append(min(0.0, kwh))
@@ -114,10 +125,12 @@ def _build_energy_flows_traces(
                 # kw is negative while the load is running; negate it so the
                 # bar represents the positive consumption in kWh.
                 deferrable_kwh.setdefault(name, []).append(max(0.0, -kwh))
+        opt_pv.append(step_pv)
+        opt_base.append(step_base)
 
-    if not opt_pv:
+    if not has_pv:
         opt_pv = list(pv_kwh[: len(xs)])
-    if not opt_base:
+    if not has_base:
         opt_base = [-b for b in base_kwh[: len(xs)]]
 
     opt_base_pos = [-v for v in opt_base]
