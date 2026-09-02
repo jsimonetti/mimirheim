@@ -5,7 +5,7 @@ It has no imports from the nordpool fetcher or publisher modules.
 """
 from __future__ import annotations
 
-from typing import Callable
+from typing import Callable, Literal
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -17,6 +17,12 @@ import helper_common.topics as _topics
 # Users override these with their own supplier's pricing formula.
 _DEFAULT_IMPORT_FORMULA = "price"
 _DEFAULT_EXPORT_FORMULA = "price"
+
+# Nordpool day-ahead is quoted on a 15-minute market time unit for most areas
+# since October 2025, so quarter-hourly is the pass-through default. Suppliers
+# that bill per whole hour settle on the hourly average of those four quarters
+# instead, which the fetcher can reproduce by aggregating.
+_DEFAULT_PRICE_INTERVAL = "quarter_hourly"
 
 
 def _compile_formula(formula: str) -> Callable[[datetime, float], float]:
@@ -77,6 +83,16 @@ class NordpoolApiConfig(BaseModel):
             price in EUR/kWh from the raw spot price. Applied to every step.
         export_formula: Python expression that computes the net export price
             in EUR/kWh from the raw spot price. Applied to every step.
+        price_interval: Length of one published price step —
+            ``"quarter_hourly"`` or ``"hourly"``. Nordpool quotes day-ahead
+            prices on a 15-minute market time unit for most areas, which is
+            what ``"quarter_hourly"`` (the default) publishes unchanged. Set it
+            to ``"hourly"`` when your supplier bills a single price per whole
+            hour: the four quarter-hour spot prices are then averaged into one
+            hourly spot price before the formulas are applied, which is exactly
+            how such suppliers derive their hourly rate. Leaving it at
+            ``"quarter_hourly"`` on an hourly contract makes the optimiser
+            chase intra-hour price swings the meter never bills for.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -97,6 +113,16 @@ class NordpoolApiConfig(BaseModel):
             "Available variables: ``price`` (raw spot, EUR/kWh), ``ts`` (datetime, UTC)."
         ),
         json_schema_extra={"ui_label": "Export price formula", "ui_group": "basic"},
+    )
+    price_interval: Literal["hourly", "quarter_hourly"] = Field(
+        default=_DEFAULT_PRICE_INTERVAL,
+        description=(
+            "Length of one published price step. 'quarter_hourly' (default) publishes "
+            "the raw Nordpool market time unit unchanged; 'hourly' averages each clock "
+            "hour into a single step, matching suppliers that bill one dynamic price "
+            "per hour."
+        ),
+        json_schema_extra={"ui_label": "Price interval", "ui_group": "basic"},
     )
 
     @field_validator("import_formula", "export_formula", mode="after")

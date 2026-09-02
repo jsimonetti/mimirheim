@@ -73,6 +73,18 @@ class TestNordpoolApiConfig:
         with pytest.raises(ValidationError, match="syntax"):
             NordpoolApiConfig(area="NO2", export_formula="def bad():")
 
+    def test_price_interval_defaults_to_the_native_quarter_hour(self) -> None:
+        cfg = NordpoolApiConfig(area="NO2")
+        assert cfg.price_interval == "quarter_hourly"
+
+    def test_price_interval_accepts_hourly(self) -> None:
+        cfg = NordpoolApiConfig(area="NL", price_interval="hourly")
+        assert cfg.price_interval == "hourly"
+
+    def test_price_interval_rejects_unknown_value(self) -> None:
+        with pytest.raises(ValidationError):
+            NordpoolApiConfig(area="NO2", price_interval="half_hourly")
+
     def test_rejects_unknown_fields(self) -> None:
         with pytest.raises(ValidationError):
             NordpoolApiConfig(area="NO2", currency="EUR")
