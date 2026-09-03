@@ -63,7 +63,7 @@ ARG S6_OVERLAY_VERSION=3.2.3.2
 # these digests, so bumps become reviewable commits rather than silent drift.
 # ---------------------------------------------------------------------------
 FROM ghcr.io/astral-sh/uv:0.12.5@sha256:e85be844203885286c60ffad8a858d48afb6c5a5c237ca0e67f12e74b8f174b1 AS uvbin
-FROM ghcr.io/hassio-addons/base:stable@sha256:47ed45a406ec6a43666e00f1b6152406478e0816a2e353c743b3e3c77c248b37 AS bashio
+FROM ghcr.io/hassio-addons/base:stable@sha256:e72908cc2e9d90bef85210a927d5e0fd11a7b3e61f608d3d99a95c107eef9a3f AS bashio
 
 # ---------------------------------------------------------------------------
 # Stage 1: deps-only venv — rebuilt only when pyproject.toml or uv.lock change.
