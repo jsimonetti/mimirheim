@@ -44,6 +44,26 @@ The tool uses the `pynordpool` library, which wraps the Nordpool data portal RES
 - Only steps at or after the current UTC hour are included in the published payload.
 - Day-ahead prices are confirmed prices: all steps are published with `confidence: 1.0`.
 
+### Price interval
+
+Nordpool has quoted day-ahead prices on a **15-minute** market time unit for most areas since October 2025, and that is what the API returns. `nordpool.price_interval` controls what the tool publishes.
+
+| Value | Behaviour |
+|-------|-----------|
+| `quarter_hourly` (default) | Publish the raw market time unit unchanged, one step per quarter hour. |
+| `hourly` | Average each clock hour into one step. |
+
+Set `price_interval: hourly` when your supplier bills **one dynamic price per whole hour**. Those suppliers derive the hourly rate as the arithmetic mean of the four quarter-hour spot prices, so aggregating here gives mimirheim the price the meter is actually settled on. Leaving the default `quarter_hourly` on an hourly contract makes the optimiser charge and discharge to chase intra-hour price swings that never reach the bill.
+
+Aggregation details:
+
+- Buckets are aligned to the UTC clock. Every CET and CEST offset is a whole number of hours, so a UTC-aligned bucket is also a local-clock-aligned bucket.
+- The mean is taken on the **raw spot price, before** `import_formula` and `export_formula` run. The supplier prices the hourly average, so the formula must be applied to that average — this matters for any formula that is not a straight affine function of `price`.
+- A partially covered bucket at either end of the horizon is averaged over the periods present rather than dropped, so the payload has no gaps.
+- mimirheim resamples the payload onto its own 15-minute solver grid with a hold-previous step function, so each hourly price covers the four solver steps that follow it.
+
+One consequence is worth knowing before switching. mimirheim treats the **last timestamp in the payload as the end of its horizon** (`compute_horizon_steps` in `mimirheim/core/forecast.py`) — it does not extrapolate a step duration past the final entry. An hourly payload whose last step starts at 23:00 therefore ends the price horizon at 23:00, 45 minutes earlier than a quarter-hourly payload whose last step starts at 23:45 — three solver steps. Prices normally reach further ahead than the PV and baseload forecasts, so the joint horizon is rarely bound by this, but those 45 minutes are lost when prices are the shortest series — check `readiness.min_horizon_hours` if a solve starts being skipped after the switch.
+
 ### Area codes
 
 Nordpool area codes follow the standard two- or four-character format used by the data portal:
@@ -78,9 +98,9 @@ output_topic: mimir/input/prices
 
 nordpool:
   area: NO2                 # Nordpool price area code
-  vat_multiplier: 1.0       # Apply VAT/markup; 1.25 adds 25 %. Default 1.0 (no markup).
-  grid_tariff_import_eur_per_kwh: 0.0   # Fixed network tariff added to every import step
-  grid_tariff_export_eur_per_kwh: 0.0   # Fixed network tariff subtracted from every export step
+  import_formula: "price"   # Python expression for the all-in import price in EUR/kWh
+  export_formula: "price"   # Python expression for the net export price in EUR/kWh
+  price_interval: quarter_hourly   # or "hourly" for an hourly dynamic tariff
 
 signal_mimir: false
 mimir_trigger_topic: mimir/input/trigger   # required only when signal_mimir: true
@@ -100,9 +120,9 @@ All fields are required unless a default is shown. The tool rejects unknown fiel
 | `trigger_topic` | string | MQTT topic that triggers a fetch-and-publish cycle |
 | `output_topic` | string | MQTT topic to publish the price payload to (retained) |
 | `nordpool.area` | string | Nordpool price area code |
-| `nordpool.vat_multiplier` | float ≥ 1.0 | Multiplier applied to every price step. Use this to embed VAT or a fixed markup. Default `1.0` |
-| `nordpool.grid_tariff_import_eur_per_kwh` | float ≥ 0 | Flat import network tariff in EUR/kWh added to every step's `import_eur_per_kwh`. Default `0.0` |
-| `nordpool.grid_tariff_export_eur_per_kwh` | float ≥ 0 | Flat export network tariff in EUR/kWh subtracted from every step's `export_eur_per_kwh`. Default `0.0` |
+| `nordpool.import_formula` | string | Python expression for the all-in import price in EUR/kWh. Variables: `price` (raw spot, EUR/kWh), `ts` (UTC-aware `datetime`). Default `"price"` |
+| `nordpool.export_formula` | string | Python expression for the net export price in EUR/kWh. Same variables as `import_formula`. Default `"price"` |
+| `nordpool.price_interval` | `quarter_hourly` or `hourly` | Length of one published price step. `quarter_hourly` publishes the raw Nordpool market time unit; `hourly` averages each clock hour into one step for suppliers that bill an hourly dynamic price. Default `quarter_hourly` |
 | `signal_mimir` | boolean | If `true`, publish an empty message to `mimir_trigger_topic` after publishing the price payload. Default `false` |
 | `mimir_trigger_topic` | string | mimirheim's trigger topic. Required when `signal_mimir: true` |
 
@@ -110,7 +130,7 @@ All fields are required unless a default is shown. The tool rejects unknown fiel
 
 ## 4. Output format
 
-The tool publishes a JSON array retained to `output_topic`. Each element is one hour:
+The tool publishes a JSON array retained to `output_topic`. Each element is one price step of `nordpool.price_interval` (the example below uses `hourly`):
 
 ```json
 [
@@ -130,9 +150,9 @@ The tool publishes a JSON array retained to `output_topic`. Each element is one 
 ```
 
 - `ts` is the start of the price period in UTC (ISO 8601 with offset `+00:00`).
-- Import and export prices are equal (Nordpool day-ahead is a single spot price). The `grid_tariff_*` fields allow them to diverge if your network tariff structure requires it.
+- Import and export prices come from the same raw spot price; `import_formula` and `export_formula` are what make them diverge.
 - `confidence` is always `1.0` — day-ahead prices are confirmed, not estimated.
-- mimirheim resamples this hourly array to its 15-minute solver grid using a step function.
+- mimirheim resamples this array onto its 15-minute solver grid using a hold-previous step function, so a coarser payload simply repeats each price across the steps it covers.
 
 ---
 

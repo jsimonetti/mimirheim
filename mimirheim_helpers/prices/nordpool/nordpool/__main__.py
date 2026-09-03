@@ -64,6 +64,7 @@ class NordpoolDaemon(HelperDaemon):
                     area=config.nordpool.area,
                     import_formula=config.nordpool.import_formula,
                     export_formula=config.nordpool.export_formula,
+                    price_interval=config.nordpool.price_interval,
                 )
             )
         except FetchError:
@@ -79,7 +80,11 @@ class NordpoolDaemon(HelperDaemon):
             signal_mimir=config.signal_mimir,
             mimir_trigger_topic=config.mimir_trigger_topic,
         )
-        return CycleResult(horizon_hours=len(steps) * 0.25)
+        # Each step covers one hour in "hourly" mode or 15 minutes in
+        # "quarter_hourly" mode. len(steps) alone is a step count, not hours —
+        # it must be scaled by the step duration to report true horizon_hours.
+        step_hours = 0.25 if config.nordpool.price_interval == "quarter_hourly" else 1.0
+        return CycleResult(horizon_hours=len(steps) * step_hours)
 
 
 def main() -> None:

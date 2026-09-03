@@ -4,8 +4,8 @@ Covers the horizon_hours calculation on the returned CycleResult: it must
 reflect actual hours of published coverage, not the raw number of price
 steps. A "quarter_hourly" cycle publishes four steps per hour, so the step
 count must be scaled by 0.25 to report true hours — mirroring the equivalent
-fix already applied in the nordpool helper, which always fetches 15-minute
-steps.
+calculation in the nordpool helper, which takes the same price_interval
+setting.
 """
 from __future__ import annotations
 

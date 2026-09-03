@@ -36,6 +36,25 @@ nordpool:
   # Example: raw spot price with no markup or deduction
   export_formula: "price"
 
+  # price_interval controls the length of one published price step.
+  #
+  #   quarter_hourly (default) — publish the raw Nordpool market time unit.
+  #                              Nordpool has quoted most areas per quarter
+  #                              hour since October 2025.
+  #   hourly                   — average each clock hour into one step.
+  #
+  # Set this to hourly when your supplier bills a single dynamic price per
+  # whole hour. Such suppliers derive the hourly rate as the mean of the four
+  # quarter-hour spot prices, so averaging here gives mimirheim the price you
+  # are actually settled on. Leaving it at quarter_hourly on an hourly contract
+  # makes the optimiser chase intra-hour price swings that never reach the bill.
+  #
+  # The average is taken on the raw spot price, before import_formula and
+  # export_formula are applied. Note that mimirheim ends its horizon at the
+  # last timestamp in the payload, so an hourly payload ends 45 minutes
+  # earlier than a quarter-hourly one (23:00 rather than 23:45).
+  # price_interval: quarter_hourly  # default
+
 # Set signal_mimir to true and uncomment mimir_trigger_topic to chain this tool
 # into the mimirheim solve loop after prices are published.
 # mimir_trigger_topic: mimir/input/trigger

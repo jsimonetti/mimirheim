@@ -188,6 +188,185 @@ class TestFetchPrices:
         assert tss == sorted(tss)
 
 
+class TestPriceInterval:
+    """Aggregation of the 15-minute market time unit into hourly steps."""
+
+    async def test_defaults_to_native_15_minute_steps(
+        self, mock_client: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("nordpool.fetcher.datetime", _make_datetime_mock(_NOW))
+        entries = [
+            _make_entry(_NOW + timedelta(minutes=15 * i), price)
+            for i, price in enumerate([40.0, 80.0, 120.0, 160.0])
+        ]
+        mock_client.async_get_delivery_periods.return_value = _make_periods_data(
+            [_make_day_data(entries)]
+        )
+        steps = await fetch_prices(
+            area="NO2",
+            import_formula="price",
+            export_formula="price",
+        )
+        assert len(steps) == 4
+        assert [s["import_eur_per_kwh"] for s in steps] == pytest.approx(
+            [0.04, 0.08, 0.12, 0.16]
+        )
+
+    async def test_hourly_averages_the_four_quarters(
+        self, mock_client: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("nordpool.fetcher.datetime", _make_datetime_mock(_NOW))
+        # 40, 80, 120, 160 EUR/MWh averages to 100 EUR/MWh = 0.1 EUR/kWh.
+        entries = [
+            _make_entry(_NOW + timedelta(minutes=15 * i), price)
+            for i, price in enumerate([40.0, 80.0, 120.0, 160.0])
+        ]
+        mock_client.async_get_delivery_periods.return_value = _make_periods_data(
+            [_make_day_data(entries)]
+        )
+        steps = await fetch_prices(
+            area="NO2",
+            import_formula="price",
+            export_formula="price",
+            price_interval="hourly",
+        )
+        assert len(steps) == 1
+        assert steps[0]["ts"] == _NOW.isoformat()
+        assert steps[0]["import_eur_per_kwh"] == pytest.approx(0.1)
+        assert steps[0]["export_eur_per_kwh"] == pytest.approx(0.1)
+
+    async def test_hourly_buckets_by_clock_hour(
+        self, mock_client: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("nordpool.fetcher.datetime", _make_datetime_mock(_NOW))
+        # Two full hours: the first averages to 100, the second to 200 EUR/MWh.
+        entries = [
+            _make_entry(_NOW + timedelta(minutes=15 * i), price)
+            for i, price in enumerate([40.0, 80.0, 120.0, 160.0, 140.0, 180.0, 220.0, 260.0])
+        ]
+        mock_client.async_get_delivery_periods.return_value = _make_periods_data(
+            [_make_day_data(entries)]
+        )
+        steps = await fetch_prices(
+            area="NO2",
+            import_formula="price",
+            export_formula="price",
+            price_interval="hourly",
+        )
+        assert [s["ts"] for s in steps] == [
+            _NOW.isoformat(),
+            (_NOW + timedelta(hours=1)).isoformat(),
+        ]
+        assert [s["import_eur_per_kwh"] for s in steps] == pytest.approx([0.1, 0.2])
+
+    async def test_explicit_quarter_hourly_matches_the_default(
+        self, mock_client: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("nordpool.fetcher.datetime", _make_datetime_mock(_NOW))
+        entries = [
+            _make_entry(_NOW + timedelta(minutes=15 * i), price)
+            for i, price in enumerate([40.0, 80.0, 120.0, 160.0])
+        ]
+        mock_client.async_get_delivery_periods.return_value = _make_periods_data(
+            [_make_day_data(entries)]
+        )
+        steps = await fetch_prices(
+            area="NO2",
+            import_formula="price",
+            export_formula="price",
+            price_interval="quarter_hourly",
+        )
+        assert [s["ts"] for s in steps] == [
+            (_NOW + timedelta(minutes=15 * i)).isoformat() for i in range(4)
+        ]
+        assert [s["import_eur_per_kwh"] for s in steps] == pytest.approx(
+            [0.04, 0.08, 0.12, 0.16]
+        )
+
+    async def test_formula_is_applied_to_the_hourly_average(
+        self, mock_client: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("nordpool.fetcher.datetime", _make_datetime_mock(_NOW))
+        entries = [
+            _make_entry(_NOW + timedelta(minutes=15 * i), price)
+            for i, price in enumerate([40.0, 80.0, 120.0, 160.0])
+        ]
+        mock_client.async_get_delivery_periods.return_value = _make_periods_data(
+            [_make_day_data(entries)]
+        )
+        # A non-affine formula distinguishes "average then apply" from
+        # "apply then average": mean of the squares is not the square of the mean.
+        steps = await fetch_prices(
+            area="NO2",
+            import_formula="price ** 2",
+            export_formula="price",
+            price_interval="hourly",
+        )
+        assert steps[0]["import_eur_per_kwh"] == pytest.approx(0.1**2)
+
+    async def test_hourly_averages_a_partial_bucket_over_what_is_present(
+        self, mock_client: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("nordpool.fetcher.datetime", _make_datetime_mock(_NOW))
+        # The last hour of the horizon only has two of its four quarters.
+        entries = [
+            _make_entry(_NOW + timedelta(minutes=15 * i), price)
+            for i, price in enumerate([40.0, 80.0, 120.0, 160.0, 100.0, 300.0])
+        ]
+        mock_client.async_get_delivery_periods.return_value = _make_periods_data(
+            [_make_day_data(entries)]
+        )
+        steps = await fetch_prices(
+            area="NO2",
+            import_formula="price",
+            export_formula="price",
+            price_interval="hourly",
+        )
+        assert len(steps) == 2
+        assert steps[1]["import_eur_per_kwh"] == pytest.approx(0.2)
+
+    async def test_hourly_source_data_is_unchanged_by_hourly_resolution(
+        self, mock_client: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("nordpool.fetcher.datetime", _make_datetime_mock(_NOW))
+        # An area still quoted hourly already has one period per bucket.
+        entries = [_make_entry(_NOW + timedelta(hours=i), 50.0 + i) for i in range(3)]
+        mock_client.async_get_delivery_periods.return_value = _make_periods_data(
+            [_make_day_data(entries)]
+        )
+        steps = await fetch_prices(
+            area="NO2",
+            import_formula="price",
+            export_formula="price",
+            price_interval="hourly",
+        )
+        assert [s["import_eur_per_kwh"] for s in steps] == pytest.approx(
+            [0.05, 0.051, 0.052]
+        )
+
+    async def test_hourly_steps_span_days_and_stay_sorted(
+        self, mock_client: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("nordpool.fetcher.datetime", _make_datetime_mock(_NOW))
+        today = [_make_entry(_NOW + timedelta(minutes=15 * i), 100.0) for i in range(4)]
+        tomorrow = [
+            _make_entry(_NOW + timedelta(hours=1, minutes=15 * i), 200.0)
+            for i in range(4)
+        ]
+        # Tomorrow's day bucket is returned first to prove the output is sorted.
+        mock_client.async_get_delivery_periods.return_value = _make_periods_data(
+            [_make_day_data(tomorrow), _make_day_data(today)]
+        )
+        steps = await fetch_prices(
+            area="NO2",
+            import_formula="price",
+            export_formula="price",
+            price_interval="hourly",
+        )
+        assert [s["ts"] for s in steps] == sorted(s["ts"] for s in steps)
+        assert [s["import_eur_per_kwh"] for s in steps] == pytest.approx([0.1, 0.2])
+
+
 def _make_datetime_mock(fixed_now: datetime) -> MagicMock:
     """Return a mock for the datetime class that overrides now() but passes through other calls."""
     dt_mock = MagicMock(wraps=datetime)
