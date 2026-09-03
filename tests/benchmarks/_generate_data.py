@@ -355,6 +355,7 @@ static_loads:
 #     * roof_east (4 kWp east, AC-coupled)
 #     * roof_west (4 kWp west, AC-coupled)
 #     * bundle.pv_forecast = east + west (summed, AC side)
+#     * bundle.pv_forecasts = per-array series (roof_east, roof_west)
 #   - EVs:
 #     * ev_commuter: 65 kWh, plugged in overnight, needs 55 kWh by 07:30
 #     * ev_secondary: 40 kWh, plugged in all week, gentle target
@@ -390,6 +391,10 @@ def generate_scenario_3() -> None:
         "horizon_export_prices": export_prices(p),
         "horizon_confidence": [1.0] * n,
         "pv_forecast": pv_ac,
+        "pv_forecasts": {
+            "roof_east": pv_east,
+            "roof_west": pv_west,
+        },
         "base_load_forecast": base_load_curve(n),
         "battery_inputs": {
             "standalone_bat": {"soc_kwh": 5.0}

@@ -70,6 +70,9 @@ def _clip_bundle(bundle: SolveBundle, max_steps: int) -> SolveBundle:
                 "pv_forecast", "base_load_forecast"):
         d[key] = d[key][:max_steps]
 
+    for name in d["pv_forecasts"]:
+        d["pv_forecasts"][name] = d["pv_forecasts"][name][:max_steps]
+
     for inv in d["hybrid_inverter_inputs"].values():
         inv["pv_forecast_kw"] = inv["pv_forecast_kw"][:max_steps]
 

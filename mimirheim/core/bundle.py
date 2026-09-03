@@ -21,7 +21,7 @@ vocabulary between the IO layer (which populates the models) and the solver core
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class BatteryInputs(BaseModel):
@@ -290,6 +290,10 @@ class SolveBundle(BaseModel):
             flowing from the PV array into the home. Sum of all configured
             PV arrays, resampled to the 15-minute grid with a hold-previous
             step function.
+        pv_forecasts: Per-array PV forecast in kW per step, keyed by
+            pv_arrays device name. The power balance uses these; the summed
+            pv_forecast is retained for the naive-cost baseline and for
+            backward-compatible dump files.
         base_load_forecast: Forecast of non-controllable (static) household
             load in kW per step. Sum of all configured static loads, resampled
             the same way.
@@ -327,7 +331,17 @@ class SolveBundle(BaseModel):
     )
     pv_forecast: list[float] = Field(
         min_length=1,
-        description="PV generation forecast in kW per step.",
+        description="PV generation forecast in kW per step (sum of all arrays).",
+    )
+    pv_forecasts: dict[str, list[float]] = Field(
+        default_factory=dict,
+        description=(
+            "Per-array PV forecast in kW per step, keyed by pv_arrays device "
+            "name. Required whenever more than one array is configured; with "
+            "a single array it may be omitted, in which case pv_forecast is "
+            "used for that array. Kept alongside the summed pv_forecast so "
+            "older dump files stay loadable."
+        ),
     )
     base_load_forecast: list[float] = Field(
         min_length=1,
@@ -369,6 +383,35 @@ class SolveBundle(BaseModel):
             "automation when the load physically begins."
         ),
     )
+
+    @model_validator(mode="after")
+    def _pv_forecasts_consistent(self) -> "SolveBundle":
+        """Reject bundles whose per-array series disagree with the summed series.
+
+        The power balance uses ``pv_forecasts`` while the naive-cost baseline
+        uses the summed ``pv_forecast``. If the two diverge, an otherwise
+        correct schedule reports a wrong baseline and saving. The tolerance
+        of 0.005 kW per step allows for per-array values that were rounded
+        to 3 decimals independently of the rounded sum (dump files).
+        """
+        if not self.pv_forecasts:
+            return self
+        n = len(self.pv_forecast)
+        for name, series in self.pv_forecasts.items():
+            if len(series) != n:
+                raise ValueError(
+                    f"pv_forecasts[{name!r}] has {len(series)} steps but "
+                    f"pv_forecast has {n}."
+                )
+        for t in range(n):
+            total = sum(series[t] for series in self.pv_forecasts.values())
+            if abs(total - self.pv_forecast[t]) > 0.005:
+                raise ValueError(
+                    f"pv_forecasts sum to {total:.4f} kW at step {t} but "
+                    f"pv_forecast says {self.pv_forecast[t]:.4f} kW. The "
+                    "summed series must equal the per-array series."
+                )
+        return self
 
 
 class DeviceSetpoint(BaseModel):
