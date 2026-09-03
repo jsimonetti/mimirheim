@@ -386,11 +386,13 @@ class MqttClient:
         for ev_cfg in config.ev_chargers.values():
             if ev_cfg.inputs is not None:
                 def _make_ev_soc_parser(capacity_kwh: float, unit: str) -> Any:
-                    def _parse_ev_soc(raw: bytes) -> float:
-                        soc = parse_ev_inputs(raw)
+                    def _parse_ev_soc(raw: bytes) -> Any:
+                        state = parse_ev_inputs(raw)
                         if unit == "percent":
-                            return soc * capacity_kwh / 100.0
-                        return soc
+                            # Only the SOC reading is unit-converted;
+                            # target_soc_kwh is always kWh by contract.
+                            state.soc = state.soc * capacity_kwh / 100.0
+                        return state
 
                     return _parse_ev_soc
 

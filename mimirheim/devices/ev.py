@@ -23,6 +23,7 @@ This module does not import from ``mimirheim.io``. All solver interactions go th
 ``ModelContext.solver`` (a ``SolverBackend``); ``python-mip`` is never imported here.
 """
 
+import math
 from datetime import datetime
 from typing import Any
 
@@ -46,6 +47,55 @@ def _datetime_to_step(dt_value: datetime, solve_time: datetime, dt_hours: float)
     """
     delta_hours = (dt_value - solve_time).total_seconds() / 3600.0
     return max(0, int(delta_hours / dt_hours))
+
+
+def _earliest_to_step(dt_value: datetime, solve_time: datetime, dt_hours: float) -> int:
+    """Convert an earliest-charging time to the first step starting at or after it.
+
+    Steps starting before ``dt_value`` may not charge, so the conversion
+    rounds UP: an earliest time of 12:20 at quarter-hourly resolution maps
+    to step 2 (starting 12:30) — rounding down would permit charging in the
+    12:15–12:30 interval, before the window opens.
+
+    Args:
+        dt_value: The earliest charging datetime (``window_earliest``).
+        solve_time: The UTC timestamp at which this solve cycle began.
+        dt_hours: Duration of each step in hours (e.g. 0.25 for quarter-hourly).
+
+    Returns:
+        Zero-based step index, clamped to a non-negative integer. The 1e-9
+        epsilon absorbs float error so an exact step boundary maps to the
+        step starting on it.
+    """
+    delta_hours = (dt_value - solve_time).total_seconds() / 3600.0
+    return max(0, math.ceil(delta_hours / dt_hours - 1e-9))
+
+
+def _deadline_to_step(dt_value: datetime, solve_time: datetime, dt_hours: float) -> int:
+    """Convert a departure deadline to the last step that ends at or before it.
+
+    ``soc[t]`` is the state of charge at the END of step ``t``, so a deadline
+    constraint must anchor to the last step whose end does not pass the
+    deadline. A deadline exactly one hour after ``solve_time`` at
+    quarter-hourly resolution maps to step 3 (ending at +1:00), not step 4
+    (ending at +1:15) — anchoring at step 4 would count post-departure
+    charging towards the target.
+
+    Args:
+        dt_value: The departure deadline (e.g. ``window_latest``).
+        solve_time: The UTC timestamp at which this solve cycle began.
+        dt_hours: Duration of each step in hours (e.g. 0.25 for quarter-hourly).
+
+    Returns:
+        Zero-based step index, or a negative value when no step ends at or
+        before the deadline (deadline in the past or inside the first
+        interval) — callers must treat that as "no usable step" rather than
+        anchoring at step 0, which ends after the deadline. The 1e-9 epsilon
+        absorbs float error so an exact step boundary maps to the step
+        ending on it.
+    """
+    delta_hours = (dt_value - solve_time).total_seconds() / 3600.0
+    return int(delta_hours / dt_hours + 1e-9) - 1
 
 
 class EvDevice:
@@ -283,11 +333,61 @@ class EvDevice:
             return
 
         # Compute the window_latest step index if a departure window is set.
+        # The deadline anchors to the last step that ENDS at or before it.
+        #
+        # window_step is that step, or None when the deadline anchors no
+        # step in this horizon. departs_in_horizon says whether the vehicle
+        # leaves during the solved window at all, which is what gates the
+        # post-departure zero constraints below:
+        #
+        #   deadline in the past      -> expired retained value, not a
+        #                                departure: no gating (see below).
+        #   deadline inside step 0    -> the vehicle leaves before any step
+        #                                completes: no step can be anchored,
+        #                                but every step is post-departure.
+        #   deadline inside horizon   -> anchor at window_step, gate after it.
+        #   deadline beyond horizon   -> nothing to enforce this solve.
         window_step: int | None = None
-        if inputs.window_latest is not None:
-            step = _datetime_to_step(inputs.window_latest, solve_time_utc, ctx.dt)
+        departs_in_horizon = False
+        if inputs.window_latest is not None and inputs.window_latest > solve_time_utc:
+            step = _deadline_to_step(inputs.window_latest, solve_time_utc, ctx.dt)
             if step < len(ctx.T):
-                window_step = step
+                departs_in_horizon = True
+                if step >= 0:
+                    window_step = step
+
+        # Charging may not begin before window_earliest: force the charge
+        # segments to zero for every step that starts before it. Discharge
+        # (V2H) is unaffected — the window constrains charging only.
+        if inputs.window_earliest is not None:
+            earliest_step = _earliest_to_step(
+                inputs.window_earliest, solve_time_utc, ctx.dt
+            )
+            for t in ctx.T:
+                if t >= earliest_step:
+                    break
+                for i in range(len(self.config.charge_segments)):
+                    ctx.solver.add_constraint(self.charge_seg[t, i] == 0.0)
+
+        # The vehicle leaves at window_latest: no charge and no V2H discharge
+        # may be scheduled after it, or the schedule would contain setpoints
+        # for a car that is gone and the power balance would be wrong.
+        #
+        # A deadline already in the past does NOT gate anything: window_latest
+        # is published retained, so a stale value would otherwise zero every
+        # step and disable the charger permanently. A future deadline inside
+        # step 0 gates every step (last_dispatch_step is -1), since the
+        # vehicle leaves before any step completes.
+        if departs_in_horizon:
+            last_dispatch_step = window_step if window_step is not None else -1
+            for t in ctx.T:
+                if t <= last_dispatch_step:
+                    continue
+                for i in range(len(self.config.charge_segments)):
+                    ctx.solver.add_constraint(self.charge_seg[t, i] == 0.0)
+                if has_v2h:
+                    for i in range(len(self.config.discharge_segments)):
+                        ctx.solver.add_constraint(self.discharge_seg[t, i] == 0.0)
 
         for t in ctx.T:
             # --- Energy balance for SOC update ---
