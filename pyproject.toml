@@ -106,7 +106,7 @@ packages = [
 
 [dependency-groups]
 dev = [
-    "ruff>=0.14",
+    "ruff>=0.16.5",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "pytest-benchmark>=5.3.0",
