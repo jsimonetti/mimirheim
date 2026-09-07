@@ -60,6 +60,89 @@ def test_static_path_traversal_returns_400(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Content-Security-Policy (SPEC.md §11, plan 69)
+#
+# Every response -- success, 404, 403 IP-mismatch, 400 malformed request --
+# must carry the header, since a route added later that forgets it would
+# otherwise ship unnoticed. The full "does Jedison still render under this
+# policy" check is manual (plan 69 Step 6); this only checks the header's
+# presence and that it actually blocks inline/remote script execution by
+# construction (no 'unsafe-inline'/'unsafe-eval', no non-'self' host).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("GET", "/", b""),
+        ("GET", "/api/registry", b""),
+        ("GET", "/api/entry/mimirheim", b""),
+        ("GET", "/does-not-exist", b""),
+        ("POST", "/api/save", b"not json"),
+    ],
+)
+def test_every_response_carries_csp_header(
+    tmp_path: Path, method: str, path: str, body: bytes
+) -> None:
+    """Every response, success or error, carries a Content-Security-Policy header."""
+    server = _make_server(tmp_path)
+    status, headers, _ = server.handle_request(method, path, body=body)
+    assert "Content-Security-Policy" in headers
+
+
+def test_csp_header_blocks_inline_and_remote_script() -> None:
+    """The shipped policy has no unsafe-inline/unsafe-eval and no non-'self' host."""
+    from config_editor.server import _CSP_HEADER_VALUE
+
+    assert "'unsafe-inline'" not in _CSP_HEADER_VALUE
+    assert "'unsafe-eval'" not in _CSP_HEADER_VALUE
+    directives = [d.strip() for d in _CSP_HEADER_VALUE.split(";") if d.strip()]
+    for directive in directives:
+        parts = directive.split()
+        name, sources = parts[0], parts[1:]
+        if name in ("object-src", "base-uri"):
+            assert sources == ["'none'"], directive
+        else:
+            assert sources == ["'self'"], directive
+
+
+def test_ip_mismatch_403_carries_csp_header(tmp_path: Path) -> None:
+    """The IP-allowlist short-circuit in do_GET/do_POST also gets the header.
+
+    That path bypasses handle_request entirely, so it needs its own coverage
+    -- see server.py's _Handler.do_GET/do_POST.
+    """
+    server = ConfigEditorServer(config_dir=tmp_path, port=0, allowed_ip="10.0.0.1")
+    handler_cls = server._httpd.RequestHandlerClass
+
+    class _FakeHandler(handler_cls):  # type: ignore[misc, valid-type]
+        def __init__(self) -> None:
+            self.client_address = ("10.0.0.2", 12345)
+            self.sent_headers: dict[str, str] = {}
+            self.status: int | None = None
+
+        def send_response(self, status: int, message: str | None = None) -> None:
+            self.status = status
+
+        def send_header(self, key: str, value: str) -> None:
+            self.sent_headers[key] = value
+
+        def end_headers(self) -> None:
+            pass
+
+        class _NullWfile:
+            def write(self, _data: bytes) -> None:
+                pass
+
+        wfile = _NullWfile()
+
+    fake = _FakeHandler()
+    fake.do_GET()
+    assert fake.status == 403
+    assert "Content-Security-Policy" in fake.sent_headers
+
+
+# ---------------------------------------------------------------------------
 # Shared fixture data (used by the /api/save, /api/preview, and /api/entry
 # tests below).
 # ---------------------------------------------------------------------------
@@ -168,16 +251,43 @@ def test_pv_ml_learner_array_output_topic_has_enum_source(tmp_path: Path) -> Non
 # ---------------------------------------------------------------------------
 # The Supervisor's broker password must not cross the wire
 #
-# GET /api/entry/<id> never merges _mqtt_env() into its response at all (see
-# SPEC.md §12's response shape for that endpoint: {"schema", "value",
-# "enabled"} -- no mqtt_env key). That means the two tests that used to
-# assert on GET /api/config's mqtt_env key (whether the password placeholder
-# is reported, and whether the key is omitted when the env doesn't set it)
-# have no current-endpoint equivalent to port to -- see this task's final
-# report for that gap. The "does not leak" guard below still has a
-# current-endpoint home, since it holds regardless of whether mqtt_env is
-# ever exposed.
+# GET /api/entry/<id> carries a redacted "mqtt_env" key (plan 69) alongside
+# {"schema", "value", "enabled"} so the frontend can render a
+# Supervisor-provided-password placeholder for any entry -- not only
+# mimirheim.yaml's, since every helper's schema may declare its own "mqtt"
+# section too. Every actual credential value is still replaced by
+# MQTT_ENV_REDACTED before it ever reaches this response.
 # ---------------------------------------------------------------------------
+
+
+def test_get_entry_mqtt_env_reports_redacted_password(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GET /api/entry/<id>'s mqtt_env carries the redaction sentinel, not the real password."""
+    monkeypatch.setenv("MQTT_HOST", "core-mosquitto")
+    monkeypatch.setenv("MQTT_PASSWORD", "SuperSecret123")
+    server = _make_server(tmp_path)
+
+    status, _, body = _dispatch_get(server, "/api/entry/mimirheim")
+
+    assert status == 200
+    mqtt_env = json.loads(body)["mqtt_env"]
+    assert mqtt_env["host"] == "core-mosquitto"
+    assert mqtt_env["password"] == MQTT_ENV_REDACTED
+
+
+def test_get_entry_mqtt_env_empty_when_no_env_vars_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """mqtt_env is an empty dict, not omitted, when the Supervisor sets nothing (plain Docker)."""
+    for var in ("MQTT_HOST", "MQTT_PORT", "MQTT_USERNAME", "MQTT_PASSWORD", "MQTT_SSL"):
+        monkeypatch.delenv(var, raising=False)
+    server = _make_server(tmp_path)
+
+    status, _, body = _dispatch_get(server, "/api/entry/nordpool")
+
+    assert status == 200
+    assert json.loads(body)["mqtt_env"] == {}
 
 
 def test_get_entry_does_not_return_the_broker_password(

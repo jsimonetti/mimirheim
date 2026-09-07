@@ -46,7 +46,7 @@ uv run python -m config_editor --config config-editor.yaml   # run the editor
 
 Before writing any code, read:
 - `README.md` in this directory — external behaviour, HTTP API contract, configuration schema, **as currently implemented**.
-- `SPEC.md` in this directory — the schema contract: schema file format, discovery, field vocabulary, document composition, cross-references, validation, save semantics, security, and HTTP API. §2 (Discovery), §3 (`x-mimirheim` envelope), §5 (Document composition), §7 (Validation model), §8 (Save semantics), §9 (Enabled state), and §10 (Rejection rules) are **current, backend behaviour**, implemented by `registry.py` and `server.py` (plan 68). §4 (Field vocabulary) is current for every Pydantic model's schema annotations, but its frontend-rendering half (Jedison editors, `x-format`/`x-watch`/`x-template` handling) is **still a target** -- plan 69's job, along with the CSP header (§11). §6's `x-watch`/`x-template` cross-reference mechanics and the drop-in authoring CLI are plan 70's job. Where `SPEC.md` and the current implementation disagree outside these still-pending areas, treat that as a bug, not an expected gap.
+- `SPEC.md` in this directory — the schema contract: schema file format, discovery, field vocabulary, document composition, cross-references, validation, save semantics, security, and HTTP API. §2 (Discovery), §3 (`x-mimirheim` envelope), §4 (Field vocabulary, including its Jedison-rendering half -- `x-format`, `x-enumSource`, `x-watch`/`x-template`, and the `mimir-topic-placeholder` custom editor), §5 (Document composition), §6 (Cross-references), §7 (Validation model), §8 (Save semantics), §9 (Enabled state), §10 (Rejection rules), and §11 (Security, including the CSP header) are **current behaviour**, implemented by `registry.py` and `server.py` (plan 68) and `static/app.js`, `static/topic-placeholder-editor.js`, and `server.py`'s CSP header (plan 69). §6's drop-in authoring CLI is still plan 70's job. Where `SPEC.md` and the current implementation disagree outside that one still-pending area, treat that as a bug, not an expected gap.
 - `IMPLEMENTATION_DETAILS.md` in this directory — the Jedison library integration: exact API behaviour, required setup that is easy to get silently wrong, and the reasoning behind the per-entry-document architecture `SPEC.md` specifies without justifying. Relevant only to this directory's frontend; Jedison is not used anywhere else in the repo.
 - `IMPLEMENTATION_DETAILS.md` in the repo root — Pydantic conventions, docstring format, code standards.
 
@@ -92,10 +92,11 @@ mimirheim_helpers/config_editor/
         mimirheim-helper-schema.meta.json   # structural meta-schema (SPEC.md §10 rule 3)
     static/
       index.html
-      app.js
+      app.js                        # nav rail, entry construction/save/preview, deep links
+      topic-placeholder-editor.js   # the "mimir-topic-placeholder" custom Jedison editor
       style.css
       vendor/
-        jedison.umd.js        # vendored Jedison build (pinned, checksummed; see SPEC.md)
+        jedison.1.21.0.umd.js  # vendored Jedison build (pinned, checksummed; see SPEC.md)
   tests/
     conftest.py
     unit/
@@ -105,9 +106,10 @@ mimirheim_helpers/config_editor/
       test_schema_drift.py     # bundled schemas match their Pydantic models
 ```
 
-Server and CRUD tests for `server.py` itself
-(`test_config_editor_server.py`, `test_config_editor_crud_generic.py`) live
-in the root `tests/unit/` directory, not here -- see "Testing approach" below.
+Server, CRUD, and frontend-smoke tests for `server.py` and `static/` itself
+(`test_config_editor_server.py`, `test_config_editor_crud_generic.py`,
+`test_config_editor_frontend_smoke.py`) live in the root `tests/unit/`
+directory, not here -- see "Testing approach" below.
 
 ---
 
@@ -147,9 +149,17 @@ discovered and run by the root `pytest` configuration.
 - Schema drift tests (`test_schema_drift.py`): every bundled
   `schemas/bundled/<id>.schema.json` matches what
   `scripts/generate_schema_json.py` would emit today.
-- Server and CRUD tests (`tests/unit/test_config_editor_server.py` and
-  `tests/unit/test_config_editor_crud_generic.py` in the root `tests/` directory):
-  verify API behaviour in-process without a live socket.
+- Server and CRUD tests (`tests/unit/test_config_editor_server.py` in the
+  root `tests/` directory): verify API behaviour in-process without a live
+  socket, including the CSP header (SPEC.md §11) and `GET /api/entry`'s
+  redacted `mqtt_env`.
+- CRUD and frontend-smoke tests (`tests/unit/test_config_editor_crud_generic.py`
+  and `tests/unit/test_config_editor_frontend_smoke.py` in the root `tests/`
+  directory): start a real `ConfigEditorServer` on a live socket. The
+  frontend-smoke test does not execute or render any JavaScript -- it only
+  confirms `index.html` references the right scripts and that every one is
+  actually served; see that file's module docstring for what it deliberately
+  does not cover (that is plan 69's manual verification checklist's job).
 
 Write the config test first (TDD). Server behaviour is tested in the root test
 suite. Integration tests (live socket, full HTTP round-trip) require no MQTT

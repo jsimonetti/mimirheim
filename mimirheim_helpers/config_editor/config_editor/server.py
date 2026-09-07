@@ -14,10 +14,8 @@ semantics -- SPEC.md §2-§9):
 The tool's original, hardcoded-helper-list endpoints (``/api/schema``,
 ``/api/config``, ``/api/helper-configs``, ``/api/helper-schemas``,
 ``/api/helper-config/<filename>``) have been removed. ``static/app.js``
-speaks the old shapes and is non-functional against this server until
-plan 69's Jedison-based rewrite replaces it -- this is expected and
-harmless, since the config-editor rewrite (plans 68-70) does not ship until
-every plan in it has landed.
+renders every entry through the vendored Jedison library against the
+registry-backed API above (plan 69).
 
 The server uses only Python stdlib (http.server, threading, json, yaml) plus
 ``config_editor.registry`` and ``config_editor.yaml_io``. No external web
@@ -87,6 +85,28 @@ _REDACTED_MQTT_FIELDS = ("password",)
 # a wide margin while keeping a bad or hostile Content-Length from exhausting a
 # Home Assistant add-on box.
 MAX_REQUEST_BODY_BYTES = 1024 * 1024
+
+# Content-Security-Policy applied to every response (SPEC.md §11).
+#
+# script-src/style-src carry no 'unsafe-inline' or 'unsafe-eval': the vendored
+# Jedison build (checked against its source) never calls eval()/new Function()
+# and never sets inline style via the "style" attribute (only via the CSSOM
+# .style property, which style-src does not govern), so nothing needs
+# loosening for it to render. Every directive is scoped to 'self' -- no
+# response this server sends should ever cause the browser to reach off-origin,
+# which is what the offline-devtools acceptance check (SPEC.md §11) verifies.
+_CSP_HEADER_VALUE = (
+    "default-src 'self'; "
+    "script-src 'self'; "
+    "style-src 'self'; "
+    "img-src 'self'; "
+    "font-src 'self'; "
+    "connect-src 'self'; "
+    "frame-src 'self'; "
+    "object-src 'none'; "
+    "base-uri 'none'; "
+    "form-action 'self'"
+)
 
 # Path to the static files bundled with this package.
 _STATIC_DIR = Path(__file__).parent / "static"
@@ -166,16 +186,14 @@ class ConfigEditorServer:
         class _Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802
                 if server_self._allowed_ip and self.client_address[0] != server_self._allowed_ip:
-                    self.send_response(403)
-                    self.end_headers()
+                    self._send(403, {"Content-Security-Policy": _CSP_HEADER_VALUE}, b"")
                     return
                 status, headers, body = server_self.handle_request("GET", self.path, body=b"")
                 self._send(status, headers, body)
 
             def do_POST(self) -> None:  # noqa: N802
                 if server_self._allowed_ip and self.client_address[0] != server_self._allowed_ip:
-                    self.send_response(403)
-                    self.end_headers()
+                    self._send(403, {"Content-Security-Policy": _CSP_HEADER_VALUE}, b"")
                     return
                 raw_length = self.headers.get("Content-Length", "0")
                 try:
@@ -206,11 +224,11 @@ class ConfigEditorServer:
             def _reject(self, status: int, message: str) -> None:
                 """Send a JSON error response without touching the request body."""
                 payload = json.dumps({"ok": False, "error": message}).encode()
-                self.send_response(status)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(payload)))
-                self.end_headers()
-                self.wfile.write(payload)
+                self._send(
+                    status,
+                    {"Content-Type": "application/json", "Content-Security-Policy": _CSP_HEADER_VALUE},
+                    payload,
+                )
 
             def _send(self, status: int, headers: dict[str, str], body: bytes) -> None:
                 def _sanitize_header_component(component: str) -> str:
@@ -307,7 +325,9 @@ class ConfigEditorServer:
 
         This method is called both by the real HTTP handler (do_GET / do_POST)
         and directly by unit tests, which avoids the need for a live socket in
-        unit tests.
+        unit tests. Every response is given a Content-Security-Policy header
+        here, in this one place, so no route can be added later that forgets
+        it (SPEC.md §11).
 
         Args:
             method: HTTP method ("GET" or "POST").
@@ -318,6 +338,13 @@ class ConfigEditorServer:
         Returns:
             A three-tuple of (HTTP status code, response headers dict, body bytes).
         """
+        status, headers, resp_body = self._route(method, path, body)
+        return status, {**headers, "Content-Security-Policy": _CSP_HEADER_VALUE}, resp_body
+
+    def _route(
+        self, method: str, path: str, body: bytes
+    ) -> tuple[int, dict[str, str], bytes]:
+        """The actual request routing table; see :meth:`handle_request`."""
         # Strip query string.
         path = path.split("?")[0]
 
@@ -501,6 +528,13 @@ class ConfigEditorServer:
         Both ``context`` (for every entry but mimirheim.yaml's own) and the
         current file content are rebuilt from disk on every call -- no
         in-memory cache is kept across requests (SPEC.md §5 Decision 5).
+
+        The response also carries ``mqtt_env``: the env-supplied mqtt fields
+        with credentials redacted (:meth:`_mqtt_env_for_client`), for every
+        entry, not only mimirheim.yaml's own -- every entry's schema may carry
+        its own ``mqtt`` section. Without this, the frontend has no way to
+        render a Supervisor-provided-password placeholder or to know which
+        mqtt fields it should treat as read-only-unless-overridden.
         """
         entry = self._registry.get(entry_id)
         if entry is None:
@@ -518,7 +552,15 @@ class ConfigEditorServer:
             mimirheim_config = self._read_yaml_file(self._config_dir / registry.MIMIRHEIM_YAML_FILE)
             value = {**value, "context": registry.build_context(mimirheim_config)}
 
-        return self._json_response(200, {"schema": schema, "value": value, "enabled": enabled})
+        return self._json_response(
+            200,
+            {
+                "schema": schema,
+                "value": value,
+                "enabled": enabled,
+                "mqtt_env": self._mqtt_env_for_client(),
+            },
+        )
 
     def _api_post_save(self, body: bytes) -> tuple[int, dict[str, str], bytes]:
         """Validate-all-then-write-all the submitted entries (SPEC.md §8)."""

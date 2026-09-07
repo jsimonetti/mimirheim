@@ -1,37 +1,107 @@
-/* mimirheim config editor — minimal stylesheet, no framework */
+/* mimirheim config editor -- design tokens, spacing scale, light/dark via
+   prefers-color-scheme. No framework, no build step.
+
+   The vendored Jedison library (static/vendor/jedison.*.umd.js) renders its
+   own DOM structure under a fixed set of "jedi-*" classes but ships no CSS
+   of its own (verified against the published npm package before writing
+   this file) -- everything below styling those classes is this project's
+   own, not a copy of an upstream theme. */
 
 *, *::before, *::after {
   box-sizing: border-box;
 }
 
 :root {
-  --color-bg: #f8f9fa;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+
+  --radius: 6px;
+  --radius-sm: 4px;
+
+  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+
+  --color-bg: #f7f8fa;
   --color-surface: #ffffff;
-  --color-border: #dee2e6;
+  --color-surface-raised: #ffffff;
+  --color-border: #dfe3e8;
+  --color-text: #1a1d21;
+  --color-text-muted: #667085;
   --color-primary: #0d6efd;
   --color-primary-hover: #0b5ed7;
+  --color-primary-contrast: #ffffff;
   --color-danger: #dc3545;
-  --color-muted: #6c757d;
-  --color-error-bg: #fff5f5;
-  --color-error-border: #f5c2c7;
-  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
-  --radius: 4px;
+  --color-danger-bg: #fff5f5;
+  --color-danger-border: #f5c2c7;
+  --color-info-bg: #e8f4fd;
+  --color-info-border: #b6d4f7;
+  --color-warning: #d97706;
+  --color-nav-hover: #eef1f4;
+  --color-nav-active-bg: #e8f0fe;
+  --color-shadow: rgba(16, 24, 40, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #14161a;
+    --color-surface: #1c1f24;
+    --color-surface-raised: #24272d;
+    --color-border: #33373f;
+    --color-text: #e6e8eb;
+    --color-text-muted: #9aa2ad;
+    --color-primary: #4d8dff;
+    --color-primary-hover: #6ea0ff;
+    --color-primary-contrast: #0b0d10;
+    --color-danger: #f1707d;
+    --color-danger-bg: #3a1f22;
+    --color-danger-border: #6b2b32;
+    --color-info-bg: #1c2b3a;
+    --color-info-border: #2c4a63;
+    --color-warning: #e0a340;
+    --color-nav-hover: #2a2e35;
+    --color-nav-active-bg: #223049;
+    --color-shadow: rgba(0, 0, 0, 0.4);
+  }
+}
+
+html, body {
+  height: 100%;
 }
 
 body {
   margin: 0;
   font-family: var(--font);
   font-size: 14px;
+  line-height: 1.45;
   background: var(--color-bg);
-  color: #212529;
+  color: var(--color-text);
 }
 
-/* Header */
+button, input, select, textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--color-primary);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Header                                                                  */
+/* ---------------------------------------------------------------------- */
+
 header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 1.25rem;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
 }
@@ -39,50 +109,332 @@ header {
 #header-left {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 header h1 {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   font-weight: 600;
 }
 
 #save-bar {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
-/* Mode switcher (Reports / Config) */
 #mode-bar {
   display: flex;
-  gap: 0;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
 
 .mode-btn {
-  padding: 0.25rem 0.75rem;
+  padding: var(--space-1) var(--space-3);
   background: none;
   border: none;
   cursor: pointer;
   font-size: 0.85rem;
-  color: var(--color-muted);
+  color: var(--color-text-muted);
 }
 
 .mode-btn:hover {
-  background: var(--color-bg);
-  color: #212529;
+  background: var(--color-nav-hover);
+  color: var(--color-text);
 }
 
 .mode-btn.active {
   background: var(--color-primary);
-  color: #fff;
+  color: var(--color-primary-contrast);
 }
 
-/* Reports pane — full-height iframe container */
+#save-status {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  min-width: 1px;
+}
+
+#preview-btn, #save-btn {
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+#preview-btn {
+  background: none;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+#preview-btn:hover {
+  background: var(--color-nav-hover);
+}
+
+#save-btn {
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+}
+
+#save-btn:hover {
+  background: var(--color-primary-hover);
+}
+
+#save-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Layout: nav rail + entry content                                        */
+/* ---------------------------------------------------------------------- */
+
+#config-layout {
+  display: flex;
+  align-items: flex-start;
+  min-height: calc(100vh - 57px);
+}
+
+#entry-nav {
+  flex: 0 0 220px;
+  padding: var(--space-4) var(--space-2);
+  border-right: 1px solid var(--color-border);
+  background: var(--color-surface);
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  max-height: 100vh;
+  overflow-y: auto;
+}
+
+.nav-category {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  margin: var(--space-4) var(--space-2) var(--space-1);
+}
+
+.nav-category:first-child {
+  margin-top: 0;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: 2px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.88rem;
+  color: var(--color-text);
+}
+
+.nav-item:hover {
+  background: var(--color-nav-hover);
+}
+
+.nav-item.active {
+  background: var(--color-nav-active-bg);
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.nav-item-disabled {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.nav-item-dirty-dot,
+.jedi-nav-warning-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.nav-item-dirty-dot {
+  background: var(--color-primary);
+}
+
+.jedi-nav-warning-dot {
+  background: var(--color-danger);
+  margin-left: auto;
+}
+
+.nav-problems {
+  margin: 0 var(--space-2) var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+}
+
+.nav-problems ul {
+  margin: var(--space-2) 0 0;
+  padding-left: 1.1rem;
+}
+
+#entry-content {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-5);
+  max-width: 900px;
+}
+
+.entry-pane, .entry-placeholder {
+  max-width: 100%;
+}
+
+.entry-chrome {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.entry-enable-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.entry-docs-link {
+  font-size: 0.85rem;
+}
+
+.entry-placeholder {
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+}
+
+.entry-placeholder button {
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.fatal-error {
+  color: var(--color-danger);
+  padding: var(--space-5);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Banners                                                                 */
+/* ---------------------------------------------------------------------- */
+
+.info-banner {
+  background: var(--color-info-bg);
+  border: 1px solid var(--color-info-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  font-size: 0.85rem;
+}
+
+.error-banner {
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  font-size: 0.85rem;
+}
+
+.error-banner ul {
+  margin: var(--space-2) 0 0;
+  padding-left: 1.2rem;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Modal (exclusive-group warning, preview diff)                          */
+/* ---------------------------------------------------------------------- */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: var(--space-4);
+}
+
+.modal-dialog {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  padding: var(--space-5);
+  max-width: 480px;
+  width: 100%;
+  box-shadow: 0 8px 30px var(--color-shadow);
+}
+
+.modal-dialog-wide {
+  max-width: 720px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.modal-dialog h2 {
+  margin-top: 0;
+}
+
+.modal-dialog pre {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.modal-actions button, .modal-dialog-wide > button {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.modal-confirm-danger {
+  background: var(--color-danger) !important;
+  border-color: var(--color-danger) !important;
+  color: #fff !important;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Reports pane                                                            */
+/* ---------------------------------------------------------------------- */
+
 #reports-pane {
   display: none;
   overflow: hidden;
@@ -96,402 +448,262 @@ header h1 {
 }
 
 .reports-unavailable {
-  padding: 2rem 1.5rem;
-  color: var(--color-muted);
-  font-size: 0.9rem;
+  padding: var(--space-6) var(--space-5);
+  color: var(--color-text-muted);
 }
 
-#save-status {
-  font-size: 0.85rem;
-  color: var(--color-muted);
-}
+/* ---------------------------------------------------------------------- */
+/* Jedison-rendered form styling ("jedi-*" classes, no upstream CSS ships) */
+/* ---------------------------------------------------------------------- */
 
-#save-btn {
-  padding: 0.4rem 1rem;
-  background: var(--color-primary);
-  color: #fff;
+.jedi-editor-fieldset {
   border: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+}
+
+.jedi-editor-fieldset .jedi-editor-fieldset {
+  border: 1px solid var(--color-border);
   border-radius: var(--radius);
-  cursor: pointer;
-  font-size: 0.9rem;
-}
-
-#save-btn:hover {
-  background: var(--color-primary-hover);
-}
-
-#save-btn:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-/* Tab bar */
-#tab-bar {
-  display: flex;
-  gap: 0;
-  padding: 0 1.25rem;
+  padding: var(--space-4);
+  margin-bottom: var(--space-3);
   background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
 }
 
-.tab-btn {
-  padding: 0.6rem 1rem;
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  cursor: pointer;
-  font-size: 0.9rem;
-  color: var(--color-muted);
-}
-
-.tab-btn:hover {
-  color: #212529;
-}
-
-.tab-btn.active {
-  color: var(--color-primary);
-  border-bottom-color: var(--color-primary);
-}
-
-/* Tab group (helpers dropdown) */
-.tab-group {
-  position: relative;
-  display: inline-flex;
-  align-items: stretch;
-}
-
-.tab-group-btn {
-  padding: 0.6rem 1rem;
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  cursor: pointer;
-  font-size: 0.9rem;
-  color: var(--color-muted);
-  white-space: nowrap;
+.jedi-editor-legend {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
-}
-
-.tab-group-btn:hover {
-  color: #212529;
-}
-
-.tab-group-btn.active {
-  color: var(--color-primary);
-  border-bottom-color: var(--color-primary);
-}
-
-.tab-group-caret {
-  font-size: 0.7rem;
-  opacity: 0.7;
-}
-
-.tab-group-menu {
-  display: none;
-  position: absolute;
-  top: 100%;
-  left: 0;
-  z-index: 100;
-  list-style: none;
-  margin: 0;
-  padding: 0.25rem 0;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  min-width: 160px;
-}
-
-.tab-group-menu.open {
-  display: block;
-}
-
-.tab-group-item {
-  padding: 0.5rem 1rem;
-  cursor: pointer;
-  font-size: 0.9rem;
-  color: #212529;
-  white-space: nowrap;
-}
-
-.tab-group-item:hover {
-  background: var(--color-bg);
-}
-
-.tab-group-item.active {
-  color: var(--color-primary);
-  font-weight: 500;
-}
-
-/* Content pane */
-#content-pane {
-  padding: 1.25rem;
-  max-width: 900px;
-}
-
-/* Form layout */
-.form-section {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  padding: 1rem 1.25rem;
-  margin-bottom: 1rem;
-}
-
-.form-section h2 {
-  font-size: 0.9rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--color-muted);
-  margin: 0 0 0.75rem 0;
-}
-
-.field-row {
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 0.75rem;
-}
-
-.field-row label {
-  font-size: 0.85rem;
-  font-weight: 500;
-  margin-bottom: 0.25rem;
-}
-
-.field-row input[type="text"],
-.field-row input[type="number"],
-.field-row select {
-  padding: 0.35rem 0.5rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  font-size: 0.9rem;
-  max-width: 320px;
-}
-
-.field-row input[type="checkbox"] {
-  margin-top: 0.25rem;
-}
-
-.field-row .field-hint {
-  font-size: 0.8rem;
-  color: var(--color-muted);
-  margin-top: 0.2rem;
-}
-
-.field-row .topic-derived-hint {
-  font-size: 0.8rem;
-  color: var(--color-muted);
-  font-style: italic;
-  margin-top: 0.15rem;
-}
-
-.field-row .field-unit {
-  font-size: 0.8rem;
-  color: var(--color-muted);
-  margin-top: 0.2rem;
-}
-
-/* Advanced toggle */
-.advanced-toggle {
-  margin-top: 0.5rem;
-  font-size: 0.82rem;
-  color: var(--color-primary);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-}
-
-.advanced-fields {
-  margin-top: 0.5rem;
-  padding-left: 0.75rem;
-  border-left: 2px solid var(--color-border);
-}
-
-.advanced-fields.hidden {
-  display: none;
-}
-
-/* CRUD component */
-.crud-container {
-  display: flex;
-  gap: 1rem;
-  align-items: flex-start;
-}
-
-.crud-list-panel {
-  width: 220px;
-  flex-shrink: 0;
-}
-
-.crud-detail-panel {
-  flex: 1;
-}
-
-.crud-instance-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-
-.crud-instance-item {
-  display: flex;
   justify-content: space-between;
+  width: 100%;
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 0 0 var(--space-2);
+}
+
+.jedi-editor-legend-left, .jedi-editor-legend-right {
+  display: flex;
   align-items: center;
-  padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--color-border);
-  cursor: pointer;
-  font-size: 0.9rem;
-  background: var(--color-surface);
+  gap: var(--space-2);
 }
 
-.crud-instance-item:last-child {
-  border-bottom: none;
-}
-
-.crud-instance-item.selected {
-  background: #e8f0fe;
-  color: var(--color-primary);
+.jedi-title {
   font-weight: 500;
+  display: block;
+  margin-bottom: var(--space-1);
 }
 
-.crud-instance-item .remove-btn {
-  background: none;
-  border: none;
-  color: var(--color-danger);
-  cursor: pointer;
+.jedi-legend .jedi-title {
+  font-weight: 600;
+  margin-bottom: 0;
+}
+
+.jedi-description {
   font-size: 0.8rem;
-  padding: 0;
-  opacity: 0;
+  color: var(--color-text-muted);
+  margin: 0 0 var(--space-2);
 }
 
-.crud-instance-item:hover .remove-btn,
-.crud-instance-item.selected .remove-btn {
-  opacity: 1;
-}
-
-.crud-add-row {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-}
-
-.crud-add-row input {
-  flex: 1;
-  min-width: 0;
-  padding: 0.35rem 0.5rem;
+.jedi-control-slot input[type="text"],
+.jedi-control-slot input[type="number"],
+.jedi-control-slot input[type="password"],
+.jedi-control-slot input[type="email"],
+.jedi-control-slot input[type="url"],
+.jedi-control-slot input:not([type]),
+.jedi-control-slot select,
+.jedi-control-slot textarea {
+  width: 100%;
+  max-width: 420px;
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  font-size: 0.85rem;
-}
-
-.crud-add-row button {
-  padding: 0.35rem 0.75rem;
-  background: var(--color-primary);
-  color: #fff;
-  border: none;
-  border-radius: var(--radius);
-  cursor: pointer;
-  font-size: 0.85rem;
-  white-space: nowrap;
-}
-
-.crud-empty-hint {
-  font-size: 0.85rem;
-  color: var(--color-muted);
-  padding: 0.75rem;
+  border-radius: var(--radius-sm);
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  color: var(--color-text);
 }
 
-/* Error display */
-.error-banner {
-  background: var(--color-error-bg);
-  border: 1px solid var(--color-error-border);
-  border-radius: var(--radius);
-  padding: 0.75rem 1rem;
-  margin-bottom: 1rem;
-  font-size: 0.85rem;
-}
-
-.error-banner ul {
-  margin: 0.25rem 0 0 0;
-  padding-left: 1.2rem;
-}
-
-.info-banner {
-  background: #e8f4fd;
-  border: 1px solid #b6d4f7;
-  border-radius: var(--radius);
-  padding: 0.75rem 1rem;
-  margin-bottom: 1rem;
-  font-size: 0.85rem;
-}
-
-/* Sub-list (array of objects like segments) */
-.sublist-container {
-  margin-top: 0.5rem;
-}
-
-.sublist-item {
-  display: flex;
-  gap: 0.5rem;
-  align-items: flex-end;
-  margin-bottom: 0.5rem;
-  padding: 0.5rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+.jedi-control-slot input:disabled,
+.jedi-control-slot input[always-disabled],
+.jedi-control-slot select:disabled {
   background: var(--color-bg);
+  color: var(--color-text-muted);
 }
 
-/* label + input column inside a sublist item */
-.sublist-field {
+.jedi-control-slot textarea {
+  min-height: 5rem;
+}
+
+.jedi-properties-slot {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
-  flex: 1;
-  min-width: 0;
+  gap: var(--space-3);
 }
 
-.sublist-field label {
-  font-size: 0.78rem;
-  color: var(--color-muted);
+.jedi-properties-group {
+  padding: var(--space-2) 0;
+}
+
+.jedi-checkbox-control {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.jedi-error-message {
+  color: var(--color-danger);
+  font-size: 0.8rem;
+  margin-top: var(--space-1);
+}
+
+.jedi-warning-message {
+  color: var(--color-warning);
+  font-size: 0.8rem;
+  margin-top: var(--space-1);
+}
+
+/* Basic/Advanced (categories-vertical) and nav-vertical tabs share this
+   tab-strip shape. */
+.jedi-nav-list {
+  display: flex;
+  gap: var(--space-1);
+  list-style: none;
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.jedi-nav-link {
+  display: inline-block;
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  color: var(--color-text-muted);
+  border-bottom: 2px solid transparent;
+  text-decoration: none;
+}
+
+.jedi-nav-link:hover {
+  color: var(--color-text);
+}
+
+.jedi-nav-link.active, .jedi-nav-link[aria-selected="true"] {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
   font-weight: 500;
 }
 
-.sublist-field input {
-  padding: 0.3rem 0.5rem;
+.jedi-nav-warning {
+  color: var(--color-danger);
+}
+
+/* Array items (pv_arrays, batteries, etc.) */
+.jedi-array-item {
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
+  padding: var(--space-4);
+  margin-bottom: var(--space-3);
+  background: var(--color-surface);
+}
+
+.jedi-array-item-index {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.jedi-array-footer, .jedi-array-actions-slot {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+/* Generic buttons Jedison renders for add/remove/move/collapse actions. */
+.jedi-btn {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
   font-size: 0.85rem;
-  min-width: 0;
-  width: 100%;
 }
 
-.sublist-item .remove-subitem-btn {
-  padding: 0.3rem 0.6rem;
-  background: none;
-  border: 1px solid var(--color-danger);
+.jedi-btn:hover {
+  background: var(--color-nav-hover);
+}
+
+.jedi-array-delete, .jedi-array-delete-all {
+  border-color: var(--color-danger);
   color: var(--color-danger);
-  border-radius: var(--radius);
-  cursor: pointer;
-  font-size: 0.8rem;
-  white-space: nowrap;
 }
 
-.add-subitem-btn {
-  padding: 0.3rem 0.75rem;
-  background: none;
-  border: 1px solid var(--color-primary);
-  color: var(--color-primary);
-  border-radius: var(--radius);
-  cursor: pointer;
-  font-size: 0.82rem;
+.jedi-btn-group {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.jedi-deprecated {
+  opacity: 0.6;
+}
+
+/* Row/col utility classes Jedison's default theme emits for horizontal
+   layouts -- implemented as flexbox rather than a fixed 12-column grid,
+   since only "lay these out side by side, wrap on narrow screens" is
+   actually needed here. */
+.jedi-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.jedi-col, [class*="jedi-col-"] {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Phone width -- nav rail collapses above the content instead of beside it */
+/* ---------------------------------------------------------------------- */
+
+@media (max-width: 640px) {
+  #config-layout {
+    flex-direction: column;
+  }
+
+  #entry-nav {
+    flex: none;
+    width: 100%;
+    max-height: none;
+    position: static;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+  }
+
+  .nav-category {
+    flex-basis: 100%;
+    margin: var(--space-2) 0 0;
+  }
+
+  .nav-item {
+    width: auto;
+  }
+
+  #entry-content {
+    padding: var(--space-4);
+  }
+
+  header {
+    padding: var(--space-2) var(--space-3);
+  }
+
+  #save-bar {
+    flex-wrap: wrap;
+  }
+
+  .jedi-control-slot input,
+  .jedi-control-slot select,
+  .jedi-control-slot textarea {
+    max-width: 100%;
+  }
 }

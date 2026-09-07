@@ -17,23 +17,33 @@
     </div>
     <div id="save-bar">
       <span id="save-status"></span>
+      <button id="preview-btn" type="button">Preview</button>
       <button id="save-btn" type="button">Save</button>
     </div>
   </header>
 
-  <nav id="tab-bar">
-    <!-- Tab buttons are injected by app.js -->
-  </nav>
+  <div id="config-layout">
+    <nav id="entry-nav" aria-label="Config entries">
+      <!-- Nav rail is built by app.js from GET /api/registry -->
+    </nav>
+
+    <main id="entry-content">
+      <p id="loading-msg">Loading&hellip;</p>
+      <!-- One container per opened entry is mounted here by app.js;
+           only the active entry's container is visible at a time. -->
+    </main>
+  </div>
 
   <div id="reports-pane">
     <!-- Filled by app.js when switching to reports mode -->
   </div>
 
-  <main id="content-pane">
-    <!-- Active tab content is rendered here by app.js -->
-    <p id="loading-msg">Loading&hellip;</p>
-  </main>
+  <div id="modal-root">
+    <!-- Confirmation dialogs (exclusive-group deletion warning, preview diff) -->
+  </div>
 
+  <script src="static/vendor/jedison.1.21.0.umd.js"></script>
+  <script src="static/topic-placeholder-editor.js"></script>
   <script src="static/app.js"></script>
 </body>
 </html>

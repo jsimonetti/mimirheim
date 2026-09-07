@@ -156,7 +156,7 @@ helper, bundled or drop-in) is discovered and validated the same way -- see
 | `GET` | `/` | Single-page editor frontend |
 | `GET` | `/static/<file>` | Frontend static assets |
 | `GET` | `/api/registry` | Every discovered entry: id, its `x-mimirheim` fields, `enabled` (file exists), and load-time rejection problems |
-| `GET` | `/api/entry/<id>` | `{"schema": ..., "value": ..., "enabled": bool}` for one entry, rebuilt from disk on every call |
+| `GET` | `/api/entry/<id>` | `{"schema": ..., "value": ..., "enabled": bool, "mqtt_env": {...}}` for one entry, rebuilt from disk on every call. `mqtt_env` carries the HA Supervisor's env-supplied mqtt fields, with any credential redacted |
 | `POST` | `/api/save` | Body `{"entries": {"<id>": {"enabled": true, "config": {...}} \| {"enabled": false}, ...}}`. Validate-all-then-write-all over the submitted entries. Returns `{"ok": true}` or `{"ok": false, "errors": {"<id>": [...]}}` |
 | `POST` | `/api/preview` | Same request shape as `/api/save`. Returns `{"ok": true, "diffs": {"<filename>": "<unified diff>", ...}}` and writes nothing |
 | `POST` | `/api/reload` | Re-runs discovery without restarting the process. Returns the same shape as `GET /api/registry` |
@@ -164,9 +164,8 @@ helper, bundled or drop-in) is discovered and validated the same way -- see
 There is no deprecated API. The tool's original, hardcoded-helper-list
 endpoints (`/api/schema`, `/api/config`, `/api/helper-configs`,
 `/api/helper-schemas`, `/api/helper-config/<filename>`) have been removed.
-`static/app.js` speaks the old shapes and is non-functional against this
-server until plan 69's frontend rewrite replaces it -- expected, since the
-config-editor rewrite does not ship until every plan in it has landed.
+`static/app.js` renders every entry through the vendored Jedison library
+against the endpoints above.
 
 All responses are `application/json`. Status codes: 200 success, 400
 malformed JSON or bad `Content-Length`, 403 disallowed IP, 404 unknown entry
@@ -202,3 +201,7 @@ can read and write all config files in `/config` including MQTT passwords.
 When running as a HA add-on, ingress provides HA session-based authentication
 and the `allowed_ip` restriction further limits accepted connections to the
 ingress proxy. Direct LAN access returns HTTP 403.
+
+Every response carries a Content-Security-Policy header restricting scripts,
+styles, and every other resource to the server's own origin, with no
+`unsafe-inline`/`unsafe-eval` (SPEC.md §11).
