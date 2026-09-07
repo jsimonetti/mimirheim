@@ -1069,6 +1069,32 @@ def test_post_preview_deletion_diff_does_not_delete(tmp_path: Path) -> None:
     assert "nordpool.yaml" in data["diffs"]
 
 
+def test_post_preview_shows_a_key_deleted_by_omission(tmp_path: Path) -> None:
+    """A save deletes keys absent from the submitted config -- the preview diff must show it.
+
+    This is Decision 3's motivating scenario (plan 70): a user removing a
+    field's value in the form is not obviously "delete this YAML key
+    entirely" rather than "revert to a default" -- the preview diff is what
+    makes that visible before the user confirms.
+    """
+    with_output_topic = {**_MINIMAL_NORDPOOL, "output_topic": "mimir/input/prices"}
+    (tmp_path / "nordpool.yaml").write_text(yaml.dump(with_output_topic))
+    server = _make_server(tmp_path)
+
+    status, _headers, body = _dispatch_post(
+        server,
+        "/api/preview",
+        {"entries": {"nordpool": {"enabled": True, "config": _MINIMAL_NORDPOOL}}},
+    )
+
+    assert status == 200, json.loads(body)
+    data = json.loads(body)
+    diff = data["diffs"]["nordpool.yaml"]
+    assert "-output_topic: mimir/input/prices" in diff
+    loaded = yaml.safe_load((tmp_path / "nordpool.yaml").read_text())
+    assert loaded["output_topic"] == "mimir/input/prices"  # untouched -- preview never writes
+
+
 # ---------------------------------------------------------------------------
 # POST /api/reload
 # ---------------------------------------------------------------------------

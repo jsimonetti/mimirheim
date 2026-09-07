@@ -46,7 +46,7 @@ uv run python -m config_editor --config config-editor.yaml   # run the editor
 
 Before writing any code, read:
 - `README.md` in this directory — external behaviour, HTTP API contract, configuration schema, **as currently implemented**.
-- `SPEC.md` in this directory — the schema contract: schema file format, discovery, field vocabulary, document composition, cross-references, validation, save semantics, security, and HTTP API. §2 (Discovery), §3 (`x-mimirheim` envelope), §4 (Field vocabulary, including its Jedison-rendering half -- `x-format`, `x-enumSource`, `x-watch`/`x-template`, and the `mimir-topic-placeholder` custom editor), §5 (Document composition), §6 (Cross-references), §7 (Validation model), §8 (Save semantics), §9 (Enabled state), §10 (Rejection rules), and §11 (Security, including the CSP header) are **current behaviour**, implemented by `registry.py` and `server.py` (plan 68) and `static/app.js`, `static/topic-placeholder-editor.js`, and `server.py`'s CSP header (plan 69). §6's drop-in authoring CLI is still plan 70's job. Where `SPEC.md` and the current implementation disagree outside that one still-pending area, treat that as a bug, not an expected gap.
+- `SPEC.md` in this directory — the schema contract: schema file format, discovery, field vocabulary, document composition, cross-references, validation, save semantics, security, and HTTP API. Every section is **current behaviour**, implemented by `registry.py` and `server.py` (plan 68), `static/app.js`, `static/topic-placeholder-editor.js`, and `server.py`'s CSP header (plan 69), and the `--validate-schemas` CLI, the `POST /api/preview` diff computation, and the review-changes save step (plan 70). Where `SPEC.md` and the current implementation disagree, treat that as a bug, not an expected gap.
 - `IMPLEMENTATION_DETAILS.md` in this directory — the Jedison library integration: exact API behaviour, required setup that is easy to get silently wrong, and the reasoning behind the per-entry-document architecture `SPEC.md` specifies without justifying. Relevant only to this directory's frontend; Jedison is not used anywhere else in the repo.
 - `IMPLEMENTATION_DETAILS.md` in the repo root — Pydantic conventions, docstring format, code standards.
 
@@ -71,12 +71,15 @@ without exception:
 ```
 mimirheim_helpers/config_editor/
   README.md                   # external specification (authoritative, current implementation)
-  SPEC.md                    # schema contract specification (authoritative; see "Source of truth" above for what is current vs. target)
+  SPEC.md                    # schema contract specification (authoritative, current implementation)
   IMPLEMENTATION_DETAILS.md  # Jedison integration details (authoritative)
   AGENTS.md                   # this file
   config_editor/
     __init__.py
-    __main__.py               # entry point: config load, server start, signal handling
+    __main__.py               # entry point: config load, server start, signal handling,
+                                # --validate-schemas dispatch
+    cli.py                     # --validate-schemas: runs registry.build_registry and
+                                # prints one OK/REJECTED line per schema file (plan 70)
     config.py                 # ConfigEditorConfig Pydantic model; load_config()
     registry.py                # schema discovery, meta-schema validation, context
                                 # composition, two-pass validation, save semantics
@@ -92,19 +95,36 @@ mimirheim_helpers/config_editor/
         mimirheim-helper-schema.meta.json   # structural meta-schema (SPEC.md §10 rule 3)
     static/
       index.html
-      app.js                        # nav rail, entry construction/save/preview, deep links
+      app.js                        # nav rail, entry construction/save/preview
+                                     # (including the pre-save review-changes step,
+                                     # plan 70), deep links
       topic-placeholder-editor.js   # the "mimir-topic-placeholder" custom Jedison editor
       style.css
       vendor/
         jedison.1.21.0.umd.js  # vendored Jedison build (pinned, checksummed; see SPEC.md)
+  examples/
+    schemas/
+      solaredge.schema.json              # complete worked drop-in schema (plan 70);
+                                          # tested against the real registry
+      broken-example.schema.json.txt     # deliberately invalid; .txt so live discovery
+                                          # ignores it; used by the wiki troubleshooting
+                                          # section and by a test
   tests/
     conftest.py
     unit/
+      test_cli.py               # --validate-schemas: OK/REJECTED output, exit codes
       test_config.py          # ConfigEditorConfig schema and load_config() tests
+      test_examples.py         # examples/schemas/* load cleanly (or fail exactly as
+                                # documented)
       test_registry.py         # registry.py: rejection rules, discovery, composition,
                                 # validation, save semantics
       test_schema_drift.py     # bundled schemas match their Pydantic models
 ```
+
+The drop-in authoring wiki page, `wiki/Developer/Custom-Config-Schemas.md`,
+documents `x-mimirheim`, the field vocabulary, `--validate-schemas`, and the
+worked example above for a third-party author who has never read this
+directory's source.
 
 Server, CRUD, and frontend-smoke tests for `server.py` and `static/` itself
 (`test_config_editor_server.py`, `test_config_editor_crud_generic.py`,
@@ -149,6 +169,12 @@ discovered and run by the root `pytest` configuration.
 - Schema drift tests (`test_schema_drift.py`): every bundled
   `schemas/bundled/<id>.schema.json` matches what
   `scripts/generate_schema_json.py` would emit today.
+- CLI tests (`test_cli.py`): `--validate-schemas`' OK/REJECTED output and
+  exit codes, against real (not mocked) `registry.build_registry` discovery.
+- Example schema tests (`test_examples.py`): `examples/schemas/solaredge.schema.json`
+  loads with zero rejections and exercises the vocabulary the wiki page
+  claims it does; `broken-example.schema.json.txt` produces the exact
+  rejection reason the wiki page documents.
 - Server and CRUD tests (`tests/unit/test_config_editor_server.py` in the
   root `tests/` directory): verify API behaviour in-process without a live
   socket, including the CSP header (SPEC.md §11) and `GET /api/entry`'s

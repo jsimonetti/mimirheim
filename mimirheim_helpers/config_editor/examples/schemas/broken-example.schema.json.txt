@@ -1,0 +1,13 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "title": "BrokenExampleConfig",
+  "description": "Deliberately invalid worked example (plan 70): missing the required x-mimirheim envelope (SPEC.md §3). Kept with a .txt extension so the discovery scanner ignores it as a live schema -- copy it to <config_dir>/schemas/broken-example.schema.json to see --validate-schemas reject it.",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "title": "Enabled",
+      "default": true
+    }
+  }
+}

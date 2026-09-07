@@ -214,3 +214,42 @@ class TestConfigEditorMain:
             self._run_main_until_shutdown(tmp_path, monkeypatch, cfg)
 
         assert captured["level"] == logging.DEBUG
+
+    def test_config_is_required_unless_validate_schemas_is_given(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(sys, "argv", ["config_editor"])
+
+        with pytest.raises(SystemExit) as exc:
+            ce_main.main()
+
+        assert exc.value.code == 2  # argparse usage error
+
+    def test_validate_schemas_requires_config_dir(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(sys, "argv", ["config_editor", "--validate-schemas"])
+
+        with pytest.raises(SystemExit) as exc:
+            ce_main.main()
+
+        assert exc.value.code == 2  # argparse usage error
+
+    def test_validate_schemas_calls_cli_and_exits_with_its_code(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """--validate-schemas must never start the server -- it validates and exits."""
+        monkeypatch.setattr(
+            sys, "argv", ["config_editor", "--validate-schemas", "--config-dir", str(tmp_path)]
+        )
+
+        with (
+            patch.object(ce_main.cli, "validate_schemas", return_value=1) as validate,
+            patch.object(ce_main, "ConfigEditorServer") as server_cls,
+        ):
+            with pytest.raises(SystemExit) as exc:
+                ce_main.main()
+
+        validate.assert_called_once_with(tmp_path)
+        server_cls.assert_not_called()
+        assert exc.value.code == 1

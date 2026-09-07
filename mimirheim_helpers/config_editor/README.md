@@ -53,6 +53,15 @@ form. Submitting the form sends the edited dict as a POST body; the server
 validates it against the Pydantic model before writing the file, so invalid
 configurations are rejected before they can break anything.
 
+Before a save is actually written, the frontend calls `POST /api/preview` --
+the same merge/write code `POST /api/save` uses, up to but not including the
+final atomic write -- and shows the resulting diff for every touched file in
+a confirmation dialog. This matters specifically because a save writes
+exactly what the form submitted: a field left blank is not "reverted to a
+default," its YAML key is deleted entirely, and the review step is what
+makes that visible before it happens rather than after. Cancelling leaves
+every file untouched.
+
 Config files are written atomically: the new content is first written to a
 temporary file in the same directory, then renamed into place. This ensures
 the previous config file is never partially overwritten.
@@ -187,6 +196,20 @@ uv run python -m config_editor --config /config/config-editor.yaml
 ```
 
 Access the editor at `http://<host>:8099`.
+
+### Validating a drop-in schema without starting the server
+
+```bash
+uv run python -m config_editor --validate-schemas --config-dir /config
+```
+
+Runs the exact same discovery and validation code the running server uses
+against every bundled schema plus any `*.schema.json` file in
+`<config-dir>/schemas/`, printing one line per file (`OK <id>` or
+`REJECTED <source>: <reason>`) and exiting non-zero if anything was
+rejected. See the
+[Custom Config Schemas](https://github.com/jsimonetti/mimirheim/wiki/Custom-Config-Schemas)
+wiki page for the full guide to writing a drop-in schema.
 
 ---
 

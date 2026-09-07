@@ -14,7 +14,9 @@ import logging
 import signal
 import sys
 import threading
+from pathlib import Path
 
+from config_editor import cli
 from config_editor.config import load_config
 from config_editor.server import ConfigEditorServer
 
@@ -29,16 +31,38 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--config",
-        required=True,
         metavar="CONFIG_PATH",
-        help="Path to the YAML configuration file.",
+        help="Path to the YAML configuration file. Required unless --validate-schemas is given.",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--validate-schemas",
+        action="store_true",
+        help=(
+            "Validate every discovered schema (bundled and drop-in) against "
+            "--config-dir and exit, without starting the server."
+        ),
+    )
+    parser.add_argument(
+        "--config-dir",
+        metavar="CONFIG_DIR",
+        help="Config directory to scan for drop-in schemas with --validate-schemas.",
+    )
+    args = parser.parse_args()
+    if args.validate_schemas:
+        if not args.config_dir:
+            parser.error("--validate-schemas requires --config-dir")
+    elif not args.config:
+        parser.error("--config is required unless --validate-schemas is given")
+    return args
 
 
 def main() -> None:
-    """Load configuration and run the config editor HTTP server."""
+    """Load configuration and run the config editor HTTP server, or validate schemas and exit."""
     args = _parse_args()
+
+    if args.validate_schemas:
+        sys.exit(cli.validate_schemas(Path(args.config_dir)))
+
     cfg = load_config(args.config)
 
     logging.basicConfig(

@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "MqttConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "title": "MqttConfig",
+      "description": "MQTT broker connection parameters.",
+      "properties": {
+        "host": {
+          "type": "string",
+          "title": "Broker host",
+          "description": "Broker hostname or IP address."
+        },
+        "port": {
+          "type": "integer",
+          "title": "Broker port",
+          "description": "Broker TCP port.",
+          "default": 1883,
+          "minimum": 1,
+          "maximum": 65535,
+          "x-category": "Advanced"
+        }
+      },
+      "required": ["host"],
+      "x-format": "categories-vertical",
+      "x-categoryOrder": ["Basic", "Advanced"]
+    },
+    "InverterConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "title": "InverterConfig",
+      "description": "Configuration for one SolarEdge inverter reporting to the SolarEdge monitoring API.",
+      "properties": {
+        "site_id": {
+          "type": "integer",
+          "title": "SolarEdge site ID",
+          "description": "The site ID assigned by the SolarEdge monitoring portal."
+        },
+        "api_key": {
+          "type": "string",
+          "title": "API key",
+          "description": "SolarEdge monitoring API key for this site."
+        },
+        "mode": {
+          "type": "string",
+          "title": "Inverter phase mode",
+          "description": "Electrical phase configuration of the inverter.",
+          "enum": ["single-phase", "three-phase"],
+          "default": "single-phase"
+        },
+        "pv_array": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "title": "mimirheim PV array",
+          "description": "Which mimirheim pv_arrays entry this inverter's production maps to.",
+          "x-enumSource": "#/context/pv_arrays"
+        },
+        "output_topic": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }],
+          "default": null,
+          "title": "Output topic",
+          "description": "MQTT topic for the retained production payload. Defaults to '{mqtt_topic_prefix}/input/pv/{inverter_key}/solaredge' when not set.",
+          "x-category": "Advanced",
+          "x-format": "mimir-topic-placeholder"
+        },
+        "poll_interval_s": {
+          "type": "integer",
+          "title": "Poll interval (seconds)",
+          "description": "How often to poll the SolarEdge monitoring API for this inverter.",
+          "default": 300,
+          "minimum": 30,
+          "x-category": "Advanced"
+        },
+        "verify_ssl": {
+          "type": "boolean",
+          "title": "Verify SSL",
+          "description": "Verify the SolarEdge API's TLS certificate.",
+          "default": true,
+          "x-category": "Advanced"
+        }
+      },
+      "required": ["site_id", "api_key"],
+      "x-format": "categories-vertical",
+      "x-categoryOrder": ["Basic", "Advanced"]
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "title": "SolarEdgeConfig",
+  "description": "Root configuration for a third-party SolarEdge monitoring helper. Worked example for SPEC.md's drop-in schema vocabulary (plan 70): a named map of device objects (inverters), a plain enum (mode), x-category-based advanced grouping, an x-enumSource cross-reference into context.pv_arrays, and the mimir-topic-placeholder custom editor.",
+  "properties": {
+    "mqtt": {
+      "$ref": "#/$defs/MqttConfig",
+      "title": "MQTT",
+      "description": "MQTT broker connection settings."
+    },
+    "inverters": {
+      "type": "object",
+      "title": "Inverters",
+      "description": "Map of inverter name to its SolarEdge monitoring configuration.",
+      "additionalProperties": { "$ref": "#/$defs/InverterConfig" }
+    }
+  },
+  "required": ["mqtt", "inverters"],
+  "x-format": "categories-vertical",
+  "x-categoryOrder": ["Basic", "Advanced"],
+  "x-mimirheim": {
+    "file": "solaredge.yaml",
+    "category": "pv",
+    "order": 0,
+    "python_package": "solaredge",
+    "python_model": null,
+    "exclusive_group": null,
+    "required": false,
+    "docs_url": null
+  }
+}

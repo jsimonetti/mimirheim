@@ -555,42 +555,88 @@ function confirmModal(message) {
   });
 }
 
-/** Show a dismissible panel of preview diffs. @param {object} diffs */
-function showPreviewDiffs(diffs) {
-  const root = document.getElementById("modal-root");
-  root.innerHTML = "";
-  const overlay = document.createElement("div");
-  overlay.className = "modal-overlay";
-  const dialog = document.createElement("div");
-  dialog.className = "modal-dialog modal-dialog-wide";
-  const heading = document.createElement("h2");
-  heading.textContent = "Preview";
-  dialog.appendChild(heading);
-  const filenames = Object.keys(diffs);
-  if (filenames.length === 0) {
-    const empty = document.createElement("p");
-    empty.textContent = "No changes to preview.";
-    dialog.appendChild(empty);
-  }
-  for (const filename of filenames) {
-    const section = document.createElement("section");
-    const title = document.createElement("h3");
-    title.textContent = filename;
-    const pre = document.createElement("pre");
-    pre.textContent = diffs[filename];
-    section.appendChild(title);
-    section.appendChild(pre);
-    dialog.appendChild(section);
-  }
-  const close = document.createElement("button");
-  close.type = "button";
-  close.textContent = "Close";
-  close.addEventListener("click", () => {
+/**
+ * Show a panel of preview diffs.
+ *
+ * In view mode (`confirmable` false, the standalone Preview button) it has a
+ * single Close button and always resolves true. In confirmable mode (the
+ * review-changes step gating a save, Decision 3) it has Cancel/Confirm save
+ * buttons and resolves with the user's choice -- this is what makes a
+ * save-time key deletion (SPEC.md §8) visible before it happens, not just
+ * discoverable via the separate Preview button.
+ * @param {object} diffs
+ * @param {boolean} [confirmable=false]
+ * @returns {Promise<boolean>}
+ */
+function showPreviewDiffs(diffs, confirmable = false) {
+  return new Promise((resolve) => {
+    const root = document.getElementById("modal-root");
     root.innerHTML = "";
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    const dialog = document.createElement("div");
+    dialog.className = "modal-dialog modal-dialog-wide";
+    const heading = document.createElement("h2");
+    heading.textContent = confirmable ? "Review changes" : "Preview";
+    dialog.appendChild(heading);
+    const filenames = Object.keys(diffs);
+    if (filenames.length === 0) {
+      const empty = document.createElement("p");
+      empty.textContent = "No changes to preview.";
+      dialog.appendChild(empty);
+    }
+    for (const filename of filenames) {
+      const section = document.createElement("section");
+      const title = document.createElement("h3");
+      title.textContent = filename;
+      const pre = document.createElement("pre");
+      pre.textContent = diffs[filename];
+      section.appendChild(title);
+      section.appendChild(pre);
+      dialog.appendChild(section);
+    }
+    const finish = (result) => {
+      root.innerHTML = "";
+      resolve(result);
+    };
+    if (confirmable) {
+      const actions = document.createElement("div");
+      actions.className = "modal-actions";
+      const cancel = document.createElement("button");
+      cancel.type = "button";
+      cancel.textContent = "Cancel";
+      const confirm = document.createElement("button");
+      confirm.type = "button";
+      confirm.textContent = "Confirm save";
+      cancel.addEventListener("click", () => finish(false));
+      confirm.addEventListener("click", () => finish(true));
+      actions.appendChild(cancel);
+      actions.appendChild(confirm);
+      dialog.appendChild(actions);
+    } else {
+      const close = document.createElement("button");
+      close.type = "button";
+      close.textContent = "Close";
+      close.addEventListener("click", () => finish(true));
+      dialog.appendChild(close);
+    }
+    overlay.appendChild(dialog);
+    root.appendChild(overlay);
   });
-  dialog.appendChild(close);
-  overlay.appendChild(dialog);
-  root.appendChild(overlay);
+}
+
+/**
+ * POST payload to /api/preview and return the parsed response.
+ * @param {object} payload {"entries": {...}}
+ * @returns {Promise<object>} `{"ok": true, "diffs": {...}} | {"ok": false, "errors": {...}}`
+ */
+async function fetchPreview(payload) {
+  const resp = await fetch("api/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return resp.json();
 }
 
 /** Render per-entry save/preview errors into the status area. @param {object} errors */
@@ -637,17 +683,12 @@ async function handlePreview() {
     }, 3000);
     return;
   }
-  const resp = await fetch("api/preview", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const data = await resp.json();
+  const data = await fetchPreview(payload);
   if (!data.ok) {
     showSaveErrors(data.errors || {});
     return;
   }
-  showPreviewDiffs(data.diffs || {});
+  await showPreviewDiffs(data.diffs || {});
 }
 
 async function handleSave() {
@@ -670,6 +711,16 @@ async function handleSave() {
     );
     if (!proceed) return;
   }
+
+  clearSaveErrors();
+  const previewData = await fetchPreview(payload);
+  if (!previewData.ok) {
+    showSaveErrors(previewData.errors || {});
+    status.textContent = "Validation errors — nothing was saved.";
+    return;
+  }
+  const confirmed = await showPreviewDiffs(previewData.diffs || {}, true);
+  if (!confirmed) return;
 
   btn.disabled = true;
   status.textContent = "Saving…";
