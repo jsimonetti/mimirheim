@@ -39,7 +39,9 @@ uv run python -m config_editor --config config-editor.yaml   # run the editor
 ## Source of truth
 
 Before writing any code, read:
-- `README.md` in this directory — external behaviour, HTTP API contract, configuration schema.
+- `README.md` in this directory — external behaviour, HTTP API contract, configuration schema, **as currently implemented**.
+- `SPEC.md` in this directory — the schema contract: schema file format, discovery, field vocabulary, document composition, cross-references, validation, save semantics, security, and HTTP API, **as the rewrite (plans 68-70) targets it**. Where `SPEC.md` and the current implementation disagree, that is expected until those plans land — `SPEC.md` describes where the code is going, not where it is. Do not assume it already matches deployed behaviour.
+- `IMPLEMENTATION_DETAILS.md` in this directory — the Jedison library integration: exact API behaviour, required setup that is easy to get silently wrong, and the reasoning behind the per-entry-document architecture `SPEC.md` specifies without justifying. Relevant only to this directory's frontend; Jedison is not used anywhere else in the repo.
 - `IMPLEMENTATION_DETAILS.md` in the repo root — Pydantic conventions, docstring format, code standards.
 
 ---
@@ -62,7 +64,9 @@ without exception:
 
 ```
 mimirheim_helpers/config_editor/
-  README.md                   # external specification (authoritative)
+  README.md                   # external specification (authoritative, current implementation)
+  SPEC.md                    # schema contract specification (authoritative, target design)
+  IMPLEMENTATION_DETAILS.md  # Jedison integration details (authoritative)
   AGENTS.md                   # this file
   config_editor/
     __init__.py
@@ -73,6 +77,8 @@ mimirheim_helpers/config_editor/
       index.html
       app.js
       style.css
+      vendor/
+        jedison.umd.js        # vendored Jedison build (pinned, checksummed; see SPEC.md)
   tests/
     conftest.py
     unit/
@@ -83,19 +89,9 @@ mimirheim_helpers/config_editor/
 
 ## HTTP API
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/` | Serve the single-page editor frontend |
-| `GET` | `/static/<file>` | Serve frontend static assets |
-| `GET` | `/api/schema` | MimirheimConfig JSON Schema (cached at startup) |
-| `GET` | `/api/config` | Current `mimirheim.yaml` as a parsed dict |
-| `POST` | `/api/config` | Validate and write `mimirheim.yaml` |
-| `GET` | `/api/helper-configs` | Enabled state and config dict for every helper |
-| `GET` | `/api/helper-schemas` | JSON Schema for every helper config model |
-| `POST` | `/api/helper-config/<filename>` | Enable (write) or disable (delete) a helper config file |
-
-All JSON API responses use `Content-Type: application/json`. Write operations
-use atomic temp-file + `os.replace` to prevent partial writes.
+The current, live HTTP API is documented in `README.md` §4. The target HTTP
+API this tool is being rewritten toward is documented in `SPEC.md` §12. Do
+not duplicate either table here — update the relevant document instead.
 
 ---
 
