@@ -158,6 +158,43 @@ def _category_orders(entries: list[BundledEntrySpec]) -> dict[str, int]:
     return orders
 
 
+def _fix_nullable_object_branch_defaults(schema: dict[str, Any]) -> None:
+    """Give nullable object branches their own empty-object default.
+
+    Jedison eagerly constructs one child instance per ``anyOf`` branch (to
+    support switching between them) and copies a field's own top-level
+    ``default`` onto every branch that doesn't already set its own. For an
+    ``Optional[Model] = None`` field, that copies ``default: null`` onto the
+    object branch too; if ``Model`` forbids extra properties
+    (``additionalProperties: false``), Jedison's own additional-properties
+    enforcement then calls ``Object.keys(null)`` while building that
+    (inactive) branch and throws -- caught and logged by Jedison, but noisy
+    on every editor load. Giving the object branch its own ``default: {}``
+    stops that copy-down from ever reaching it.
+    """
+    defs = schema.get("$defs", {})
+
+    def branch_is_object(branch: dict[str, Any]) -> bool:
+        ref = branch.get("$ref", "")
+        target = defs.get(ref.removeprefix("#/$defs/"), {}) if ref.startswith("#/$defs/") else branch
+        return target.get("type") == "object"
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            any_of = node.get("anyOf")
+            if isinstance(any_of, list) and node.get("default", "_missing") is None:
+                for branch in any_of:
+                    if isinstance(branch, dict) and "default" not in branch and branch_is_object(branch):
+                        branch["default"] = {}
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(schema)
+
+
 def build_bundled_schema(entry: BundledEntrySpec, order: int) -> dict[str, Any]:
     """Build one bundled schema document: the model's JSON Schema plus its x-mimirheim envelope.
 
@@ -171,6 +208,7 @@ def build_bundled_schema(entry: BundledEntrySpec, order: int) -> dict[str, Any]:
     """
     model_cls = _import_model(entry["python_model"])
     schema = model_cls.model_json_schema()
+    _fix_nullable_object_branch_defaults(schema)
     schema["x-mimirheim"] = {
         "file": entry["file"],
         "category": entry["category"],

@@ -225,7 +225,8 @@
     "ha_discovery": {
       "anyOf": [
         {
-          "$ref": "#/$defs/HomeAssistantConfig"
+          "$ref": "#/$defs/HomeAssistantConfig",
+          "default": {}
         },
         {
           "type": "null"

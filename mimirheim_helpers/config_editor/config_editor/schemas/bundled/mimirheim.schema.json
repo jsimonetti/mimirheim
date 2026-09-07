@@ -512,7 +512,8 @@
         "building_thermal": {
           "anyOf": [
             {
-              "$ref": "#/$defs/BuildingThermalConfig"
+              "$ref": "#/$defs/BuildingThermalConfig",
+              "default": {}
             },
             {
               "type": "null"
@@ -1566,7 +1567,8 @@
         "balanced_weights": {
           "anyOf": [
             {
-              "$ref": "#/$defs/BalancedWeightsConfig"
+              "$ref": "#/$defs/BalancedWeightsConfig",
+              "default": {}
             },
             {
               "type": "null"
@@ -2093,7 +2095,8 @@
         "building_thermal": {
           "anyOf": [
             {
-              "$ref": "#/$defs/BuildingThermalConfig"
+              "$ref": "#/$defs/BuildingThermalConfig",
+              "default": {}
             },
             {
               "type": "null"

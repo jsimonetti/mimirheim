@@ -156,7 +156,8 @@
                 },
                 "type": "array"
               },
-              "type": "object"
+              "type": "object",
+              "default": {}
             },
             {
               "type": "null"
@@ -261,7 +262,8 @@
     "ha_discovery": {
       "anyOf": [
         {
-          "$ref": "#/$defs/HomeAssistantConfig"
+          "$ref": "#/$defs/HomeAssistantConfig",
+          "default": {}
         },
         {
           "type": "null"

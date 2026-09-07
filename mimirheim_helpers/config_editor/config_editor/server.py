@@ -88,17 +88,27 @@ MAX_REQUEST_BODY_BYTES = 1024 * 1024
 
 # Content-Security-Policy applied to every response (SPEC.md §11).
 #
-# script-src/style-src carry no 'unsafe-inline' or 'unsafe-eval': the vendored
-# Jedison build (checked against its source) never calls eval()/new Function()
-# and never sets inline style via the "style" attribute (only via the CSSOM
-# .style property, which style-src does not govern), so nothing needs
-# loosening for it to render. Every directive is scoped to 'self' -- no
-# response this server sends should ever cause the browser to reach off-origin,
-# which is what the offline-devtools acceptance check (SPEC.md §11) verifies.
+# script-src carries no 'unsafe-inline' or 'unsafe-eval': the vendored Jedison
+# build (checked against its source) never calls eval()/new Function() and
+# never sets inline script.
+#
+# style-src carries 'unsafe-inline': the vendored Jedison build injects two
+# small, fixed CSS blocks at runtime via createElement("style") + textContent
+# ("jedi-nav-styles", "jedi-accordion-button-style") to lay out nav/accordion
+# widgets, which style-src 'self' alone blocks (a runtime <style> element is
+# always inline, regardless of the "style" attribute vs. CSSOM .style
+# property distinction). SPEC.md §11 only requires blocking inline/remote
+# *script* execution, not style, so this does not reopen that guarantee --
+# it does mean a hostile schema's CSS could reach an inline style context,
+# which is a lower-severity concern than script execution.
+#
+# Every directive is otherwise scoped to 'self' -- no response this server
+# sends should ever cause the browser to reach off-origin, which is what the
+# offline-devtools acceptance check (SPEC.md §11) verifies.
 _CSP_HEADER_VALUE = (
     "default-src 'self'; "
     "script-src 'self'; "
-    "style-src 'self'; "
+    "style-src 'self' 'unsafe-inline'; "
     "img-src 'self'; "
     "font-src 'self'; "
     "connect-src 'self'; "

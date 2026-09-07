@@ -67,7 +67,11 @@ def test_static_path_traversal_returns_400(tmp_path: Path) -> None:
 # otherwise ship unnoticed. The full "does Jedison still render under this
 # policy" check is manual (plan 69 Step 6); this only checks the header's
 # presence and that it actually blocks inline/remote script execution by
-# construction (no 'unsafe-inline'/'unsafe-eval', no non-'self' host).
+# construction (no 'unsafe-inline'/'unsafe-eval' on script-src, no non-'self'
+# host anywhere). style-src carries 'unsafe-inline' deliberately -- the
+# vendored Jedison build injects small CSS blocks at runtime via
+# createElement("style") for nav/accordion widgets, which style-src 'self'
+# alone blocks; see server.py's _CSP_HEADER_VALUE comment.
 # ---------------------------------------------------------------------------
 
 
@@ -91,10 +95,13 @@ def test_every_response_carries_csp_header(
 
 
 def test_csp_header_blocks_inline_and_remote_script() -> None:
-    """The shipped policy has no unsafe-inline/unsafe-eval and no non-'self' host."""
+    """The shipped policy has no unsafe-eval anywhere, no unsafe-inline on script-src.
+
+    style-src is the sole, deliberate exception to 'no unsafe-inline
+    anywhere' -- see the comment above and on _CSP_HEADER_VALUE.
+    """
     from config_editor.server import _CSP_HEADER_VALUE
 
-    assert "'unsafe-inline'" not in _CSP_HEADER_VALUE
     assert "'unsafe-eval'" not in _CSP_HEADER_VALUE
     directives = [d.strip() for d in _CSP_HEADER_VALUE.split(";") if d.strip()]
     for directive in directives:
@@ -102,8 +109,11 @@ def test_csp_header_blocks_inline_and_remote_script() -> None:
         name, sources = parts[0], parts[1:]
         if name in ("object-src", "base-uri"):
             assert sources == ["'none'"], directive
+        elif name == "style-src":
+            assert sources == ["'self'", "'unsafe-inline'"], directive
         else:
             assert sources == ["'self'"], directive
+            assert "'unsafe-inline'" not in sources, directive
 
 
 def test_ip_mismatch_403_carries_csp_header(tmp_path: Path) -> None:
