@@ -128,7 +128,7 @@
     },
     "NordpoolApiConfig": {
       "additionalProperties": false,
-      "description": "Nordpool-specific fetch and pricing parameters.\n\nThe import and export prices are computed by evaluating user-supplied\nPython expression strings. Each expression may reference:\n\n- ``price``: the raw Nordpool spot price in EUR/kWh for that step.\n- ``ts``: the step start time as a UTC-aware ``datetime`` object.\n\nThis allows any supplier pricing scheme to be expressed without code\nchanges. For example, the Dutch Tibber all-in import price is::\n\n    ((price + 0.09161) * 1.21) + 0.0248\n\nBy default both formulas pass the raw spot price through unchanged.\n\nAttributes:\n    area: Nordpool area code (e.g. ``\"NO2\"``, ``\"NL\"``, ``\"SE3\"``).\n    import_formula: Python expression that computes the all-in import\n        price in EUR/kWh from the raw spot price. Applied to every step.\n    export_formula: Python expression that computes the net export price\n        in EUR/kWh from the raw spot price. Applied to every step.",
+      "description": "Nordpool-specific fetch and pricing parameters.\n\nThe import and export prices are computed by evaluating user-supplied\nPython expression strings. Each expression may reference:\n\n- ``price``: the raw Nordpool spot price in EUR/kWh for that step.\n- ``ts``: the step start time as a UTC-aware ``datetime`` object.\n\nThis allows any supplier pricing scheme to be expressed without code\nchanges. For example, the Dutch Tibber all-in import price is::\n\n    ((price + 0.09161) * 1.21) + 0.0248\n\nBy default both formulas pass the raw spot price through unchanged.\n\nAttributes:\n    area: Nordpool area code (e.g. ``\"NO2\"``, ``\"NL\"``, ``\"SE3\"``).\n    import_formula: Python expression that computes the all-in import\n        price in EUR/kWh from the raw spot price. Applied to every step.\n    export_formula: Python expression that computes the net export price\n        in EUR/kWh from the raw spot price. Applied to every step.\n    price_interval: Length of one published price step \u2014\n        ``\"quarter_hourly\"`` or ``\"hourly\"``. Nordpool quotes day-ahead\n        prices on a 15-minute market time unit for most areas, which is\n        what ``\"quarter_hourly\"`` (the default) publishes unchanged. Set it\n        to ``\"hourly\"`` when your supplier bills a single price per whole\n        hour: the four quarter-hour spot prices are then averaged into one\n        hourly spot price before the formulas are applied, which is exactly\n        how such suppliers derive their hourly rate. Leaving it at\n        ``\"quarter_hourly\"`` on an hourly contract makes the optimiser\n        chase intra-hour price swings the meter never bills for.",
       "properties": {
         "area": {
           "description": "Nordpool price area code (e.g. 'NO2', 'NL', 'SE3').",
@@ -146,6 +146,18 @@
           "description": "Python expression for the net export price in EUR/kWh. Available variables: ``price`` (raw spot, EUR/kWh), ``ts`` (datetime, UTC).",
           "title": "Export price formula",
           "type": "string"
+        },
+        "price_interval": {
+          "default": "quarter_hourly",
+          "description": "Length of one published price step. 'quarter_hourly' (default) publishes the raw Nordpool market time unit unchanged; 'hourly' averages each clock hour into a single step, matching suppliers that bill one dynamic price per hour.",
+          "enum": [
+            "hourly",
+            "quarter_hourly"
+          ],
+          "title": "Price Interval",
+          "type": "string",
+          "ui_group": "basic",
+          "ui_label": "Price interval"
         }
       },
       "required": [
