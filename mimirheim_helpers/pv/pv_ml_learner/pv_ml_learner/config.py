@@ -19,7 +19,12 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic import ValidationError as PydanticValidationError
 
-from helper_common.config import HomeAssistantConfig as _HelperHaDiscoveryConfig, MqttConfig, apply_mqtt_env_overrides
+from helper_common.config import (
+    HomeAssistantConfig as _HelperHaDiscoveryConfig,
+    MqttConfig,
+    apply_mqtt_env_overrides,
+    map_entry_schema_extra,
+)
 import helper_common.topics as _topics
 
 
@@ -146,7 +151,12 @@ class ArrayConfig(BaseModel):
             production. Matching training hours are excluded from the dataset.
     """
 
-    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra=map_entry_schema_extra(
+            {"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]}
+        ),
+    )
 
     peak_power_kwp: float = Field(
         gt=0,
@@ -326,6 +336,7 @@ class PvLearnerConfig(BaseModel):
         min_length=1,
         description="Named map of PV array configurations. The key is used as the array identifier and mimirheim device name.",
         title="PV arrays",
+        json_schema_extra={"x-format": "nav-horizontal"},
     )
     storage: StorageConfig = Field(description="Shared SQLite storage configuration.", title="Storage")
     training: TrainingConfig = Field(description="Training and inference trigger configuration.", title="Training")

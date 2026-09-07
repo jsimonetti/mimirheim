@@ -69,6 +69,7 @@ def test_index_references_jedison_and_app_scripts(live_server: str) -> None:
     assert status == 200
     html = body.decode()
     assert "static/vendor/jedison.1.21.0.umd.js" in html
+    assert "static/vendor/bootstrap.5.3.3.bundle.min.js" in html
     assert "static/topic-placeholder-editor.js" in html
     assert "static/app.js" in html
 
@@ -77,6 +78,8 @@ def test_index_references_jedison_and_app_scripts(live_server: str) -> None:
     "path",
     [
         "static/vendor/jedison.1.21.0.umd.js",
+        "static/vendor/bootstrap.5.3.3.min.css",
+        "static/vendor/bootstrap.5.3.3.bundle.min.js",
         "static/topic-placeholder-editor.js",
         "static/app.js",
         "static/style.css",

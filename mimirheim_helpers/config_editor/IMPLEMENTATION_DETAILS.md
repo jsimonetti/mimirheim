@@ -29,6 +29,34 @@ Before bumping the vendored version, re-check every section below against
 the new release's `CHANGELOG.md` — several of these behaviours are recent
 (1.17.0 through 1.21.0) and could plausibly change again.
 
+`config_editor/static/vendor/bootstrap.5.3.3.min.css` and
+`bootstrap.5.3.3.bundle.min.js`, version 5.3.3. The npm tarball
+(`bootstrap-5.3.3.tgz`) was downloaded and its SHA-1 verified against the
+registry's own `shasum` (`de35e1a765c897ac940021900fcbb831602bac38`) before
+extracting `dist/css/bootstrap.min.css` and `dist/js/bootstrap.bundle.min.js`
+from it unmodified except for stripping each file's trailing
+`sourceMappingURL` comment (the paired `.map` files are not vendored — this
+project's static server only serves `.js`/`.css`/`.html`, so a `.map`
+sitting next to them could never actually be fetched; leaving the comment
+in would just be a guaranteed-404 dead reference). SHA-256 of the two
+vendored (post-strip) files, for future-drift detection:
+`26db49828d6701fcfce37a96da6ec3f0ed481abae49c8c9969a575b064413cad` (css),
+`073254afbfc06331b8b548b7fc0532b4ffe2cfdd588368dcc338e7abd50810e1` (js).
+`BOOTSTRAP-LICENSE` (MIT) is vendored alongside (named to avoid colliding
+with Jedison's own `LICENSE` file in the same directory). Loaded as plain
+same-origin `<link>`/`<script>` tags in `index.html`, per the CSP
+constraint below — never from a CDN.
+
+The **bundle** (not the plain `bootstrap.min.js`) is required, not just the
+CSS: Jedison's `ThemeBootstrap5` theme (`gTheme = new Jedison.ThemeBootstrap5()`
+in `app.js`) emits real `data-bs-toggle="collapse"` / `"tab"` / `"modal"`
+attributes for accordions, nav tabs, and info dialogs. Those attributes do
+nothing on their own — they are Bootstrap's own JS components' declarative
+API, wired up by event delegation once `bootstrap.bundle.min.js` (which
+includes Popper) has run. Without it, every accordion/tab in the rendered
+form is inert: the markup and CSS look right, but clicking a collapsed
+section or a tab does nothing.
+
 ---
 
 ## Dereferencing is mandatory and fails silently if skipped
@@ -256,6 +284,88 @@ Both need the application to listen for `jedison.on("instance-change", ...)`
 (or poll `isDirty`) and manually toggle a CSS class on the corresponding tab
 element.
 
+**Theme is a real, swappable class, not fixed markup.** Every editor holds
+`this.theme` and builds its DOM exclusively through `theme.get*()` calls
+(`getInputControl`, `getAddPropertyButton`, `getTab`, `getFieldset`, ...).
+The vendored UMD exports four theme classes: `Theme` (the plain `jedi-*`
+classes this project used to hand-style), `ThemeBootstrap3`,
+`ThemeBootstrap4`, and `ThemeBootstrap5` — the last of which emits genuine
+Bootstrap 5 classes/attributes (`card`, `accordion-item`, `btn-primary`,
+`form-control`, `data-bs-toggle`, ...), not `jedi-*` aliases. `app.js`
+constructs `new Jedison.ThemeBootstrap5()` once at startup and reuses it for
+every entry (see the Bootstrap vendoring note above for the accompanying JS
+requirement) — this is the entire integration surface; nothing else in
+`app.js` needs to know which theme is active.
+
+**Every dynamic-map field (`additionalProperties` is a schema, e.g.
+`batteries`/`pv_arrays`/`deferrable_loads` on `MimirheimConfig`, or a
+helper's own `arrays` map) sets `"x-format": "nav-horizontal"` directly in
+its own `Field(..., json_schema_extra={...})`,** a per-field Pydantic model
+annotation, not a client-side schema rewrite. This is a deliberate choice
+over a generic structural walk (which an earlier iteration of this feature
+used, in `app.js`): the predicate "is this an array/dynamic-map" is
+mechanically derivable from schema shape alone, but the actual footprint of
+"every array/map field across mimirheim and every helper package" is real —
+each field needing this is annotated individually, in its own model,
+alongside the `x-mimirheim`/`x-category` annotations this codebase already
+uses that same way. `x-format: "nav-horizontal"` resolves for both
+`type: "array"` (`EditorArrayNav`) and `type: "object"` (`EditorObjectNav`)
+schemas.
+
+**`EditorObjectNav`'s tab strip is not additionalProperties-aware by format
+alone — it tabs whatever is in `instance.children` at render time, which
+happens to include additionalProperties-created children alongside declared
+`properties` children, but its "add a new child" mechanism is entirely
+inherited from the plain `EditorObject` base class, unconditional on
+format.** Concretely: for a schema like `batteries` (`additionalProperties`
+only, no fixed `properties`), setting `x-format: "nav-horizontal"` turns
+every *existing* battery into its own tab (this is the actual fix for the
+originally-reported "wall of stacked 'Add property' boxes"), but the
+quick-add-property control (a small "Add property" toggle button that
+reveals a name input, `EditorObject.getObjectControlConfig()`/`addProperty()`)
+still renders alongside the tab strip, unconditionally, unless `x-objectAdd:
+false`/the global `objectAdd` option is set — there is no format-based way
+to suppress just that control while keeping the ability to add a new named
+entry, nor should there be: it is the only way to add one. Do not read
+"Add property still visible" as a sign the format did not apply — check
+whether the *tab strip* rendered instead, with `.jedi-nav-list`/one tab per
+existing key.
+
+**`EditorObjectNav`'s tab label is `schema.title` if present, the child's
+own map key only as a fallback** (`getChildTitle(){const e=ft(t.schema);
+return c(e)?e:t.getKey()}` — no `x-titleTemplate` support at all, unlike the
+array-nav editor). Every Pydantic-generated model schema carries a `title`
+(its class name, e.g. `"BatteryConfig"`), so left alone, every tab in a map
+with more than one entry renders the *same*, indistinguishable label. Every
+model used only as a dynamic-map's value type (`BatteryConfig`, `PvConfig`,
+..., and both packages' `pv_fetcher`/`pv_ml_learner` `ArrayConfig`) therefore
+sets `model_config = ConfigDict(json_schema_extra=map_entry_schema_extra(...))`
+(`helper_common.config.map_entry_schema_extra`) instead of a plain
+`json_schema_extra={...}` dict — the hook applies the model's own extra keys
+(most of these already needed the `{"x-format": "categories-vertical",
+"x-categoryOrder": [...]}` boilerplate for their *own* Basic/Advanced field
+grouping, an unrelated, coexisting concern) and then pops `title`, forcing
+the map-key fallback. `ConfigDict` only accepts one `json_schema_extra`
+value (a dict or a callable, never both), which is why this couldn't just be
+bolted on as a second, separate `model_config` line. Confirmed against a
+real `mimirheim.yaml` with three configured `deferrable_loads` entries: tabs
+read "BatteryConfig"/"BatteryConfig"/"BatteryConfig" (or the field's own
+title) before this hook existed, the real device names
+("Vaatwasser"/"Wasmachine"/"Droger") after.
+
+Per-tab reorder ("move up"/"move down") buttons are disabled globally via
+`arrayMove: false` passed to every `Jedison.Create(...)` call in `app.js` (a
+global option, read through `schema["x-arrayMove"] ?? options.arrayMove`),
+deliberately *not* pushed into the models as `x-arrayMove: false` on every
+array field: unlike `x-format` (which varies per field — some might
+legitimately want the default list, `"table"`, etc.), "never show reorder
+buttons in this app" has no per-field variation, so repeating it on every
+field would be pure duplication for zero benefit. Add/delete buttons per tab
+are unaffected (separate `arrayAdd`/`arrayDelete` options, left at their
+`true` default). additionalProperties maps have no reorder concept to begin
+with (a dict has no order), so this client-side default only actually
+changes behaviour for genuine `type: "array"` fields.
+
 ---
 
 ## `applyOverlay`
@@ -333,3 +443,14 @@ already works. File this upstream
 (`github.com/germanbisurgi/jedison`) before shipping any implementation
 that touches nullable, length-bounded arrays without this workaround
 already in place.
+
+Verified this defect is format-independent, in case a future field ever
+combines `x-format: "nav-horizontal"` with a nullable, length-bounded array:
+reproducing the exact schema shape above with that format set on the array
+branch throws the identical `Cannot read properties of null (reading
+'length')`, byte-for-byte the same as the plain default array editor —
+`EditorArrayNav` inherits the crashing method from `EditorArray` and does
+not override it. The nav-horizontal rollout (dynamic-map fields only, see
+"Navigation and grouping" above) does not currently annotate `profile_kw` or
+any other nullable array field, so this remains exactly as pre-existing and
+untouched as before.

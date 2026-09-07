@@ -58,7 +58,6 @@
         "azimuth",
         "peak_power_kwp"
       ],
-      "title": "ArrayConfig",
       "type": "object",
       "x-categoryOrder": [
         "Basic",
@@ -301,7 +300,8 @@
       },
       "description": "Named map of PV array configurations.",
       "title": "PV arrays",
-      "type": "object"
+      "type": "object",
+      "x-format": "nav-horizontal"
     },
     "confidence_decay": {
       "$ref": "#/$defs/ConfidenceDecayConfig",

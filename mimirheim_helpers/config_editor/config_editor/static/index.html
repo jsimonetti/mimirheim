@@ -4,30 +4,31 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>mimirheim config editor</title>
+  <link rel="stylesheet" href="static/vendor/bootstrap.5.3.3.min.css">
   <link rel="stylesheet" href="static/style.css">
 </head>
 <body>
-  <header>
-    <div id="header-left">
-      <h1>mimirheim</h1>
-      <nav id="mode-bar">
-        <button class="mode-btn" id="mode-btn-reports" type="button">Reports</button>
-        <button class="mode-btn active" id="mode-btn-config" type="button">Config</button>
+  <header class="navbar navbar-expand bg-body-tertiary border-bottom px-3 py-2">
+    <div id="header-left" class="d-flex align-items-center gap-3">
+      <h1 class="h5 mb-0">mimirheim</h1>
+      <nav id="mode-bar" class="nav nav-pills">
+        <button class="nav-link mode-btn" id="mode-btn-reports" type="button">Reports</button>
+        <button class="nav-link mode-btn active" id="mode-btn-config" type="button">Config</button>
       </nav>
     </div>
-    <div id="save-bar">
-      <span id="save-status"></span>
-      <button id="preview-btn" type="button">Preview</button>
-      <button id="save-btn" type="button">Save</button>
+    <div id="save-bar" class="d-flex align-items-center gap-3 ms-auto">
+      <span id="save-status" class="text-muted small"></span>
+      <button id="preview-btn" type="button" class="btn btn-outline-secondary btn-sm">Preview</button>
+      <button id="save-btn" type="button" class="btn btn-primary btn-sm">Save</button>
     </div>
   </header>
 
-  <div id="config-layout">
-    <nav id="entry-nav" aria-label="Config entries">
+  <div id="config-layout" class="d-flex align-items-start">
+    <nav id="entry-nav" class="list-group list-group-flush border-end flex-shrink-0" aria-label="Config entries">
       <!-- Nav rail is built by app.js from GET /api/registry -->
     </nav>
 
-    <main id="entry-content">
+    <main id="entry-content" class="flex-fill p-4">
       <p id="loading-msg">Loading&hellip;</p>
       <!-- One container per opened entry is mounted here by app.js;
            only the active entry's container is visible at a time. -->
@@ -43,6 +44,7 @@
   </div>
 
   <script src="static/vendor/jedison.1.21.0.umd.js"></script>
+  <script src="static/vendor/bootstrap.5.3.3.bundle.min.js"></script>
   <script src="static/topic-placeholder-editor.js"></script>
   <script src="static/app.js"></script>
 </body>

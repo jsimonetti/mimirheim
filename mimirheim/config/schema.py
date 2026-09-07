@@ -17,6 +17,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 import helper_common.topics as _topics
+from helper_common.config import map_entry_schema_extra
 
 # ---------------------------------------------------------------------------
 # Infrastructure: MQTT connection and required global settings
@@ -788,7 +789,12 @@ class BatteryConfig(BaseModel):
             mode flag). All fields default to None (no publishing).
     """
 
-    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra=map_entry_schema_extra(
+            {"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]}
+        ),
+    )
 
     capacity_kwh: float = Field(gt=0, description="Usable capacity in kWh.", title="Capacity (kWh)")
     min_soc_kwh: float = Field(ge=0, default=0.0, description="Minimum SOC in kWh.", title="Minimum SOC (kWh)")
@@ -1248,7 +1254,12 @@ class EvConfig(BaseModel):
         inputs: MQTT input topics for live EV state readings.
     """
 
-    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra=map_entry_schema_extra(
+            {"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]}
+        ),
+    )
 
     capacity_kwh: float = Field(gt=0, description="Vehicle battery capacity in kWh.", title="Vehicle capacity (kWh)")
     min_soc_kwh: float = Field(ge=0, default=0.0, description="Minimum SOC in kWh.", title="Minimum SOC (kWh)")
@@ -1543,7 +1554,12 @@ class PvConfig(BaseModel):
             mode commands.
     """
 
-    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra=map_entry_schema_extra(
+            {"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]}
+        ),
+    )
 
     max_power_kw: float = Field(gt=0, description="Array peak output in kW.", title="Peak power (kW)")
     topic_forecast: str | None = Field(
@@ -1753,7 +1769,12 @@ class HybridInverterConfig(BaseModel):
             from the previous step.
     """
 
-    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra=map_entry_schema_extra(
+            {"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]}
+        ),
+    )
 
     capacity_kwh: float = Field(gt=0, description="Usable battery capacity in kWh.", title="Battery capacity (kWh)")
     min_soc_kwh: float = Field(ge=0, default=0.0, description="Minimum SOC in kWh.", title="Minimum SOC (kWh)")
@@ -2020,7 +2041,12 @@ class DeferrableLoadConfig(BaseModel):
             binary optimisation occurred), nothing is published.
     """
 
-    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra=map_entry_schema_extra(
+            {"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]}
+        ),
+    )
 
     power_profile: list[float] = Field(
         min_length=1,
@@ -2089,7 +2115,12 @@ class StaticLoadConfig(BaseModel):
             is read, in kW.
     """
 
-    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra=map_entry_schema_extra(
+            {"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]}
+        ),
+    )
 
     topic_forecast: str | None = Field(
         default=None,
@@ -2348,7 +2379,12 @@ class ThermalBoilerConfig(BaseModel):
             ``ThermalBoilerInputs.current_temp_c`` in the solve bundle.
     """
 
-    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra=map_entry_schema_extra(
+            {"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]}
+        ),
+    )
 
     volume_liters: float = Field(gt=0, description="Water volume of the tank in litres.", title="Tank volume (L)")
     elec_power_kw: float = Field(
@@ -2497,7 +2533,12 @@ class SpaceHeatingConfig(BaseModel):
             operation; may be None in unit tests.
     """
 
-    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra=map_entry_schema_extra(
+            {"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]}
+        ),
+    )
 
     elec_power_kw: float | None = Field(
         default=None, gt=0, description="Rated electrical power for on/off mode in kW.",
@@ -2642,7 +2683,12 @@ class CombiHeatPumpConfig(BaseModel):
         inputs: MQTT input topic configuration. Required for live operation.
     """
 
-    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra=map_entry_schema_extra(
+            {"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]}
+        ),
+    )
 
     elec_power_kw: float = Field(gt=0, description="Rated electrical power in kW.", title="Electrical power (kW)")
     cop_dhw: float = Field(gt=0, description="COP in DHW mode.", title="COP (DHW mode)")
@@ -2724,15 +2770,41 @@ class MimirheimConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
-    batteries: dict[str, BatteryConfig] = Field(default_factory=dict, title="Batteries")
-    pv_arrays: dict[str, PvConfig] = Field(default_factory=dict, title="PV arrays")
-    ev_chargers: dict[str, EvConfig] = Field(default_factory=dict, title="EV chargers")
-    deferrable_loads: dict[str, DeferrableLoadConfig] = Field(default_factory=dict, title="Deferrable loads", json_schema_extra={"x-category": "Advanced"})
-    static_loads: dict[str, StaticLoadConfig] = Field(default_factory=dict, title="Static loads")
-    hybrid_inverters: dict[str, HybridInverterConfig] = Field(default_factory=dict, title="Hybrid inverters")
-    thermal_boilers: dict[str, ThermalBoilerConfig] = Field(default_factory=dict, title="Thermal boilers", json_schema_extra={"x-category": "Advanced"})
-    space_heating_hps: dict[str, SpaceHeatingConfig] = Field(default_factory=dict, title="Space heating heat pumps", json_schema_extra={"x-category": "Advanced"})
-    combi_heat_pumps: dict[str, CombiHeatPumpConfig] = Field(default_factory=dict, title="Combi heat pumps", json_schema_extra={"x-category": "Advanced"})
+    batteries: dict[str, BatteryConfig] = Field(
+        default_factory=dict, title="Batteries", json_schema_extra={"x-format": "nav-horizontal"}
+    )
+    pv_arrays: dict[str, PvConfig] = Field(
+        default_factory=dict, title="PV arrays", json_schema_extra={"x-format": "nav-horizontal"}
+    )
+    ev_chargers: dict[str, EvConfig] = Field(
+        default_factory=dict, title="EV chargers", json_schema_extra={"x-format": "nav-horizontal"}
+    )
+    deferrable_loads: dict[str, DeferrableLoadConfig] = Field(
+        default_factory=dict,
+        title="Deferrable loads",
+        json_schema_extra={"x-format": "nav-horizontal"},
+    )
+    static_loads: dict[str, StaticLoadConfig] = Field(
+        default_factory=dict, title="Static loads", json_schema_extra={"x-format": "nav-horizontal"}
+    )
+    hybrid_inverters: dict[str, HybridInverterConfig] = Field(
+        default_factory=dict, title="Hybrid inverters", json_schema_extra={"x-format": "nav-horizontal"}
+    )
+    thermal_boilers: dict[str, ThermalBoilerConfig] = Field(
+        default_factory=dict,
+        title="Thermal boilers",
+        json_schema_extra={"x-format": "nav-horizontal"},
+    )
+    space_heating_hps: dict[str, SpaceHeatingConfig] = Field(
+        default_factory=dict,
+        title="Space heating heat pumps",
+        json_schema_extra={"x-format": "nav-horizontal"},
+    )
+    combi_heat_pumps: dict[str, CombiHeatPumpConfig] = Field(
+        default_factory=dict,
+        title="Combi heat pumps",
+        json_schema_extra={"x-format": "nav-horizontal"},
+    )
     grid: GridConfig = Field(title="Grid connection")
     objectives: ObjectivesConfig = Field(default_factory=ObjectivesConfig, title="Objectives", json_schema_extra={"x-category": "Advanced"})
     constraints: ConstraintsConfig = Field(default_factory=ConstraintsConfig, title="Constraints", json_schema_extra={"x-category": "Advanced"})

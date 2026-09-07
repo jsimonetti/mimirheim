@@ -63,7 +63,6 @@
         "model_path",
         "metadata_path"
       ],
-      "title": "ArrayConfig",
       "type": "object",
       "x-categoryOrder": [
         "Basic",
@@ -462,7 +461,8 @@
       "description": "Named map of PV array configurations. The key is used as the array identifier and mimirheim device name.",
       "minProperties": 1,
       "title": "PV arrays",
-      "type": "object"
+      "type": "object",
+      "x-format": "nav-horizontal"
     },
     "storage": {
       "$ref": "#/$defs/StorageConfig",

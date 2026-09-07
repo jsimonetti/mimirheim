@@ -42,7 +42,7 @@ const CATEGORY_LABELS = {
 /** @type {{entries: Object, problems: Array}|null} Last GET /api/registry payload. */
 let gRegistry = null;
 
-/** @type {object|null} Shared Jedison.Theme instance, reused across entries. */
+/** @type {object|null} Shared Jedison.ThemeBootstrap5 instance, reused across entries. */
 let gTheme = null;
 
 /** @type {Array<Function>} customEditors passed to every Jedison.Create call. */
@@ -147,11 +147,12 @@ function buildNav() {
 
   if (gRegistry.problems && gRegistry.problems.length > 0) {
     const banner = document.createElement("details");
-    banner.className = "nav-problems";
+    banner.className = "nav-problems alert alert-warning small mx-2";
     const summary = document.createElement("summary");
     summary.textContent = `${gRegistry.problems.length} schema(s) failed to load`;
     banner.appendChild(summary);
     const list = document.createElement("ul");
+    list.className = "mb-0 mt-2";
     for (const problem of gRegistry.problems) {
       const item = document.createElement("li");
       item.textContent = `${problem.source}: ${problem.reason}`;
@@ -166,7 +167,7 @@ function buildNav() {
     const category = entry["x-mimirheim"].category;
     if (category !== lastCategory) {
       const heading = document.createElement("div");
-      heading.className = "nav-category";
+      heading.className = "nav-category list-group-item border-0 bg-transparent text-uppercase text-muted small fw-semibold pb-1";
       heading.textContent = CATEGORY_LABELS[category] || category;
       nav.appendChild(heading);
       lastCategory = category;
@@ -174,7 +175,7 @@ function buildNav() {
 
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "nav-item";
+    button.className = "nav-item list-group-item list-group-item-action d-flex align-items-center gap-2";
     button.dataset.entryId = id;
     const open = gOpen.get(id);
     button.textContent = (open && open.schema && open.schema.title) || humanizeId(id);
@@ -219,7 +220,7 @@ function updateNavIndicators(id) {
   const isDirty = !!open && entryHasPendingChange(open);
   if (isDirty && !dot) {
     dot = document.createElement("span");
-    dot.className = "nav-item-dirty-dot";
+    dot.className = "nav-item-dirty-dot rounded-circle bg-primary";
     dot.title = "Unsaved changes";
     button.appendChild(dot);
   } else if (!isDirty && dot) {
@@ -230,7 +231,7 @@ function updateNavIndicators(id) {
   const hasErrors = !!open && open.jedison.getErrors().length > 0;
   if (hasErrors && !warn) {
     warn = document.createElement("span");
-    warn.className = "jedi-nav-warning-dot";
+    warn.className = "jedi-nav-warning-dot rounded-circle bg-danger";
     warn.title = "Validation errors";
     button.appendChild(warn);
   } else if (!hasErrors && warn) {
@@ -263,6 +264,13 @@ async function constructInstance(schema, value, container) {
     container,
     theme: gTheme,
     customEditors: gCustomEditors,
+    // Global default: no reorder buttons anywhere, app-wide -- unlike
+    // x-format (which fields should render as tabs), this is a blanket UI
+    // policy with no per-field variation, so it stays a client-side option
+    // rather than an x-arrayMove: false repeated on every array field's own
+    // schema. Add/delete per tab are unaffected (arrayAdd/arrayDelete,
+    // left at their default true).
+    arrayMove: false,
   });
   resetDirtyRecursive(jedison.root);
   return jedison;
@@ -349,13 +357,16 @@ async function loadAndMountEntry(id) {
 function buildEntryChrome(id, enabled) {
   const regEntry = gRegistry.entries[id];
   const row = document.createElement("div");
-  row.className = "entry-chrome";
+  row.className = "entry-chrome d-flex align-items-center gap-3 mb-3";
 
   if (!regEntry["x-mimirheim"].required) {
-    const label = document.createElement("label");
-    label.className = "entry-enable-toggle";
+    const wrap = document.createElement("div");
+    wrap.className = "entry-enable-toggle form-check form-switch mb-0";
     const checkbox = document.createElement("input");
+    checkbox.className = "form-check-input";
     checkbox.type = "checkbox";
+    checkbox.role = "switch";
+    checkbox.id = `enable-toggle-${id}`;
     checkbox.checked = enabled;
     checkbox.addEventListener("change", () => {
       const entryState = gOpen.get(id);
@@ -363,9 +374,13 @@ function buildEntryChrome(id, enabled) {
       entryState.formHost.hidden = !checkbox.checked;
       updateNavIndicators(id);
     });
-    label.appendChild(checkbox);
-    label.appendChild(document.createTextNode("Enabled"));
-    row.appendChild(label);
+    const label = document.createElement("label");
+    label.className = "form-check-label";
+    label.htmlFor = checkbox.id;
+    label.textContent = "Enabled";
+    wrap.appendChild(checkbox);
+    wrap.appendChild(label);
+    row.appendChild(wrap);
   }
 
   const docsUrl = regEntry["x-mimirheim"].docs_url;
@@ -375,7 +390,7 @@ function buildEntryChrome(id, enabled) {
     link.target = "_blank";
     link.rel = "noopener noreferrer";
     link.textContent = "Documentation";
-    link.className = "entry-docs-link";
+    link.className = "entry-docs-link small";
     row.appendChild(link);
   }
 
@@ -396,7 +411,7 @@ function buildEntryChrome(id, enabled) {
  */
 function buildMqttEnvBanner(mqttEnv) {
   const banner = document.createElement("div");
-  banner.className = "info-banner";
+  banner.className = "info-banner alert alert-info small";
   const fields = Object.keys(mqttEnv).sort().join(", ");
   banner.textContent =
     `MQTT connection settings (${fields}) are supplied by the Home Assistant ` +
@@ -416,12 +431,13 @@ function renderDisabledPlaceholder(id) {
   let placeholder = content.querySelector(`.entry-placeholder[data-entry-id="${CSS.escape(id)}"]`);
   if (!placeholder) {
     placeholder = document.createElement("div");
-    placeholder.className = "entry-placeholder";
+    placeholder.className = "entry-placeholder card p-4 text-muted";
     placeholder.dataset.entryId = id;
     const message = document.createElement("p");
     message.textContent = `${humanizeId(id)} is not enabled.`;
     const button = document.createElement("button");
     button.type = "button";
+    button.className = "btn btn-primary mt-3";
     button.textContent = "Enable";
     button.addEventListener("click", async () => {
       await loadAndMountEntry(id);
@@ -528,18 +544,19 @@ function confirmModal(message) {
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
     const dialog = document.createElement("div");
-    dialog.className = "modal-dialog";
+    dialog.className = "mimir-dialog card p-4 shadow";
     const text = document.createElement("p");
     text.textContent = message;
     const actions = document.createElement("div");
-    actions.className = "modal-actions";
+    actions.className = "modal-actions d-flex justify-content-end gap-2 mt-3";
     const cancel = document.createElement("button");
     cancel.type = "button";
+    cancel.className = "btn btn-outline-secondary";
     cancel.textContent = "Cancel";
     const confirm = document.createElement("button");
     confirm.type = "button";
     confirm.textContent = "Confirm";
-    confirm.className = "modal-confirm-danger";
+    confirm.className = "btn btn-danger";
     const finish = (result) => {
       root.innerHTML = "";
       resolve(result);
@@ -575,8 +592,9 @@ function showPreviewDiffs(diffs, confirmable = false) {
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
     const dialog = document.createElement("div");
-    dialog.className = "modal-dialog modal-dialog-wide";
+    dialog.className = "mimir-dialog mimir-dialog-wide card p-4 shadow";
     const heading = document.createElement("h2");
+    heading.className = "h5";
     heading.textContent = confirmable ? "Review changes" : "Preview";
     dialog.appendChild(heading);
     const filenames = Object.keys(diffs);
@@ -587,9 +605,12 @@ function showPreviewDiffs(diffs, confirmable = false) {
     }
     for (const filename of filenames) {
       const section = document.createElement("section");
+      section.className = "mb-3";
       const title = document.createElement("h3");
+      title.className = "h6";
       title.textContent = filename;
       const pre = document.createElement("pre");
+      pre.className = "bg-body-secondary border rounded p-3 small";
       pre.textContent = diffs[filename];
       section.appendChild(title);
       section.appendChild(pre);
@@ -601,12 +622,14 @@ function showPreviewDiffs(diffs, confirmable = false) {
     };
     if (confirmable) {
       const actions = document.createElement("div");
-      actions.className = "modal-actions";
+      actions.className = "modal-actions d-flex justify-content-end gap-2 mt-3";
       const cancel = document.createElement("button");
       cancel.type = "button";
+      cancel.className = "btn btn-outline-secondary";
       cancel.textContent = "Cancel";
       const confirm = document.createElement("button");
       confirm.type = "button";
+      confirm.className = "btn btn-primary";
       confirm.textContent = "Confirm save";
       cancel.addEventListener("click", () => finish(false));
       confirm.addEventListener("click", () => finish(true));
@@ -616,6 +639,7 @@ function showPreviewDiffs(diffs, confirmable = false) {
     } else {
       const close = document.createElement("button");
       close.type = "button";
+      close.className = "btn btn-outline-secondary mt-3";
       close.textContent = "Close";
       close.addEventListener("click", () => finish(true));
       dialog.appendChild(close);
@@ -645,7 +669,7 @@ function showSaveErrors(errors) {
   if (!banner) {
     banner = document.createElement("div");
     banner.id = "error-banner";
-    banner.className = "error-banner";
+    banner.className = "error-banner alert alert-danger small";
     document.getElementById("entry-content").prepend(banner);
   }
   const items = [];
@@ -659,6 +683,7 @@ function showSaveErrors(errors) {
   const strong = document.createElement("strong");
   strong.textContent = "Validation errors:";
   const list = document.createElement("ul");
+  list.className = "mb-0 mt-2";
   for (const item of items) {
     const li = document.createElement("li");
     li.textContent = item;
@@ -794,7 +819,7 @@ function setMode(mode) {
       reportsPane.appendChild(iframe);
     } else {
       const msg = document.createElement("p");
-      msg.className = "reports-unavailable";
+      msg.className = "reports-unavailable text-muted p-5";
       msg.textContent =
         "No reports available. Set reports_dir in config-editor.yaml to the " +
         "reporting helper's output_dir and restart the config editor.";
@@ -853,7 +878,7 @@ async function init() {
   const registryResp = await fetch("api/registry");
   gRegistry = await registryResp.json();
 
-  gTheme = new Jedison.Theme();
+  gTheme = new Jedison.ThemeBootstrap5();
   gCustomEditors = [createMimirTopicPlaceholderEditor(Jedison)];
 
   // Best-effort: reports availability is inferred from whether GET /reports/
@@ -895,7 +920,7 @@ init().catch((err) => {
   const content = document.getElementById("entry-content");
   content.innerHTML = "";
   const p = document.createElement("p");
-  p.className = "fatal-error";
+  p.className = "fatal-error text-danger p-4";
   p.textContent = `Failed to load: ${err && err.message ? err.message : err}`;
   content.appendChild(p);
 });

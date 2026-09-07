@@ -283,7 +283,6 @@
       "required": [
         "capacity_kwh"
       ],
-      "title": "BatteryConfig",
       "type": "object",
       "x-categoryOrder": [
         "Basic",
@@ -532,7 +531,6 @@
         "setpoint_c",
         "cooling_rate_k_per_hour"
       ],
-      "title": "CombiHeatPumpConfig",
       "type": "object",
       "x-categoryOrder": [
         "Basic",
@@ -785,7 +783,6 @@
       "required": [
         "power_profile"
       ],
-      "title": "DeferrableLoadConfig",
       "type": "object",
       "x-categoryOrder": [
         "Basic",
@@ -985,7 +982,6 @@
         "capacity_kwh",
         "charge_segments"
       ],
-      "title": "EvConfig",
       "type": "object",
       "x-categoryOrder": [
         "Basic",
@@ -1406,7 +1402,6 @@
         "max_discharge_kw",
         "max_pv_kw"
       ],
-      "title": "HybridInverterConfig",
       "type": "object",
       "x-categoryOrder": [
         "Basic",
@@ -1763,7 +1758,6 @@
       "required": [
         "max_power_kw"
       ],
-      "title": "PvConfig",
       "type": "object",
       "x-categoryOrder": [
         "Basic",
@@ -2105,7 +2099,6 @@
           "x-category": "Advanced"
         }
       },
-      "title": "SpaceHeatingConfig",
       "type": "object",
       "x-categoryOrder": [
         "Basic",
@@ -2174,7 +2167,6 @@
           "x-format": "mimir-topic-placeholder"
         }
       },
-      "title": "StaticLoadConfig",
       "type": "object",
       "x-categoryOrder": [
         "Basic",
@@ -2259,7 +2251,6 @@
         "setpoint_c",
         "cooling_rate_k_per_hour"
       ],
-      "title": "ThermalBoilerConfig",
       "type": "object",
       "x-categoryOrder": [
         "Basic",
@@ -2304,21 +2295,24 @@
         "$ref": "#/$defs/BatteryConfig"
       },
       "title": "Batteries",
-      "type": "object"
+      "type": "object",
+      "x-format": "nav-horizontal"
     },
     "pv_arrays": {
       "additionalProperties": {
         "$ref": "#/$defs/PvConfig"
       },
       "title": "PV arrays",
-      "type": "object"
+      "type": "object",
+      "x-format": "nav-horizontal"
     },
     "ev_chargers": {
       "additionalProperties": {
         "$ref": "#/$defs/EvConfig"
       },
       "title": "EV chargers",
-      "type": "object"
+      "type": "object",
+      "x-format": "nav-horizontal"
     },
     "deferrable_loads": {
       "additionalProperties": {
@@ -2326,21 +2320,23 @@
       },
       "title": "Deferrable loads",
       "type": "object",
-      "x-category": "Advanced"
+      "x-format": "nav-horizontal"
     },
     "static_loads": {
       "additionalProperties": {
         "$ref": "#/$defs/StaticLoadConfig"
       },
       "title": "Static loads",
-      "type": "object"
+      "type": "object",
+      "x-format": "nav-horizontal"
     },
     "hybrid_inverters": {
       "additionalProperties": {
         "$ref": "#/$defs/HybridInverterConfig"
       },
       "title": "Hybrid inverters",
-      "type": "object"
+      "type": "object",
+      "x-format": "nav-horizontal"
     },
     "thermal_boilers": {
       "additionalProperties": {
@@ -2348,7 +2344,7 @@
       },
       "title": "Thermal boilers",
       "type": "object",
-      "x-category": "Advanced"
+      "x-format": "nav-horizontal"
     },
     "space_heating_hps": {
       "additionalProperties": {
@@ -2356,7 +2352,7 @@
       },
       "title": "Space heating heat pumps",
       "type": "object",
-      "x-category": "Advanced"
+      "x-format": "nav-horizontal"
     },
     "combi_heat_pumps": {
       "additionalProperties": {
@@ -2364,7 +2360,7 @@
       },
       "title": "Combi heat pumps",
       "type": "object",
-      "x-category": "Advanced"
+      "x-format": "nav-horizontal"
     },
     "grid": {
       "$ref": "#/$defs/GridConfig",

@@ -19,7 +19,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic import ValidationError as PydanticValidationError
 
-from helper_common.config import HomeAssistantConfig, MqttConfig, apply_mqtt_env_overrides
+from helper_common.config import HomeAssistantConfig, MqttConfig, apply_mqtt_env_overrides, map_entry_schema_extra
 import helper_common.topics as _topics
 
 
@@ -63,7 +63,12 @@ class ArrayConfig(BaseModel):
         peak_power_kwp: Array peak power in kWp. Must be positive.
     """
 
-    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra=map_entry_schema_extra(
+            {"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]}
+        ),
+    )
 
     output_topic: str | None = Field(
         default=None,
@@ -168,6 +173,7 @@ class PvFetcherConfig(BaseModel):
     arrays: dict[str, ArrayConfig] = Field(
         description="Named map of PV array configurations.",
         title="PV arrays",
+        json_schema_extra={"x-format": "nav-horizontal"},
     )
     confidence_decay: ConfidenceDecayConfig = Field(
         default_factory=ConfidenceDecayConfig,
