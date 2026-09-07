@@ -37,14 +37,14 @@ class ConfigEditorConfig(BaseModel):
             the config file.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     port: int = Field(
         default=8099,
         ge=1024,
         le=65535,
         description="TCP port the editor listens on.",
-        json_schema_extra={"ui_label": "Port", "ui_group": "advanced"},
+        title="Port", json_schema_extra={"x-category": "Advanced"},
     )
     config_dir: Path = Field(
         default=Path("/config"),
@@ -52,12 +52,12 @@ class ConfigEditorConfig(BaseModel):
             "Path to the config directory. "
             "Must match the container volume mount point."
         ),
-        json_schema_extra={"ui_label": "Config directory", "ui_group": "advanced"},
+        title="Config directory", json_schema_extra={"x-category": "Advanced"},
     )
     log_level: str = Field(
         default="INFO",
         description="Logging level: DEBUG, INFO, WARNING.",
-        json_schema_extra={"ui_label": "Log level", "ui_group": "advanced"},
+        title="Log level", json_schema_extra={"x-category": "Advanced"},
     )
     allowed_ip: str | None = Field(
         default=None,
@@ -68,7 +68,7 @@ class ConfigEditorConfig(BaseModel):
             "variable overrides this value when set, which is how the HA add-on "
             "supplies the ingress gateway address."
         ),
-        json_schema_extra={"ui_label": "Allowed IP", "ui_group": "advanced"},
+        title="Allowed IP", json_schema_extra={"x-category": "Advanced"},
     )
     disabled: bool | None = Field(
         default=False,

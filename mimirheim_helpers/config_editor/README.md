@@ -37,9 +37,14 @@ At startup, config-editor:
 
 1. Loads `config-editor.yaml` and validates it against `ConfigEditorConfig`.
 2. Starts a `ThreadingHTTPServer` on the configured port (default 8099).
-3. Imports `MimirheimConfig` and all available helper config models to build
-   JSON schemas. These schemas are computed once and cached for the lifetime of
-   the process.
+3. Discovers every `*.schema.json` file: bundled ones shipped inside the
+   config-editor package, plus any drop-in schema in `<config_dir>/schemas/`.
+   No Python helper modules are imported to determine what schemas exist --
+   each schema file carries its own `x-mimirheim` envelope naming the YAML
+   file it edits and, for bundled schemas only, an optional dotted path to a
+   second-pass Pydantic validator. Discovery runs once at startup and again,
+   without restarting the process, on `POST /api/reload`. See `SPEC.md` §2
+   for the full discovery and validation contract.
 4. Serves the single-page editor frontend and JSON API endpoints until
    SIGTERM or SIGINT.
 
@@ -117,6 +122,19 @@ An empty file is valid and enables the editor with all defaults.
 | `config_dir` | path | `/config` | Directory where config files are read from and written to. |
 | `log_level` | string | `INFO` | Python logging level name. |
 
+### Drop-in schemas
+
+`config_dir` may also contain a `schemas/` subdirectory
+(`/config/schemas/*.schema.json` by default). Every file there is scanned
+alongside the bundled schemas at startup and on `POST /api/reload`, using the
+same discovery, validation, and rendering path -- a drop-in schema is not a
+lesser citizen than a bundled one. An id already claimed by a bundled schema
+is rejected (the bundled schema always wins); two drop-ins claiming the same
+id are resolved in sorted filename order, first wins. A malformed drop-in is
+recorded as a load-time problem (visible via `GET /api/registry`) and never
+prevents another schema, bundled or drop-in, from loading. See `SPEC.md` for
+the full schema file format and rejection rules.
+
 ### HA add-on: allowed_ip
 
 When running as a HA add-on, the `CONFIG_EDITOR_ALLOWED_IP` environment
@@ -129,20 +147,30 @@ does not appear in `config-editor.yaml` and cannot be set manually.
 
 ## 4. HTTP API
 
+The current API is registry-backed: every entry (`mimirheim.yaml` and every
+helper, bundled or drop-in) is discovered and validated the same way -- see
+`SPEC.md` §2-§9 for the full contract this table summarises.
+
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/` | Single-page editor frontend |
 | `GET` | `/static/<file>` | Frontend static assets |
-| `GET` | `/api/schema` | `MimirheimConfig` JSON Schema |
-| `GET` | `/api/config` | Current `mimirheim.yaml` as `{"exists": bool, "config": dict}` |
-| `POST` | `/api/config` | Validate dict body and write `mimirheim.yaml`. Returns `{"ok": true}` or `{"ok": false, "errors": ...}` |
-| `GET` | `/api/helper-configs` | Dict mapping each helper filename to `{"enabled": bool, "config": dict}` |
-| `GET` | `/api/helper-schemas` | Dict mapping each helper filename to its JSON Schema |
-| `POST` | `/api/helper-config/<filename>` | Body `{"enabled": true, "config": {...}}` writes the file. `{"enabled": false}` deletes it. |
+| `GET` | `/api/registry` | Every discovered entry: id, its `x-mimirheim` fields, `enabled` (file exists), and load-time rejection problems |
+| `GET` | `/api/entry/<id>` | `{"schema": ..., "value": ..., "enabled": bool}` for one entry, rebuilt from disk on every call |
+| `POST` | `/api/save` | Body `{"entries": {"<id>": {"enabled": true, "config": {...}} \| {"enabled": false}, ...}}`. Validate-all-then-write-all over the submitted entries. Returns `{"ok": true}` or `{"ok": false, "errors": {"<id>": [...]}}` |
+| `POST` | `/api/preview` | Same request shape as `/api/save`. Returns `{"ok": true, "diffs": {"<filename>": "<unified diff>", ...}}` and writes nothing |
+| `POST` | `/api/reload` | Re-runs discovery without restarting the process. Returns the same shape as `GET /api/registry` |
 
-All responses are `application/json`. Error responses use standard HTTP status
-codes: 400 for malformed JSON, 403 for disallowed IP, 404 for unknown paths,
-422 for Pydantic validation failures.
+There is no deprecated API. The tool's original, hardcoded-helper-list
+endpoints (`/api/schema`, `/api/config`, `/api/helper-configs`,
+`/api/helper-schemas`, `/api/helper-config/<filename>`) have been removed.
+`static/app.js` speaks the old shapes and is non-functional against this
+server until plan 69's frontend rewrite replaces it -- expected, since the
+config-editor rewrite does not ship until every plan in it has landed.
+
+All responses are `application/json`. Status codes: 200 success, 400
+malformed JSON or bad `Content-Length`, 403 disallowed IP, 404 unknown entry
+id or path, 422 validation failure.
 
 ---
 

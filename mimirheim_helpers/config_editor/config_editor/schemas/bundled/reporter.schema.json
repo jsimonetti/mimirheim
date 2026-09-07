@@ -1,0 +1,182 @@
+{
+  "$defs": {
+    "MqttConfig": {
+      "additionalProperties": false,
+      "description": "MQTT broker connection parameters, shared by all mimirheim input helper daemons.\n\nAttributes:\n    host: Broker hostname or IP address.\n    port: Broker TCP port. Default is 1883 (unencrypted); use 8883 with TLS.\n    client_id: MQTT client identifier. Must be unique on the broker.\n    username: Optional broker username. Omit for anonymous access.\n    password: Optional broker password.\n    tls: Enable TLS for the broker connection. Set to True when the broker\n        listens on an encrypted port (typically 8883). When False, a\n        plaintext connection is made regardless of the port number.\n    tls_allow_insecure: When True and tls is also True, skip broker\n        certificate verification. Useful for self-signed certificates on\n        private networks. Has no effect when tls is False. Do not use\n        against a broker reachable from an untrusted network.",
+      "properties": {
+        "host": {
+          "description": "Broker hostname or IP address.",
+          "title": "Broker host",
+          "type": "string"
+        },
+        "port": {
+          "default": 1883,
+          "description": "Broker TCP port.",
+          "maximum": 65535,
+          "minimum": 1,
+          "title": "Broker port",
+          "type": "integer",
+          "x-category": "Advanced"
+        },
+        "client_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "MQTT client identifier. Defaults to a tool-specific value when not set.",
+          "title": "Client ID"
+        },
+        "username": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Broker username.",
+          "title": "Username",
+          "x-category": "Advanced"
+        },
+        "password": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Broker password.",
+          "title": "Password",
+          "x-category": "Advanced"
+        },
+        "tls": {
+          "default": false,
+          "description": "Enable TLS for the broker connection. Set to true when the broker listens on an encrypted port (typically 8883).",
+          "title": "Enable TLS",
+          "type": "boolean",
+          "x-category": "Advanced"
+        },
+        "tls_allow_insecure": {
+          "default": false,
+          "description": "Skip broker certificate verification when TLS is enabled. Has no effect when tls is false.",
+          "title": "Allow insecure TLS",
+          "type": "boolean",
+          "x-category": "Advanced"
+        }
+      },
+      "required": [
+        "host"
+      ],
+      "title": "MqttConfig",
+      "type": "object",
+      "x-categoryOrder": [
+        "Basic",
+        "Advanced"
+      ],
+      "x-format": "categories-vertical"
+    },
+    "ReporterReportingSection": {
+      "additionalProperties": false,
+      "description": "Reporting-specific paths and retention settings for the reporter daemon.\n\nThis section points the reporter to the dump directory shared with mimirheim\nand to the directory where HTML reports are written.\n\nAttributes:\n    dump_dir: Directory shared with the mimirheim container. The reporter reads\n        dump file pairs from here via a bind-mount or named volume. Must\n        be readable by the reporter process.\n    output_dir: Directory where the reporter writes ``{ts}_report.html``,\n        ``plotly.min.js``, ``inventory.js``, and ``index.html``.\n    max_reports: Maximum number of ``*_report.html`` files to retain in\n        ``output_dir``. Older reports are removed when this limit is\n        exceeded. 0 means unlimited.\n    notify_topic: MQTT topic to subscribe to for dump-available\n        notifications. Defaults to ``'{mimir_topic_prefix}/status/dump_available'``\n        when not set.",
+      "properties": {
+        "dump_dir": {
+          "description": "Shared dump directory (read by reporter).",
+          "format": "path",
+          "title": "Dump directory",
+          "type": "string"
+        },
+        "output_dir": {
+          "description": "Directory to write HTML reports into.",
+          "format": "path",
+          "title": "Output directory",
+          "type": "string"
+        },
+        "max_reports": {
+          "default": 100,
+          "description": "Maximum retained HTML reports. 0 = unlimited.",
+          "minimum": 0,
+          "title": "Max reports",
+          "type": "integer",
+          "x-category": "Advanced"
+        },
+        "notify_topic": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "MQTT topic to subscribe to for dump-available notifications.",
+          "title": "Notify topic",
+          "x-category": "Advanced"
+        }
+      },
+      "required": [
+        "dump_dir",
+        "output_dir"
+      ],
+      "title": "ReporterReportingSection",
+      "type": "object",
+      "x-categoryOrder": [
+        "Basic",
+        "Advanced"
+      ],
+      "x-format": "categories-vertical"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Root configuration model for the mimirheim-reporter daemon.\n\nAttributes:\n    mqtt: MQTT broker connection parameters.\n    reporting: Reporting paths and retention settings.",
+  "properties": {
+    "mqtt": {
+      "$ref": "#/$defs/MqttConfig",
+      "description": "MQTT broker connection parameters.",
+      "title": "MQTT"
+    },
+    "mimir_topic_prefix": {
+      "default": "mimir",
+      "description": "mimirheim mqtt.topic_prefix. Used to derive the default notify_topic.",
+      "title": "mimirheim topic prefix",
+      "type": "string",
+      "x-category": "Advanced"
+    },
+    "reporting": {
+      "$ref": "#/$defs/ReporterReportingSection",
+      "description": "Reporting paths and retention settings.",
+      "title": "Reporting"
+    }
+  },
+  "required": [
+    "mqtt",
+    "reporting"
+  ],
+  "title": "ReporterConfig",
+  "type": "object",
+  "x-categoryOrder": [
+    "Basic",
+    "Advanced"
+  ],
+  "x-format": "categories-vertical",
+  "x-mimirheim": {
+    "file": "reporter.yaml",
+    "category": "reporting",
+    "order": 0,
+    "python_package": "reporter",
+    "python_model": "reporter.config:ReporterConfig",
+    "exclusive_group": null,
+    "required": false,
+    "docs_url": null
+  }
+}

@@ -66,6 +66,7 @@ reporter = [
 ]
 config-editor = [
     "ruamel.yaml>=0.18",
+    "jsonschema>=4.23",
 ]
 # Meta-extra: installs every helper's runtime dependencies in one shot.
 # Used by the container build and by full developer environments.

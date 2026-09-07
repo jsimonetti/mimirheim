@@ -25,11 +25,7 @@ either one.
 
 ## Branch
 
-```bash
-git switch -c feat/config-editor-registry
-```
-
-Do not merge or push until the user has reviewed the result.
+Do not push until the user has reviewed the result.
 
 ---
 
@@ -122,13 +118,19 @@ to distinguish which validator raised.
 replaced — they are wired onto the new endpoints exactly as they work on the
 existing ones today.
 
-### 9. Deprecated aliases stay until plan 69
+### 9. Deprecated aliases are deleted, not kept alive
 
-`GET /api/schema`, `GET /api/config`, `POST /api/config`,
-`GET /api/helper-configs`, `GET /api/helper-schemas`,
-`POST /api/helper-config/<filename>` remain, reimplemented as thin adapters
-over `registry.py`, so `app.js` keeps working unmodified through this plan.
-Plan 69 deletes them once the new frontend no longer calls them.
+**Correction made during implementation, 2026-09-07:** this decision
+originally kept `GET /api/schema`, `GET /api/config`, `POST /api/config`,
+`GET /api/helper-configs`, `GET /api/helper-schemas`, and
+`POST /api/helper-config/<filename>` alive as thin adapters over
+`registry.py`, so `app.js` would keep working unmodified through this plan.
+That was unnecessary: the config-editor rewrite (plans 68-70) does not ship
+until every plan in it has landed, so there was never a need to bridge
+`app.js` across the transition. The six aliases and their handler methods
+are deleted in this plan, not adapted. `static/app.js` speaks the old
+shapes and is non-functional against the server from this plan onward --
+expected and harmless until plan 69's Jedison-based rewrite replaces it.
 
 ### 10. Field vocabulary migration
 
@@ -195,9 +197,9 @@ unaffected (confirmed it never reads any `ui_*` key).
 - `config_editor/registry.py` (new).
 - `config_editor/schemas/bundled/*.schema.json` (new, generated).
 - `config_editor/schemas/_meta/mimirheim-helper-schema.meta.json` (new).
-- `config_editor/server.py` — new endpoints backed by `registry.py`;
-  deprecated aliases as thin adapters; `_load_helper_models()` and
-  `_baseload_variants` deleted.
+- `config_editor/server.py` — new endpoints backed by `registry.py`; the six
+  deprecated aliases, `_load_helper_models()`, and `_baseload_variants`
+  deleted.
 - `scripts/generate_schema_json.py` — extended to emit bundled schemas.
 - `pyproject.toml` — add `jsonschema` to the `config-editor` extra.
 - The twelve files listed in Decision 10 — field vocabulary migration.
@@ -342,8 +344,8 @@ Zero matches.
 Add `GET /api/registry`, `GET /api/entry/<id>`, `POST /api/save`,
 `POST /api/preview`, `POST /api/reload`, backed by `registry.py`. Port MQTT
 redaction, IP allowlist, body size cap, and `_safe_join` onto the new
-endpoints. Reimplement the six deprecated endpoints as adapters over the new
-ones. Delete `_load_helper_models()` and `_baseload_variants`.
+endpoints. Delete the six deprecated endpoints and their handler methods
+outright, along with `_load_helper_models()` and `_baseload_variants`.
 
 ### Step 10 — port `test_config_editor_server.py`
 
@@ -351,9 +353,9 @@ Rewrite or add tests so every currently-covered behaviour is re-verified
 against the new endpoints: MQTT env redaction round-trip (placeholder never
 written, a user-typed value survives, env-supplied is reported correctly),
 exclusive baseload group switching, path traversal returns 400, IP
-allowlist rejects a non-matching address, reports-mode detection. Add a
-thin smoke test per deprecated alias (it delegates correctly), not a full
-duplicate of its coverage.
+allowlist rejects a non-matching address, reports-mode detection. Delete the
+tests for the six deprecated endpoints outright; they have no adapter left
+to smoke-test.
 
 ### Step 11 — documentation
 
@@ -397,10 +399,11 @@ All green. Record final counts against the Prerequisites baseline.
 - [ ] No `ui_label`/`ui_group`/`ui_placeholder`/`ui_source`/
       `ui_instance_name_description` string remains anywhere in the
       codebase; `tests/unit/test_schema_ui_annotations.py` is deleted.
-- [ ] The six deprecated aliases still work, backed by `registry.py`.
-- [ ] `static/app.js` still works unmodified against the deprecated
-      aliases (manual smoke check: start the server, load the existing
-      frontend, confirm it still renders and saves).
+- [ ] The six deprecated aliases are deleted, not adapted; no route or
+      handler method for them remains in `server.py`.
+- [ ] `static/app.js` is expected to be non-functional against this server
+      until plan 69's frontend rewrite replaces it — no smoke check against
+      it is part of this plan's acceptance.
 - [ ] `README.md`'s HTTP API table, "How it works" step 3, and
       "Configuration" section accurately describe the shipped behaviour —
       no reference to importing helper config models or to a fixed helper

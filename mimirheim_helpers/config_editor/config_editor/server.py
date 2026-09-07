@@ -1,41 +1,56 @@
 """HTTP server for the mimirheim config editor.
 
-This module provides ConfigEditorServer, a lightweight HTTP server that serves
-the static frontend files and JSON API endpoints:
+This module provides ConfigEditorServer, a lightweight HTTP server that
+serves the static frontend files and a JSON API on top of
+``config_editor.registry`` (schema discovery, validation, and save
+semantics -- SPEC.md §2-§9):
 
-    GET  /api/schema                   — MimirheimConfig JSON Schema (cached)
-    GET  /api/config                   — current mimirheim.yaml as parsed dict
-    POST /api/config                   — validate via Pydantic, write YAML
-    GET  /api/helper-configs           — enabled/config for all known helpers
-    GET  /api/helper-schemas           — JSON Schema for every helper config
-    POST /api/helper-config/<filename> — enable (write) or disable (delete) a helper
+    GET  /api/registry                 -- every discovered entry + problems
+    GET  /api/entry/<id>                -- one entry's schema, value, enabled
+    POST /api/save                      -- validate-all-then-write-all
+    POST /api/preview                   -- same shape as /api/save, no writes
+    POST /api/reload                    -- re-run discovery, no restart
 
-The server uses only Python stdlib (http.server, threading, json, yaml).
-No external web framework is required.
+The tool's original, hardcoded-helper-list endpoints (``/api/schema``,
+``/api/config``, ``/api/helper-configs``, ``/api/helper-schemas``,
+``/api/helper-config/<filename>``) have been removed. ``static/app.js``
+speaks the old shapes and is non-functional against this server until
+plan 69's Jedison-based rewrite replaces it -- this is expected and
+harmless, since the config-editor rewrite (plans 68-70) does not ship until
+every plan in it has landed.
+
+The server uses only Python stdlib (http.server, threading, json, yaml) plus
+``config_editor.registry`` and ``config_editor.yaml_io``. No external web
+framework is required.
 
 What this module does not do:
 - It does not authenticate users. The editor is designed for trusted private
   networks only.
 - It does not serve files outside the static/ directory.
 - It does not parse MQTT messages or interact with the solver.
+- It does not implement schema discovery, validation, or save semantics
+  itself -- that is entirely ``config_editor.registry``'s job. This module
+  only translates between HTTP requests/responses and calls into it.
 """
 from __future__ import annotations
 
+import dataclasses
+import difflib
 import http.server
+import importlib
 import json
 import logging
 import mimetypes
 import os
-import tempfile
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import ValidationError as PydanticValidationError
-from ruamel.yaml import YAML
 
+from config_editor import registry
+from config_editor.yaml_io import render_yaml_preserving_comments, write_yaml_preserving_comments
 from helper_common.config import mqtt_env_overrides
-from mimirheim.config.schema import MimirheimConfig
 
 logger = logging.getLogger(__name__)
 
@@ -48,14 +63,16 @@ _ALLOWED_REPORT_EXTENSIONS = {".html", ".js", ".css"}
 # Only these suffixes are served from the dump directory.
 _ALLOWED_DUMP_SUFFIXES = ("_input.json", "_output.json")
 
-# Substituted for credential values in the /api/config response.
+# Substituted for credential values in an entry's returned value and in
+# GET /api/config's mqtt_env.
 #
-# The editor needs to know which mqtt fields the Supervisor supplies, and needs
-# a value it can compare the form field against to decide whether the user
-# overrode it. It does not need the secret itself, and this server does not
-# authenticate: anything that can reach the port could read a real password out
-# of the response. The POST handlers strip this sentinel back out, so it never
-# reaches a YAML file even though the form posts it straight back.
+# The editor needs to know which mqtt fields the Supervisor supplies, and
+# needs a value it can compare the form field against to decide whether the
+# user overrode it. It does not need the secret itself, and this server does
+# not authenticate: anything that can reach the port could read a real
+# password out of the response. The POST handlers strip this sentinel back
+# out, so it never reaches a YAML file even though the form posts it
+# straight back.
 MQTT_ENV_REDACTED = "__supervisor_provided__"
 
 # mqtt fields whose value is replaced by MQTT_ENV_REDACTED on the way out.
@@ -100,193 +117,36 @@ def _safe_join(base: Path, filename: str) -> Path | None:
     return Path(fullpath)
 
 
-def _write_yaml_preserving_comments(
-    data: dict[str, Any], file_path: Path
-) -> str:
-    """Write YAML file while preserving existing comments and formatting.
+class _BadRequest(Exception):
+    """Raised internally when a POST body fails to parse or is malformed shape.
 
-    If the file exists, loads it with ruamel.yaml to preserve comments,
-    updates values in-place, then writes back. If the file doesn't exist,
-    creates a new formatted YAML file.
-
-    Args:
-        data: Dictionary to write as YAML.
-        file_path: Path where the YAML file will be written.
-
-    Returns:
-        The YAML string that was written.
+    Caught at the HTTP-handler boundary and turned into a 400 response;
+    never propagates past ``handle_request``.
     """
-    yaml_handler = YAML()
-    yaml_handler.default_flow_style = False
-    yaml_handler.preserve_quotes = True
-    yaml_handler.width = 4096  # Prevent line wrapping
-
-    if file_path.exists():
-        # Load existing file to preserve comments and structure
-        try:
-            with file_path.open("r") as f:
-                existing = yaml_handler.load(f)
-        except Exception:
-            # File is malformed or unreadable: write fresh
-            existing = None
-        
-        if existing is not None:
-            # Deep merge: update existing structure with new values
-            def deep_merge(target: Any, source: dict) -> None:
-                """Recursively update target dict with values from source.
-                
-                Updates values, adds new keys, and removes keys not in source.
-                """
-                if not isinstance(target, dict) or not isinstance(source, dict):
-                    return
-                
-                # Remove keys that are in target but not in source
-                keys_to_remove = [k for k in target.keys() if k not in source]
-                for key in keys_to_remove:
-                    del target[key]
-                
-                # Update or add keys from source
-                for key, value in source.items():
-                    if key in target and isinstance(target[key], dict) and isinstance(value, dict):
-                        deep_merge(target[key], value)
-                    else:
-                        target[key] = value
-            
-            deep_merge(existing, data)
-            merged = existing
-        else:
-            # File was empty or malformed
-            merged = data
-    else:
-        # New file: just use the provided data
-        merged = data
-
-    # Write to string first to get the output for logging
-    import io
-    stream = io.StringIO()
-    yaml_handler.dump(merged, stream)
-    yaml_str = stream.getvalue()
-    
-    # Now write atomically to disk
-    fd, tmp_path = tempfile.mkstemp(
-        dir=file_path.parent, suffix=".yaml.tmp"
-    )
-    try:
-        with os.fdopen(fd, "w") as fh:
-            fh.write(yaml_str)
-        os.replace(tmp_path, file_path)
-    except OSError:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
-    
-    return yaml_str
-
-
-# ---------------------------------------------------------------------------
-# Helper config registry
-#
-# Maps each known helper config filename to (Pydantic model, competing_files).
-# Competing files are the other baseload variants; enabling one deletes them.
-# Imports are deferred to avoid loading optional heavy dependencies at startup.
-# Any filename not in this dict is rejected as 400 on POST.
-# ---------------------------------------------------------------------------
-
-def _load_helper_models() -> dict[str, tuple[Any, list[str]]]:
-    """Import and return all known helper Pydantic config classes.
-
-    Returns a dict mapping config filename to (model_class, competing_filenames).
-    Competing filenames apply only to the mutually-exclusive baseload variants:
-    enabling one deletes the others.
-
-    Helper packages that are not installed are omitted silently so that the
-    server starts in minimal environments.
-    """
-    result: dict[str, tuple[Any, list[str]]] = {}
-    _baseload_variants = ["baseload-static.yaml", "baseload-ha.yaml", "baseload-ha-db.yaml"]
-
-    try:
-        from nordpool.config import NordpoolConfig
-        result["nordpool.yaml"] = (NordpoolConfig, [])
-    except ImportError:
-        pass
-
-    try:
-        from zonneplan_prices.config import ZonneplanPricesConfig
-        result["zonneplan.yaml"] = (ZonneplanPricesConfig, [])
-    except ImportError:
-        pass
-
-    try:
-        from pv_fetcher.config import PvFetcherConfig
-        result["pv-fetcher.yaml"] = (PvFetcherConfig, [])
-    except ImportError:
-        pass
-
-    try:
-        from pv_ml_learner.config import PvLearnerConfig
-        result["pv-ml-learner.yaml"] = (PvLearnerConfig, [])
-    except ImportError:
-        pass
-
-    try:
-        from baseload_static.config import BaseloadConfig as BaseloadStaticConfig
-        result["baseload-static.yaml"] = (
-            BaseloadStaticConfig,
-            [f for f in _baseload_variants if f != "baseload-static.yaml"],
-        )
-    except ImportError:
-        pass
-
-    try:
-        from baseload_ha.config import BaseloadConfig as BaseloadHaConfig
-        result["baseload-ha.yaml"] = (
-            BaseloadHaConfig,
-            [f for f in _baseload_variants if f != "baseload-ha.yaml"],
-        )
-    except ImportError:
-        pass
-
-    try:
-        from baseload_ha_db.config import BaseloadConfig as BaseloadHaDbConfig
-        result["baseload-ha-db.yaml"] = (
-            BaseloadHaDbConfig,
-            [f for f in _baseload_variants if f != "baseload-ha-db.yaml"],
-        )
-    except ImportError:
-        pass
-
-    try:
-        from reporter.config import ReporterConfig
-        result["reporter.yaml"] = (ReporterConfig, [])
-    except ImportError:
-        pass
-
-    try:
-        from scheduler.config import SchedulerConfig
-        result["scheduler.yaml"] = (SchedulerConfig, [])
-    except ImportError:
-        pass
-
-    return result
 
 
 class ConfigEditorServer:
     """Lightweight HTTP server for the mimirheim config editor.
 
-    Serves static files and three JSON API endpoints. All request handling
-    is synchronous; the stdlib ThreadingHTTPServer is used so that concurrent
-    browser requests do not block each other.
+    Serves static files and the registry-backed JSON API. All request
+    handling is synchronous; the stdlib ThreadingHTTPServer is used so that
+    concurrent browser requests do not block each other.
 
-    The schema is computed once at construction time and cached for the
-    lifetime of the server instance.
+    Schema discovery (``config_editor.registry.build_registry``) runs once at
+    construction time and is cached in ``self._registry`` for the lifetime of
+    the server instance; ``POST /api/reload`` re-runs it without restarting
+    the process. An entry's ``context`` and current file content are never
+    cached -- they are rebuilt from disk on every ``GET /api/entry/<id>``
+    (SPEC.md §5 Decision 5).
 
     Args:
-        config_dir: Directory where mimirheim.yaml is read from and written to.
+        config_dir: Directory where mimirheim YAML files are read from and
+            written to. Its ``schemas/`` subdirectory, if present, is scanned
+            for drop-in schema files (SPEC.md §2).
         port: TCP port to listen on. Pass 0 to let the OS assign a free port
             (useful in tests).
+        allowed_ip: If set, only requests from this source IP are accepted;
+            all others receive 403.
     """
 
     def __init__(
@@ -297,17 +157,7 @@ class ConfigEditorServer:
     ) -> None:
         self._config_dir = Path(config_dir)
         self._allowed_ip = allowed_ip
-        self._schema: dict[str, Any] = MimirheimConfig.model_json_schema()
-
-        # Load helper model registry. Dict maps filename → (model_cls, competitors).
-        self._helper_models: dict[str, tuple[Any, list[str]]] = _load_helper_models()
-
-        # Pre-compute helper schemas once — these are expensive for some models
-        # (pv_ml_learner has many nested $defs).
-        self._helper_schemas: dict[str, Any] = {
-            fname: model_cls.model_json_schema()
-            for fname, (model_cls, _) in self._helper_models.items()
-        }
+        self._registry: registry.Registry = self._discover_registry()
 
         # Build the actual HTTP server. handler_factory creates a closure over
         # self so the handler can call _dispatch without global state.
@@ -387,22 +237,27 @@ class ConfigEditorServer:
         """Return the actual TCP port the server is bound to."""
         return self._httpd.server_address[1]
 
-    def _read_reporter_yaml(self) -> dict:
+    def _discover_registry(self) -> registry.Registry:
+        """Run schema discovery (SPEC.md §2) against this server's directories.
+
+        Raises:
+            registry.BundledSchemaCollisionError: See
+                ``registry.discover_bundled`` -- a packaging bug, not user
+                input; the server fails loudly at startup or reload rather
+                than silently picking one.
+        """
+        return registry.build_registry(
+            bundled_dir=registry.BUNDLED_SCHEMA_DIR,
+            dropin_dir=self._config_dir / "schemas",
+        )
+
+    def _read_reporter_yaml(self) -> dict[str, Any]:
         """Read and parse reporter.yaml from the config directory.
 
         Returns an empty dict if the file is absent, unreadable, or cannot be
-        parsed. An unreadable file used to raise OSError out of the request
-        handler; "reports not configured" is the honest answer and does not
-        take the thread down.
+        parsed.
         """
-        reporter_yaml = self._config_dir / "reporter.yaml"
-        try:
-            return yaml.safe_load(reporter_yaml.read_text()) or {}
-        except FileNotFoundError:
-            return {}
-        except (OSError, yaml.YAMLError) as exc:
-            logger.warning("Could not read %s: %s", reporter_yaml, exc)
-            return {}
+        return self._read_yaml_file(self._config_dir / "reporter.yaml")
 
     def _reporting_path(self, key: str) -> Path | None:
         """Return a path from the ``reporting`` section of reporter.yaml.
@@ -483,19 +338,18 @@ class ConfigEditorServer:
             return self._serve_dump_file(path[len("/reports/dumps/"):])
         if method == "GET" and path.startswith("/reports/"):
             return self._serve_report_file(path[len("/reports/"):])
-        if method == "GET" and path == "/api/schema":
-            return self._api_get_schema()
-        if method == "GET" and path == "/api/config":
-            return self._api_get_config()
-        if method == "POST" and path == "/api/config":
-            return self._api_post_config(body)
-        if method == "GET" and path == "/api/helper-configs":
-            return self._api_get_helper_configs()
-        if method == "GET" and path == "/api/helper-schemas":
-            return self._api_get_helper_schemas()
-        if method == "POST" and path.startswith("/api/helper-config/"):
-            filename = path[len("/api/helper-config/"):]
-            return self._api_post_helper_config(filename, body)
+
+        # -- Current registry-backed API (SPEC.md §12) --
+        if method == "GET" and path == "/api/registry":
+            return self._api_get_registry()
+        if method == "GET" and path.startswith("/api/entry/"):
+            return self._api_get_entry(path[len("/api/entry/"):])
+        if method == "POST" and path == "/api/save":
+            return self._api_post_save(body)
+        if method == "POST" and path == "/api/preview":
+            return self._api_post_preview(body)
+        if method == "POST" and path == "/api/reload":
+            return self._api_post_reload()
 
         return self._json_response(404, {"error": "not found"})
 
@@ -528,7 +382,7 @@ class ConfigEditorServer:
     def _serve_report_file(self, filename: str) -> tuple[int, dict[str, str], bytes]:
         """Serve a single file from the reports directory.
 
-        Only flat filenames are accepted — no path separators or traversal
+        Only flat filenames are accepted -- no path separators or traversal
         components. Allowed extensions: .html, .js.
 
         Args:
@@ -558,7 +412,7 @@ class ConfigEditorServer:
 
         Download links in the report index use the relative path ``dumps/<filename>``
         so they work through the config editor proxy. When the report index is opened
-        directly from the filesystem, these links will 404 — users who need
+        directly from the filesystem, these links will 404 -- users who need
         direct-file access can add a web server alias or symlink themselves.
 
         Args:
@@ -581,7 +435,7 @@ class ConfigEditorServer:
             {
                 "Content-Type": "application/json",
                 # resolved.name is the final path component after symlink
-                # resolution and containment verification — safe for use in
+                # resolution and containment verification -- safe for use in
                 # the Content-Disposition header.
                 "Content-Disposition": f'attachment; filename="{resolved.name}"',
             },
@@ -618,233 +472,252 @@ class ConfigEditorServer:
         return 200, {"Content-Type": content_type}, resolved.read_bytes()
 
     # ------------------------------------------------------------------
-    # API endpoints
+    # Registry-backed API endpoints (SPEC.md §12)
     # ------------------------------------------------------------------
 
-    def _api_get_schema(self) -> tuple[int, dict[str, str], bytes]:
-        """Return the cached MimirheimConfig JSON Schema."""
-        return self._json_response(200, self._schema)
+    def _api_get_registry(self) -> tuple[int, dict[str, str], bytes]:
+        """Return every discovered entry's id, x-mimirheim fields, enabled state, and problems."""
+        return self._json_response(200, self._registry_payload())
 
-    def _api_get_config(self) -> tuple[int, dict[str, str], bytes]:
-        """Read mimirheim.yaml and return its parsed contents.
+    def _api_post_reload(self) -> tuple[int, dict[str, str], bytes]:
+        """Re-run discovery without restarting the process; return the new registry state."""
+        self._registry = self._discover_registry()
+        return self._json_response(200, self._registry_payload())
 
-        Does not validate via Pydantic so that partially-complete configs
-        written by the user are returned as-is for display in the frontend.
+    def _registry_payload(self) -> dict[str, Any]:
+        """Build the response body shared by GET /api/registry and POST /api/reload."""
+        entries: dict[str, Any] = {}
+        for entry_id, entry in self._registry.entries.items():
+            entries[entry_id] = {
+                "x-mimirheim": self._envelope_dict(entry.envelope),
+                "enabled": (self._config_dir / entry.envelope.file).exists(),
+            }
+        problems = [{"source": p.source, "reason": p.reason} for p in self._registry.problems]
+        return {"entries": entries, "problems": problems}
 
-        The ``mqtt_env`` key in the response names the MQTT broker settings
-        currently set via environment variables (injected by the HA Supervisor).
-        The frontend uses these to show which fields are Supervisor-controlled
-        and to strip them from the saved YAML when the user has not overridden
-        them. Credential values are replaced by ``MQTT_ENV_REDACTED``; the key
-        is still present, so the frontend can tell the field is env-supplied
-        without the secret leaving the process.
+    def _api_get_entry(self, entry_id: str) -> tuple[int, dict[str, str], bytes]:
+        """Return one entry's dereferenceable schema, current value, and enabled state.
 
-        Returns:
-            ``{"exists": false, "config": {}, "mqtt_env": {...}}`` when the
-            file is absent.
-            ``{"exists": true, "config": <dict>, "mqtt_env": {...}}`` when the
-            file is present.
+        Both ``context`` (for every entry but mimirheim.yaml's own) and the
+        current file content are rebuilt from disk on every call -- no
+        in-memory cache is kept across requests (SPEC.md §5 Decision 5).
         """
-        mqtt_env = self._mqtt_env_for_client()
-        reports_available = (
-            self._reports_dir is not None
-            and (self._reports_dir / "index.html").exists()
+        entry = self._registry.get(entry_id)
+        if entry is None:
+            return self._json_response(404, {"error": f"unknown entry id {entry_id!r}"})
+
+        schema = registry.compose_entry_schema(entry)
+        target = self._config_dir / entry.envelope.file
+        enabled = target.exists()
+        value = (
+            self._read_yaml_file(target)
+            if enabled
+            else self._model_defaults(entry.envelope.python_model)
         )
-        yaml_path = self._config_dir / "mimirheim.yaml"
-        if not yaml_path.exists():
-            return self._json_response(
-                200,
-                {"exists": False, "config": {}, "mqtt_env": mqtt_env, "reports_available": reports_available},
-            )
+        if entry.envelope.file != registry.MIMIRHEIM_YAML_FILE:
+            mimirheim_config = self._read_yaml_file(self._config_dir / registry.MIMIRHEIM_YAML_FILE)
+            value = {**value, "context": registry.build_context(mimirheim_config)}
 
+        return self._json_response(200, {"schema": schema, "value": value, "enabled": enabled})
+
+    def _api_post_save(self, body: bytes) -> tuple[int, dict[str, str], bytes]:
+        """Validate-all-then-write-all the submitted entries (SPEC.md §8)."""
         try:
-            raw = yaml.safe_load(yaml_path.read_text()) or {}
-        except yaml.YAMLError as exc:
-            logger.warning("Failed to parse mimirheim.yaml: %s", exc)
-            return self._json_response(
-                200,
-                {"exists": True, "config": {}, "mqtt_env": mqtt_env, "reports_available": reports_available},
-            )
-
-        return self._json_response(
-            200,
-            {"exists": True, "config": raw, "mqtt_env": mqtt_env, "reports_available": reports_available},
-        )
-
-    def _api_post_config(self, body: bytes) -> tuple[int, dict[str, str], bytes]:
-        """Validate a JSON config body and write it to mimirheim.yaml.
-
-        Validation is performed via MimirheimConfig.model_validate. If
-        validation fails, HTTP 422 is returned with a list of Pydantic error
-        dicts; the file is not written.
-
-        When MQTT env vars are set (HA Supervisor context), the submitted config
-        may omit mqtt fields that are provided by the Supervisor at runtime.
-        The server merges env-supplied mqtt fields into a validation-only copy
-        before calling Pydantic; only the original submitted data is written to
-        disk, keeping Supervisor credentials out of the YAML file.
-
-        On success, the config is serialised to YAML and written atomically:
-        a temp file is written in the same directory, then os.replace() moves
-        it into place. This prevents a partial file being visible to the
-        solver if the container is restarted mid-write.
-
-        Args:
-            body: Raw JSON bytes.
-
-        Returns:
-            HTTP 200 {"ok": true} on success.
-            HTTP 422 {"ok": false, "errors": [...]} on validation failure.
-            HTTP 400 on malformed JSON.
-        """
-        try:
-            data = json.loads(body)
-        except (json.JSONDecodeError, ValueError) as exc:
+            entries = self._extract_entries(body)
+        except _BadRequest as exc:
             return self._json_response(400, {"ok": False, "errors": str(exc)})
 
-        # An untouched password field posts the redaction sentinel back. Drop it
-        # before anything else looks at the data, so it is neither validated nor
-        # written to disk.
-        data = self._strip_redacted_mqtt(data) if isinstance(data, dict) else data
-
-        # Merge env-supplied MQTT fields into a validation-only copy. The user
-        # may have excluded mqtt fields that the Supervisor provides at runtime;
-        # without the merge, Pydantic would reject the config as incomplete.
-        mqtt_env = self._mqtt_env()
-        if mqtt_env:
-            validate_data: dict = dict(data)
-            validate_data["mqtt"] = {**mqtt_env, **dict(data.get("mqtt") or {})}
-        else:
-            validate_data = data
-
+        to_write, to_validate = self._redact_and_merge_entries(entries)
         try:
-            MimirheimConfig.model_validate(validate_data)
-        except PydanticValidationError as exc:
-            return self._json_response(422, {"ok": False, "errors": exc.errors()})
+            errors = registry.validate_save(self._registry, to_validate)
+        except registry.UnknownEntryError as exc:
+            return self._json_response(404, {"error": f"unknown entry id: {exc}"})
+        if errors:
+            return self._json_response(422, {"ok": False, "errors": errors})
 
-        yaml_path = self._config_dir / "mimirheim.yaml"
-        yaml_str = _write_yaml_preserving_comments(data, yaml_path)
-
-        logger.info("Wrote mimirheim.yaml (%d bytes)", len(yaml_str))
+        registry.write_entries(
+            self._registry, self._config_dir, to_write, write_yaml=write_yaml_preserving_comments
+        )
         return self._json_response(200, {"ok": True})
 
-    # ------------------------------------------------------------------
-    # Helper config endpoints
-    # ------------------------------------------------------------------
+    def _api_post_preview(self, body: bytes) -> tuple[int, dict[str, str], bytes]:
+        """Compute the YAML diff a save would produce, without writing anything.
 
-    def _api_get_helper_configs(self) -> tuple[int, dict[str, str], bytes]:
-        """Return enabled status and parsed config for every known helper.
-
-        A helper is enabled when its config file exists in config_dir. The
-        config contents are returned as-is (no Pydantic validation on GET)
-        so that partially-complete files are still displayed in the frontend.
+        Shares ``registry.write_entries`` -- the exact merge/write
+        implementation ``/api/save`` uses -- via swapped ``write_yaml`` and
+        ``delete_yaml`` callbacks that compute a unified diff instead of
+        touching disk (SPEC.md §12).
         """
-        result: dict[str, Any] = {}
-        for fname in self._helper_models:
-            fpath = self._config_dir / fname
-            if fpath.exists():
-                try:
-                    raw = yaml.safe_load(fpath.read_text()) or {}
-                except yaml.YAMLError:
-                    raw = {}
-                result[fname] = {"enabled": True, "config": raw}
-            else:
-                result[fname] = {"enabled": False, "config": {}}
-        return self._json_response(200, result)
-
-    def _api_get_helper_schemas(self) -> tuple[int, dict[str, str], bytes]:
-        """Return the pre-computed JSON Schema for every known helper config."""
-        return self._json_response(200, self._helper_schemas)
-
-    def _api_post_helper_config(
-        self, filename: str, body: bytes
-    ) -> tuple[int, dict[str, str], bytes]:
-        """Enable (write) or disable (delete) a helper config file.
-
-        The filename must be present in the hardcoded helper allowlist. Any
-        other value returns 400 to prevent path traversal or arbitrary file
-        writes.
-
-        Request body schema:
-            {"enabled": false}                          — delete the config file
-            {"enabled": true, "config": { ... }}        — validate and write
-
-        For baseload variants, enabling one automatically deletes the other
-        two variants to enforce the mutual-exclusion rule.
-
-        Args:
-            filename: Config filename extracted from the URL path.
-            body: Raw JSON bytes.
-
-        Returns:
-            HTTP 200 {"ok": true} on success.
-            HTTP 400 if filename is not in the allowlist.
-            HTTP 422 {"ok": false, "errors": [...]} on Pydantic validation failure.
-        """
-        if filename not in self._helper_models:
-            return self._json_response(400, {"ok": False, "error": "unknown helper filename"})
-
         try:
-            data = json.loads(body)
-        except (json.JSONDecodeError, ValueError) as exc:
+            entries = self._extract_entries(body)
+        except _BadRequest as exc:
             return self._json_response(400, {"ok": False, "errors": str(exc)})
 
-        enabled = data.get("enabled", True)
-        fpath = _safe_join(self._config_dir, filename)
-        if fpath is None:
-            return self._json_response(400, {"ok": False, "error": "invalid filename"})
-
-        if not enabled:
-            # Disable: delete the file if it exists.
-            if fpath.exists():
-                try:
-                    fpath.unlink()
-                    logger.info("Deleted %s", filename)
-                except OSError as exc:
-                    return self._json_response(500, {"ok": False, "error": str(exc)})
-            return self._json_response(200, {"ok": True})
-
-        # Enable: validate then write atomically.
-        config_dict = data.get("config", {})
-        if isinstance(config_dict, dict):
-            config_dict = self._strip_redacted_mqtt(config_dict)
-        model_cls, competitors = self._helper_models[filename]
-
-        # Merge env-supplied MQTT fields for validation only. Helper configs may
-        # omit mqtt fields that the Supervisor provides at runtime.
-        mqtt_env = self._mqtt_env()
-        if mqtt_env:
-            validate_dict: dict = dict(config_dict)
-            validate_dict["mqtt"] = {**mqtt_env, **dict(config_dict.get("mqtt") or {})}
-        else:
-            validate_dict = config_dict
-
+        to_write, to_validate = self._redact_and_merge_entries(entries)
         try:
-            model_cls.model_validate(validate_dict)
-        except PydanticValidationError as exc:
-            return self._json_response(422, {"ok": False, "errors": exc.errors()})
+            errors = registry.validate_save(self._registry, to_validate)
+        except registry.UnknownEntryError as exc:
+            return self._json_response(404, {"error": f"unknown entry id: {exc}"})
+        if errors:
+            return self._json_response(422, {"ok": False, "errors": errors})
 
-        yaml_str = _write_yaml_preserving_comments(config_dict, fpath)
+        diffs: dict[str, str] = {}
 
-        # Delete mutually-exclusive variants (baseload only).
-        for competing_fname in competitors:
-            competing_path = _safe_join(self._config_dir, competing_fname)
-            if competing_path is None:
-                logger.warning("Skipping invalid competing filename %s", competing_fname)
+        def _preview_write(data: dict[str, Any], path: Path) -> str:
+            before = path.read_text() if path.exists() else ""
+            after = render_yaml_preserving_comments(data, path)
+            diffs[path.name] = self._unified_diff(before, after, path.name)
+            return after
+
+        def _preview_delete(path: Path) -> None:
+            before = path.read_text() if path.exists() else ""
+            diffs[path.name] = self._unified_diff(before, "", path.name)
+
+        registry.write_entries(
+            self._registry,
+            self._config_dir,
+            to_write,
+            write_yaml=_preview_write,
+            delete_yaml=_preview_delete,
+        )
+        return self._json_response(200, {"ok": True, "diffs": diffs})
+
+    # ------------------------------------------------------------------
+    # Shared helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _extract_entries(body: bytes) -> dict[str, dict[str, Any]]:
+        """Parse and structurally validate a /api/save or /api/preview request body.
+
+        Args:
+            body: Raw JSON bytes, expected to decode to
+                ``{"entries": {"<id>": {...}, ...}}``.
+
+        Returns:
+            The parsed ``entries`` mapping.
+
+        Raises:
+            _BadRequest: If the body is not valid JSON, or is not shaped
+                like ``{"entries": {...}}``.
+        """
+        try:
+            raw = json.loads(body)
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise _BadRequest(str(exc)) from exc
+        if not isinstance(raw, dict) or not isinstance(raw.get("entries"), dict):
+            raise _BadRequest("request body must be {'entries': {'<id>': {...}, ...}}")
+        return raw["entries"]
+
+    def _redact_and_merge_entries(
+        self, entries: Mapping[str, Mapping[str, Any]]
+    ) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+        """Split a raw request's entries into (what to write, what to validate against).
+
+        Every enabled entry's config has the MQTT_ENV_REDACTED sentinel
+        stripped before either step (Decision 8), so a form posting the
+        placeholder back for an untouched password field never validates or
+        writes it. The validation-only copy additionally has env-supplied
+        MQTT fields merged in, so a config that is only complete once the
+        Supervisor's environment variables are considered still validates;
+        the merged-in fields are never written to disk.
+
+        Args:
+            entries: The raw ``{"<id>": {"enabled": ..., "config": {...}}}``
+                mapping from the request body.
+
+        Returns:
+            A ``(to_write, to_validate)`` pair, each shaped like ``entries``
+            and suitable for ``registry.validate_save`` /
+            ``registry.write_entries``.
+        """
+        mqtt_env = self._mqtt_env()
+        to_write: dict[str, dict[str, Any]] = {}
+        to_validate: dict[str, dict[str, Any]] = {}
+        for entry_id, spec in entries.items():
+            if not spec.get("enabled", True):
+                to_write[entry_id] = {"enabled": False}
+                to_validate[entry_id] = {"enabled": False}
                 continue
-            if competing_path.exists():
-                try:
-                    competing_path.unlink()
-                    logger.info("Deleted competing baseload variant %s", competing_fname)
-                except OSError as exc:
-                    logger.warning("Failed to delete %s: %s", competing_fname, exc)
 
-        logger.info("Wrote %s (%d bytes)", filename, len(yaml_str))
-        return self._json_response(200, {"ok": True})
+            config = spec.get("config") or {}
+            if isinstance(config, dict):
+                config = self._strip_redacted_mqtt(config)
+            to_write[entry_id] = {"enabled": True, "config": config}
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
+            if mqtt_env and isinstance(config, dict):
+                merged_config: dict[str, Any] = dict(config)
+                merged_config["mqtt"] = {**mqtt_env, **dict(config.get("mqtt") or {})}
+            else:
+                merged_config = dict(config) if isinstance(config, dict) else {}
+            to_validate[entry_id] = {"enabled": True, "config": merged_config}
+        return to_write, to_validate
+
+    @staticmethod
+    def _unified_diff(before: str, after: str, filename: str) -> str:
+        """Return a unified diff string between ``before`` and ``after``."""
+        return "".join(
+            difflib.unified_diff(
+                before.splitlines(keepends=True),
+                after.splitlines(keepends=True),
+                fromfile=filename,
+                tofile=filename,
+            )
+        )
+
+    @staticmethod
+    def _envelope_dict(envelope: registry.XMimirheim) -> dict[str, Any]:
+        """Return an ``x-mimirheim`` envelope as a plain JSON-shaped dict."""
+        return dataclasses.asdict(envelope)
+
+    @staticmethod
+    def _read_yaml_file(path: Path) -> dict[str, Any]:
+        """Parse a YAML file into a dict, or {} if absent, unreadable, or malformed.
+
+        Shared by every endpoint that reads a config file's current raw
+        content: an unreadable or malformed file degrades to "empty" rather
+        than raising out of a request handler.
+        """
+        try:
+            raw = yaml.safe_load(path.read_text())
+        except FileNotFoundError:
+            return {}
+        except (OSError, yaml.YAMLError) as exc:
+            logger.warning("Could not read %s: %s", path, exc)
+            return {}
+        return raw if isinstance(raw, dict) else {}
+
+    @staticmethod
+    def _model_defaults(dotted_path: str | None) -> dict[str, Any]:
+        """Build a not-yet-enabled entry's starting value from its model's own defaults.
+
+        Uses ``model_construct()`` rather than a validating constructor:
+        fields with a declared default are populated; fields with none
+        (e.g. a helper's required ``mqtt`` section) are simply absent from
+        the result, exactly as a fresh, not-yet-filled-in form should start.
+
+        Args:
+            dotted_path: ``"module.path:ClassName"``, or ``None`` for a
+                drop-in or any entry with no ``python_model``.
+
+        Returns:
+            The model's default field values as a plain JSON-shaped dict, or
+            ``{}`` if ``dotted_path`` is ``None`` or cannot be imported.
+        """
+        if dotted_path is None:
+            return {}
+        module_name, _, class_name = dotted_path.partition(":")
+        if not module_name or not class_name:
+            logger.error("Malformed x-mimirheim.python_model dotted path: %r", dotted_path)
+            return {}
+        try:
+            module = importlib.import_module(module_name)
+            model_cls = getattr(module, class_name)
+        except (ImportError, AttributeError) as exc:
+            logger.error("Could not import python_model %r: %s", dotted_path, exc)
+            return {}
+        dumped = model_cls.model_construct().model_dump(mode="json")
+        return dumped if isinstance(dumped, dict) else {}
 
     @classmethod
     def _mqtt_env_for_client(cls) -> dict[str, Any]:

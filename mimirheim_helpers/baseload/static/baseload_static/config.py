@@ -31,11 +31,11 @@ class StaticBaseloadConfig(BaseModel):
             current wall-clock hour. Defaults to 48. Must be between 1 and 168.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
-    profile_kw: list[float] | None = Field(default=None, min_length=1, max_length=168, json_schema_extra={"ui_label": "Hourly profile (kW)", "ui_group": "basic"})
-    weekly_profiles_kw: dict[int, list[float]] | None = Field(default=None, json_schema_extra={"ui_label": "Weekly profiles (kW)", "ui_group": "advanced"})
-    horizon_hours: int = Field(default=48, ge=1, le=168, json_schema_extra={"ui_label": "Horizon (hours)", "ui_group": "advanced"})
+    profile_kw: list[float] | None = Field(default=None, min_length=1, max_length=168, title="Hourly profile (kW)")
+    weekly_profiles_kw: dict[int, list[float]] | None = Field(default=None, title="Weekly profiles (kW)", json_schema_extra={"x-category": "Advanced"})
+    horizon_hours: int = Field(default=48, ge=1, le=168, title="Horizon (hours)", json_schema_extra={"x-category": "Advanced"})
 
     @model_validator(mode="after")
     def _validate_profiles(self) -> "StaticBaseloadConfig":
@@ -90,33 +90,33 @@ class BaseloadConfig(BaseModel):
             mimirheim canonical trigger topic derived from ``mimir_topic_prefix``.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
-    mqtt: MqttConfig = Field(description="MQTT broker connection settings.", json_schema_extra={"ui_label": "MQTT", "ui_group": "basic"})
+    mqtt: MqttConfig = Field(description="MQTT broker connection settings.", title="MQTT")
     mimir_topic_prefix: str = Field(
         default="mimir",
         description="mimirheim mqtt.topic_prefix. Used to derive default output and trigger topics.",
-        json_schema_extra={"ui_label": "mimirheim topic prefix", "ui_group": "advanced"},
+        title="mimirheim topic prefix", json_schema_extra={"x-category": "Advanced"},
     )
     mimir_static_load_name: str = Field(
         default="base_load",
         description="mimirheim static_loads device name. Used to derive the default output_topic.",
-        json_schema_extra={"ui_label": "mimirheim static load name", "ui_group": "advanced", "ui_source": "static_loads"},
+        title="mimirheim static load name", json_schema_extra={"x-category": "Advanced", "x-enumSource": "#/context/static_loads"},
     )
-    trigger_topic: str = Field(description="MQTT topic that triggers a publish cycle.", json_schema_extra={"ui_label": "Trigger topic", "ui_group": "advanced"})
+    trigger_topic: str = Field(description="MQTT topic that triggers a publish cycle.", title="Trigger topic", json_schema_extra={"x-category": "Advanced"})
     output_topic: str | None = Field(
         default=None,
         description=(
             "MQTT topic for the retained baseload forecast payload. "
             "Defaults to '{mimir_topic_prefix}/input/baseload/{mimir_static_load_name}/forecast'."
         ),
-        json_schema_extra={"ui_label": "Output topic", "ui_group": "advanced", "ui_placeholder": "{mimir_topic_prefix}/input/baseload/{mimir_static_load_name}/forecast"},
+        title="Output topic", json_schema_extra={"x-category": "Advanced", "x-watch": {"topic_prefix": "#/mimir_topic_prefix", "load_name": "#/mimir_static_load_name"}, "x-template": "{{ topic_prefix.value || 'mimir' }}/input/baseload/{{ load_name.value || 'base_load' }}/forecast"},
     )
-    baseload: StaticBaseloadConfig = Field(description="Static load profile and horizon configuration.", json_schema_extra={"ui_label": "Baseload profile", "ui_group": "basic"})
-    signal_mimir: bool = Field(default=False, description="Publish to mimir_trigger_topic after publishing the forecast.", json_schema_extra={"ui_label": "Signal mimirheim", "ui_group": "advanced"})
-    mimir_trigger_topic: str | None = Field(default=None, description="mimirheim trigger topic. Derives from mimir_topic_prefix when not set.", json_schema_extra={"ui_label": "mimirheim trigger topic", "ui_group": "advanced"})
-    ha_discovery: HomeAssistantConfig | None = Field(default=None, description="Optional Home Assistant MQTT discovery settings.", json_schema_extra={"ui_label": "HA discovery", "ui_group": "advanced"})
-    stats_topic: str | None = Field(default=None, description="MQTT topic where per-cycle run statistics are published.", json_schema_extra={"ui_label": "Stats topic", "ui_group": "advanced"})
+    baseload: StaticBaseloadConfig = Field(description="Static load profile and horizon configuration.", title="Baseload profile")
+    signal_mimir: bool = Field(default=False, description="Publish to mimir_trigger_topic after publishing the forecast.", title="Signal mimirheim", json_schema_extra={"x-category": "Advanced"})
+    mimir_trigger_topic: str | None = Field(default=None, description="mimirheim trigger topic. Derives from mimir_topic_prefix when not set.", title="mimirheim trigger topic", json_schema_extra={"x-category": "Advanced"})
+    ha_discovery: HomeAssistantConfig | None = Field(default=None, description="Optional Home Assistant MQTT discovery settings.", title="HA discovery", json_schema_extra={"x-category": "Advanced"})
+    stats_topic: str | None = Field(default=None, description="MQTT topic where per-cycle run statistics are published.", title="Stats topic", json_schema_extra={"x-category": "Advanced"})
 
     @model_validator(mode="after")
     def _derive_hioo_topics(self) -> "BaseloadConfig":

@@ -97,14 +97,14 @@ class NordpoolApiConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    area: str = Field(description="Nordpool price area code (e.g. 'NO2', 'NL', 'SE3').", json_schema_extra={"ui_label": "Nordpool area", "ui_group": "basic"})
+    area: str = Field(description="Nordpool price area code (e.g. 'NO2', 'NL', 'SE3').", title="Nordpool area")
     import_formula: str = Field(
         default=_DEFAULT_IMPORT_FORMULA,
         description=(
             "Python expression for the all-in import price in EUR/kWh. "
             "Available variables: ``price`` (raw spot, EUR/kWh), ``ts`` (datetime, UTC)."
         ),
-        json_schema_extra={"ui_label": "Import price formula", "ui_group": "basic"},
+        title="Import price formula",
     )
     export_formula: str = Field(
         default=_DEFAULT_EXPORT_FORMULA,
@@ -112,7 +112,7 @@ class NordpoolApiConfig(BaseModel):
             "Python expression for the net export price in EUR/kWh. "
             "Available variables: ``price`` (raw spot, EUR/kWh), ``ts`` (datetime, UTC)."
         ),
-        json_schema_extra={"ui_label": "Export price formula", "ui_group": "basic"},
+        title="Export price formula",
     )
     price_interval: Literal["hourly", "quarter_hourly"] = Field(
         default=_DEFAULT_PRICE_INTERVAL,
@@ -153,36 +153,36 @@ class NordpoolConfig(BaseModel):
             mimirheim canonical trigger topic derived from ``mimir_topic_prefix``.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
-    mqtt: MqttConfig = Field(description="MQTT broker connection settings.", json_schema_extra={"ui_label": "MQTT", "ui_group": "basic"})
+    mqtt: MqttConfig = Field(description="MQTT broker connection settings.", title="MQTT")
     mimir_topic_prefix: str = Field(
         default="mimir",
         description="mimirheim mqtt.topic_prefix. Used to derive default output and trigger topics.",
-        json_schema_extra={"ui_label": "mimirheim topic prefix", "ui_group": "advanced"},
+        title="mimirheim topic prefix", json_schema_extra={"x-category": "Advanced"},
     )
-    trigger_topic: str = Field(description="MQTT topic that triggers a fetch cycle.", json_schema_extra={"ui_label": "Trigger topic", "ui_group": "advanced"})
+    trigger_topic: str = Field(description="MQTT topic that triggers a fetch cycle.", title="Trigger topic", json_schema_extra={"x-category": "Advanced"})
     output_topic: str | None = Field(
         default=None,
         description=(
             "MQTT topic for the retained price payload. "
             "Defaults to '{mimir_topic_prefix}/input/prices' when not set."
         ),
-        json_schema_extra={"ui_label": "Output topic", "ui_group": "advanced", "ui_placeholder": "{mimir_topic_prefix}/input/prices"},
+        title="Output topic", json_schema_extra={"x-category": "Advanced"},
     )
-    nordpool: NordpoolApiConfig = Field(description="Nordpool API and pricing formula parameters.", json_schema_extra={"ui_label": "Nordpool API", "ui_group": "basic"})
+    nordpool: NordpoolApiConfig = Field(description="Nordpool API and pricing formula parameters.", title="Nordpool API")
     ha_discovery: HomeAssistantConfig | None = Field(
         default=None,
         description="Optional Home Assistant MQTT discovery settings.",
-        json_schema_extra={"ui_label": "HA discovery", "ui_group": "advanced"},
+        title="HA discovery", json_schema_extra={"x-category": "Advanced"},
     )
     stats_topic: str | None = Field(
         default=None,
         description="MQTT topic where per-cycle run statistics are published.",
-        json_schema_extra={"ui_label": "Stats topic", "ui_group": "advanced"},
+        title="Stats topic", json_schema_extra={"x-category": "Advanced"},
     )
-    signal_mimir: bool = Field(default=False, description="Publish to mimir_trigger_topic after publishing prices.", json_schema_extra={"ui_label": "Signal mimirheim", "ui_group": "advanced"})
-    mimir_trigger_topic: str | None = Field(default=None, description="Topic to trigger mimirheim. Derived from mimir_topic_prefix when not set.", json_schema_extra={"ui_label": "mimirheim trigger topic", "ui_group": "advanced"})
+    signal_mimir: bool = Field(default=False, description="Publish to mimir_trigger_topic after publishing prices.", title="Signal mimirheim", json_schema_extra={"x-category": "Advanced"})
+    mimir_trigger_topic: str | None = Field(default=None, description="Topic to trigger mimirheim. Derived from mimir_topic_prefix when not set.", title="mimirheim trigger topic", json_schema_extra={"x-category": "Advanced"})
 
     @model_validator(mode="after")
     def _derive_hioo_topics(self) -> "NordpoolConfig":

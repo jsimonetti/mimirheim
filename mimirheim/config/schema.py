@@ -41,23 +41,23 @@ class MqttConfig(BaseModel):
             against a broker reachable from an untrusted network.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
-    host: str = Field(description="MQTT broker hostname or IP address.", json_schema_extra={"ui_label": "Broker host", "ui_group": "basic"})
-    port: int = Field(default=1883, description="MQTT broker port.", json_schema_extra={"ui_label": "Broker port", "ui_group": "advanced"})
-    client_id: str | None = Field(default=None, description="MQTT client identifier. Defaults to 'mimir' when not set.", json_schema_extra={"ui_label": "Client ID", "ui_group": "basic"})
-    topic_prefix: str = Field(default="mimir", description="Topic prefix for all mimirheim topics.", json_schema_extra={"ui_label": "Topic prefix", "ui_group": "advanced"})
-    username: str | None = Field(default=None, description="Broker username. Omit for anonymous access.", json_schema_extra={"ui_label": "Username", "ui_group": "advanced"})
-    password: str | None = Field(default=None, description="Broker password.", json_schema_extra={"ui_label": "Password", "ui_group": "advanced"})
+    host: str = Field(description="MQTT broker hostname or IP address.", title="Broker host")
+    port: int = Field(default=1883, description="MQTT broker port.", title="Broker port", json_schema_extra={"x-category": "Advanced"})
+    client_id: str | None = Field(default=None, description="MQTT client identifier. Defaults to 'mimir' when not set.", title="Client ID")
+    topic_prefix: str = Field(default="mimir", description="Topic prefix for all mimirheim topics.", title="Topic prefix", json_schema_extra={"x-category": "Advanced"})
+    username: str | None = Field(default=None, description="Broker username. Omit for anonymous access.", title="Username", json_schema_extra={"x-category": "Advanced"})
+    password: str | None = Field(default=None, description="Broker password.", title="Password", json_schema_extra={"x-category": "Advanced"})
     tls: bool = Field(
         default=False,
         description="Enable TLS for the broker connection. Set to true when the broker listens on an encrypted port (typically 8883).",
-        json_schema_extra={"ui_label": "Enable TLS", "ui_group": "advanced"},
+        title="Enable TLS", json_schema_extra={"x-category": "Advanced"},
     )
     tls_allow_insecure: bool = Field(
         default=False,
         description="Skip broker certificate verification when TLS is enabled. Useful for self-signed certificates on private networks. Has no effect when tls is false.",
-        json_schema_extra={"ui_label": "Allow insecure TLS", "ui_group": "advanced"},
+        title="Allow insecure TLS", json_schema_extra={"x-category": "Advanced"},
     )
 
 class GridConfig(BaseModel):
@@ -76,8 +76,8 @@ class GridConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    import_limit_kw: float = Field(ge=0, description="Maximum grid import power in kW.", json_schema_extra={"ui_label": "Import limit (kW)", "ui_group": "basic"})
-    export_limit_kw: float = Field(ge=0, description="Maximum grid export power in kW.", json_schema_extra={"ui_label": "Export limit (kW)", "ui_group": "basic"})
+    import_limit_kw: float = Field(ge=0, description="Maximum grid import power in kW.", title="Import limit (kW)")
+    export_limit_kw: float = Field(ge=0, description="Maximum grid export power in kW.", title="Export limit (kW)")
 
 # ---------------------------------------------------------------------------
 # Strategy, objective, and solver configuration
@@ -94,11 +94,11 @@ class BalancedWeightsConfig(BaseModel):
         self_sufficiency_weight: Weight applied to the grid import penalty term.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
-    cost_weight: float = Field(ge=0, default=1.0, description="Weight on cost/revenue terms.", json_schema_extra={"ui_label": "Cost weight", "ui_group": "advanced"})
+    cost_weight: float = Field(ge=0, default=1.0, description="Weight on cost/revenue terms.", title="Cost weight", json_schema_extra={"x-category": "Advanced"})
     self_sufficiency_weight: float = Field(
-        ge=0, default=1.0, description="Weight on grid import penalty terms.", json_schema_extra={"ui_label": "Self-sufficiency weight", "ui_group": "advanced"}
+        ge=0, default=1.0, description="Weight on grid import penalty terms.", title="Self-sufficiency weight", json_schema_extra={"x-category": "Advanced"}
     )
 
 class ObjectivesConfig(BaseModel):
@@ -129,12 +129,12 @@ class ObjectivesConfig(BaseModel):
             objective. Default 0.0 disables the term completely.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     balanced_weights: BalancedWeightsConfig | None = Field(
         default=None,
         description="Objective weights for the balanced strategy. Null = equal weighting.",
-        json_schema_extra={"ui_label": "Balanced strategy weights", "ui_group": "advanced"},
+        title="Balanced strategy weights", json_schema_extra={"x-category": "Advanced"},
     )
     min_dispatch_gain_eur: float = Field(
         default=0.0,
@@ -144,7 +144,7 @@ class ObjectivesConfig(BaseModel):
             "storage. Below this threshold an idle schedule is published instead. "
             "0.0 (default) disables the check. Applies to minimize_cost and balanced only."
         ),
-        json_schema_extra={"ui_label": "Minimum dispatch gain (\u20ac)", "ui_group": "advanced"},
+        title="Minimum dispatch gain (\u20ac)", json_schema_extra={"x-category": "Advanced"},
     )
     exchange_shaping_weight: float = Field(
         default=0.0,
@@ -156,7 +156,7 @@ class ObjectivesConfig(BaseModel):
             "(e.g. 1e-4) to break solver indifference without distorting the "
             "primary economic objective."
         ),
-        json_schema_extra={"ui_label": "Exchange shaping weight", "ui_group": "advanced"},
+        title="Exchange shaping weight", json_schema_extra={"x-category": "Advanced"},
     )
 
 class ConstraintsConfig(BaseModel):
@@ -172,10 +172,10 @@ class ConstraintsConfig(BaseModel):
             Set to 0.0 to enforce zero export across the horizon.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
-    max_import_kw: float | None = Field(default=None, description="Hard cap on grid import in kW.", json_schema_extra={"ui_label": "Max import cap (kW)", "ui_group": "advanced"})
-    max_export_kw: float | None = Field(default=None, description="Hard cap on grid export in kW.", json_schema_extra={"ui_label": "Max export cap (kW)", "ui_group": "advanced"})
+    max_import_kw: float | None = Field(default=None, description="Hard cap on grid import in kW.", title="Max import cap (kW)", json_schema_extra={"x-category": "Advanced"})
+    max_export_kw: float | None = Field(default=None, description="Hard cap on grid export in kW.", title="Max export cap (kW)", json_schema_extra={"x-category": "Advanced"})
 
 class SolverConfig(BaseModel):
     """Solver tuning parameters for the CBC MILP backend.
@@ -207,7 +207,7 @@ class SolverConfig(BaseModel):
             so the total never exceeds it.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     max_horizon_steps: int = Field(
         default=288,
@@ -218,7 +218,7 @@ class SolverConfig(BaseModel):
             "Bundles longer than this are trimmed before building the model. "
             "Minimum 96 (24 h) to ensure the schedule covers at least one full day."
         ),
-        json_schema_extra={"ui_label": "Max horizon steps", "ui_group": "advanced"},
+        title="Max horizon steps", json_schema_extra={"x-category": "Advanced"},
     )
     threads: int = Field(
         default=-1,
@@ -227,7 +227,7 @@ class SolverConfig(BaseModel):
             "CBC solver threads. -1 = use all available CPU cores. "
             "1 = single-threaded."
         ),
-        json_schema_extra={"ui_label": "Solver threads", "ui_group": "advanced"},
+        title="Solver threads", json_schema_extra={"x-category": "Advanced"},
     )
     time_limit_seconds: float = Field(
         default=59.0,
@@ -240,7 +240,7 @@ class SolverConfig(BaseModel):
             "splits this budget across its two phases. Default 59 s, which "
             "fits inside a 60-second cycle."
         ),
-        json_schema_extra={"ui_label": "Solver time limit (s)", "ui_group": "advanced"},
+        title="Solver time limit (s)", json_schema_extra={"x-category": "Advanced"},
     )
 
 class ReadinessConfig(BaseModel):
@@ -270,19 +270,19 @@ class ReadinessConfig(BaseModel):
             describe conditions late in the gap. Default 2 hours.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     min_horizon_hours: float = Field(
         ge=0,
         default=1.0,
         description="Minimum forecast coverage in hours to attempt a solve.",
-        json_schema_extra={"ui_label": "Minimum horizon (h)", "ui_group": "advanced"},
+        title="Minimum horizon (h)", json_schema_extra={"x-category": "Advanced"},
     )
     warn_below_hours: float = Field(
         ge=0,
         default=8.0,
         description="Log a warning when available horizon is below this value in hours.",
-        json_schema_extra={"ui_label": "Warn below (h)", "ui_group": "advanced"},
+        title="Warn below (h)", json_schema_extra={"x-category": "Advanced"},
     )
     max_gap_hours: float = Field(
         ge=0,
@@ -292,7 +292,7 @@ class ReadinessConfig(BaseModel):
             "exceeds this value in hours. The solve proceeds regardless: "
             "resampling holds the last known value across the gap."
         ),
-        json_schema_extra={"ui_label": "Max gap (h)", "ui_group": "advanced"},
+        title="Max gap (h)", json_schema_extra={"x-category": "Advanced"},
     )
 
 class ControlConfig(BaseModel):
@@ -324,7 +324,7 @@ class ControlConfig(BaseModel):
             margin). Default 2 steps (30 minutes at 15-minute resolution).
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     exchange_epsilon_kw: float = Field(
         default=0.05,
@@ -333,7 +333,7 @@ class ControlConfig(BaseModel):
             "Grid exchange below this value in kW is treated as near-zero. "
             "Enforcer activation applies only to steps below this threshold."
         ),
-        json_schema_extra={"ui_label": "Exchange epsilon (kW)", "ui_group": "advanced"},
+        title="Exchange epsilon (kW)", json_schema_extra={"x-category": "Advanced"},
     )
     headroom_margin_kw: float = Field(
         default=0.10,
@@ -342,7 +342,7 @@ class ControlConfig(BaseModel):
             "Minimum absorption headroom in kW for a device to be eligible as enforcer. "
             "Devices below this threshold at their current operating point are excluded."
         ),
-        json_schema_extra={"ui_label": "Headroom margin (kW)", "ui_group": "advanced"},
+        title="Headroom margin (kW)", json_schema_extra={"x-category": "Advanced"},
     )
     switch_delta: float = Field(
         default=0.05,
@@ -351,7 +351,7 @@ class ControlConfig(BaseModel):
             "Challenger must exceed current enforcer score by this amount to trigger a switch. "
             "Prevents oscillation when two devices score similarly."
         ),
-        json_schema_extra={"ui_label": "Switch delta", "ui_group": "advanced"},
+        title="Switch delta", json_schema_extra={"x-category": "Advanced"},
     )
     min_enforcer_dwell_steps: int = Field(
         default=2,
@@ -360,7 +360,7 @@ class ControlConfig(BaseModel):
             "Minimum consecutive steps a device remains enforcer once selected. "
             "Device becomes ineligible immediately if it loses availability or headroom."
         ),
-        json_schema_extra={"ui_label": "Min enforcer dwell steps", "ui_group": "advanced"},
+        title="Min enforcer dwell steps", json_schema_extra={"x-category": "Advanced"},
     )
 
 # ---------------------------------------------------------------------------
@@ -382,7 +382,7 @@ class InputsConfig(BaseModel):
             but publish prices to a shared topic.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     prices: str | None = Field(
         default=None,
@@ -390,7 +390,7 @@ class InputsConfig(BaseModel):
             "Topic for per-step price data. Defaults to "
             "'{mqtt.topic_prefix}/input/prices' when not set."
         ),
-        json_schema_extra={"ui_label": "Prices topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/input/prices"},
+        title="Prices topic", json_schema_extra={"x-category": "Advanced"},
     )
 
 class OutputsConfig(BaseModel):
@@ -407,7 +407,7 @@ class OutputsConfig(BaseModel):
             a clean shutdown.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     schedule: str | None = Field(
         default=None,
@@ -415,7 +415,7 @@ class OutputsConfig(BaseModel):
             "Topic for the full horizon schedule. "
             "Defaults to '{mqtt.topic_prefix}/strategy/schedule'."
         ),
-        json_schema_extra={"ui_label": "Schedule topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/strategy/schedule"},
+        title="Schedule topic", json_schema_extra={"x-category": "Advanced"},
     )
     current: str | None = Field(
         default=None,
@@ -423,7 +423,7 @@ class OutputsConfig(BaseModel):
             "Topic for the current-step strategy summary. "
             "Defaults to '{mqtt.topic_prefix}/strategy/current'."
         ),
-        json_schema_extra={"ui_label": "Current topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/strategy/current"},
+        title="Current topic", json_schema_extra={"x-category": "Advanced"},
     )
     last_solve: str | None = Field(
         default=None,
@@ -431,7 +431,7 @@ class OutputsConfig(BaseModel):
             "Topic for the retained solve-status message. "
             "Defaults to '{mqtt.topic_prefix}/status/last_solve'."
         ),
-        json_schema_extra={"ui_label": "Last solve topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/status/last_solve"},
+        title="Last solve topic", json_schema_extra={"x-category": "Advanced"},
     )
     availability: str | None = Field(
         default=None,
@@ -439,7 +439,7 @@ class OutputsConfig(BaseModel):
             "Topic for birth ('online') and last-will ('offline') messages. "
             "Defaults to '{mqtt.topic_prefix}/status/availability'."
         ),
-        json_schema_extra={"ui_label": "Availability topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/status/availability"},
+        title="Availability topic", json_schema_extra={"x-category": "Advanced"},
     )
 
 class HomeAssistantConfig(BaseModel):
@@ -466,23 +466,23 @@ class HomeAssistantConfig(BaseModel):
             across restarts; changing it creates a new device in HA.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
-    enabled: bool = Field(default=False, description="Enable HA MQTT discovery. Default: false.", json_schema_extra={"ui_label": "Enable HA discovery", "ui_group": "advanced"})
+    enabled: bool = Field(default=False, description="Enable HA MQTT discovery. Default: false.", title="Enable HA discovery", json_schema_extra={"x-category": "Advanced"})
     discovery_prefix: str = Field(
         default="homeassistant",
         description="Topic prefix used by HA for discovery. Default: 'homeassistant'.",
-        json_schema_extra={"ui_label": "Discovery prefix", "ui_group": "advanced"},
+        title="Discovery prefix", json_schema_extra={"x-category": "Advanced"},
     )
     device_name: str = Field(
         default="mimir",
         description="Human-readable device name shown in HA.",
-        json_schema_extra={"ui_label": "HA device name", "ui_group": "advanced"},
+        title="HA device name", json_schema_extra={"x-category": "Advanced"},
     )
     device_id: str | None = Field(
         default=None,
         description="Stable device identifier for the HA device registry. Defaults to mqtt.client_id.",
-        json_schema_extra={"ui_label": "HA device ID", "ui_group": "advanced"},
+        title="HA device ID", json_schema_extra={"x-category": "Advanced"},
     )
 
 class DebugConfig(BaseModel):
@@ -499,15 +499,15 @@ class DebugConfig(BaseModel):
             removed when the limit is exceeded. 0 means unlimited.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
-    enabled: bool = Field(default=False, description="Enable DEBUG logging and solve dumps.", json_schema_extra={"ui_label": "Enable debug dumps", "ui_group": "advanced"})
+    enabled: bool = Field(default=False, description="Enable DEBUG logging and solve dumps.", title="Enable debug dumps", json_schema_extra={"x-category": "Advanced"})
     dump_dir: Path | None = Field(
         default=None,
         description="Directory for solve dumps. Null = disabled.",
-        json_schema_extra={"ui_label": "Dump directory", "ui_group": "advanced"},
+        title="Dump directory", json_schema_extra={"x-category": "Advanced"},
     )
-    max_dumps: int = Field(ge=0, default=50, description="Maximum retained dump pairs.", json_schema_extra={"ui_label": "Max debug dumps", "ui_group": "advanced"})
+    max_dumps: int = Field(ge=0, default=50, description="Maximum retained dump pairs.", title="Max debug dumps", json_schema_extra={"x-category": "Advanced"})
 
 class ReportingConfig(BaseModel):
     """Configuration for the standalone mimirheim-reporter daemon.
@@ -534,23 +534,23 @@ class ReportingConfig(BaseModel):
             Default ``mimir/status/dump_available``.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     enabled: bool = Field(
         default=False,
         description="Enable production dump writing and MQTT notification.",
-        json_schema_extra={"ui_label": "Enable reporting", "ui_group": "advanced"},
+        title="Enable reporting", json_schema_extra={"x-category": "Advanced"},
     )
     dump_dir: Path | None = Field(
         default=None,
         description="Directory for solve dumps shared with mimirheim-reporter. Null = disabled.",
-        json_schema_extra={"ui_label": "Report dump directory", "ui_group": "advanced"},
+        title="Report dump directory", json_schema_extra={"x-category": "Advanced"},
     )
     max_dumps: int = Field(
         default=200,
         ge=0,
         description="Maximum retained dump pairs. 0 = unlimited.",
-        json_schema_extra={"ui_label": "Max reports", "ui_group": "advanced"},
+        title="Max reports", json_schema_extra={"x-category": "Advanced"},
     )
     notify_topic: str | None = Field(
         default=None,
@@ -558,7 +558,7 @@ class ReportingConfig(BaseModel):
             "MQTT topic for dump-available notifications. "
             "Defaults to '{mqtt.topic_prefix}/status/dump_available' when not set."
         ),
-        json_schema_extra={"ui_label": "Notify topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/status/dump_available"},
+        title="Notify topic", json_schema_extra={"x-category": "Advanced"},
     )
 
     @model_validator(mode="after")
@@ -591,7 +591,7 @@ class SocTopicConfig(BaseModel):
             using the configured capacity. Always set this field explicitly.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     topic: str | None = Field(
         default=None,
@@ -600,7 +600,7 @@ class SocTopicConfig(BaseModel):
             "Defaults to the device-specific path derived from mqtt.topic_prefix "
             "when not set."
         ),
-        json_schema_extra={"ui_label": "SOC MQTT topic", "ui_group": "advanced"},
+        title="SOC MQTT topic", json_schema_extra={"x-category": "Advanced"},
     )
     unit: Literal["kwh", "percent"] = Field(
         default="percent",
@@ -614,7 +614,7 @@ class SocTopicConfig(BaseModel):
             "the cell's actual usable capacity as the battery ages. Always set this "
             "field explicitly — do not rely on the default."
         ),
-        json_schema_extra={"ui_label": "SOC unit", "ui_group": "advanced"},
+        title="SOC unit", json_schema_extra={"x-category": "Advanced"},
     )
 
 class EfficiencySegment(BaseModel):
@@ -639,8 +639,8 @@ class EfficiencySegment(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    power_max_kw: float = Field(gt=0, description="Maximum power through this segment in kW.", json_schema_extra={"ui_label": "Max power (kW)", "ui_group": "basic"})
-    efficiency: float = Field(gt=0, le=1.0, description="Round-trip efficiency fraction [0, 1].", json_schema_extra={"ui_label": "Efficiency", "ui_group": "basic"})
+    power_max_kw: float = Field(gt=0, description="Maximum power through this segment in kW.", title="Max power (kW)")
+    efficiency: float = Field(gt=0, le=1.0, description="Round-trip efficiency fraction [0, 1].", title="Efficiency")
 
 class EfficiencyBreakpoint(BaseModel):
     """A single point on a piecewise-linear battery efficiency curve.
@@ -659,8 +659,8 @@ class EfficiencyBreakpoint(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    power_kw: float = Field(ge=0.0, description="AC power in kW at this breakpoint.", json_schema_extra={"ui_label": "Power (kW)", "ui_group": "basic"})
-    efficiency: float = Field(gt=0.0, le=1.0, description="Round-trip efficiency fraction.", json_schema_extra={"ui_label": "Efficiency", "ui_group": "basic"})
+    power_kw: float = Field(ge=0.0, description="AC power in kW at this breakpoint.", title="Power (kW)")
+    efficiency: float = Field(gt=0.0, le=1.0, description="Round-trip efficiency fraction.", title="Efficiency")
 
 class BatteryInputsConfig(BaseModel):
     """MQTT input topic configuration for a battery device.
@@ -669,12 +669,12 @@ class BatteryInputsConfig(BaseModel):
         soc: Topic and unit for the battery state-of-charge reading.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     soc: SocTopicConfig = Field(
         default_factory=SocTopicConfig,
         description="Battery state-of-charge MQTT topic configuration. Defaults to derived topic with percent unit.",
-        json_schema_extra={"ui_label": "SOC topic config", "ui_group": "advanced"},
+        title="SOC topic config", json_schema_extra={"x-category": "Advanced"},
     )
 
 class BatteryCapabilitiesConfig(BaseModel):
@@ -698,12 +698,12 @@ class BatteryCapabilitiesConfig(BaseModel):
             performs the real-time enforcement autonomously. Default False.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     staged_power: bool = Field(
         default=False,
         description="Hardware accepts only discrete power stages, not continuous values.",
-        json_schema_extra={"ui_label": "Staged power control", "ui_group": "advanced"},
+        title="Staged power control", json_schema_extra={"x-category": "Advanced"},
     )
     zero_exchange: bool = Field(
         default=False,
@@ -712,7 +712,7 @@ class BatteryCapabilitiesConfig(BaseModel):
             " When True, the inverter autonomously holds grid exchange near zero"
             " using local CT measurements."
         ),
-        json_schema_extra={"ui_label": "Zero-exchange mode", "ui_group": "advanced"},
+        title="Zero-exchange mode", json_schema_extra={"x-category": "Advanced"},
     )
 
 class BatteryOutputsConfig(BaseModel):
@@ -730,7 +730,7 @@ class BatteryOutputsConfig(BaseModel):
             not provided explicitly.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     exchange_mode: str | None = Field(
         default=None,
@@ -739,7 +739,7 @@ class BatteryOutputsConfig(BaseModel):
             "Defaults to '{mqtt.topic_prefix}/output/battery/{name}/exchange_mode' "
             "when not set."
         ),
-        json_schema_extra={"ui_label": "Exchange mode topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/output/battery/{name}/exchange_mode"},
+        title="Exchange mode topic", json_schema_extra={"x-category": "Advanced", "x-format": "mimir-topic-placeholder"},
     )
 
 class BatteryConfig(BaseModel):
@@ -788,10 +788,10 @@ class BatteryConfig(BaseModel):
             mode flag). All fields default to None (no publishing).
     """
 
-    model_config = ConfigDict(extra="forbid", json_schema_extra={"ui_instance_name_description": "A short identifier for this battery used in MQTT topics and automations. For example: 'home_battery' or 'garage_battery'."})
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
-    capacity_kwh: float = Field(gt=0, description="Usable capacity in kWh.", json_schema_extra={"ui_label": "Capacity (kWh)", "ui_group": "basic"})
-    min_soc_kwh: float = Field(ge=0, default=0.0, description="Minimum SOC in kWh.", json_schema_extra={"ui_label": "Minimum SOC (kWh)", "ui_group": "basic"})
+    capacity_kwh: float = Field(gt=0, description="Usable capacity in kWh.", title="Capacity (kWh)")
+    min_soc_kwh: float = Field(ge=0, default=0.0, description="Minimum SOC in kWh.", title="Minimum SOC (kWh)")
     charge_segments: list[EfficiencySegment] | None = Field(
         default=None,
         min_length=1,
@@ -799,7 +799,7 @@ class BatteryConfig(BaseModel):
             "Stacked-segment efficiency model for charging. Mutually exclusive with "
             "charge_efficiency_curve. Exactly one must be provided."
         ),
-        json_schema_extra={"ui_label": "Charge segments", "ui_group": "basic"},
+        title="Charge segments",
     )
     discharge_segments: list[EfficiencySegment] | None = Field(
         default=None,
@@ -808,7 +808,7 @@ class BatteryConfig(BaseModel):
             "Stacked-segment efficiency model for discharging. Mutually exclusive with "
             "discharge_efficiency_curve. Exactly one must be provided."
         ),
-        json_schema_extra={"ui_label": "Discharge segments", "ui_group": "basic"},
+        title="Discharge segments",
     )
     charge_efficiency_curve: list[EfficiencyBreakpoint] | None = Field(
         default=None,
@@ -817,7 +817,7 @@ class BatteryConfig(BaseModel):
             "SOS2 piecewise-linear efficiency curve for charging. First breakpoint "
             "must be at power_kw=0.0. Mutually exclusive with charge_segments."
         ),
-        json_schema_extra={"ui_label": "Charge efficiency curve", "ui_group": "advanced"},
+        title="Charge efficiency curve", json_schema_extra={"x-category": "Advanced"},
     )
     discharge_efficiency_curve: list[EfficiencyBreakpoint] | None = Field(
         default=None,
@@ -826,7 +826,7 @@ class BatteryConfig(BaseModel):
             "SOS2 piecewise-linear efficiency curve for discharging. First breakpoint "
             "must be at power_kw=0.0. Mutually exclusive with discharge_segments."
         ),
-        json_schema_extra={"ui_label": "Discharge efficiency curve", "ui_group": "advanced"},
+        title="Discharge efficiency curve", json_schema_extra={"x-category": "Advanced"},
     )
     wear_cost_eur_per_kwh: float = Field(
         ge=0,
@@ -842,7 +842,7 @@ class BatteryConfig(BaseModel):
             "has \u20ac3,000 / (3,000 \u00d7 10 kWh) = \u20ac0.10/kWh of throughput. "
             "Typical residential LFP values fall in the \u20ac0.03\u2013\u20ac0.12/kWh range."
         ),
-        json_schema_extra={"ui_label": "Wear cost (\u20ac/kWh)", "ui_group": "basic"},
+        title="Wear cost (\u20ac/kWh)",
     )
     optimal_lower_soc_kwh: float = Field(
         default=0.0,
@@ -854,7 +854,7 @@ class BatteryConfig(BaseModel):
             "level when the price spread justifies it. Must be >= min_soc_kwh and "
             "<= capacity_kwh."
         ),
-        json_schema_extra={"ui_label": "Preferred minimum SOC (kWh)", "ui_group": "advanced"},
+        title="Preferred minimum SOC (kWh)", json_schema_extra={"x-category": "Advanced"},
     )
     soc_low_penalty_eur_per_kwh_h: float = Field(
         default=0.0,
@@ -866,7 +866,7 @@ class BatteryConfig(BaseModel):
             "dispatch below the optimal level for any price spread smaller than "
             "this rate."
         ),
-        json_schema_extra={"ui_label": "Low SOC penalty (\u20ac/kWh\u00b7h)", "ui_group": "advanced"},
+        title="Low SOC penalty (\u20ac/kWh\u00b7h)", json_schema_extra={"x-category": "Advanced"},
     )
     reduce_charge_above_soc_kwh: float | None = Field(
         default=None,
@@ -876,7 +876,7 @@ class BatteryConfig(BaseModel):
             "between min_soc_kwh and capacity_kwh. Must be set together with "
             "reduce_charge_min_kw."
         ),
-        json_schema_extra={"ui_label": "Derate charge above SOC (kWh)", "ui_group": "advanced"},
+        title="Derate charge above SOC (kWh)", json_schema_extra={"x-category": "Advanced"},
     )
     reduce_charge_min_kw: float | None = Field(
         default=None,
@@ -889,7 +889,7 @@ class BatteryConfig(BaseModel):
             "segment power_max_kw values. Must be set together with "
             "reduce_charge_above_soc_kwh."
         ),
-        json_schema_extra={"ui_label": "Derated charge minimum (kW)", "ui_group": "advanced"},
+        title="Derated charge minimum (kW)", json_schema_extra={"x-category": "Advanced"},
     )
     reduce_discharge_below_soc_kwh: float | None = Field(
         default=None,
@@ -899,7 +899,7 @@ class BatteryConfig(BaseModel):
             "between min_soc_kwh and capacity_kwh. Must be set together with "
             "reduce_discharge_min_kw."
         ),
-        json_schema_extra={"ui_label": "Derate discharge below SOC (kWh)", "ui_group": "advanced"},
+        title="Derate discharge below SOC (kWh)", json_schema_extra={"x-category": "Advanced"},
     )
     reduce_discharge_min_kw: float | None = Field(
         default=None,
@@ -912,22 +912,22 @@ class BatteryConfig(BaseModel):
             "segment power_max_kw values. Must be set together with "
             "reduce_discharge_below_soc_kwh."
         ),
-        json_schema_extra={"ui_label": "Derated discharge minimum (kW)", "ui_group": "advanced"},
+        title="Derated discharge minimum (kW)", json_schema_extra={"x-category": "Advanced"},
     )
     capabilities: BatteryCapabilitiesConfig = Field(
         default_factory=BatteryCapabilitiesConfig,
         description="Hardware capability flags.",
-        json_schema_extra={"ui_label": "Hardware capabilities", "ui_group": "advanced"},
+        title="Hardware capabilities", json_schema_extra={"x-category": "Advanced"},
     )
     inputs: BatteryInputsConfig | None = Field(
         default_factory=BatteryInputsConfig,
         description="MQTT input topic configuration for battery state readings. Defaults to an empty model so topics are derived with percent unit. Set to null to opt out of MQTT inputs entirely.",
-        json_schema_extra={"ui_label": "Input topics", "ui_group": "advanced"},
+        title="Input topics", json_schema_extra={"x-category": "Advanced"},
     )
     outputs: BatteryOutputsConfig = Field(
         default_factory=BatteryOutputsConfig,
         description="MQTT output topic configuration for battery control signals.",
-        json_schema_extra={"ui_label": "Output topics", "ui_group": "advanced"},
+        title="Output topics", json_schema_extra={"x-category": "Advanced"},
     )
     min_charge_kw: float | None = Field(
         default=None,
@@ -941,7 +941,7 @@ class BatteryConfig(BaseModel):
             "cycle. "
             "Default None = no floor applied."
         ),
-        json_schema_extra={"ui_label": "Minimum charge power (kW)", "ui_group": "advanced"},
+        title="Minimum charge power (kW)", json_schema_extra={"x-category": "Advanced"},
     )
     min_discharge_kw: float | None = Field(
         default=None,
@@ -953,7 +953,7 @@ class BatteryConfig(BaseModel):
             "Safe to combine with min_charge_kw. "
             "Default None = no floor applied."
         ),
-        json_schema_extra={"ui_label": "Minimum discharge power (kW)", "ui_group": "advanced"},
+        title="Minimum discharge power (kW)", json_schema_extra={"x-category": "Advanced"},
     )
 
     @model_validator(mode="after")
@@ -1104,12 +1104,12 @@ class EvInputsConfig(BaseModel):
             'on'/'off', '1'/'0', or a JSON boolean.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     soc: SocTopicConfig = Field(
         default_factory=SocTopicConfig,
         description="Vehicle SOC MQTT topic configuration. Defaults to derived topic with percent unit.",
-        json_schema_extra={"ui_label": "SOC topic config", "ui_group": "advanced"},
+        title="SOC topic config", json_schema_extra={"x-category": "Advanced"},
     )
     plugged_in_topic: str | None = Field(
         default=None,
@@ -1117,7 +1117,7 @@ class EvInputsConfig(BaseModel):
             "MQTT topic for the EV plug state. "
             "Defaults to '{mqtt.topic_prefix}/input/ev/{name}/plugged_in' when not set."
         ),
-        json_schema_extra={"ui_label": "Plug state topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/input/ev/{name}/plugged_in"},
+        title="Plug state topic", json_schema_extra={"x-category": "Advanced", "x-format": "mimir-topic-placeholder"},
     )
 
 class EvCapabilitiesConfig(BaseModel):
@@ -1142,12 +1142,12 @@ class EvCapabilitiesConfig(BaseModel):
             self-regulates. Orthogonal to ``zero_exchange``. Default False.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     staged_power: bool = Field(
         default=False,
         description="Hardware accepts only discrete power stages, not continuous values.",
-        json_schema_extra={"ui_label": "Staged power control", "ui_group": "advanced"},
+        title="Staged power control", json_schema_extra={"x-category": "Advanced"},
     )
     zero_exchange: bool = Field(
         default=False,
@@ -1156,7 +1156,7 @@ class EvCapabilitiesConfig(BaseModel):
             " The charger autonomously holds grid exchange near zero using local CT"
             " measurements."
         ),
-        json_schema_extra={"ui_label": "Zero-exchange mode", "ui_group": "advanced"},
+        title="Zero-exchange mode", json_schema_extra={"x-category": "Advanced"},
     )
     v2h: bool = Field(
         default=False,
@@ -1164,7 +1164,7 @@ class EvCapabilitiesConfig(BaseModel):
             "Hardware supports vehicle-to-home discharge (bidirectional power flow)."
             " Required when zero_exchange=True."
         ),
-        json_schema_extra={"ui_label": "Vehicle-to-home (V2H)", "ui_group": "advanced"},
+        title="Vehicle-to-home (V2H)", json_schema_extra={"x-category": "Advanced"},
     )
     loadbalance: bool = Field(
         default=False,
@@ -1172,7 +1172,7 @@ class EvCapabilitiesConfig(BaseModel):
             "EVSE firmware supports autonomous charge-only excess-PV following mode."
             " When asserted, the EVSE self-regulates to available PV surplus."
         ),
-        json_schema_extra={"ui_label": "Load balance mode", "ui_group": "advanced"},
+        title="Load balance mode", json_schema_extra={"x-category": "Advanced"},
     )
 
     @model_validator(mode="after")
@@ -1212,7 +1212,7 @@ class EvOutputsConfig(BaseModel):
             provided explicitly.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     exchange_mode: str | None = Field(
         default=None,
@@ -1221,7 +1221,7 @@ class EvOutputsConfig(BaseModel):
             "Defaults to '{mqtt.topic_prefix}/output/ev/{name}/exchange_mode' "
             "when not set."
         ),
-        json_schema_extra={"ui_label": "Exchange mode topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/output/ev/{name}/exchange_mode"},
+        title="Exchange mode topic", json_schema_extra={"x-category": "Advanced", "x-format": "mimir-topic-placeholder"},
     )
     loadbalance_cmd: str | None = Field(
         default=None,
@@ -1230,7 +1230,7 @@ class EvOutputsConfig(BaseModel):
             "Defaults to '{mqtt.topic_prefix}/output/ev/{name}/loadbalance' "
             "when not set."
         ),
-        json_schema_extra={"ui_label": "Load balance topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/output/ev/{name}/loadbalance"},
+        title="Load balance topic", json_schema_extra={"x-category": "Advanced", "x-format": "mimir-topic-placeholder"},
     )
 
 class EvConfig(BaseModel):
@@ -1248,18 +1248,18 @@ class EvConfig(BaseModel):
         inputs: MQTT input topics for live EV state readings.
     """
 
-    model_config = ConfigDict(extra="forbid", json_schema_extra={"ui_instance_name_description": "A short identifier for this EV charger used in MQTT topics and automations. For example: 'ev_charger' or 'garage_evse'."})
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
-    capacity_kwh: float = Field(gt=0, description="Vehicle battery capacity in kWh.", json_schema_extra={"ui_label": "Vehicle capacity (kWh)", "ui_group": "basic"})
-    min_soc_kwh: float = Field(ge=0, default=0.0, description="Minimum SOC in kWh.", json_schema_extra={"ui_label": "Minimum SOC (kWh)", "ui_group": "basic"})
+    capacity_kwh: float = Field(gt=0, description="Vehicle battery capacity in kWh.", title="Vehicle capacity (kWh)")
+    min_soc_kwh: float = Field(ge=0, default=0.0, description="Minimum SOC in kWh.", title="Minimum SOC (kWh)")
     charge_segments: list[EfficiencySegment] = Field(
         min_length=1, description="Piecewise efficiency segments for charging.",
-        json_schema_extra={"ui_label": "Charge segments", "ui_group": "basic"},
+        title="Charge segments",
     )
     discharge_segments: list[EfficiencySegment] = Field(
         default_factory=list,
         description="Piecewise efficiency segments for V2H discharge. Empty = no V2H.",
-        json_schema_extra={"ui_label": "Discharge segments (V2H)", "ui_group": "basic"},
+        title="Discharge segments (V2H)",
     )
     wear_cost_eur_per_kwh: float = Field(
         ge=0,
@@ -1274,12 +1274,12 @@ class EvConfig(BaseModel):
             "Example: a 60 kWh vehicle battery with a \u20ac8,000 pack and 1,500 full "
             "cycles gives \u20ac8,000 / (1,500 \u00d7 60 kWh) = \u20ac0.089/kWh."
         ),
-        json_schema_extra={"ui_label": "Wear cost (\u20ac/kWh)", "ui_group": "basic"},
+        title="Wear cost (\u20ac/kWh)",
     )
     capabilities: EvCapabilitiesConfig = Field(
         default_factory=EvCapabilitiesConfig,
         description="Hardware capability flags.",
-        json_schema_extra={"ui_label": "Hardware capabilities", "ui_group": "advanced"},
+        title="Hardware capabilities", json_schema_extra={"x-category": "Advanced"},
     )
     min_charge_kw: float | None = Field(
         default=None,
@@ -1292,7 +1292,7 @@ class EvConfig(BaseModel):
             "the solution space. Applies to both V2H and charge-only chargers. "
             "Default None = no floor applied."
         ),
-        json_schema_extra={"ui_label": "Minimum EVSE charge power (kW)", "ui_group": "advanced"},
+        title="Minimum EVSE charge power (kW)", json_schema_extra={"x-category": "Advanced"},
     )
     min_discharge_kw: float | None = Field(
         default=None,
@@ -1306,17 +1306,17 @@ class EvConfig(BaseModel):
             "discharge at all. "
             "Default None = no floor applied."
         ),
-        json_schema_extra={"ui_label": "Minimum V2H discharge power (kW)", "ui_group": "advanced"},
+        title="Minimum V2H discharge power (kW)", json_schema_extra={"x-category": "Advanced"},
     )
     outputs: EvOutputsConfig = Field(
         default_factory=EvOutputsConfig,
         description="MQTT output topic configuration.",
-        json_schema_extra={"ui_label": "Output topics", "ui_group": "advanced"},
+        title="Output topics", json_schema_extra={"x-category": "Advanced"},
     )
     inputs: EvInputsConfig | None = Field(
         default_factory=EvInputsConfig,
         description="MQTT input topic configuration for EV state readings. Defaults to an empty model so topics are derived with percent unit. Set to null to opt out of MQTT inputs entirely.",
-        json_schema_extra={"ui_label": "Input topics", "ui_group": "advanced"},
+        title="Input topics", json_schema_extra={"x-category": "Advanced"},
     )
 
     @property
@@ -1383,12 +1383,12 @@ class PvCapabilitiesConfig(BaseModel):
             Default False.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     power_limit: bool = Field(
         default=False,
         description="Inverter accepts a continuous production limit setpoint in kW.",
-        json_schema_extra={"ui_label": "Power limit control", "ui_group": "advanced"},
+        title="Power limit control", json_schema_extra={"x-category": "Advanced"},
     )
     zero_export: bool = Field(
         default=False,
@@ -1396,7 +1396,7 @@ class PvCapabilitiesConfig(BaseModel):
             "Inverter has a boolean zero-export mode register. When True, the inverter"
             " autonomously prevents grid export using local CT measurements."
         ),
-        json_schema_extra={"ui_label": "Zero-export mode", "ui_group": "advanced"},
+        title="Zero-export mode", json_schema_extra={"x-category": "Advanced"},
     )
     on_off: bool = Field(
         default=False,
@@ -1405,7 +1405,7 @@ class PvCapabilitiesConfig(BaseModel):
             "as a binary decision variable: the array either produces the full "
             "forecast or is switched off. Mutually exclusive with power_limit."
         ),
-        json_schema_extra={"ui_label": "On/off control", "ui_group": "advanced"},
+        title="On/off control", json_schema_extra={"x-category": "Advanced"},
     )
 
     @model_validator(mode="after")
@@ -1461,7 +1461,7 @@ class PvOutputsConfig(BaseModel):
             provided explicitly.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     power_limit_kw: str | None = Field(
         default=None,
@@ -1470,7 +1470,7 @@ class PvOutputsConfig(BaseModel):
             "Defaults to '{mqtt.topic_prefix}/output/pv/{name}/power_limit_kw' "
             "when not set."
         ),
-        json_schema_extra={"ui_label": "Power limit topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/output/pv/{name}/power_limit_kw"},
+        title="Power limit topic", json_schema_extra={"x-category": "Advanced", "x-format": "mimir-topic-placeholder"},
     )
     zero_export_mode: str | None = Field(
         default=None,
@@ -1479,7 +1479,7 @@ class PvOutputsConfig(BaseModel):
             "Defaults to '{mqtt.topic_prefix}/output/pv/{name}/zero_export_mode' "
             "when not set."
         ),
-        json_schema_extra={"ui_label": "Zero-export mode topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/output/pv/{name}/zero_export_mode"},
+        title="Zero-export mode topic", json_schema_extra={"x-category": "Advanced", "x-format": "mimir-topic-placeholder"},
     )
     on_off_mode: str | None = Field(
         default=None,
@@ -1491,7 +1491,7 @@ class PvOutputsConfig(BaseModel):
             "Defaults to '{mqtt.topic_prefix}/output/pv/{name}/on_off_mode' "
             "when not set."
         ),
-        json_schema_extra={"ui_label": "On/off mode topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/output/pv/{name}/on_off_mode"},
+        title="On/off mode topic", json_schema_extra={"x-category": "Advanced", "x-format": "mimir-topic-placeholder"},
     )
     is_curtailed: str | None = Field(
         default=None,
@@ -1502,7 +1502,7 @@ class PvOutputsConfig(BaseModel):
             "Valid for staged, power_limit, and on_off modes. None for fixed-mode arrays. "
             "Defaults to '{mqtt.topic_prefix}/output/pv/{name}/is_curtailed' when not set."
         ),
-        json_schema_extra={"ui_label": "Is curtailed topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/output/pv/{name}/is_curtailed"},
+        title="Is curtailed topic", json_schema_extra={"x-category": "Advanced", "x-format": "mimir-topic-placeholder"},
     )
 
 class PvConfig(BaseModel):
@@ -1543,16 +1543,16 @@ class PvConfig(BaseModel):
             mode commands.
     """
 
-    model_config = ConfigDict(extra="forbid", json_schema_extra={"ui_instance_name_description": "A short identifier for this PV array used in MQTT topics and automations. For example: 'roof_pv' or 'south_array'."})
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
-    max_power_kw: float = Field(gt=0, description="Array peak output in kW.", json_schema_extra={"ui_label": "Peak power (kW)", "ui_group": "basic"})
+    max_power_kw: float = Field(gt=0, description="Array peak output in kW.", title="Peak power (kW)")
     topic_forecast: str | None = Field(
         default=None,
         description=(
             "MQTT topic for the per-step PV power forecast in kW. "
             "Defaults to '{mqtt.topic_prefix}/input/pv/{name}/forecast' when not set."
         ),
-        json_schema_extra={"ui_label": "Forecast topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/input/pv/{name}/forecast"},
+        title="Forecast topic", json_schema_extra={"x-category": "Advanced", "x-format": "mimir-topic-placeholder"},
     )
     production_stages: list[float] | None = Field(
         default=None,
@@ -1561,17 +1561,17 @@ class PvConfig(BaseModel):
             "with 0.0. When set, the solver selects exactly one stage per step. "
             "Mutually exclusive with capabilities.power_limit and capabilities.on_off."
         ),
-        json_schema_extra={"ui_label": "Production stages (kW)", "ui_group": "advanced"},
+        title="Production stages (kW)", json_schema_extra={"x-category": "Advanced"},
     )
     capabilities: PvCapabilitiesConfig = Field(
         default_factory=PvCapabilitiesConfig,
         description="Hardware capability flags.",
-        json_schema_extra={"ui_label": "Hardware capabilities", "ui_group": "advanced"},
+        title="Hardware capabilities", json_schema_extra={"x-category": "Advanced"},
     )
     outputs: PvOutputsConfig = Field(
         default_factory=PvOutputsConfig,
         description="MQTT output topic names for PV control commands.",
-        json_schema_extra={"ui_label": "Output topics", "ui_group": "advanced"},
+        title="Output topics", json_schema_extra={"x-category": "Advanced"},
     )
 
     @model_validator(mode="after")
@@ -1676,7 +1676,7 @@ class HybridInverterCapabilitiesConfig(BaseModel):
             performs the real-time enforcement autonomously. Default False.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     zero_exchange: bool = Field(
         default=False,
@@ -1685,7 +1685,7 @@ class HybridInverterCapabilitiesConfig(BaseModel):
             "When True, the inverter autonomously holds grid exchange near zero "
             "using local CT measurements."
         ),
-        json_schema_extra={"ui_label": "Zero-exchange mode", "ui_group": "advanced"},
+        title="Zero-exchange mode", json_schema_extra={"x-category": "Advanced"},
     )
 
 
@@ -1699,7 +1699,7 @@ class HybridInverterOutputsConfig(BaseModel):
             published).
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     exchange_mode: str | None = Field(
         default=None,
@@ -1708,11 +1708,7 @@ class HybridInverterOutputsConfig(BaseModel):
             "Defaults to '{mqtt.topic_prefix}/output/hybrid/{name}/exchange_mode' "
             "when not set."
         ),
-        json_schema_extra={
-            "ui_label": "Exchange mode topic",
-            "ui_group": "advanced",
-            "ui_placeholder": "{mqtt.topic_prefix}/output/hybrid/{name}/exchange_mode",
-        },
+        title="Exchange mode topic", json_schema_extra={"x-category": "Advanced", "x-format": "mimir-topic-placeholder"},
     )
 
 
@@ -1757,39 +1753,39 @@ class HybridInverterConfig(BaseModel):
             from the previous step.
     """
 
-    model_config = ConfigDict(extra="forbid", json_schema_extra={"ui_instance_name_description": "A short identifier for this hybrid inverter used in MQTT topics and automations. For example: 'hybrid_inv' or 'solis_hybrid'."})
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
-    capacity_kwh: float = Field(gt=0, description="Usable battery capacity in kWh.", json_schema_extra={"ui_label": "Battery capacity (kWh)", "ui_group": "basic"})
-    min_soc_kwh: float = Field(ge=0, default=0.0, description="Minimum SOC in kWh.", json_schema_extra={"ui_label": "Minimum SOC (kWh)", "ui_group": "basic"})
-    max_charge_kw: float = Field(gt=0, description="Maximum DC charge power to battery cells in kW.", json_schema_extra={"ui_label": "Max charge power (kW)", "ui_group": "basic"})
+    capacity_kwh: float = Field(gt=0, description="Usable battery capacity in kWh.", title="Battery capacity (kWh)")
+    min_soc_kwh: float = Field(ge=0, default=0.0, description="Minimum SOC in kWh.", title="Minimum SOC (kWh)")
+    max_charge_kw: float = Field(gt=0, description="Maximum DC charge power to battery cells in kW.", title="Max charge power (kW)")
     max_discharge_kw: float = Field(
         gt=0, description="Maximum DC discharge power from battery cells in kW.",
-        json_schema_extra={"ui_label": "Max discharge power (kW)", "ui_group": "basic"},
+        title="Max discharge power (kW)",
     )
     battery_charge_efficiency: float = Field(
         gt=0,
         le=1.0,
         default=0.95,
         description="Efficiency of battery charge process (DC bus to cell storage).",
-        json_schema_extra={"ui_label": "Battery charge efficiency", "ui_group": "advanced"},
+        title="Battery charge efficiency", json_schema_extra={"x-category": "Advanced"},
     )
     battery_discharge_efficiency: float = Field(
         gt=0,
         le=1.0,
         default=0.95,
         description="Efficiency of battery discharge process (cell to DC bus).",
-        json_schema_extra={"ui_label": "Battery discharge efficiency", "ui_group": "advanced"},
+        title="Battery discharge efficiency", json_schema_extra={"x-category": "Advanced"},
     )
     inverter_efficiency: float = Field(
         gt=0,
         le=1.0,
         default=0.97,
         description="AC-to-DC and DC-to-AC inverter conversion efficiency.",
-        json_schema_extra={"ui_label": "Inverter efficiency", "ui_group": "advanced"},
+        title="Inverter efficiency", json_schema_extra={"x-category": "Advanced"},
     )
     max_pv_kw: float = Field(
         gt=0, description="Peak PV power at MPPT input in kW. Used to clip forecasts.",
-        json_schema_extra={"ui_label": "PV peak power (kW)", "ui_group": "basic"},
+        title="PV peak power (kW)",
     )
     wear_cost_eur_per_kwh: float = Field(
         ge=0,
@@ -1803,7 +1799,7 @@ class HybridInverterConfig(BaseModel):
             "Example: a 10 kWh battery costing \u20ac3,000 with 3,000 full cycles "
             "gives \u20ac3,000 / (3,000 \u00d7 10 kWh) = \u20ac0.10/kWh."
         ),
-        json_schema_extra={"ui_label": "Wear cost (\u20ac/kWh)", "ui_group": "basic"},
+        title="Wear cost (\u20ac/kWh)",
     )
     topic_pv_forecast: str | None = Field(
         default=None,
@@ -1811,12 +1807,12 @@ class HybridInverterConfig(BaseModel):
             "MQTT topic for per-step PV DC power forecast in kW. "
             "Defaults to '{mqtt.topic_prefix}/input/hybrid/{name}/pv_forecast' when not set."
         ),
-        json_schema_extra={"ui_label": "PV forecast topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/input/hybrid/{name}/pv_forecast"},
+        title="PV forecast topic", json_schema_extra={"x-category": "Advanced", "x-format": "mimir-topic-placeholder"},
     )
     inputs: BatteryInputsConfig | None = Field(
         default_factory=BatteryInputsConfig,
         description="MQTT input topic configuration for live battery SOC readings. Defaults to an empty model so topics are derived with percent unit. Set to null to opt out of MQTT inputs entirely.",
-        json_schema_extra={"ui_label": "Input topics", "ui_group": "advanced"},
+        title="Input topics", json_schema_extra={"x-category": "Advanced"},
     )
     optimal_lower_soc_kwh: float = Field(
         default=0.0,
@@ -1828,7 +1824,7 @@ class HybridInverterConfig(BaseModel):
             "level when the price spread justifies it. Must be >= min_soc_kwh and "
             "<= capacity_kwh."
         ),
-        json_schema_extra={"ui_label": "Preferred minimum SOC (kWh)", "ui_group": "advanced"},
+        title="Preferred minimum SOC (kWh)", json_schema_extra={"x-category": "Advanced"},
     )
     soc_low_penalty_eur_per_kwh_h: float = Field(
         default=0.0,
@@ -1837,7 +1833,7 @@ class HybridInverterConfig(BaseModel):
             "Penalty rate for SOC below optimal_lower_soc_kwh, in EUR per kWh of "
             "deficit per hour. Set to 0.0 (default) to disable."
         ),
-        json_schema_extra={"ui_label": "Low SOC penalty (\u20ac/kWh\u00b7h)", "ui_group": "advanced"},
+        title="Low SOC penalty (\u20ac/kWh\u00b7h)", json_schema_extra={"x-category": "Advanced"},
     )
     reduce_charge_above_soc_kwh: float | None = Field(
         default=None,
@@ -1847,7 +1843,7 @@ class HybridInverterConfig(BaseModel):
             "between min_soc_kwh and capacity_kwh. Must be set together with "
             "reduce_charge_min_kw."
         ),
-        json_schema_extra={"ui_label": "Derate charge above SOC (kWh)", "ui_group": "advanced"},
+        title="Derate charge above SOC (kWh)", json_schema_extra={"x-category": "Advanced"},
     )
     reduce_charge_min_kw: float | None = Field(
         default=None,
@@ -1858,7 +1854,7 @@ class HybridInverterConfig(BaseModel):
             "reduce_charge_above_soc_kwh to this value at capacity_kwh. Must be "
             "set together with reduce_charge_above_soc_kwh."
         ),
-        json_schema_extra={"ui_label": "Derated charge minimum (kW)", "ui_group": "advanced"},
+        title="Derated charge minimum (kW)", json_schema_extra={"x-category": "Advanced"},
     )
     reduce_discharge_below_soc_kwh: float | None = Field(
         default=None,
@@ -1868,7 +1864,7 @@ class HybridInverterConfig(BaseModel):
             "between min_soc_kwh and capacity_kwh. Must be set together with "
             "reduce_discharge_min_kw."
         ),
-        json_schema_extra={"ui_label": "Derate discharge below SOC (kWh)", "ui_group": "advanced"},
+        title="Derate discharge below SOC (kWh)", json_schema_extra={"x-category": "Advanced"},
     )
     reduce_discharge_min_kw: float | None = Field(
         default=None,
@@ -1879,7 +1875,7 @@ class HybridInverterConfig(BaseModel):
             "reduce_discharge_below_soc_kwh to this value at min_soc_kwh. Must be "
             "set together with reduce_discharge_below_soc_kwh."
         ),
-        json_schema_extra={"ui_label": "Derated discharge minimum (kW)", "ui_group": "advanced"},
+        title="Derated discharge minimum (kW)", json_schema_extra={"x-category": "Advanced"},
     )
     min_charge_kw: float | None = Field(
         default=None,
@@ -1893,7 +1889,7 @@ class HybridInverterConfig(BaseModel):
             "cycle. "
             "Default None = no floor applied."
         ),
-        json_schema_extra={"ui_label": "Minimum charge power (kW)", "ui_group": "advanced"},
+        title="Minimum charge power (kW)", json_schema_extra={"x-category": "Advanced"},
     )
     min_discharge_kw: float | None = Field(
         default=None,
@@ -1905,17 +1901,17 @@ class HybridInverterConfig(BaseModel):
             "Safe to combine with min_charge_kw. "
             "Default None = no floor applied."
         ),
-        json_schema_extra={"ui_label": "Minimum discharge power (kW)", "ui_group": "advanced"},
+        title="Minimum discharge power (kW)", json_schema_extra={"x-category": "Advanced"},
     )
     capabilities: HybridInverterCapabilitiesConfig = Field(
         default_factory=HybridInverterCapabilitiesConfig,
         description="Hardware capability flags.",
-        json_schema_extra={"ui_label": "Hardware capabilities", "ui_group": "advanced"},
+        title="Hardware capabilities", json_schema_extra={"x-category": "Advanced"},
     )
     outputs: HybridInverterOutputsConfig = Field(
         default_factory=HybridInverterOutputsConfig,
         description="MQTT output topic configuration for hybrid inverter control signals.",
-        json_schema_extra={"ui_label": "Output topics", "ui_group": "advanced"},
+        title="Output topics", json_schema_extra={"x-category": "Advanced"},
     )
 
     @model_validator(mode="after")
@@ -2024,7 +2020,7 @@ class DeferrableLoadConfig(BaseModel):
             binary optimisation occurred), nothing is published.
     """
 
-    model_config = ConfigDict(extra="forbid", json_schema_extra={"ui_instance_name_description": "A short identifier for this deferrable load used in MQTT topics and automations. For example: 'washing_machine' or 'dishwasher'."})
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     power_profile: list[float] = Field(
         min_length=1,
@@ -2032,7 +2028,7 @@ class DeferrableLoadConfig(BaseModel):
             "Per-step power draw in kW, one entry per step of the run cycle. "
             "All values must be positive. The array length defines the run duration."
         ),
-        json_schema_extra={"ui_label": "Power profile (kW per step)", "ui_group": "basic"},
+        title="Power profile (kW per step)",
     )
     topic_window_earliest: str | None = Field(
         default=None,
@@ -2040,7 +2036,7 @@ class DeferrableLoadConfig(BaseModel):
             "MQTT topic for earliest start datetime. "
             "Defaults to '{mqtt.topic_prefix}/input/deferrable/{name}/window_earliest' when not set."
         ),
-        json_schema_extra={"ui_label": "Earliest start topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/input/deferrable/{name}/window_earliest"},
+        title="Earliest start topic", json_schema_extra={"x-category": "Advanced", "x-format": "mimir-topic-placeholder"},
     )
     topic_window_latest: str | None = Field(
         default=None,
@@ -2048,7 +2044,7 @@ class DeferrableLoadConfig(BaseModel):
             "MQTT topic for latest end datetime. "
             "Defaults to '{mqtt.topic_prefix}/input/deferrable/{name}/window_latest' when not set."
         ),
-        json_schema_extra={"ui_label": "Latest end topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/input/deferrable/{name}/window_latest"},
+        title="Latest end topic", json_schema_extra={"x-category": "Advanced", "x-format": "mimir-topic-placeholder"},
     )
     topic_committed_start_time: str | None = Field(
         default=None,
@@ -2057,7 +2053,7 @@ class DeferrableLoadConfig(BaseModel):
             "when the load physically begins. Retained. When present and current, mimirheim "
             "treats the load as a fixed draw for the remaining profile steps."
         ),
-        json_schema_extra={"ui_label": "Committed start time topic", "ui_group": "advanced"},
+        title="Committed start time topic", json_schema_extra={"x-category": "Advanced"},
     )
     topic_recommended_start_time: str | None = Field(
         default=None,
@@ -2067,7 +2063,7 @@ class DeferrableLoadConfig(BaseModel):
             "datetime of the first nonzero-setpoint step for this load. Only published "
             "when the load is in binary scheduling state (not running/committed)."
         ),
-        json_schema_extra={"ui_label": "Recommended start time topic", "ui_group": "advanced"},
+        title="Recommended start time topic", json_schema_extra={"x-category": "Advanced"},
     )
 
     @model_validator(mode="after")
@@ -2093,7 +2089,7 @@ class StaticLoadConfig(BaseModel):
             is read, in kW.
     """
 
-    model_config = ConfigDict(extra="forbid", json_schema_extra={"ui_instance_name_description": "A short identifier for this static load used in MQTT topics and automations. For example: 'base_load' or 'house_loads'."})
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     topic_forecast: str | None = Field(
         default=None,
@@ -2101,7 +2097,7 @@ class StaticLoadConfig(BaseModel):
             "MQTT topic for the per-step base load forecast in kW. "
             "Defaults to '{mqtt.topic_prefix}/input/baseload/{name}/forecast' when not set."
         ),
-        json_schema_extra={"ui_label": "Forecast topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/input/baseload/{name}/forecast"},
+        title="Forecast topic", json_schema_extra={"x-category": "Advanced", "x-format": "mimir-topic-placeholder"},
     )
 
 # ---------------------------------------------------------------------------
@@ -2127,7 +2123,7 @@ class BuildingThermalInputsConfig(BaseModel):
             (e.g. Open-Meteo, Met.no) via the home automation system.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     topic_current_indoor_temp_c: str | None = Field(
         default=None,
@@ -2135,7 +2131,7 @@ class BuildingThermalInputsConfig(BaseModel):
             "MQTT topic for current indoor temperature in °C, retained. "
             "Defaults to a path derived from mqtt.topic_prefix and device name."
         ),
-        json_schema_extra={"ui_label": "Indoor temperature topic", "ui_group": "advanced"},
+        title="Indoor temperature topic", json_schema_extra={"x-category": "Advanced"},
     )
     topic_outdoor_temp_forecast_c: str | None = Field(
         default=None,
@@ -2144,7 +2140,7 @@ class BuildingThermalInputsConfig(BaseModel):
             "JSON array of floats, retained. "
             "Defaults to a path derived from mqtt.topic_prefix and device name."
         ),
-        json_schema_extra={"ui_label": "Outdoor temperature forecast topic", "ui_group": "advanced"},
+        title="Outdoor temperature forecast topic", json_schema_extra={"x-category": "Advanced"},
     )
 
 class BuildingThermalConfig(BaseModel):
@@ -2206,32 +2202,32 @@ class BuildingThermalConfig(BaseModel):
             CombiHeatPumpInputs.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     thermal_capacity_kwh_per_k: float = Field(
         gt=0,
         description="Building thermal mass in kWh/K.",
-        json_schema_extra={"ui_label": "Thermal capacity (kWh/K)", "ui_group": "basic"},
+        title="Thermal capacity (kWh/K)",
     )
     heat_loss_coeff_kw_per_k: float = Field(
         gt=0,
         description="Building heat loss coefficient in kW/K.",
-        json_schema_extra={"ui_label": "Heat loss coefficient (kW/K)", "ui_group": "basic"},
+        title="Heat loss coefficient (kW/K)",
     )
     comfort_min_c: float = Field(
         default=19.0,
         description="Minimum acceptable indoor temperature in °C.",
-        json_schema_extra={"ui_label": "Minimum comfort (°C)", "ui_group": "advanced"},
+        title="Minimum comfort (°C)", json_schema_extra={"x-category": "Advanced"},
     )
     comfort_max_c: float = Field(
         default=24.0,
         description="Maximum acceptable indoor temperature in °C.",
-        json_schema_extra={"ui_label": "Maximum comfort (°C)", "ui_group": "advanced"},
+        title="Maximum comfort (°C)", json_schema_extra={"x-category": "Advanced"},
     )
     inputs: BuildingThermalInputsConfig | None = Field(
         default_factory=BuildingThermalInputsConfig,
         description="MQTT input topics. Defaults to an empty model so topics are derived. Set to null to opt out of MQTT inputs entirely.",
-        json_schema_extra={"ui_label": "Input topics", "ui_group": "advanced"},
+        title="Input topics", json_schema_extra={"x-category": "Advanced"},
     )
 
     @model_validator(mode="after")
@@ -2302,7 +2298,7 @@ class ThermalBoilerInputsConfig(BaseModel):
             most recent value on reconnect.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     topic_current_temp: str | None = Field(
         default=None,
@@ -2310,7 +2306,7 @@ class ThermalBoilerInputsConfig(BaseModel):
             "MQTT topic publishing the current water temperature in °C, retained. "
             "Defaults to '{mqtt.topic_prefix}/input/thermal_boiler/{name}/temp_c' when not set."
         ),
-        json_schema_extra={"ui_label": "Current temperature topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/input/thermal_boiler/{name}/temp_c"},
+        title="Current temperature topic", json_schema_extra={"x-category": "Advanced", "x-format": "mimir-topic-placeholder"},
     )
 
 class ThermalBoilerConfig(BaseModel):
@@ -2352,34 +2348,34 @@ class ThermalBoilerConfig(BaseModel):
             ``ThermalBoilerInputs.current_temp_c`` in the solve bundle.
     """
 
-    model_config = ConfigDict(extra="forbid", json_schema_extra={"ui_instance_name_description": "A short identifier for this thermal boiler used in MQTT topics and automations. For example: 'hot_water' or 'dhw_tank'."})
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
-    volume_liters: float = Field(gt=0, description="Water volume of the tank in litres.", json_schema_extra={"ui_label": "Tank volume (L)", "ui_group": "basic"})
+    volume_liters: float = Field(gt=0, description="Water volume of the tank in litres.", title="Tank volume (L)")
     elec_power_kw: float = Field(
         gt=0, description="Rated electrical power of the heating element in kW.",
-        json_schema_extra={"ui_label": "Electrical power (kW)", "ui_group": "basic"},
+        title="Electrical power (kW)",
     )
     cop: float = Field(
         gt=0,
         default=1.0,
         description="Coefficient of performance. 1.0 = resistive; 2+ = heat pump.",
-        json_schema_extra={"ui_label": "Coefficient of performance (COP)", "ui_group": "advanced"},
+        title="Coefficient of performance (COP)", json_schema_extra={"x-category": "Advanced"},
     )
-    setpoint_c: float = Field(description="Target hot water temperature in °C.", json_schema_extra={"ui_label": "Target temperature (°C)", "ui_group": "basic"})
+    setpoint_c: float = Field(description="Target hot water temperature in °C.", title="Target temperature (°C)")
     min_temp_c: float = Field(
         default=40.0, description="Minimum allowable water temperature in °C.",
-        json_schema_extra={"ui_label": "Minimum temperature (°C)", "ui_group": "advanced"},
+        title="Minimum temperature (°C)", json_schema_extra={"x-category": "Advanced"},
     )
     cooling_rate_k_per_hour: float = Field(
         ge=0,
         description="Tank temperature decay rate in K/hour when the heater is off.",
-        json_schema_extra={"ui_label": "Cooling rate (K/h)", "ui_group": "basic"},
+        title="Cooling rate (K/h)",
     )
     min_run_steps: int = Field(
         ge=0,
         default=0,
         description="Minimum consecutive active steps once started. 0 = free cycling.",
-        json_schema_extra={"ui_label": "Minimum run steps", "ui_group": "advanced"},
+        title="Minimum run steps", json_schema_extra={"x-category": "Advanced"},
     )
     wear_cost_eur_per_kwh: float = Field(
         ge=0,
@@ -2391,12 +2387,12 @@ class ThermalBoilerConfig(BaseModel):
             "Meaningful only for heat pump compressors where short-cycling causes "
             "wear; set to 0.0 (default) for resistive immersion elements."
         ),
-        json_schema_extra={"ui_label": "Wear cost (\u20ac/kWh)", "ui_group": "basic"},
+        title="Wear cost (\u20ac/kWh)",
     )
     inputs: ThermalBoilerInputsConfig | None = Field(
         default_factory=ThermalBoilerInputsConfig,
         description="MQTT input topic configuration for live water temperature readings. Defaults to an empty model so topics are derived. Set to null to opt out of MQTT temperature input entirely.",
-        json_schema_extra={"ui_label": "Input topics", "ui_group": "advanced"},
+        title="Input topics", json_schema_extra={"x-category": "Advanced"},
     )
 
     @model_validator(mode="after")
@@ -2430,8 +2426,8 @@ class HeatingStage(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    elec_kw: float = Field(ge=0.0, description="Electrical power at this stage in kW.", json_schema_extra={"ui_label": "Electrical power (kW)", "ui_group": "basic"})
-    cop: float = Field(ge=0.0, description="COP at this stage.", json_schema_extra={"ui_label": "COP", "ui_group": "basic"})
+    elec_kw: float = Field(ge=0.0, description="Electrical power at this stage in kW.", title="Electrical power (kW)")
+    cop: float = Field(ge=0.0, description="COP at this stage.", title="COP")
 
 class SpaceHeatingInputsConfig(BaseModel):
     """MQTT input topic configuration for a space heating heat pump.
@@ -2450,7 +2446,7 @@ class SpaceHeatingInputsConfig(BaseModel):
             required input.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     topic_heat_needed_kwh: str | None = Field(
         default=None,
@@ -2458,14 +2454,14 @@ class SpaceHeatingInputsConfig(BaseModel):
             "MQTT topic publishing remaining heat needed this horizon in kWh, retained. "
             "Defaults to a path derived from mqtt.topic_prefix and device name."
         ),
-        json_schema_extra={"ui_label": "Heat needed topic", "ui_group": "advanced"},
+        title="Heat needed topic", json_schema_extra={"x-category": "Advanced"},
     )
     topic_heat_produced_today_kwh: str | None = Field(
         default=None,
         description=(
             "Optional informational topic for accumulated heat produced today in kWh."
         ),
-        json_schema_extra={"ui_label": "Heat produced today topic", "ui_group": "advanced"},
+        title="Heat produced today topic", json_schema_extra={"x-category": "Advanced"},
     )
 
 class SpaceHeatingConfig(BaseModel):
@@ -2501,25 +2497,25 @@ class SpaceHeatingConfig(BaseModel):
             operation; may be None in unit tests.
     """
 
-    model_config = ConfigDict(extra="forbid", json_schema_extra={"ui_instance_name_description": "A short identifier for this space heating heat pump used in MQTT topics and automations. For example: 'space_hp' or 'underfloor_hp'."})
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     elec_power_kw: float | None = Field(
         default=None, gt=0, description="Rated electrical power for on/off mode in kW.",
-        json_schema_extra={"ui_label": "Electrical power (kW)", "ui_group": "basic"},
+        title="Electrical power (kW)",
     )
     cop: float | None = Field(
         default=None, gt=0, description="COP for on/off mode.",
-        json_schema_extra={"ui_label": "COP (on/off mode)", "ui_group": "basic"},
+        title="COP (on/off mode)",
     )
     stages: list[HeatingStage] | None = Field(
         default=None,
         min_length=2,
         description="Operating points for SOS2 power-stage mode.",
-        json_schema_extra={"ui_label": "Operating stages", "ui_group": "basic"},
+        title="Operating stages",
     )
     min_run_steps: int = Field(
         ge=0, default=4, description="Minimum consecutive active steps once started.",
-        json_schema_extra={"ui_label": "Minimum run steps", "ui_group": "advanced"},
+        title="Minimum run steps", json_schema_extra={"x-category": "Advanced"},
     )
     wear_cost_eur_per_kwh: float = Field(
         ge=0,
@@ -2530,12 +2526,12 @@ class SpaceHeatingConfig(BaseModel):
             "cycling beyond what the minimum run constraint already enforces. "
             "Set to 0.0 (default) for minimal cycling cost modelling."
         ),
-        json_schema_extra={"ui_label": "Wear cost (\u20ac/kWh)", "ui_group": "basic"},
+        title="Wear cost (\u20ac/kWh)",
     )
     inputs: SpaceHeatingInputsConfig | None = Field(
         default_factory=SpaceHeatingInputsConfig,
         description="MQTT input topic configuration. Defaults to an empty model so topics are derived. Set to null to opt out of MQTT inputs entirely.",
-        json_schema_extra={"ui_label": "Input topics", "ui_group": "advanced"},
+        title="Input topics", json_schema_extra={"x-category": "Advanced"},
     )
     building_thermal: BuildingThermalConfig | None = Field(
         default=None,
@@ -2544,7 +2540,7 @@ class SpaceHeatingConfig(BaseModel):
             "temperature as a per-step state variable and enforces a comfort band "
             "instead of the degree-days total-heat lower bound."
         ),
-        json_schema_extra={"ui_label": "Building thermal model", "ui_group": "advanced"},
+        title="Building thermal model", json_schema_extra={"x-category": "Advanced"},
     )
 
     @model_validator(mode="after")
@@ -2585,7 +2581,7 @@ class CombiHeatPumpInputsConfig(BaseModel):
             from degree-days data by the home automation system.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     topic_current_temp: str | None = Field(
         default=None,
@@ -2593,7 +2589,7 @@ class CombiHeatPumpInputsConfig(BaseModel):
             "MQTT topic for DHW water temperature in °C, retained. "
             "Defaults to a path derived from mqtt.topic_prefix and device name."
         ),
-        json_schema_extra={"ui_label": "DHW temperature topic", "ui_group": "advanced"},
+        title="DHW temperature topic", json_schema_extra={"x-category": "Advanced"},
     )
     topic_heat_needed_kwh: str | None = Field(
         default=None,
@@ -2601,7 +2597,7 @@ class CombiHeatPumpInputsConfig(BaseModel):
             "MQTT topic for space heating demand in kWh this horizon, retained. "
             "Defaults to a path derived from mqtt.topic_prefix and device name."
         ),
-        json_schema_extra={"ui_label": "Heat needed topic", "ui_group": "advanced"},
+        title="Heat needed topic", json_schema_extra={"x-category": "Advanced"},
     )
 
 class CombiHeatPumpConfig(BaseModel):
@@ -2646,16 +2642,16 @@ class CombiHeatPumpConfig(BaseModel):
         inputs: MQTT input topic configuration. Required for live operation.
     """
 
-    model_config = ConfigDict(extra="forbid", json_schema_extra={"ui_instance_name_description": "A short identifier for this combi heat pump used in MQTT topics and automations. For example: 'combi_hp' or 'main_hp'."})
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
-    elec_power_kw: float = Field(gt=0, description="Rated electrical power in kW.", json_schema_extra={"ui_label": "Electrical power (kW)", "ui_group": "basic"})
-    cop_dhw: float = Field(gt=0, description="COP in DHW mode.", json_schema_extra={"ui_label": "COP (DHW mode)", "ui_group": "basic"})
-    cop_sh: float = Field(gt=0, description="COP in space heating mode.", json_schema_extra={"ui_label": "COP (space heating mode)", "ui_group": "basic"})
-    volume_liters: float = Field(gt=0, description="DHW tank volume in litres.", json_schema_extra={"ui_label": "DHW tank volume (L)", "ui_group": "basic"})
-    setpoint_c: float = Field(description="DHW target temperature in °C.", json_schema_extra={"ui_label": "DHW target temperature (°C)", "ui_group": "basic"})
-    min_temp_c: float = Field(default=40.0, description="DHW minimum temperature in °C.", json_schema_extra={"ui_label": "DHW minimum temperature (°C)", "ui_group": "advanced"})
-    cooling_rate_k_per_hour: float = Field(ge=0, description="Tank cooling rate in K/h.", json_schema_extra={"ui_label": "Cooling rate (K/h)", "ui_group": "basic"})
-    min_run_steps: int = Field(ge=0, default=4, description="Minimum consecutive active steps.", json_schema_extra={"ui_label": "Minimum run steps", "ui_group": "advanced"})
+    elec_power_kw: float = Field(gt=0, description="Rated electrical power in kW.", title="Electrical power (kW)")
+    cop_dhw: float = Field(gt=0, description="COP in DHW mode.", title="COP (DHW mode)")
+    cop_sh: float = Field(gt=0, description="COP in space heating mode.", title="COP (space heating mode)")
+    volume_liters: float = Field(gt=0, description="DHW tank volume in litres.", title="DHW tank volume (L)")
+    setpoint_c: float = Field(description="DHW target temperature in °C.", title="DHW target temperature (°C)")
+    min_temp_c: float = Field(default=40.0, description="DHW minimum temperature in °C.", title="DHW minimum temperature (°C)", json_schema_extra={"x-category": "Advanced"})
+    cooling_rate_k_per_hour: float = Field(ge=0, description="Tank cooling rate in K/h.", title="Cooling rate (K/h)")
+    min_run_steps: int = Field(ge=0, default=4, description="Minimum consecutive active steps.", title="Minimum run steps", json_schema_extra={"x-category": "Advanced"})
     wear_cost_eur_per_kwh: float = Field(
         ge=0,
         default=0.0,
@@ -2665,12 +2661,12 @@ class CombiHeatPumpConfig(BaseModel):
             "cycling beyond what the minimum run constraint already enforces. "
             "Set to 0.0 (default) for minimal cycling cost modelling."
         ),
-        json_schema_extra={"ui_label": "Wear cost (\u20ac/kWh)", "ui_group": "basic"},
+        title="Wear cost (\u20ac/kWh)",
     )
     inputs: CombiHeatPumpInputsConfig | None = Field(
         default_factory=CombiHeatPumpInputsConfig,
         description="MQTT input topic configuration. Defaults to an empty model so topics are derived. Set to null to opt out of MQTT inputs entirely.",
-        json_schema_extra={"ui_label": "Input topics", "ui_group": "advanced"},
+        title="Input topics", json_schema_extra={"x-category": "Advanced"},
     )
     building_thermal: BuildingThermalConfig | None = Field(
         default=None,
@@ -2680,7 +2676,7 @@ class CombiHeatPumpConfig(BaseModel):
             "comfort band instead of the degree-days total-heat lower bound for SH. "
             "DHW mode is unaffected."
         ),
-        json_schema_extra={"ui_label": "Building thermal model", "ui_group": "advanced"},
+        title="Building thermal model", json_schema_extra={"x-category": "Advanced"},
     )
 
     @model_validator(mode="after")
@@ -2726,29 +2722,29 @@ class MimirheimConfig(BaseModel):
             production dump writing and MQTT notification for mimirheim-reporter.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
-    batteries: dict[str, BatteryConfig] = Field(default_factory=dict, json_schema_extra={"ui_label": "Batteries", "ui_group": "basic"})
-    pv_arrays: dict[str, PvConfig] = Field(default_factory=dict, json_schema_extra={"ui_label": "PV arrays", "ui_group": "basic"})
-    ev_chargers: dict[str, EvConfig] = Field(default_factory=dict, json_schema_extra={"ui_label": "EV chargers", "ui_group": "basic"})
-    deferrable_loads: dict[str, DeferrableLoadConfig] = Field(default_factory=dict, json_schema_extra={"ui_label": "Deferrable loads", "ui_group": "advanced"})
-    static_loads: dict[str, StaticLoadConfig] = Field(default_factory=dict, json_schema_extra={"ui_label": "Static loads", "ui_group": "basic"})
-    hybrid_inverters: dict[str, HybridInverterConfig] = Field(default_factory=dict, json_schema_extra={"ui_label": "Hybrid inverters", "ui_group": "basic"})
-    thermal_boilers: dict[str, ThermalBoilerConfig] = Field(default_factory=dict, json_schema_extra={"ui_label": "Thermal boilers", "ui_group": "advanced"})
-    space_heating_hps: dict[str, SpaceHeatingConfig] = Field(default_factory=dict, json_schema_extra={"ui_label": "Space heating heat pumps", "ui_group": "advanced"})
-    combi_heat_pumps: dict[str, CombiHeatPumpConfig] = Field(default_factory=dict, json_schema_extra={"ui_label": "Combi heat pumps", "ui_group": "advanced"})
-    grid: GridConfig = Field(json_schema_extra={"ui_label": "Grid connection", "ui_group": "basic"})
-    objectives: ObjectivesConfig = Field(default_factory=ObjectivesConfig, json_schema_extra={"ui_label": "Objectives", "ui_group": "advanced"})
-    constraints: ConstraintsConfig = Field(default_factory=ConstraintsConfig, json_schema_extra={"ui_label": "Constraints", "ui_group": "advanced"})
-    solver: SolverConfig = Field(default_factory=SolverConfig, json_schema_extra={"ui_label": "Solver", "ui_group": "advanced"})
-    readiness: ReadinessConfig = Field(default_factory=ReadinessConfig, json_schema_extra={"ui_label": "Readiness", "ui_group": "advanced"})
-    mqtt: MqttConfig = Field(json_schema_extra={"ui_label": "MQTT", "ui_group": "basic"})
-    outputs: OutputsConfig = Field(default_factory=OutputsConfig, json_schema_extra={"ui_label": "Output topics", "ui_group": "advanced"})
-    inputs: InputsConfig = Field(default_factory=InputsConfig, json_schema_extra={"ui_label": "Input topics", "ui_group": "advanced"})
-    homeassistant: HomeAssistantConfig = Field(default_factory=HomeAssistantConfig, json_schema_extra={"ui_label": "Home Assistant", "ui_group": "advanced"})
-    debug: DebugConfig = Field(default_factory=DebugConfig, json_schema_extra={"ui_label": "Debug", "ui_group": "advanced"})
-    control: ControlConfig = Field(default_factory=ControlConfig, json_schema_extra={"ui_label": "Control", "ui_group": "advanced"})
-    reporting: ReportingConfig = Field(default_factory=ReportingConfig, json_schema_extra={"ui_label": "Reporting", "ui_group": "advanced"})
+    batteries: dict[str, BatteryConfig] = Field(default_factory=dict, title="Batteries")
+    pv_arrays: dict[str, PvConfig] = Field(default_factory=dict, title="PV arrays")
+    ev_chargers: dict[str, EvConfig] = Field(default_factory=dict, title="EV chargers")
+    deferrable_loads: dict[str, DeferrableLoadConfig] = Field(default_factory=dict, title="Deferrable loads", json_schema_extra={"x-category": "Advanced"})
+    static_loads: dict[str, StaticLoadConfig] = Field(default_factory=dict, title="Static loads")
+    hybrid_inverters: dict[str, HybridInverterConfig] = Field(default_factory=dict, title="Hybrid inverters")
+    thermal_boilers: dict[str, ThermalBoilerConfig] = Field(default_factory=dict, title="Thermal boilers", json_schema_extra={"x-category": "Advanced"})
+    space_heating_hps: dict[str, SpaceHeatingConfig] = Field(default_factory=dict, title="Space heating heat pumps", json_schema_extra={"x-category": "Advanced"})
+    combi_heat_pumps: dict[str, CombiHeatPumpConfig] = Field(default_factory=dict, title="Combi heat pumps", json_schema_extra={"x-category": "Advanced"})
+    grid: GridConfig = Field(title="Grid connection")
+    objectives: ObjectivesConfig = Field(default_factory=ObjectivesConfig, title="Objectives", json_schema_extra={"x-category": "Advanced"})
+    constraints: ConstraintsConfig = Field(default_factory=ConstraintsConfig, title="Constraints", json_schema_extra={"x-category": "Advanced"})
+    solver: SolverConfig = Field(default_factory=SolverConfig, title="Solver", json_schema_extra={"x-category": "Advanced"})
+    readiness: ReadinessConfig = Field(default_factory=ReadinessConfig, title="Readiness", json_schema_extra={"x-category": "Advanced"})
+    mqtt: MqttConfig = Field(title="MQTT")
+    outputs: OutputsConfig = Field(default_factory=OutputsConfig, title="Output topics", json_schema_extra={"x-category": "Advanced"})
+    inputs: InputsConfig = Field(default_factory=InputsConfig, title="Input topics", json_schema_extra={"x-category": "Advanced"})
+    homeassistant: HomeAssistantConfig = Field(default_factory=HomeAssistantConfig, title="Home Assistant", json_schema_extra={"x-category": "Advanced"})
+    debug: DebugConfig = Field(default_factory=DebugConfig, title="Debug", json_schema_extra={"x-category": "Advanced"})
+    control: ControlConfig = Field(default_factory=ControlConfig, title="Control", json_schema_extra={"x-category": "Advanced"})
+    reporting: ReportingConfig = Field(default_factory=ReportingConfig, title="Reporting", json_schema_extra={"x-category": "Advanced"})
 
     @model_validator(mode="after")
     def device_names_unique(self) -> "MimirheimConfig":

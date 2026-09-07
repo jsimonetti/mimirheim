@@ -1,0 +1,297 @@
+{
+  "$defs": {
+    "HomeAssistantConfig": {
+      "additionalProperties": false,
+      "description": "Home Assistant MQTT discovery settings for a helper tool.\n\nWhen ``enabled`` is True, the daemon publishes a retained discovery payload\nto ``{discovery_prefix}/button/{tool_name}/config`` on every broker connect\nand whenever HA's birth message (``homeassistant/status = online``) is\nreceived. This creates a button entity in HA that triggers the tool on press.\n\nAttributes:\n    enabled: Enable or disable HA discovery for this tool. Defaults to False\n        for backward compatibility \u2014 existing configs that do not have a\n        ``homeassistant:`` section are unaffected.\n    discovery_prefix: HA discovery topic prefix. Defaults to ``homeassistant``.\n    device_name: Human-readable display name for the HA device card. If\n        omitted, the daemon uses a formatted version of the tool name.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Enable HA MQTT discovery.",
+          "title": "Enable HA discovery",
+          "type": "boolean",
+          "x-category": "Advanced"
+        },
+        "discovery_prefix": {
+          "default": "homeassistant",
+          "description": "HA MQTT discovery topic prefix.",
+          "title": "Discovery prefix",
+          "type": "string",
+          "x-category": "Advanced"
+        },
+        "device_name": {
+          "default": "",
+          "description": "Display name for the HA device. Defaults to tool name.",
+          "title": "HA device name",
+          "type": "string",
+          "x-category": "Advanced"
+        },
+        "forecast_sensor": {
+          "default": true,
+          "description": "Publish an additional HA sensor entity for the helper's forecast output topic.",
+          "title": "Enable forecast sensor",
+          "type": "boolean",
+          "x-category": "Advanced"
+        }
+      },
+      "title": "HomeAssistantConfig",
+      "type": "object",
+      "x-categoryOrder": [
+        "Basic",
+        "Advanced"
+      ],
+      "x-format": "categories-vertical"
+    },
+    "MqttConfig": {
+      "additionalProperties": false,
+      "description": "MQTT broker connection parameters, shared by all mimirheim input helper daemons.\n\nAttributes:\n    host: Broker hostname or IP address.\n    port: Broker TCP port. Default is 1883 (unencrypted); use 8883 with TLS.\n    client_id: MQTT client identifier. Must be unique on the broker.\n    username: Optional broker username. Omit for anonymous access.\n    password: Optional broker password.\n    tls: Enable TLS for the broker connection. Set to True when the broker\n        listens on an encrypted port (typically 8883). When False, a\n        plaintext connection is made regardless of the port number.\n    tls_allow_insecure: When True and tls is also True, skip broker\n        certificate verification. Useful for self-signed certificates on\n        private networks. Has no effect when tls is False. Do not use\n        against a broker reachable from an untrusted network.",
+      "properties": {
+        "host": {
+          "description": "Broker hostname or IP address.",
+          "title": "Broker host",
+          "type": "string"
+        },
+        "port": {
+          "default": 1883,
+          "description": "Broker TCP port.",
+          "maximum": 65535,
+          "minimum": 1,
+          "title": "Broker port",
+          "type": "integer",
+          "x-category": "Advanced"
+        },
+        "client_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "MQTT client identifier. Defaults to a tool-specific value when not set.",
+          "title": "Client ID"
+        },
+        "username": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Broker username.",
+          "title": "Username",
+          "x-category": "Advanced"
+        },
+        "password": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Broker password.",
+          "title": "Password",
+          "x-category": "Advanced"
+        },
+        "tls": {
+          "default": false,
+          "description": "Enable TLS for the broker connection. Set to true when the broker listens on an encrypted port (typically 8883).",
+          "title": "Enable TLS",
+          "type": "boolean",
+          "x-category": "Advanced"
+        },
+        "tls_allow_insecure": {
+          "default": false,
+          "description": "Skip broker certificate verification when TLS is enabled. Has no effect when tls is false.",
+          "title": "Allow insecure TLS",
+          "type": "boolean",
+          "x-category": "Advanced"
+        }
+      },
+      "required": [
+        "host"
+      ],
+      "title": "MqttConfig",
+      "type": "object",
+      "x-categoryOrder": [
+        "Basic",
+        "Advanced"
+      ],
+      "x-format": "categories-vertical"
+    },
+    "ZonneplanApiConfig": {
+      "additionalProperties": false,
+      "description": "Zonneplan-specific fetch and pricing parameters.\n\nAttributes:\n    email: Email address used to trigger the Zonneplan login email. Required\n        for the in-daemon auth flow. When absent and the token file is also\n        absent, the daemon logs an error and refuses to proceed.\n    token_file: Path to the JSON file where OAuth tokens are persisted\n        between restarts. Must be on a Docker volume to survive container\n        restarts. Defaults to ``zonneplan_token.json`` in the working\n        directory.\n    import_formula: Python expression for the all-in import price in\n        EUR/kWh. Available variables: ``price`` (all-in, incl. tax),\n        ``price_excl_tax`` (excl. tax), ``ts`` (step start datetime, UTC).\n        Defaults to ``\"price\"`` which passes the all-in price through\n        unchanged.\n    export_formula: Python expression for the net export price in EUR/kWh.\n        Same variables available as ``import_formula``. Defaults to\n        ``\"0.0\"`` (no export revenue modelled) because Zonneplan does not\n        publish a per-hour export price.\n    price_interval: Which Zonneplan consumer-price chart to fetch \u2014\n        ``\"hourly\"`` or ``\"quarter_hourly\"``. Defaults to ``\"hourly\"``,\n        matching Zonneplan's current dynamic pricing. Set to\n        ``\"quarter_hourly\"`` once 15-minute prices are available on the\n        account.",
+      "properties": {
+        "email": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Email address registered with the Zonneplan account. Required for first-time authentication. When absent and no token file exists, the daemon logs an error and skips the cycle.",
+          "title": "Email address"
+        },
+        "token_file": {
+          "default": "zonneplan_token.json",
+          "description": "Path to the JSON file where OAuth tokens are persisted between restarts. Must be on a Docker volume to survive container restarts.",
+          "title": "Token file path",
+          "type": "string",
+          "x-category": "Advanced"
+        },
+        "import_formula": {
+          "default": "price",
+          "description": "Python expression for the all-in import price in EUR/kWh. Available variables: ``price`` (all-in incl. tax, EUR/kWh), ``price_excl_tax`` (excl. tax, EUR/kWh), ``ts`` (datetime, UTC).",
+          "title": "Import price formula",
+          "type": "string"
+        },
+        "export_formula": {
+          "default": "price_excl_tax",
+          "description": "Python expression for the net export price in EUR/kWh. Same variables available as import_formula. Defaults to price_excl_tax.",
+          "title": "Export price formula",
+          "type": "string"
+        },
+        "price_interval": {
+          "default": "hourly",
+          "description": "Price data resolution requested from Zonneplan. 'hourly' matches current dynamic pricing; 'quarter_hourly' requests 15-minute prices once available on the account.",
+          "enum": [
+            "hourly",
+            "quarter_hourly"
+          ],
+          "title": "Price interval",
+          "type": "string"
+        }
+      },
+      "title": "ZonneplanApiConfig",
+      "type": "object",
+      "x-categoryOrder": [
+        "Basic",
+        "Advanced"
+      ],
+      "x-format": "categories-vertical"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Root configuration for the zonneplan_prices daemon.\n\nMirrors NordpoolConfig in structure so that HelperDaemon's autodiscovery\nand stats machinery works without any changes to the base class.\n\nAttributes:\n    mqtt: MQTT broker connection parameters.\n    mimir_topic_prefix: Topic prefix used to construct default topic paths.\n        Defaults to ``\"mimir\"``.\n    trigger_topic: Topic the daemon subscribes to. A message here triggers\n        one fetch-and-publish cycle.\n    output_topic: Topic to publish the price payload to. When None the\n        daemon defaults to ``{mimir_topic_prefix}/input/prices``.\n    zonneplan: Zonneplan API and pricing parameters.\n    ha_discovery: Optional Home Assistant MQTT discovery settings. When\n        present, HelperDaemon publishes a button entity on connect and on\n        every HA birth message. No extra code is required in the subclass.\n    stats_topic: Optional topic for per-cycle run statistics.\n    signal_mimir: When True, publish an empty non-retained trigger message\n        to ``mimir_trigger_topic`` after each successful price fetch.\n    mimir_trigger_topic: Required when ``signal_mimir`` is True.",
+  "properties": {
+    "mqtt": {
+      "$ref": "#/$defs/MqttConfig",
+      "description": "MQTT broker connection settings.",
+      "title": "MQTT"
+    },
+    "mimir_topic_prefix": {
+      "default": "mimir",
+      "description": "mimirheim mqtt.topic_prefix. Used to derive default output and trigger topics.",
+      "title": "mimirheim topic prefix",
+      "type": "string",
+      "x-category": "Advanced"
+    },
+    "trigger_topic": {
+      "description": "MQTT topic that triggers a fetch cycle.",
+      "title": "Trigger topic",
+      "type": "string",
+      "x-category": "Advanced"
+    },
+    "output_topic": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "MQTT topic for the retained price payload. Defaults to '{mimir_topic_prefix}/input/prices' when not set.",
+      "title": "Output topic",
+      "x-category": "Advanced"
+    },
+    "zonneplan": {
+      "$ref": "#/$defs/ZonneplanApiConfig",
+      "description": "Zonneplan API and pricing formula parameters.",
+      "title": "Zonneplan API"
+    },
+    "ha_discovery": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/HomeAssistantConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Optional Home Assistant MQTT discovery settings.",
+      "title": "HA discovery",
+      "x-category": "Advanced"
+    },
+    "stats_topic": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "MQTT topic where per-cycle run statistics are published.",
+      "title": "Stats topic",
+      "x-category": "Advanced"
+    },
+    "signal_mimir": {
+      "default": false,
+      "description": "Publish to mimir_trigger_topic after publishing prices.",
+      "title": "Signal mimirheim",
+      "type": "boolean",
+      "x-category": "Advanced"
+    },
+    "mimir_trigger_topic": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Topic to trigger mimirheim. Derived from mimir_topic_prefix when not set.",
+      "title": "mimirheim trigger topic",
+      "x-category": "Advanced"
+    }
+  },
+  "required": [
+    "mqtt",
+    "trigger_topic",
+    "zonneplan"
+  ],
+  "title": "ZonneplanPricesConfig",
+  "type": "object",
+  "x-categoryOrder": [
+    "Basic",
+    "Advanced"
+  ],
+  "x-format": "categories-vertical",
+  "x-mimirheim": {
+    "file": "zonneplan.yaml",
+    "category": "prices",
+    "order": 1,
+    "python_package": "zonneplan_prices",
+    "python_model": "zonneplan_prices.config:ZonneplanPricesConfig",
+    "exclusive_group": null,
+    "required": false,
+    "docs_url": null
+  }
+}

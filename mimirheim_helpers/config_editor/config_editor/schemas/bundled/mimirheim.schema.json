@@ -2435,5 +2435,15 @@
     "Basic",
     "Advanced"
   ],
-  "x-format": "categories-vertical"
+  "x-format": "categories-vertical",
+  "x-mimirheim": {
+    "file": "mimirheim.yaml",
+    "category": "core",
+    "order": 0,
+    "python_package": "mimirheim",
+    "python_model": "mimirheim.config.schema:MimirheimConfig",
+    "exclusive_group": null,
+    "required": true,
+    "docs_url": null
+  }
 }

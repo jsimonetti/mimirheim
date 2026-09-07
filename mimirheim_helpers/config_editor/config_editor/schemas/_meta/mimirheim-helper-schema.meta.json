@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mimirheim.dev/config-editor/schemas/_meta/mimirheim-helper-schema.meta.json",
+  "title": "mimirheim-helper-schema meta-schema",
+  "description": "Structural sanity check applied to every *.schema.json file discovered by the config-editor (SPEC.md §2, §10 rule 3), both bundled and drop-in. Deliberately narrow: it confirms the document is shaped like a JSON Schema (properties/required/$defs carry the right JSON type) and, if a $schema dialect is declared, that it is the supported one. It does NOT enforce the x-mimirheim envelope's own required keys, the file name pattern, the reserved file name, or the category enum -- those are separate, individually actionable rejection rules (SPEC.md §10 rules 4-9) implemented directly in registry.py so each produces its own specific message naming the offending key.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "const": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "type": {
+      "type": "string"
+    },
+    "properties": {
+      "type": "object"
+    },
+    "required": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": {
+      "type": "boolean"
+    },
+    "$defs": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object"
+      }
+    },
+    "x-mimirheim": {
+      "type": "object"
+    }
+  }
+}

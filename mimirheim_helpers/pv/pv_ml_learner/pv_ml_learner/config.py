@@ -39,7 +39,7 @@ class KnmiConfig(BaseModel):
 
     station_id: int = Field(
         description="KNMI station ID. 260 = De Bilt.",
-        json_schema_extra={"ui_label": "KNMI station ID", "ui_group": "basic"},
+        title="KNMI station ID",
     )
 
 
@@ -57,17 +57,17 @@ class MeteoserverConfig(BaseModel):
             inference. The API returns up to ~54 hours; the tail is discarded.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
-    api_key: str = Field(description="Meteoserver API key.", json_schema_extra={"ui_label": "API key", "ui_group": "basic"})
-    latitude: float = Field(description="Site latitude in decimal degrees.", json_schema_extra={"ui_label": "Latitude", "ui_group": "basic"})
-    longitude: float = Field(description="Site longitude in decimal degrees.", json_schema_extra={"ui_label": "Longitude", "ui_group": "basic"})
+    api_key: str = Field(description="Meteoserver API key.", title="API key")
+    latitude: float = Field(description="Site latitude in decimal degrees.", title="Latitude")
+    longitude: float = Field(description="Site longitude in decimal degrees.", title="Longitude")
     forecast_horizon_hours: int = Field(
         default=48,
         ge=1,
         le=54,
         description="Number of hourly forecast steps to use (1–54).",
-        json_schema_extra={"ui_label": "Forecast horizon (h)", "ui_group": "advanced"},
+        title="Forecast horizon (h)", json_schema_extra={"x-category": "Advanced"},
     )
 
 
@@ -104,7 +104,7 @@ class HomeAssistantConfig(BaseModel):
             "postgresql+psycopg2://user:pass@host/homeassistant, "
             "mysql+pymysql://user:pass@host/homeassistant."
         ),
-        json_schema_extra={"ui_label": "HA DB URL", "ui_group": "basic"},
+        title="HA DB URL",
     )
 
     @model_validator(mode="after")
@@ -146,12 +146,12 @@ class ArrayConfig(BaseModel):
             production. Matching training hours are excluded from the dataset.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     peak_power_kwp: float = Field(
         gt=0,
         description="Installed PV peak power in kWp.",
-        json_schema_extra={"ui_label": "Peak power (kWp)", "ui_group": "basic"},
+        title="Peak power (kWp)",
     )
     output_topic: str | None = Field(
         default=None,
@@ -159,22 +159,22 @@ class ArrayConfig(BaseModel):
             "MQTT topic for the retained forecast payload. "
             "Defaults to '{mimir_topic_prefix}/input/pv/{array_key}/forecast' when not set."
         ),
-        json_schema_extra={"ui_label": "Output topic", "ui_group": "advanced", "ui_placeholder": "{mimir_topic_prefix}/input/pv/{array_key}/forecast", "ui_source": "pv_arrays"},
+        title="Output topic", json_schema_extra={"x-category": "Advanced", "x-enumSource": "#/context/pv_arrays", "x-format": "mimir-topic-placeholder"},
     )
     sum_entity_ids: list[str] = Field(
         min_length=1,
         description="Entity IDs to sum for hourly PV production.",
-        json_schema_extra={"ui_label": "Sum entity IDs", "ui_group": "basic"},
+        title="Sum entity IDs",
     )
-    model_path: str = Field(description="joblib model file path.", json_schema_extra={"ui_label": "Model path", "ui_group": "advanced"})
-    metadata_path: str = Field(description="JSON metadata file path.", json_schema_extra={"ui_label": "Metadata path", "ui_group": "advanced"})
+    model_path: str = Field(description="joblib model file path.", title="Model path", json_schema_extra={"x-category": "Advanced"})
+    metadata_path: str = Field(description="JSON metadata file path.", title="Metadata path", json_schema_extra={"x-category": "Advanced"})
     exclude_limiting_entity_ids: list[str] = Field(
         default_factory=list,
         description=(
             "Binary/numeric sensors indicating active inverter limiting. "
             "Matching training hours are excluded from the dataset."
         ),
-        json_schema_extra={"ui_label": "Exclude limiting entities", "ui_group": "advanced"},
+        title="Exclude limiting entities", json_schema_extra={"x-category": "Advanced"},
     )
 
 
@@ -191,7 +191,7 @@ class StorageConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    db_path: str = Field(description="SQLite database path.", json_schema_extra={"ui_label": "Storage DB path", "ui_group": "basic"})
+    db_path: str = Field(description="SQLite database path.", title="Storage DB path")
 
 
 class HyperparamConfig(BaseModel):
@@ -209,13 +209,13 @@ class HyperparamConfig(BaseModel):
         min_child_weight: Minimum child weight values to try.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
-    n_estimators: list[int] = Field(default=[200], json_schema_extra={"ui_label": "n_estimators", "ui_group": "advanced"})
-    max_depth: list[int] = Field(default=[5], json_schema_extra={"ui_label": "max_depth", "ui_group": "advanced"})
-    learning_rate: list[float] = Field(default=[0.08], json_schema_extra={"ui_label": "learning_rate", "ui_group": "advanced"})
-    subsample: list[float] = Field(default=[0.9], json_schema_extra={"ui_label": "subsample", "ui_group": "advanced"})
-    min_child_weight: list[int] = Field(default=[1], json_schema_extra={"ui_label": "min_child_weight", "ui_group": "advanced"})
+    n_estimators: list[int] = Field(default=[200], title="n_estimators", json_schema_extra={"x-category": "Advanced"})
+    max_depth: list[int] = Field(default=[5], title="max_depth", json_schema_extra={"x-category": "Advanced"})
+    learning_rate: list[float] = Field(default=[0.08], title="learning_rate", json_schema_extra={"x-category": "Advanced"})
+    subsample: list[float] = Field(default=[0.9], title="subsample", json_schema_extra={"x-category": "Advanced"})
+    min_child_weight: list[int] = Field(default=[1], title="min_child_weight", json_schema_extra={"x-category": "Advanced"})
 
 
 class TrainingConfig(BaseModel):
@@ -237,32 +237,32 @@ class TrainingConfig(BaseModel):
         n_cv_splits: Number of TimeSeriesSplit CV folds.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     train_trigger_topic: str = Field(
         description="MQTT topic that triggers a training run.",
-        json_schema_extra={"ui_label": "Train trigger topic", "ui_group": "basic"},
+        title="Train trigger topic",
     )
     inference_trigger_topic: str = Field(
         description="MQTT topic that triggers an inference run.",
-        json_schema_extra={"ui_label": "Inference trigger topic", "ui_group": "basic"},
+        title="Inference trigger topic",
     )
     min_months_required: int = Field(
         default=12,
         ge=1,
         description="Minimum distinct calendar months required to train.",
-        json_schema_extra={"ui_label": "Min months required", "ui_group": "advanced"},
+        title="Min months required", json_schema_extra={"x-category": "Advanced"},
     )
     hyperparams: HyperparamConfig = Field(
         default_factory=HyperparamConfig,
         description="XGBoost grid search configuration.",
-        json_schema_extra={"ui_label": "Hyperparameters", "ui_group": "advanced"},
+        title="Hyperparameters", json_schema_extra={"x-category": "Advanced"},
     )
     n_cv_splits: int = Field(
         default=5,
         ge=2,
         description="Number of TimeSeriesSplit CV folds.",
-        json_schema_extra={"ui_label": "CV splits", "ui_group": "advanced"},
+        title="CV splits", json_schema_extra={"x-category": "Advanced"},
     )
 
 
@@ -277,7 +277,7 @@ class HaDiscoveryConfig(_HelperHaDiscoveryConfig):
         device_name: Device name shown in HA. Default 'MIMIRHEIM PV Learner'.
     """
 
-    device_name: str = Field(default="MIMIRHEIM PV Learner", json_schema_extra={"ui_label": "Device name", "ui_group": "advanced"})
+    device_name: str = Field(default="MIMIRHEIM PV Learner", title="Device name", json_schema_extra={"x-category": "Advanced"})
 
 
 class PvLearnerConfig(BaseModel):
@@ -301,39 +301,39 @@ class PvLearnerConfig(BaseModel):
             published after every training or inference cycle.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
-    mqtt: MqttConfig = Field(description="MQTT broker connection settings.", json_schema_extra={"ui_label": "MQTT", "ui_group": "basic"})
+    mqtt: MqttConfig = Field(description="MQTT broker connection settings.", title="MQTT")
     mimir_topic_prefix: str = Field(
         default="mimir",
         description="mimirheim mqtt.topic_prefix. Used to derive default array output and trigger topics.",
-        json_schema_extra={"ui_label": "mimirheim topic prefix", "ui_group": "advanced"},
+        title="mimirheim topic prefix", json_schema_extra={"x-category": "Advanced"},
     )
     signal_mimir: bool = Field(
         default=False,
         description="Publish to mimir_trigger_topic after each forecast cycle.",
-        json_schema_extra={"ui_label": "Signal mimirheim", "ui_group": "advanced"},
+        title="Signal mimirheim", json_schema_extra={"x-category": "Advanced"},
     )
     mimir_trigger_topic: str | None = Field(
         default=None,
         description="mimirheim trigger topic. Defaults to '{mimir_topic_prefix}/input/trigger'.",
-        json_schema_extra={"ui_label": "mimirheim trigger topic", "ui_group": "advanced", "ui_placeholder": "{mimir_topic_prefix}/input/trigger"},
+        title="mimirheim trigger topic", json_schema_extra={"x-category": "Advanced"},
     )
-    knmi: KnmiConfig = Field(description="KNMI weather station configuration.", json_schema_extra={"ui_label": "KNMI", "ui_group": "basic"})
-    meteoserver: MeteoserverConfig = Field(description="Meteoserver API configuration.", json_schema_extra={"ui_label": "Meteoserver", "ui_group": "basic"})
-    homeassistant: HomeAssistantConfig = Field(description="Home Assistant database configuration.", json_schema_extra={"ui_label": "Home Assistant", "ui_group": "basic"})
+    knmi: KnmiConfig = Field(description="KNMI weather station configuration.", title="KNMI")
+    meteoserver: MeteoserverConfig = Field(description="Meteoserver API configuration.", title="Meteoserver")
+    homeassistant: HomeAssistantConfig = Field(description="Home Assistant database configuration.", title="Home Assistant")
     arrays: dict[str, ArrayConfig] = Field(
         min_length=1,
         description="Named map of PV array configurations. The key is used as the array identifier and mimirheim device name.",
-        json_schema_extra={"ui_label": "PV arrays", "ui_group": "basic"},
+        title="PV arrays",
     )
-    storage: StorageConfig = Field(description="Shared SQLite storage configuration.", json_schema_extra={"ui_label": "Storage", "ui_group": "basic"})
-    training: TrainingConfig = Field(description="Training and inference trigger configuration.", json_schema_extra={"ui_label": "Training", "ui_group": "basic"})
-    ha_discovery: HaDiscoveryConfig = Field(default_factory=HaDiscoveryConfig, json_schema_extra={"ui_label": "HA discovery", "ui_group": "advanced"})
+    storage: StorageConfig = Field(description="Shared SQLite storage configuration.", title="Storage")
+    training: TrainingConfig = Field(description="Training and inference trigger configuration.", title="Training")
+    ha_discovery: HaDiscoveryConfig = Field(default_factory=HaDiscoveryConfig, title="HA discovery", json_schema_extra={"x-category": "Advanced"})
     stats_topic: str | None = Field(
         default=None,
         description="MQTT topic where per-cycle run statistics are published.",
-        json_schema_extra={"ui_label": "Stats topic", "ui_group": "advanced"},
+        title="Stats topic", json_schema_extra={"x-category": "Advanced"},
     )
 
     @model_validator(mode="after")

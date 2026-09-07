@@ -1,0 +1,348 @@
+{
+  "$defs": {
+    "EntityConfig": {
+      "additionalProperties": false,
+      "description": "A single power sensor entity and the unit it reports in.\n\nArgs:\n    entity_id: Home Assistant entity ID, e.g. ``sensor.kitchen_power``.\n    unit: Unit in which this entity reports power. Must be ``\"W\"`` or ``\"kW\"``.\n        Each entity may use a different unit; the tool converts all values\n        to kilowatts before computing the forecast.",
+      "properties": {
+        "entity_id": {
+          "description": "Home Assistant entity ID.",
+          "title": "Entity ID",
+          "type": "string"
+        },
+        "unit": {
+          "description": "Power unit reported by this entity.",
+          "enum": [
+            "W",
+            "kW"
+          ],
+          "title": "Unit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entity_id",
+        "unit"
+      ],
+      "title": "EntityConfig",
+      "type": "object"
+    },
+    "HaConfig": {
+      "additionalProperties": false,
+      "description": "Home Assistant connection and entity configuration.\n\nArgs:\n    url: Base URL of the HA instance including scheme and port.\n    token: Long-Lived Access Token generated in HA.\n    sum_entities: Entities whose hourly mean power is summed. Must contain\n        at least one entry. Each entry specifies the entity ID and the unit\n        that entity reports in (``\"W\"`` or ``\"kW\"``). Entities may use\n        different units.\n    subtract_entities: Entities subtracted from the sum. Typically used to\n        remove steered loads (battery, PV, deferred appliances) that mimirheim\n        already controls, so they are not double-counted. May be empty.\n        Each entry specifies the entity ID and its unit independently.\n    lookback_days: Number of previous days of history to average. Must be\n        between 1 and 30 inclusive.\n    lookback_decay: Recency weight ratio applied over the lookback window.\n        The newest day is weighted ``lookback_decay`` times more than the\n        oldest day, with intermediate days interpolated exponentially.\n        ``1.0`` (default) disables weighting and produces a plain average.\n        Must be >= 1.0.\n    horizon_hours: Number of hours of forecast to publish, starting from the\n        current wall-clock hour. The 24-hour day profile is tiled to fill\n        the window if horizon_hours exceeds 24. Must be between 1 and 168\n        inclusive (one week).",
+      "properties": {
+        "url": {
+          "description": "Base URL of the HA instance including scheme and port.",
+          "title": "HA URL",
+          "type": "string"
+        },
+        "token": {
+          "description": "Long-Lived Access Token generated in HA.",
+          "title": "HA token",
+          "type": "string"
+        },
+        "sum_entities": {
+          "items": {
+            "$ref": "#/$defs/EntityConfig"
+          },
+          "minItems": 1,
+          "title": "Sum entities",
+          "type": "array"
+        },
+        "subtract_entities": {
+          "items": {
+            "$ref": "#/$defs/EntityConfig"
+          },
+          "title": "Subtract entities",
+          "type": "array",
+          "x-category": "Advanced"
+        },
+        "lookback_days": {
+          "default": 7,
+          "maximum": 112,
+          "minimum": 1,
+          "title": "Lookback days",
+          "type": "integer",
+          "x-category": "Advanced"
+        },
+        "lookback_decay": {
+          "default": 1.0,
+          "minimum": 1.0,
+          "title": "Lookback decay",
+          "type": "number",
+          "x-category": "Advanced"
+        },
+        "horizon_hours": {
+          "default": 48,
+          "maximum": 168,
+          "minimum": 1,
+          "title": "Horizon (hours)",
+          "type": "integer",
+          "x-category": "Advanced"
+        }
+      },
+      "required": [
+        "url",
+        "token",
+        "sum_entities"
+      ],
+      "title": "HaConfig",
+      "type": "object",
+      "x-categoryOrder": [
+        "Basic",
+        "Advanced"
+      ],
+      "x-format": "categories-vertical"
+    },
+    "HomeAssistantConfig": {
+      "additionalProperties": false,
+      "description": "Home Assistant MQTT discovery settings for a helper tool.\n\nWhen ``enabled`` is True, the daemon publishes a retained discovery payload\nto ``{discovery_prefix}/button/{tool_name}/config`` on every broker connect\nand whenever HA's birth message (``homeassistant/status = online``) is\nreceived. This creates a button entity in HA that triggers the tool on press.\n\nAttributes:\n    enabled: Enable or disable HA discovery for this tool. Defaults to False\n        for backward compatibility \u2014 existing configs that do not have a\n        ``homeassistant:`` section are unaffected.\n    discovery_prefix: HA discovery topic prefix. Defaults to ``homeassistant``.\n    device_name: Human-readable display name for the HA device card. If\n        omitted, the daemon uses a formatted version of the tool name.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Enable HA MQTT discovery.",
+          "title": "Enable HA discovery",
+          "type": "boolean",
+          "x-category": "Advanced"
+        },
+        "discovery_prefix": {
+          "default": "homeassistant",
+          "description": "HA MQTT discovery topic prefix.",
+          "title": "Discovery prefix",
+          "type": "string",
+          "x-category": "Advanced"
+        },
+        "device_name": {
+          "default": "",
+          "description": "Display name for the HA device. Defaults to tool name.",
+          "title": "HA device name",
+          "type": "string",
+          "x-category": "Advanced"
+        },
+        "forecast_sensor": {
+          "default": true,
+          "description": "Publish an additional HA sensor entity for the helper's forecast output topic.",
+          "title": "Enable forecast sensor",
+          "type": "boolean",
+          "x-category": "Advanced"
+        }
+      },
+      "title": "HomeAssistantConfig",
+      "type": "object",
+      "x-categoryOrder": [
+        "Basic",
+        "Advanced"
+      ],
+      "x-format": "categories-vertical"
+    },
+    "MqttConfig": {
+      "additionalProperties": false,
+      "description": "MQTT broker connection parameters, shared by all mimirheim input helper daemons.\n\nAttributes:\n    host: Broker hostname or IP address.\n    port: Broker TCP port. Default is 1883 (unencrypted); use 8883 with TLS.\n    client_id: MQTT client identifier. Must be unique on the broker.\n    username: Optional broker username. Omit for anonymous access.\n    password: Optional broker password.\n    tls: Enable TLS for the broker connection. Set to True when the broker\n        listens on an encrypted port (typically 8883). When False, a\n        plaintext connection is made regardless of the port number.\n    tls_allow_insecure: When True and tls is also True, skip broker\n        certificate verification. Useful for self-signed certificates on\n        private networks. Has no effect when tls is False. Do not use\n        against a broker reachable from an untrusted network.",
+      "properties": {
+        "host": {
+          "description": "Broker hostname or IP address.",
+          "title": "Broker host",
+          "type": "string"
+        },
+        "port": {
+          "default": 1883,
+          "description": "Broker TCP port.",
+          "maximum": 65535,
+          "minimum": 1,
+          "title": "Broker port",
+          "type": "integer",
+          "x-category": "Advanced"
+        },
+        "client_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "MQTT client identifier. Defaults to a tool-specific value when not set.",
+          "title": "Client ID"
+        },
+        "username": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Broker username.",
+          "title": "Username",
+          "x-category": "Advanced"
+        },
+        "password": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Broker password.",
+          "title": "Password",
+          "x-category": "Advanced"
+        },
+        "tls": {
+          "default": false,
+          "description": "Enable TLS for the broker connection. Set to true when the broker listens on an encrypted port (typically 8883).",
+          "title": "Enable TLS",
+          "type": "boolean",
+          "x-category": "Advanced"
+        },
+        "tls_allow_insecure": {
+          "default": false,
+          "description": "Skip broker certificate verification when TLS is enabled. Has no effect when tls is false.",
+          "title": "Allow insecure TLS",
+          "type": "boolean",
+          "x-category": "Advanced"
+        }
+      },
+      "required": [
+        "host"
+      ],
+      "title": "MqttConfig",
+      "type": "object",
+      "x-categoryOrder": [
+        "Basic",
+        "Advanced"
+      ],
+      "x-format": "categories-vertical"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Root configuration for the homeassistant baseload daemon.\n\nArgs:\n    mqtt: MQTT broker connection settings.\n    mimir_topic_prefix: The ``mqtt.topic_prefix`` configured in mimirheim. Used\n        to derive default values for ``output_topic`` and\n        ``mimir_trigger_topic``. Defaults to ``\"mimir\"``.\n    mimir_static_load_name: The ``static_loads`` device name in the mimirheim config\n        that this tool publishes to. Used to derive the default\n        ``output_topic`` when it is not set explicitly. Defaults to\n        ``\"base_load\"``.\n    trigger_topic: The tool subscribes here; a message fires one fetch cycle.\n    output_topic: Base load forecast payload is published retained to this topic.\n        Defaults to the mimirheim canonical baseload topic derived from\n        ``mimir_topic_prefix`` and ``mimir_static_load_name``.\n    homeassistant: HA connection and entity configuration.\n    signal_mimir: If True, publish to mimir_trigger_topic after publishing the forecast.\n    mimir_trigger_topic: Required when signal_mimir is True. Defaults to the\n        mimirheim canonical trigger topic derived from ``mimir_topic_prefix``.",
+  "properties": {
+    "mqtt": {
+      "$ref": "#/$defs/MqttConfig",
+      "description": "MQTT broker connection settings.",
+      "title": "MQTT"
+    },
+    "mimir_topic_prefix": {
+      "default": "mimir",
+      "description": "mimirheim mqtt.topic_prefix. Used to derive default output and trigger topics.",
+      "title": "mimirheim topic prefix",
+      "type": "string",
+      "x-category": "Advanced"
+    },
+    "mimir_static_load_name": {
+      "default": "base_load",
+      "description": "mimirheim static_loads device name. Used to derive the default output_topic.",
+      "title": "mimirheim static load name",
+      "type": "string",
+      "x-category": "Advanced",
+      "x-enumSource": "#/context/static_loads"
+    },
+    "trigger_topic": {
+      "description": "MQTT topic that triggers a fetch cycle.",
+      "title": "Trigger topic",
+      "type": "string",
+      "x-category": "Advanced"
+    },
+    "output_topic": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "MQTT topic for the retained baseload forecast payload. Defaults to '{mimir_topic_prefix}/input/baseload/{mimir_static_load_name}/forecast'.",
+      "title": "Output topic",
+      "x-category": "Advanced",
+      "x-template": "{{ topic_prefix.value || 'mimir' }}/input/baseload/{{ load_name.value || 'base_load' }}/forecast",
+      "x-watch": {
+        "load_name": "#/mimir_static_load_name",
+        "topic_prefix": "#/mimir_topic_prefix"
+      }
+    },
+    "homeassistant": {
+      "$ref": "#/$defs/HaConfig",
+      "description": "HA connection and entity configuration.",
+      "title": "Home Assistant"
+    },
+    "signal_mimir": {
+      "default": false,
+      "description": "Publish to mimir_trigger_topic after publishing the forecast.",
+      "title": "Signal mimirheim",
+      "type": "boolean",
+      "x-category": "Advanced"
+    },
+    "mimir_trigger_topic": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "mimirheim trigger topic. Derives from mimir_topic_prefix when not set.",
+      "title": "mimirheim trigger topic",
+      "x-category": "Advanced"
+    },
+    "ha_discovery": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/HomeAssistantConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Optional Home Assistant MQTT discovery settings.",
+      "title": "HA discovery",
+      "x-category": "Advanced"
+    },
+    "stats_topic": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "MQTT topic where per-cycle run statistics are published.",
+      "title": "Stats topic",
+      "x-category": "Advanced"
+    }
+  },
+  "required": [
+    "mqtt",
+    "trigger_topic",
+    "homeassistant"
+  ],
+  "title": "BaseloadConfig",
+  "type": "object",
+  "x-categoryOrder": [
+    "Basic",
+    "Advanced"
+  ],
+  "x-format": "categories-vertical",
+  "x-mimirheim": {
+    "file": "baseload-ha.yaml",
+    "category": "baseload",
+    "order": 1,
+    "python_package": "baseload_ha",
+    "python_model": "baseload_ha.config:BaseloadConfig",
+    "exclusive_group": "baseload",
+    "required": false,
+    "docs_url": null
+  }
+}

@@ -89,7 +89,7 @@ class ZonneplanApiConfig(BaseModel):
             account.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     email: str | None = Field(
         default=None,
@@ -98,7 +98,7 @@ class ZonneplanApiConfig(BaseModel):
             "first-time authentication. When absent and no token file exists, "
             "the daemon logs an error and skips the cycle."
         ),
-        json_schema_extra={"ui_label": "Email address", "ui_group": "basic"},
+        title="Email address",
     )
     token_file: str = Field(
         default="zonneplan_token.json",
@@ -106,7 +106,7 @@ class ZonneplanApiConfig(BaseModel):
             "Path to the JSON file where OAuth tokens are persisted between "
             "restarts. Must be on a Docker volume to survive container restarts."
         ),
-        json_schema_extra={"ui_label": "Token file path", "ui_group": "advanced"},
+        title="Token file path", json_schema_extra={"x-category": "Advanced"},
     )
     import_formula: str = Field(
         default=_DEFAULT_IMPORT_FORMULA,
@@ -115,7 +115,7 @@ class ZonneplanApiConfig(BaseModel):
             "Available variables: ``price`` (all-in incl. tax, EUR/kWh), "
             "``price_excl_tax`` (excl. tax, EUR/kWh), ``ts`` (datetime, UTC)."
         ),
-        json_schema_extra={"ui_label": "Import price formula", "ui_group": "basic"},
+        title="Import price formula",
     )
     export_formula: str = Field(
         default=_DEFAULT_EXPORT_FORMULA,
@@ -123,7 +123,7 @@ class ZonneplanApiConfig(BaseModel):
             "Python expression for the net export price in EUR/kWh. "
             "Same variables available as import_formula. Defaults to price_excl_tax."
         ),
-        json_schema_extra={"ui_label": "Export price formula", "ui_group": "basic"},
+        title="Export price formula",
     )
     price_interval: Literal["hourly", "quarter_hourly"] = Field(
         default="hourly",
@@ -132,7 +132,7 @@ class ZonneplanApiConfig(BaseModel):
             "current dynamic pricing; 'quarter_hourly' requests 15-minute "
             "prices once available on the account."
         ),
-        json_schema_extra={"ui_label": "Price interval", "ui_group": "basic"},
+        title="Price interval",
     )
 
     @field_validator("import_formula", "export_formula", mode="after")
@@ -190,20 +190,20 @@ class ZonneplanPricesConfig(BaseModel):
         mimir_trigger_topic: Required when ``signal_mimir`` is True.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"x-format": "categories-vertical", "x-categoryOrder": ["Basic", "Advanced"]})
 
     mqtt: MqttConfig = Field(
         description="MQTT broker connection settings.",
-        json_schema_extra={"ui_label": "MQTT", "ui_group": "basic"},
+        title="MQTT",
     )
     mimir_topic_prefix: str = Field(
         default="mimir",
         description="mimirheim mqtt.topic_prefix. Used to derive default output and trigger topics.",
-        json_schema_extra={"ui_label": "mimirheim topic prefix", "ui_group": "advanced"},
+        title="mimirheim topic prefix", json_schema_extra={"x-category": "Advanced"},
     )
     trigger_topic: str = Field(
         description="MQTT topic that triggers a fetch cycle.",
-        json_schema_extra={"ui_label": "Trigger topic", "ui_group": "advanced"},
+        title="Trigger topic", json_schema_extra={"x-category": "Advanced"},
     )
     output_topic: str | None = Field(
         default=None,
@@ -211,31 +211,31 @@ class ZonneplanPricesConfig(BaseModel):
             "MQTT topic for the retained price payload. "
             "Defaults to '{mimir_topic_prefix}/input/prices' when not set."
         ),
-        json_schema_extra={"ui_label": "Output topic", "ui_group": "advanced", "ui_placeholder": "{mimir_topic_prefix}/input/prices"},
+        title="Output topic", json_schema_extra={"x-category": "Advanced"},
     )
     zonneplan: ZonneplanApiConfig = Field(
         description="Zonneplan API and pricing formula parameters.",
-        json_schema_extra={"ui_label": "Zonneplan API", "ui_group": "basic"},
+        title="Zonneplan API",
     )
     ha_discovery: HomeAssistantConfig | None = Field(
         default=None,
         description="Optional Home Assistant MQTT discovery settings.",
-        json_schema_extra={"ui_label": "HA discovery", "ui_group": "advanced"},
+        title="HA discovery", json_schema_extra={"x-category": "Advanced"},
     )
     stats_topic: str | None = Field(
         default=None,
         description="MQTT topic where per-cycle run statistics are published.",
-        json_schema_extra={"ui_label": "Stats topic", "ui_group": "advanced"},
+        title="Stats topic", json_schema_extra={"x-category": "Advanced"},
     )
     signal_mimir: bool = Field(
         default=False,
         description="Publish to mimir_trigger_topic after publishing prices.",
-        json_schema_extra={"ui_label": "Signal mimirheim", "ui_group": "advanced"},
+        title="Signal mimirheim", json_schema_extra={"x-category": "Advanced"},
     )
     mimir_trigger_topic: str | None = Field(
         default=None,
         description="Topic to trigger mimirheim. Derived from mimir_topic_prefix when not set.",
-        json_schema_extra={"ui_label": "mimirheim trigger topic", "ui_group": "advanced"},
+        title="mimirheim trigger topic", json_schema_extra={"x-category": "Advanced"},
     )
 
     @model_validator(mode="after")

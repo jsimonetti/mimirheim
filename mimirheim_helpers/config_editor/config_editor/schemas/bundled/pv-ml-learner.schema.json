@@ -1,0 +1,523 @@
+{
+  "$defs": {
+    "ArrayConfig": {
+      "additionalProperties": false,
+      "description": "Configuration for a single PV array.\n\nEach array has its own production sensors, forecast output topic, and\nmodel storage paths. Multiple arrays can be configured when the\ninstallation has more than one inverter or independently metered array.\n\nThe entry key in the ``arrays`` map is the array identifier. It is used\nin log messages, to key actuals rows in the database, and to derive the\ndefault output topic matching the mimirheim ``pv_arrays`` device name.\n\nAttributes:\n    peak_power_kwp: Installed peak power in kWp. Predictions above\n        peak_power_kwp * 1.1 are clamped to that ceiling.\n    output_topic: MQTT topic on which the forecast is published (retained).\n        When not set, derived as\n        ``'{mimir_topic_prefix}/input/pv/{array_key}/forecast'`` where\n        ``array_key`` is the ``arrays`` map key for this entry.\n    sum_entity_ids: One or more HA energy sensor entity IDs whose hourly\n        production is summed for this array.\n    model_path: Path where the trained XGBoost model is serialised.\n    metadata_path: Path for the JSON metadata file written alongside the\n        model.\n    exclude_limiting_entity_ids: Optional binary or numeric sensors that\n        indicate when this array's inverter was actively limiting\n        production. Matching training hours are excluded from the dataset.",
+      "properties": {
+        "peak_power_kwp": {
+          "description": "Installed PV peak power in kWp.",
+          "exclusiveMinimum": 0,
+          "title": "Peak power (kWp)",
+          "type": "number"
+        },
+        "output_topic": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "MQTT topic for the retained forecast payload. Defaults to '{mimir_topic_prefix}/input/pv/{array_key}/forecast' when not set.",
+          "title": "Output topic",
+          "x-category": "Advanced",
+          "x-enumSource": "#/context/pv_arrays",
+          "x-format": "mimir-topic-placeholder"
+        },
+        "sum_entity_ids": {
+          "description": "Entity IDs to sum for hourly PV production.",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Sum entity IDs",
+          "type": "array"
+        },
+        "model_path": {
+          "description": "joblib model file path.",
+          "title": "Model path",
+          "type": "string",
+          "x-category": "Advanced"
+        },
+        "metadata_path": {
+          "description": "JSON metadata file path.",
+          "title": "Metadata path",
+          "type": "string",
+          "x-category": "Advanced"
+        },
+        "exclude_limiting_entity_ids": {
+          "description": "Binary/numeric sensors indicating active inverter limiting. Matching training hours are excluded from the dataset.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Exclude limiting entities",
+          "type": "array",
+          "x-category": "Advanced"
+        }
+      },
+      "required": [
+        "peak_power_kwp",
+        "sum_entity_ids",
+        "model_path",
+        "metadata_path"
+      ],
+      "title": "ArrayConfig",
+      "type": "object",
+      "x-categoryOrder": [
+        "Basic",
+        "Advanced"
+      ],
+      "x-format": "categories-vertical"
+    },
+    "HaDiscoveryConfig": {
+      "additionalProperties": false,
+      "description": "Home Assistant MQTT discovery configuration for pv_ml_learner.\n\nExtends the shared ``HomeAssistantConfig`` with a device-name default\nappropriate for the PV ML Learner. All other fields (``enabled``,\n``discovery_prefix``, ``forecast_sensor``) are inherited.\n\nAttributes:\n    device_name: Device name shown in HA. Default 'MIMIRHEIM PV Learner'.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Enable HA MQTT discovery.",
+          "title": "Enable HA discovery",
+          "type": "boolean",
+          "x-category": "Advanced"
+        },
+        "discovery_prefix": {
+          "default": "homeassistant",
+          "description": "HA MQTT discovery topic prefix.",
+          "title": "Discovery prefix",
+          "type": "string",
+          "x-category": "Advanced"
+        },
+        "device_name": {
+          "default": "MIMIRHEIM PV Learner",
+          "title": "Device name",
+          "type": "string",
+          "x-category": "Advanced"
+        },
+        "forecast_sensor": {
+          "default": true,
+          "description": "Publish an additional HA sensor entity for the helper's forecast output topic.",
+          "title": "Enable forecast sensor",
+          "type": "boolean",
+          "x-category": "Advanced"
+        }
+      },
+      "title": "HaDiscoveryConfig",
+      "type": "object",
+      "x-categoryOrder": [
+        "Basic",
+        "Advanced"
+      ],
+      "x-format": "categories-vertical"
+    },
+    "HomeAssistantConfig": {
+      "additionalProperties": false,
+      "description": "Home Assistant database reader configuration.\n\nPer-array entity IDs and limiting sensor lists are configured on each\nArrayConfig entry, not here. This model only holds the shared database\nconnection details.\n\nAttributes:\n    db_url: SQLAlchemy connection URL for the Home Assistant recorder\n        database. Accepts any backend supported by SQLAlchemy. Examples:\n\n        SQLite (most common for local HA installs):\n            sqlite:////config/home-assistant_v2.db\n\n        PostgreSQL (external HA database):\n            postgresql+psycopg2://user:pass@host/homeassistant\n\n        MariaDB / MySQL:\n            mysql+pymysql://user:pass@host/homeassistant\n\n        Note: bare filesystem paths (``/config/...``) are not accepted.\n        The ``sqlite:///`` scheme prefix is required even for local files.",
+      "properties": {
+        "db_url": {
+          "description": "SQLAlchemy connection URL for the HA recorder database. Examples: sqlite:////config/home-assistant_v2.db, postgresql+psycopg2://user:pass@host/homeassistant, mysql+pymysql://user:pass@host/homeassistant.",
+          "title": "HA DB URL",
+          "type": "string"
+        }
+      },
+      "required": [
+        "db_url"
+      ],
+      "title": "HomeAssistantConfig",
+      "type": "object"
+    },
+    "HyperparamConfig": {
+      "additionalProperties": false,
+      "description": "XGBoost hyperparameter search grid.\n\nEach field is a list of values to try in the TimeSeriesSplit grid search.\nRemove the field (or omit the entire ``hyperparams`` block) to use the\ndefault single-value grid.\n\nAttributes:\n    n_estimators: Number of boosting rounds to try.\n    max_depth: Maximum tree depth values to try.\n    learning_rate: Learning rate (eta) values to try.\n    subsample: Row subsampling fraction values to try.\n    min_child_weight: Minimum child weight values to try.",
+      "properties": {
+        "n_estimators": {
+          "default": [
+            200
+          ],
+          "items": {
+            "type": "integer"
+          },
+          "title": "n_estimators",
+          "type": "array",
+          "x-category": "Advanced"
+        },
+        "max_depth": {
+          "default": [
+            5
+          ],
+          "items": {
+            "type": "integer"
+          },
+          "title": "max_depth",
+          "type": "array",
+          "x-category": "Advanced"
+        },
+        "learning_rate": {
+          "default": [
+            0.08
+          ],
+          "items": {
+            "type": "number"
+          },
+          "title": "learning_rate",
+          "type": "array",
+          "x-category": "Advanced"
+        },
+        "subsample": {
+          "default": [
+            0.9
+          ],
+          "items": {
+            "type": "number"
+          },
+          "title": "subsample",
+          "type": "array",
+          "x-category": "Advanced"
+        },
+        "min_child_weight": {
+          "default": [
+            1
+          ],
+          "items": {
+            "type": "integer"
+          },
+          "title": "min_child_weight",
+          "type": "array",
+          "x-category": "Advanced"
+        }
+      },
+      "title": "HyperparamConfig",
+      "type": "object",
+      "x-categoryOrder": [
+        "Basic",
+        "Advanced"
+      ],
+      "x-format": "categories-vertical"
+    },
+    "KnmiConfig": {
+      "additionalProperties": false,
+      "description": "KNMI weather station configuration.\n\nknmi-py does not require an API key. The public KNMI script endpoint is\nused directly. History is backfilled automatically to cover the full HA\nactuals window.\n\nAttributes:\n    station_id: KNMI station number. 260 = De Bilt. Use the nearest\n        station that provides Q, FH, T, and RH columns.",
+      "properties": {
+        "station_id": {
+          "description": "KNMI station ID. 260 = De Bilt.",
+          "title": "KNMI station ID",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "station_id"
+      ],
+      "title": "KnmiConfig",
+      "type": "object"
+    },
+    "MeteoserverConfig": {
+      "additionalProperties": false,
+      "description": "Meteoserver hourly weather forecast API configuration.\n\nThe endpoint is:\n    https://data.meteoserver.nl/api/uurverwachting.php?lat=LAT&long=LON&key=KEY\n\nAttributes:\n    api_key: Meteoserver API key (query-string authentication).\n    latitude: Site latitude in decimal degrees.\n    longitude: Site longitude in decimal degrees.\n    forecast_horizon_hours: Number of hourly steps to store and use for\n        inference. The API returns up to ~54 hours; the tail is discarded.",
+      "properties": {
+        "api_key": {
+          "description": "Meteoserver API key.",
+          "title": "API key",
+          "type": "string"
+        },
+        "latitude": {
+          "description": "Site latitude in decimal degrees.",
+          "title": "Latitude",
+          "type": "number"
+        },
+        "longitude": {
+          "description": "Site longitude in decimal degrees.",
+          "title": "Longitude",
+          "type": "number"
+        },
+        "forecast_horizon_hours": {
+          "default": 48,
+          "description": "Number of hourly forecast steps to use (1\u201354).",
+          "maximum": 54,
+          "minimum": 1,
+          "title": "Forecast horizon (h)",
+          "type": "integer",
+          "x-category": "Advanced"
+        }
+      },
+      "required": [
+        "api_key",
+        "latitude",
+        "longitude"
+      ],
+      "title": "MeteoserverConfig",
+      "type": "object",
+      "x-categoryOrder": [
+        "Basic",
+        "Advanced"
+      ],
+      "x-format": "categories-vertical"
+    },
+    "MqttConfig": {
+      "additionalProperties": false,
+      "description": "MQTT broker connection parameters, shared by all mimirheim input helper daemons.\n\nAttributes:\n    host: Broker hostname or IP address.\n    port: Broker TCP port. Default is 1883 (unencrypted); use 8883 with TLS.\n    client_id: MQTT client identifier. Must be unique on the broker.\n    username: Optional broker username. Omit for anonymous access.\n    password: Optional broker password.\n    tls: Enable TLS for the broker connection. Set to True when the broker\n        listens on an encrypted port (typically 8883). When False, a\n        plaintext connection is made regardless of the port number.\n    tls_allow_insecure: When True and tls is also True, skip broker\n        certificate verification. Useful for self-signed certificates on\n        private networks. Has no effect when tls is False. Do not use\n        against a broker reachable from an untrusted network.",
+      "properties": {
+        "host": {
+          "description": "Broker hostname or IP address.",
+          "title": "Broker host",
+          "type": "string"
+        },
+        "port": {
+          "default": 1883,
+          "description": "Broker TCP port.",
+          "maximum": 65535,
+          "minimum": 1,
+          "title": "Broker port",
+          "type": "integer",
+          "x-category": "Advanced"
+        },
+        "client_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "MQTT client identifier. Defaults to a tool-specific value when not set.",
+          "title": "Client ID"
+        },
+        "username": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Broker username.",
+          "title": "Username",
+          "x-category": "Advanced"
+        },
+        "password": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Broker password.",
+          "title": "Password",
+          "x-category": "Advanced"
+        },
+        "tls": {
+          "default": false,
+          "description": "Enable TLS for the broker connection. Set to true when the broker listens on an encrypted port (typically 8883).",
+          "title": "Enable TLS",
+          "type": "boolean",
+          "x-category": "Advanced"
+        },
+        "tls_allow_insecure": {
+          "default": false,
+          "description": "Skip broker certificate verification when TLS is enabled. Has no effect when tls is false.",
+          "title": "Allow insecure TLS",
+          "type": "boolean",
+          "x-category": "Advanced"
+        }
+      },
+      "required": [
+        "host"
+      ],
+      "title": "MqttConfig",
+      "type": "object",
+      "x-categoryOrder": [
+        "Basic",
+        "Advanced"
+      ],
+      "x-format": "categories-vertical"
+    },
+    "StorageConfig": {
+      "additionalProperties": false,
+      "description": "Path for the shared persistent SQLite database.\n\nModel and metadata paths are configured per-array in ArrayConfig.\nThe SQLite database (KNMI observations, Meteoserver forecasts, and all\nPV actuals keyed by array name) is shared across all arrays.\n\nAttributes:\n    db_path: Path to the SQLite database.",
+      "properties": {
+        "db_path": {
+          "description": "SQLite database path.",
+          "title": "Storage DB path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "db_path"
+      ],
+      "title": "StorageConfig",
+      "type": "object"
+    },
+    "TrainingConfig": {
+      "additionalProperties": false,
+      "description": "Model training and inference trigger configuration.\n\nTraining and inference are triggered by publishing any message to the\nrespective MQTT topics. Scheduling is the responsibility of the caller\n(Home Assistant automation, external cron, Node-RED, etc.).\n\nAttributes:\n    train_trigger_topic: MQTT topic that triggers a full training cycle:\n        ingest new KNMI and HA data, retrain all arrays, then immediately\n        run an inference cycle.\n    inference_trigger_topic: MQTT topic that triggers an inference-only\n        cycle: fetch a fresh Meteoserver forecast, run all arrays, publish.\n    min_months_required: Minimum distinct calendar months required to\n        train. Default 12. Lower temporarily while data accumulates.\n    hyperparams: XGBoost grid search configuration.\n    n_cv_splits: Number of TimeSeriesSplit CV folds.",
+      "properties": {
+        "train_trigger_topic": {
+          "description": "MQTT topic that triggers a training run.",
+          "title": "Train trigger topic",
+          "type": "string"
+        },
+        "inference_trigger_topic": {
+          "description": "MQTT topic that triggers an inference run.",
+          "title": "Inference trigger topic",
+          "type": "string"
+        },
+        "min_months_required": {
+          "default": 12,
+          "description": "Minimum distinct calendar months required to train.",
+          "minimum": 1,
+          "title": "Min months required",
+          "type": "integer",
+          "x-category": "Advanced"
+        },
+        "hyperparams": {
+          "$ref": "#/$defs/HyperparamConfig",
+          "description": "XGBoost grid search configuration.",
+          "title": "Hyperparameters",
+          "x-category": "Advanced"
+        },
+        "n_cv_splits": {
+          "default": 5,
+          "description": "Number of TimeSeriesSplit CV folds.",
+          "minimum": 2,
+          "title": "CV splits",
+          "type": "integer",
+          "x-category": "Advanced"
+        }
+      },
+      "required": [
+        "train_trigger_topic",
+        "inference_trigger_topic"
+      ],
+      "title": "TrainingConfig",
+      "type": "object",
+      "x-categoryOrder": [
+        "Basic",
+        "Advanced"
+      ],
+      "x-format": "categories-vertical"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Top-level configuration for the pv_ml_learner daemon.\n\nAttributes:\n    mqtt: MQTT broker connection parameters.\n    signal_mimir: If True, publish an empty message to mimir_trigger_topic\n        after each complete forecast publish cycle (all arrays done).\n    mimir_trigger_topic: mimirheim trigger topic. Required when signal_mimir is\n        True.\n    knmi: KNMI station configuration (shared across all arrays).\n    meteoserver: Meteoserver API configuration.\n    homeassistant: Home Assistant database configuration.\n    arrays: One or more PV array configurations. Each array is trained,\n        predicted, and published independently.\n    storage: Path for the shared SQLite database.\n    training: Training and inference trigger topic configuration.\n    ha_discovery: HA MQTT discovery configuration.\n    stats_topic: Optional MQTT topic where per-cycle run statistics are\n        published after every training or inference cycle.",
+  "properties": {
+    "mqtt": {
+      "$ref": "#/$defs/MqttConfig",
+      "description": "MQTT broker connection settings.",
+      "title": "MQTT"
+    },
+    "mimir_topic_prefix": {
+      "default": "mimir",
+      "description": "mimirheim mqtt.topic_prefix. Used to derive default array output and trigger topics.",
+      "title": "mimirheim topic prefix",
+      "type": "string",
+      "x-category": "Advanced"
+    },
+    "signal_mimir": {
+      "default": false,
+      "description": "Publish to mimir_trigger_topic after each forecast cycle.",
+      "title": "Signal mimirheim",
+      "type": "boolean",
+      "x-category": "Advanced"
+    },
+    "mimir_trigger_topic": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "mimirheim trigger topic. Defaults to '{mimir_topic_prefix}/input/trigger'.",
+      "title": "mimirheim trigger topic",
+      "x-category": "Advanced"
+    },
+    "knmi": {
+      "$ref": "#/$defs/KnmiConfig",
+      "description": "KNMI weather station configuration.",
+      "title": "KNMI"
+    },
+    "meteoserver": {
+      "$ref": "#/$defs/MeteoserverConfig",
+      "description": "Meteoserver API configuration.",
+      "title": "Meteoserver"
+    },
+    "homeassistant": {
+      "$ref": "#/$defs/HomeAssistantConfig",
+      "description": "Home Assistant database configuration.",
+      "title": "Home Assistant"
+    },
+    "arrays": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ArrayConfig"
+      },
+      "description": "Named map of PV array configurations. The key is used as the array identifier and mimirheim device name.",
+      "minProperties": 1,
+      "title": "PV arrays",
+      "type": "object"
+    },
+    "storage": {
+      "$ref": "#/$defs/StorageConfig",
+      "description": "Shared SQLite storage configuration.",
+      "title": "Storage"
+    },
+    "training": {
+      "$ref": "#/$defs/TrainingConfig",
+      "description": "Training and inference trigger configuration.",
+      "title": "Training"
+    },
+    "ha_discovery": {
+      "$ref": "#/$defs/HaDiscoveryConfig",
+      "title": "HA discovery",
+      "x-category": "Advanced"
+    },
+    "stats_topic": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "MQTT topic where per-cycle run statistics are published.",
+      "title": "Stats topic",
+      "x-category": "Advanced"
+    }
+  },
+  "required": [
+    "mqtt",
+    "knmi",
+    "meteoserver",
+    "homeassistant",
+    "arrays",
+    "storage",
+    "training"
+  ],
+  "title": "PvLearnerConfig",
+  "type": "object",
+  "x-categoryOrder": [
+    "Basic",
+    "Advanced"
+  ],
+  "x-format": "categories-vertical",
+  "x-mimirheim": {
+    "file": "pv-ml-learner.yaml",
+    "category": "pv",
+    "order": 1,
+    "python_package": "pv_ml_learner",
+    "python_model": "pv_ml_learner.config:PvLearnerConfig",
+    "exclusive_group": null,
+    "required": false,
+    "docs_url": null
+  }
+}

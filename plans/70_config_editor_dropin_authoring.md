@@ -17,13 +17,9 @@ built reachable and understandable from outside the repository.
 
 ## Branch
 
-Requires plans 68 and 69 merged.
+Requires plans 68 and 69 done.
 
-```bash
-git switch -c feat/config-editor-dropin-authoring
-```
-
-Do not merge or push until the user has reviewed the result.
+Do not push until the user has reviewed the result.
 
 ---
 

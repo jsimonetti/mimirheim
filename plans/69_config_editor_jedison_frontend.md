@@ -18,14 +18,10 @@ plan implements that specification; it does not re-derive it.
 
 ## Branch
 
-Requires plan 68 merged first — this plan depends on the new endpoints and
+Requires plan 68 done first — this plan depends on the new endpoints and
 the migrated field vocabulary existing in the bundled schemas.
 
-```bash
-git switch -c feat/config-editor-jedison-frontend
-```
-
-Do not merge or push until the user has reviewed the result.
+Do not push until the user has reviewed the result.
 
 ---
 

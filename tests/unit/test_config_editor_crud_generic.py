@@ -9,6 +9,7 @@ What these tests do not cover:
 - JavaScript rendering of the CRUD UI
 - Browser-side interaction
 """
+
 from __future__ import annotations
 
 import json
@@ -26,6 +27,7 @@ from config_editor.server import ConfigEditorServer
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def live_server(tmp_path: Path):
@@ -63,6 +65,7 @@ def _get_json(url: str) -> tuple[int, dict]:
 # Battery CRUD round-trip
 # ---------------------------------------------------------------------------
 
+
 def test_crud_battery_round_trip(live_server: str) -> None:
     """POST a config with one battery, GET it back and assert the instance is present."""
     config = {
@@ -79,19 +82,22 @@ def test_crud_battery_round_trip(live_server: str) -> None:
             }
         },
     }
-    post_status, post_body = _post_json(f"{live_server}/api/config", config)
+    post_status, post_body = _post_json(
+        f"{live_server}/api/save", {"entries": {"mimirheim": {"enabled": True, "config": config}}}
+    )
     assert post_status == 200
     assert post_body["ok"] is True
 
-    get_status, get_body = _get_json(f"{live_server}/api/config")
+    get_status, get_body = _get_json(f"{live_server}/api/entry/mimirheim")
     assert get_status == 200
-    assert get_body["exists"] is True
-    assert "home_battery" in get_body["config"]["batteries"]
+    assert get_body["enabled"] is True
+    assert "home_battery" in get_body["value"]["batteries"]
 
 
 # ---------------------------------------------------------------------------
 # PV array CRUD round-trip
 # ---------------------------------------------------------------------------
+
 
 def test_crud_pv_round_trip(live_server: str) -> None:
     """POST a config with one PV array, GET it back and assert the instance is present.
@@ -106,18 +112,21 @@ def test_crud_pv_round_trip(live_server: str) -> None:
             "roof_pv": {"max_power_kw": 8.0},
         },
     }
-    post_status, post_body = _post_json(f"{live_server}/api/config", config)
+    post_status, post_body = _post_json(
+        f"{live_server}/api/save", {"entries": {"mimirheim": {"enabled": True, "config": config}}}
+    )
     assert post_status == 200
     assert post_body["ok"] is True
 
-    get_status, get_body = _get_json(f"{live_server}/api/config")
+    get_status, get_body = _get_json(f"{live_server}/api/entry/mimirheim")
     assert get_status == 200
-    assert "roof_pv" in get_body["config"]["pv_arrays"]
+    assert "roof_pv" in get_body["value"]["pv_arrays"]
 
 
 # ---------------------------------------------------------------------------
 # Multiple instances
 # ---------------------------------------------------------------------------
+
 
 def test_crud_add_second_battery(live_server: str) -> None:
     """POST a config with two battery instances; both are returned on GET."""
@@ -143,11 +152,13 @@ def test_crud_add_second_battery(live_server: str) -> None:
             },
         },
     }
-    post_status, post_body = _post_json(f"{live_server}/api/config", config)
+    post_status, post_body = _post_json(
+        f"{live_server}/api/save", {"entries": {"mimirheim": {"enabled": True, "config": config}}}
+    )
     assert post_status == 200
 
-    get_status, get_body = _get_json(f"{live_server}/api/config")
-    batteries = get_body["config"]["batteries"]
+    get_status, get_body = _get_json(f"{live_server}/api/entry/mimirheim")
+    batteries = get_body["value"]["batteries"]
     assert "battery_a" in batteries
     assert "battery_b" in batteries
 
@@ -155,6 +166,7 @@ def test_crud_add_second_battery(live_server: str) -> None:
 # ---------------------------------------------------------------------------
 # Validation rejection
 # ---------------------------------------------------------------------------
+
 
 def test_crud_field_validation_battery_capacity(live_server: str) -> None:
     """POST a battery with capacity_kwh as a string returns HTTP 422."""
@@ -172,7 +184,9 @@ def test_crud_field_validation_battery_capacity(live_server: str) -> None:
             }
         },
     }
-    status, body = _post_json(f"{live_server}/api/config", config)
+    status, body = _post_json(
+        f"{live_server}/api/save", {"entries": {"mimirheim": {"enabled": True, "config": config}}}
+    )
     assert status == 422
     assert body["ok"] is False
     assert "errors" in body
@@ -192,7 +206,9 @@ def _raw_post(base_url: str, path: str, headers: bytes, body: bytes) -> int:
     host, port = base_url.removeprefix("http://").split(":")
     with socket.create_connection((host, int(port)), timeout=10) as sock:
         sock.sendall(
-            b"POST " + path.encode() + b" HTTP/1.1\r\nHost: localhost\r\n"
+            b"POST "
+            + path.encode()
+            + b" HTTP/1.1\r\nHost: localhost\r\n"
             + headers
             + b"\r\n"
             + body
@@ -206,10 +222,14 @@ def _raw_post(base_url: str, path: str, headers: bytes, body: bytes) -> int:
 
 
 def test_malformed_content_length_returns_400(live_server: str) -> None:
-    """int() on a non-numeric header raised inside the handler thread."""
+    """int() on a non-numeric header raised inside the handler thread.
+
+    The check runs in do_POST before routing, so any POST path exercises it;
+    /api/save is the current one.
+    """
     status = _raw_post(
         live_server,
-        "/api/config",
+        "/api/save",
         b"Content-Type: application/json\r\nContent-Length: not-a-number\r\n",
         b"{}",
     )
@@ -219,7 +239,7 @@ def test_malformed_content_length_returns_400(live_server: str) -> None:
 def test_negative_content_length_returns_400(live_server: str) -> None:
     status = _raw_post(
         live_server,
-        "/api/config",
+        "/api/save",
         b"Content-Type: application/json\r\nContent-Length: -5\r\n",
         b"{}",
     )
@@ -231,12 +251,16 @@ def test_oversized_body_returns_413(live_server: str) -> None:
 
     self.rfile.read(length) read whatever the client declared straight into
     memory. On a Home Assistant add-on box that is a cheap way to exhaust it.
+    Exercised against /api/preview rather than /api/save here, since
+    test_oversized_body_returns_413_on_the_new_save_endpoint below already
+    covers /api/save specifically -- the cap itself is enforced in do_POST
+    before routing, so either path proves the same thing.
     """
     from config_editor.server import MAX_REQUEST_BODY_BYTES
 
     status = _raw_post(
         live_server,
-        "/api/config",
+        "/api/preview",
         b"Content-Type: application/json\r\nContent-Length: "
         + str(MAX_REQUEST_BODY_BYTES + 1).encode()
         + b"\r\n",
@@ -248,16 +272,14 @@ def test_oversized_body_returns_413(live_server: str) -> None:
 def test_a_normal_sized_body_is_still_accepted(live_server: str) -> None:
     """Regression guard: a real config must stay well under the cap."""
     status, _data = _post_json(
-        f"{live_server}/api/helper-config/nordpool.yaml", {"enabled": False}
+        f"{live_server}/api/save", {"entries": {"nordpool": {"enabled": False}}}
     )
     assert status == 200
 
 
 def test_missing_content_length_is_treated_as_empty(live_server: str) -> None:
     """No header means no body, which the JSON parser rejects as a 400."""
-    status = _raw_post(
-        live_server, "/api/config", b"Content-Type: application/json\r\n", b""
-    )
+    status = _raw_post(live_server, "/api/save", b"Content-Type: application/json\r\n", b"")
     assert status == 400
 
 
@@ -272,3 +294,69 @@ def test_the_body_cap_is_a_sane_size() -> None:
     from config_editor.server import MAX_REQUEST_BODY_BYTES
 
     assert 64 * 1024 <= MAX_REQUEST_BODY_BYTES <= 8 * 1024 * 1024
+
+
+def test_oversized_body_returns_413_on_the_new_save_endpoint(live_server: str) -> None:
+    """The body size cap is enforced in do_POST itself, before routing -- covers /api/save too."""
+    from config_editor.server import MAX_REQUEST_BODY_BYTES
+
+    status = _raw_post(
+        live_server,
+        "/api/save",
+        b"Content-Type: application/json\r\nContent-Length: "
+        + str(MAX_REQUEST_BODY_BYTES + 1).encode()
+        + b"\r\n",
+        b"{}",
+    )
+    assert status == 413
+
+
+# ---------------------------------------------------------------------------
+# IP allowlist
+#
+# The allowed_ip check happens in the real socket handler (do_GET/do_POST),
+# never exercised by handle_request() called in-process -- so it can only be
+# tested over a live socket.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def restricted_live_server(tmp_path: Path):
+    """A live ConfigEditorServer that only accepts connections from an address nothing binds to."""
+    server = ConfigEditorServer(config_dir=tmp_path, port=0, allowed_ip="203.0.113.1")
+    port = server.server_port
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield f"http://127.0.0.1:{port}"
+    server.shutdown()
+
+
+def test_ip_allowlist_rejects_a_non_matching_address_on_get(restricted_live_server: str) -> None:
+    status, _data = _get_json_status(f"{restricted_live_server}/api/registry")
+    assert status == 403
+
+
+def test_ip_allowlist_rejects_a_non_matching_address_on_post(restricted_live_server: str) -> None:
+    status = _post_json_status(f"{restricted_live_server}/api/save", {"entries": {}})
+    assert status == 403
+
+
+def _get_json_status(url: str) -> tuple[int, dict]:
+    try:
+        with urllib.request.urlopen(url) as resp:
+            return resp.status, json.loads(resp.read())
+    except urllib.error.HTTPError as exc:
+        return exc.code, {}
+
+
+def _post_json_status(url: str, data: dict) -> int:
+    """POST and return only the status code -- the 403 body is empty, not JSON."""
+    body = json.dumps(data).encode()
+    req = urllib.request.Request(
+        url, data=body, headers={"Content-Type": "application/json"}, method="POST"
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return resp.status
+    except urllib.error.HTTPError as exc:
+        return exc.code
