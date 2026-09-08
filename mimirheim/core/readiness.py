@@ -352,8 +352,9 @@ class ReadinessState:
             )
 
             # Resample PV forecast per array. Each PvDevice receives its own
-            # series; the summed series is kept for the naive-cost baseline
-            # and for dump-file compatibility. Summing into a single series
+            # series, and the naive-cost baseline is built from the same
+            # per-array series; the summed series is kept for dump-file
+            # compatibility and its consumers. Summing into a single series
             # and handing it to every device would count PV once per array
             # in the power balance.
             pv_forecast = [0.0] * n_steps

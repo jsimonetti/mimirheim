@@ -647,3 +647,127 @@ def test_pv_on_off_is_curtailed_true_when_off() -> None:
 
     assert pv.is_curtailed(0) is True
 
+
+
+# ---------------------------------------------------------------------------
+# Forecast clipping to max_power_kw
+# ---------------------------------------------------------------------------
+
+
+def test_pv_forecast_clipped_to_max_power_kw() -> None:
+    """A forecast above the array's peak output must be clipped to it.
+
+    max_power_kw is the nameplate AC output of the array. A forecast that
+    exceeds it describes production the hardware cannot deliver, so planning
+    against it commits the schedule to energy that will never arrive. This is
+    the behaviour the field has always been documented to have.
+    """
+    ctx = _make_ctx()
+    pv = PvDevice(name="pv", config=_config())  # max_power_kw = 5.0
+    pv.add_variables(ctx)
+    pv.add_constraints(ctx, inputs=PvInputs(forecast_kw=[7.5, 5.0, 4.0, 0.0]))
+    assert pv.net_power(0) == 5.0
+    assert pv.net_power(1) == 5.0
+    assert pv.net_power(2) == 4.0
+    assert pv.net_power(3) == 0.0
+
+
+def test_pv_power_limit_upper_bound_clipped_to_max_power_kw() -> None:
+    """power_limit mode: the decision variable is bounded by the clipped forecast."""
+    ctx = _make_ctx(horizon=2)
+    pv = PvDevice(name="pv", config=_config_power_limit(forecast_kw=3.0))
+    pv.add_variables(ctx)
+    pv.add_constraints(ctx, inputs=PvInputs(forecast_kw=[9.0, 9.0]))
+
+    ctx.solver.set_objective_minimize(-pv.net_power(0))
+    ctx.solver.solve()
+
+    val = ctx.solver.var_value(pv.net_power(0))
+    assert val <= 3.0 + 1e-6, f"pv_kw[0]={val:.4f} exceeded max_power_kw of 3.0"
+    # Sitting at the nameplate is not curtailment, even though the raw
+    # forecast was higher: is_curtailed compares against the same clipped
+    # bound, so the boundary case must read as free-running.
+    assert pv.is_curtailed(0) is False
+
+
+def test_pv_on_off_full_output_is_the_clipped_forecast() -> None:
+    """on_off mode: running at full output means max_power_kw, not the raw forecast."""
+    ctx = _make_ctx(horizon=2)
+    pv = PvDevice(name="pv", config=_config_on_off(forecast_kw=4.0))
+    pv.add_variables(ctx)
+    pv.add_constraints(ctx, inputs=PvInputs(forecast_kw=[6.0, 6.0]))
+
+    ctx.solver.set_objective_minimize(-pv.net_power(0))
+    ctx.solver.solve()
+
+    val = ctx.solver.var_value(pv.net_power(0))
+    assert val == pytest.approx(4.0, abs=1e-6)
+
+
+def test_pv_staged_is_curtailed_uses_the_clipped_forecast() -> None:
+    """A stage at max_power_kw is not curtailment, however large the forecast.
+
+    Without clipping, an inverter running at its highest register would be
+    reported as curtailed whenever the raw forecast overshot the nameplate,
+    which is the opposite of what happened.
+    """
+    ctx = _make_ctx(horizon=1)
+    pv = PvDevice(
+        name="pv",
+        config=_config_staged(stages=[0.0, 2.0, 4.0], max_power_kw=4.0),
+    )
+    pv.add_variables(ctx)
+    pv.add_constraints(ctx, inputs=PvInputs(forecast_kw=[9.0]))
+
+    ctx.solver.set_objective_minimize(-pv.net_power(0))
+    ctx.solver.solve()
+
+    assert pv.chosen_stage_kw(0) == pytest.approx(4.0)
+    assert pv.is_curtailed(0) is False
+
+
+def test_clip_forecast_bounds_both_ends() -> None:
+    """The shared helper is what keeps the devices and the naive baseline in step."""
+    from mimirheim.devices.pv import clip_forecast
+
+    assert clip_forecast([-1.0, 0.0, 2.5, 5.0, 7.5], 5.0) == [0.0, 0.0, 2.5, 5.0, 5.0]
+    # The input is left untouched; callers keep the raw series if they need it.
+    raw = [9.0]
+    assert clip_forecast(raw, 4.0) == [4.0]
+    assert raw == [9.0]
+
+
+def test_max_deliverable_kw_is_the_configured_peak() -> None:
+    """Without stages the ceiling is simply max_power_kw."""
+    pv = PvDevice(name="pv", config=_config())  # max_power_kw = 5.0
+    assert pv.max_deliverable_kw == 5.0
+
+
+def test_max_deliverable_kw_is_capped_by_the_highest_stage() -> None:
+    """A staged inverter cannot exceed its highest register.
+
+    The schema only requires max_power_kw >= the largest stage, so the two can
+    diverge. Callers that need the real ceiling, such as the naive-cost
+    baseline, must use the lower of the pair.
+    """
+    pv = PvDevice(name="pv", config=_config_staged(stages=[0.0, 5.0], max_power_kw=10.0))
+    assert pv.max_deliverable_kw == 5.0
+
+
+def test_staged_forecast_keeps_max_power_kw_headroom() -> None:
+    """The stored forecast is clipped to max_power_kw, not to the highest stage.
+
+    In staged mode the distance between the forecast and the chosen register is
+    what is_curtailed reports. Clipping the forecast down to the register would
+    erase that signal.
+    """
+    ctx = _make_ctx(horizon=1)
+    pv = PvDevice(name="pv", config=_config_staged(stages=[0.0, 5.0], max_power_kw=10.0))
+    pv.add_variables(ctx)
+    pv.add_constraints(ctx, inputs=PvInputs(forecast_kw=[12.0]))
+    ctx.solver.set_objective_minimize(-pv.net_power(0))
+    ctx.solver.solve()
+
+    assert pv._forecast == [10.0]
+    assert pv.chosen_stage_kw(0) == pytest.approx(5.0)
+    assert pv.is_curtailed(0) is True

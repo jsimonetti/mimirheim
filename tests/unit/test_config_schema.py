@@ -2772,3 +2772,18 @@ class TestHybridInverterConfigPlan54:
             HybridInverterConfig.model_validate(
                 _minimal_hybrid(nonexistent_field=True)
             )
+
+
+def test_empty_production_stages_is_a_validation_error() -> None:
+    """An empty stage list must be rejected, not crash the validator.
+
+    _validate_production_stages reads stages[0]; without a length bound an
+    empty list raises IndexError, which escapes config loading as a traceback
+    instead of the readable error every other bad value produces.
+    """
+    with pytest.raises(ValidationError):
+        PvConfig(
+            max_power_kw=5.0,
+            topic_forecast="mimir/input/pv_forecast",
+            production_stages=[],
+        )

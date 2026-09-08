@@ -1770,6 +1770,7 @@
               "items": {
                 "type": "number"
               },
+              "minItems": 1,
               "type": "array"
             },
             {

@@ -43,6 +43,23 @@ from mimirheim.config.schema import PvConfig
 from mimirheim.core.context import ModelContext
 
 
+def clip_forecast(forecast_kw: list[float], max_power_kw: float) -> list[float]:
+    """Clip a PV forecast into the range the array can physically produce.
+
+    Args:
+        forecast_kw: Per-step forecast power in kW, as published by whichever
+            tool produced it.
+        max_power_kw: The array's peak output in kW, from its configuration.
+
+    Returns:
+        A new list with every value constrained to ``[0, max_power_kw]``.
+        Negative values come from sensor noise or calibration drift and must
+        not pull the power balance negative. Values above the peak describe
+        production the hardware cannot deliver.
+    """
+    return [min(max(0.0, kw), max_power_kw) for kw in forecast_kw]
+
+
 class PvInputs(BaseModel):
     """Runtime PV forecast delivered to the device each solve cycle.
 
@@ -119,6 +136,28 @@ class PvDevice:
             ctx: The current solve context (unused).
         """
 
+    @property
+    def max_deliverable_kw(self) -> float:
+        """Highest AC output this array can reach, in kW.
+
+        Normally the configured peak. A staged inverter is also bounded by its
+        highest register: the schema only requires ``max_power_kw`` to be at
+        least the largest stage, so an array with stages ``[0.0, 5.0]`` and
+        ``max_power_kw`` 10.0 can never deliver more than 5 kW however bright
+        the day.
+
+        This is deliberately not what ``add_constraints`` clips the forecast
+        to. In staged mode the gap between the forecast and the chosen
+        register is exactly what ``is_curtailed`` reports, so the stored
+        forecast keeps the full ``max_power_kw`` headroom. This property is
+        for callers that need the ceiling itself, such as the naive-cost
+        baseline.
+        """
+        stages = self.config.production_stages
+        if stages is not None:
+            return min(self.config.max_power_kw, stages[-1])
+        return self.config.max_power_kw
+
     def add_constraints(self, ctx: ModelContext, inputs: PvInputs) -> None:
         """Store the forecast and create any required solver variables.
 
@@ -145,7 +184,25 @@ class PvDevice:
             ctx: The current solve context.
             inputs: The per-step PV forecast for this solve cycle.
         """
-        self._forecast = inputs.forecast_kw
+        # Clip the forecast into the range this array can produce, once, so
+        # that every reader of self._forecast sees the same series. Note that
+        # the naive-cost baseline in model_builder clips to
+        # max_deliverable_kw instead, which is lower for a staged inverter
+        # whose highest register sits below max_power_kw. The two ceilings
+        # differ on purpose: see max_deliverable_kw.
+        #
+        # Lower bound: negative values arise from sensor noise or calibration
+        # drift and must not pull the power balance negative.
+        #
+        # Upper bound: max_power_kw is the array's peak output. A forecast
+        # above it describes production the inverter cannot deliver, whether
+        # from a mis-specified array in the forecast tool or a bad sensor. The
+        # solver would otherwise commit the schedule to energy that never
+        # arrives: it would size a battery charge or an EV session against
+        # surplus that is not there and import the shortfall at whatever the
+        # price turns out to be. Hybrid inverters already clip this way
+        # (``hybrid_inverter.py`` bounds its PV by ``max_pv_kw``).
+        self._forecast = clip_forecast(inputs.forecast_kw, self.config.max_power_kw)
         caps = self.config.capabilities
         stages = self.config.production_stages
         # Retain the context so chosen_stage_kw can evaluate variable values
@@ -153,9 +210,7 @@ class PvDevice:
         self._ctx = ctx
 
         for t in ctx.T:
-            # Clip forecast to zero. Negative values arise from sensor noise or
-            # calibration drift and must not pull the power balance negative.
-            f = max(0.0, inputs.forecast_kw[t])
+            f = self._forecast[t]
 
             if stages is not None:
                 # Staged mode. The inverter only accepts the specific kW values
@@ -387,7 +442,10 @@ class PvDevice:
             raise RuntimeError(
                 f"is_curtailed called on PvDevice '{self.name}' before add_constraints."
             )
-        f = max(0.0, self._forecast[t])
+        # Already clipped to [0, max_power_kw] by add_constraints. Comparing
+        # against the raw forecast here would report an inverter sitting at its
+        # nameplate output as curtailed whenever the forecast overshot it.
+        f = self._forecast[t]
         if self.config.production_stages is not None:
             # Staged mode: the chosen stage register value may be below the
             # forecast, meaning the inverter would cap actual output if the

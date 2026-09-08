@@ -38,7 +38,7 @@ from mimirheim.devices.deferrable_load import DeferrableLoad
 from mimirheim.devices.ev import EvDevice
 from mimirheim.devices.grid import Grid
 from mimirheim.devices.hybrid_inverter import HybridInverterDevice
-from mimirheim.devices.pv import PvDevice, PvInputs
+from mimirheim.devices.pv import PvDevice, PvInputs, clip_forecast
 from mimirheim.devices.static_load import StaticLoad, StaticLoadInputs
 from mimirheim.devices.space_heating import SpaceHeatingDevice
 from mimirheim.devices.thermal_boiler import ThermalBoilerDevice
@@ -255,6 +255,13 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
             f"{sorted(config.pv_arrays)!r}."
         )
 
+    # Sum of what the arrays can actually produce, accumulated below. The
+    # naive-cost baseline uses this rather than bundle.pv_forecast so that the
+    # comparison is against the same physical limits the optimised plan works
+    # under. Crediting the baseline with production clipped away for the
+    # devices would understate the savings the optimiser found.
+    clipped_pv_kw = [0.0] * horizon
+
     for pv in pv_devices:
         # Each array gets its own forecast series. Handing every device the
         # summed bundle.pv_forecast would count total PV once per array in
@@ -272,6 +279,13 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
                     "pv_arrays device is configured; the summed pv_forecast "
                     "cannot be attributed to individual arrays."
                 )
+        # max_deliverable_kw, not max_power_kw: a staged inverter is capped by
+        # its highest register, which the schema allows to sit below the
+        # configured peak.
+        for t, kw in enumerate(clip_forecast(forecast_kw, pv.max_deliverable_kw)):
+            if t >= horizon:
+                break
+            clipped_pv_kw[t] += kw
         pv.add_constraints(
             ctx,
             inputs=PvInputs(forecast_kw=forecast_kw),
@@ -573,7 +587,14 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
         solve_time_utc=bundle.solve_time_utc,
         objective_value=obj_val,
         solve_status=status,
-        naive_cost_eur=_compute_naive_cost(bundle, horizon, dt),
+        naive_cost_eur=_compute_naive_cost(
+            bundle,
+            horizon,
+            dt,
+            # With no PV device configured there is nothing to clip against,
+            # so fall back to whatever the bundle carries.
+            pv_forecast_kw=clipped_pv_kw if pv_devices else None,
+        ),
         optimised_cost_eur=_compute_optimised_cost(bundle, schedule, dt),
         soc_credit_eur=_compute_soc_credit(bundle, schedule, config, dt),
         schedule=schedule,
@@ -581,12 +602,21 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
     )
 
 
-def _compute_naive_cost(bundle: SolveBundle, horizon: int, dt: float) -> float:
+def _compute_naive_cost(
+    bundle: SolveBundle,
+    horizon: int,
+    dt: float,
+    pv_forecast_kw: list[float] | None = None,
+) -> float:
     """Compute the naive baseline cost in EUR over the horizon.
 
     The naive baseline represents operating without any storage dispatch:
     the household imports whatever PV cannot cover, and exports any PV surplus
     directly to the grid. No battery, EV, or deferrable load optimisation occurs.
+
+    The PV series is the one the arrays can actually deliver, clipped to each
+    array's ceiling by the caller, so that the baseline and the optimised plan
+    are compared under the same physical limits.
 
     Formula for each step t:
 
@@ -608,13 +638,17 @@ def _compute_naive_cost(bundle: SolveBundle, horizon: int, dt: float) -> float:
         bundle: Solve inputs providing forecasts and prices.
         horizon: Number of time steps in the horizon.
         dt: Step duration in hours (always 0.25 for 15-minute steps).
+        pv_forecast_kw: PV production per step in kW, already clipped to each
+            array's peak output. When None, ``bundle.pv_forecast`` is used as
+            it stands; callers without any configured PV array pass None.
 
     Returns:
         Naive cost in EUR. Negative values indicate net export revenue.
     """
+    pv_kw = pv_forecast_kw if pv_forecast_kw is not None else bundle.pv_forecast
     total = 0.0
     for t in range(horizon):
-        net_kw = bundle.base_load_forecast[t] - bundle.pv_forecast[t]
+        net_kw = bundle.base_load_forecast[t] - pv_kw[t]
         if net_kw >= 0.0:
             # Load exceeds PV: import the shortfall from the grid.
             total += net_kw * bundle.horizon_prices[t] * dt

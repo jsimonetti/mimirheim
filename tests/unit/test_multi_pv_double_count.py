@@ -136,3 +136,27 @@ def test_forecast_for_unconfigured_array_is_rejected() -> None:
             _bundle(),
             _config(arrays={"east": {"max_power_kw": 2.0}}),
         )
+
+
+def test_naive_baseline_uses_the_deliverable_pv_not_the_raw_forecast() -> None:
+    """The baseline may not be credited with production the arrays cannot make.
+
+    Both arrays are configured at 2.0 kW peak but the bundle carries a 4.0 kW
+    forecast for each. The deliverable total is 4.0 kW against a 6.0 kW load,
+    so the baseline imports 2.0 kW per step: 2.0 kW x 0.25 h x 0.25 EUR/kWh
+    x 4 steps = 0.5 EUR. Taking the raw 8.0 kW forecast would instead report
+    an export credit and understate the optimiser's saving.
+    """
+    horizon = 4
+    over_forecast = [4.0] * horizon
+    bundle = SolveBundle(
+        solve_time_utc=datetime(2026, 6, 1, 12, tzinfo=timezone.utc),
+        horizon_prices=[0.25] * horizon,
+        horizon_export_prices=[0.10] * horizon,
+        horizon_confidence=[1.0] * horizon,
+        pv_forecast=[8.0] * horizon,
+        base_load_forecast=[6.0] * horizon,
+        pv_forecasts={"east": over_forecast, "west": over_forecast},
+    )
+    result = build_and_solve(bundle, _config())
+    assert result.naive_cost_eur == pytest.approx(0.5, abs=1e-9)
