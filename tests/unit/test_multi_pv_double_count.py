@@ -107,9 +107,10 @@ def test_single_array_falls_back_to_summed_series() -> None:
 def test_inconsistent_summed_and_per_array_series_is_rejected() -> None:
     """pv_forecast must equal the per-step sum of pv_forecasts.
 
-    The power balance uses the per-array series while the naive-cost
-    baseline uses the summed series; letting them diverge would report a
-    wrong baseline and saving for an otherwise correct schedule.
+    The power balance and the naive-cost baseline are both built from the
+    per-array series, while dump files and their consumers read the summed
+    one. Letting the two diverge would have the schedule and the record of it
+    describe different days.
     """
     horizon = len(_TOTAL_KW)
     with pytest.raises(ValueError, match="must equal"):
@@ -128,8 +129,9 @@ def test_forecast_for_unconfigured_array_is_rejected() -> None:
     """A pv_forecasts key with no matching configured array must fail loudly.
 
     A stale key (array removed from config after the dump was written)
-    passes the bundle sum check but would silently vanish from the power
-    balance while the naive-cost baseline still counts it.
+    passes the bundle sum check, so its power is part of the summed
+    pv_forecast, yet it has no device to enter the power balance or the
+    baseline. The solve would quietly run on less PV than the bundle claims.
     """
     with pytest.raises(ValueError, match="unknown PV array"):
         build_and_solve(

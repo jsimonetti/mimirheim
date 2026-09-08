@@ -145,10 +145,13 @@ def test_device_setpoint_soc_kwh_accepts_float() -> None:
 def test_naive_cost_uses_the_clipped_pv_series_when_given_one() -> None:
     """The baseline must not be credited with PV the arrays cannot produce.
 
-    build_and_solve passes the per-array forecasts already clipped to each
-    array's max_power_kw, the same series the devices are constrained by.
-    Comparing an optimised plan built on 5 kW against a baseline built on the
-    raw 8 kW forecast would understate the saving the optimiser found.
+    build_and_solve hands the devices the raw per-array series, which they
+    clip to max_power_kw themselves, and separately clips its own copy to
+    each array's max_deliverable_kw before calling this function. Both paths
+    therefore work under the same physical limits even though they arrive
+    there by different routes. Comparing an optimised plan built on 5 kW
+    against a baseline built on the raw 8 kW forecast would understate the
+    saving the optimiser found.
     """
     bundle = _bundle(
         import_prices=[0.25, 0.25],

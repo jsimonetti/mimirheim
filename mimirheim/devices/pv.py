@@ -64,9 +64,12 @@ class PvInputs(BaseModel):
     """Runtime PV forecast delivered to the device each solve cycle.
 
     Attributes:
-        forecast_kw: Per-step PV generation forecast in kW. Must contain at
-            least one value. Negative values (caused by sensor noise or
-            calibration drift) are silently clipped to zero in ``net_power``.
+        forecast_kw: Per-step PV generation forecast in kW, as published,
+            without clipping. Must contain at least one value.
+            ``add_constraints`` clips the series into ``[0, max_power_kw]``
+            before storing it: negative values come from sensor noise or
+            calibration drift, and values above the peak describe production
+            the array cannot deliver.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -162,7 +165,8 @@ class PvDevice:
         """Store the forecast and create any required solver variables.
 
         In fixed mode (no capabilities) no variables or constraints are added.
-        The forecast is clipped to zero and stored as plain floats.
+        The forecast is clipped into ``[0, max_power_kw]`` and stored as plain
+        floats.
 
         In power_limit mode, a continuous variable ``pv_kw[t]`` is added for
         each time step with upper bound equal to the (clipped) forecast. The

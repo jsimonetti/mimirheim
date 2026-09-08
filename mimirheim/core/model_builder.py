@@ -246,9 +246,11 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
     unknown_pv = set(bundle.pv_forecasts) - set(config.pv_arrays)
     if unknown_pv:
         # A stale key (e.g. an array that was removed from the config after
-        # the dump was written) passes the bundle's sum-consistency check but
-        # would be silently dropped from the power balance below, while the
-        # naive-cost baseline still counts it via the summed pv_forecast.
+        # the dump was written) passes the bundle's sum-consistency check,
+        # which means its power is counted in the summed pv_forecast, yet it
+        # has no device to enter the power balance or the naive-cost baseline
+        # below. The solve would quietly run on less PV than the bundle says
+        # it carries.
         raise ValueError(
             f"bundle.pv_forecasts contains unknown PV array(s) "
             f"{sorted(unknown_pv)!r}; configured arrays are "
@@ -638,9 +640,11 @@ def _compute_naive_cost(
         bundle: Solve inputs providing forecasts and prices.
         horizon: Number of time steps in the horizon.
         dt: Step duration in hours (always 0.25 for 15-minute steps).
-        pv_forecast_kw: PV production per step in kW, already clipped to each
-            array's peak output. When None, ``bundle.pv_forecast`` is used as
-            it stands; callers without any configured PV array pass None.
+        pv_forecast_kw: PV production per step in kW, already clipped by the
+            caller to each array's deliverable ceiling. That is the configured
+            peak, or the highest production stage where a staged inverter's
+            registers stop below it. When None, ``bundle.pv_forecast`` is used
+            as it stands; callers without any configured PV array pass None.
 
     Returns:
         Naive cost in EUR. Negative values indicate net export revenue.
