@@ -1,0 +1,131 @@
+# Example configuration for mimirheim_helpers/pv/open-meteo/pv_openmeteo
+
+mqtt:
+  host: "localhost"
+  port: 1883
+  client_id: "mimir-pv-openmeteo"
+  # username: "mqtt-user"
+  # password: "mqtt-password"
+
+# Any message on this topic triggers one fetch-and-publish cycle.
+trigger_topic: "mimir/input/tools/pv/trigger"
+
+# Must match mqtt.topic_prefix in the mimirheim configuration.
+# Determines the derived output_topic of each array and the default
+# mimir_trigger_topic. Change only when mimirheim uses a non-default prefix.
+# mimir_topic_prefix: mimir  # default
+
+# Open-Meteo settings shared by every array. All four fields have sensible
+# defaults; the section can be omitted entirely.
+open_meteo:
+  # Null uses the free public endpoint, which needs no registration.
+  api_key: null
+  # Point at https://customer-api.open-meteo.com for a commercial subscription,
+  # or at a self-hosted Open-Meteo instance.
+  base_url: "https://api.open-meteo.com"
+  # Null lets Open-Meteo pick the best model per location. Name a model
+  # (for example icon_seamless or ecmwf_ifs025) only if it is known to do
+  # better for this site.
+  weather_model: null
+  # Days of forecast to request, including today. Three days covers a 48 hour
+  # solve horizon with room to spare.
+  forecast_days: 3
+  # Hours of already-elapsed forecast kept in the payload, so mimirheim always
+  # has a step at or before the start of its horizon.
+  past_hours: 1.0
+
+# Every plane inherits these coordinates unless it overrides them.
+site:
+  latitude: 52.3676
+  longitude: 4.9041
+
+# One entry per mimirheim pv_arrays device: one thing the solver can curtail,
+# which in practice means one inverter. The map key becomes the derived
+# output_topic '{mimir_topic_prefix}/input/pv/{key}/forecast', so it must match
+# the mimirheim pv_arrays name unless output_topic is set explicitly.
+arrays:
+  # An east-west roof on a single string inverter. The two halves peak at
+  # different times, so the shared 5 kW AC limit binds far less often than the
+  # 6.2 kWp of modules behind it suggests.
+  roof:
+    # output_topic derived to mimir/input/pv/roof/forecast
+    # Override: output_topic: "somewhere/else"
+    inverter_kwp: 5.0
+    planes:
+      - label: "roof east"
+        # Degrees from horizontal: 0 = flat, 90 = vertical.
+        declination: 35
+        # Degrees from south: 0 = south, -90 = east, 90 = west.
+        # Subtract 180 from a compass bearing to get this.
+        azimuth: -90
+        peak_power_kwp: 3.1
+        # Inverter, cabling, soiling and module degradation combined.
+        efficiency_factor: 0.9
+      - label: "roof west"
+        declination: 35
+        azimuth: 90
+        peak_power_kwp: 3.1
+        efficiency_factor: 0.9
+
+  # Micro-inverters instead: each plane clamps on its own, so the limit goes on
+  # the planes rather than on the array.
+  garage:
+    planes:
+      - label: "garage"
+        declination: 15
+        azimuth: -45
+        peak_power_kwp: 2.4
+        inverter_kwp: 2.0
+        efficiency_factor: 0.96
+        # Optional per-plane knobs, all shown at their defaults:
+        #
+        # Axis tracking: none, azimuth, tilt, or dual. A tracked axis makes the
+        # corresponding fixed angle above irrelevant.
+        # tracking: none
+        #
+        # Remove a fraction of production at sunrise or sunset, tapering
+        # linearly to none at solar noon. For obstructions the model cannot see.
+        # damping_morning: 0.0
+        # damping_evening: 0.0
+        #
+        # Snow depth at which the plane produces nothing, with linear
+        # derating up to it. 0 disables the correction.
+        # max_snowcover_depth_cm: 0.0
+        #
+        # Skyline profile: at least two points in ascending compass bearing
+        # (0 = north, 90 = east, 180 = south). Setting it enables horizon
+        # shading; leaving it out disables it.
+        # horizon:
+        #   - {azimuth: 0,   elevation: 10}
+        #   - {azimuth: 180, elevation: 25}
+        #   - {azimuth: 360, elevation: 10}
+        #
+        # While the horizon blocks the direct beam, still credit diffuse light
+        # rather than dropping to zero. Only has an effect with a horizon set.
+        # partial_shading: false
+
+# Optional. If omitted, these defaults are used.
+confidence_decay:
+  hours_0_to_6: 0.90
+  hours_6_to_24: 0.75
+  hours_24_to_48: 0.55
+  hours_48_plus: 0.35
+
+# Publish an empty trigger to mimir_trigger_topic after a successful cycle.
+signal_mimir: false
+
+# Required only when signal_mimir is true.
+# mimir_trigger_topic: mimir/input/trigger
+
+# HA MQTT discovery. When enabled, the daemon publishes a retained discovery
+# payload that creates a button entity in Home Assistant. Pressing the button
+# sends a message to trigger_topic, firing one fetch cycle.
+# ha_discovery:
+#   enabled: true
+#   discovery_prefix: homeassistant
+#   device_name: PV Forecast Open-Meteo
+
+# Optional. When set, the daemon publishes a JSON stats payload to this MQTT
+# topic after every fetch cycle (success or failure). See nordpool.yaml for
+# the full payload description.
+# stats_topic: mimir/input/tools/pv/stats

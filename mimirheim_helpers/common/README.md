@@ -60,7 +60,7 @@ Subclasses implement one method, `_run_cycle(client)`, and set `TOOL_NAME`.
 
 ### Choosing between them
 
-Pick `HelperDaemon` if the daemon is "one trigger topic in, one forecast out". That is nordpool, zonneplan, pv_fetcher and all three baseload variants.
+Pick `HelperDaemon` if the daemon is "one trigger topic in, one forecast out". That is nordpool, zonneplan, pv_fetcher, pv_openmeteo and all three baseload variants.
 
 Pick `MqttDaemon` when that shape does not fit. The reporter is event-driven and has no trigger; `PvLearnerDaemon` has two independent trigger topics, one to train and one to infer.
 

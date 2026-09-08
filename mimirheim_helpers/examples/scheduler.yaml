@@ -46,6 +46,10 @@ schedules:
   # during the day. Fetches still occur at night, but forecast.solar returns
   # zero power for night-time steps — these publishes are cheap and keep the
   # readiness state current.
+  #
+  # The Open-Meteo helper (pv-openmeteo.yaml) listens on the same trigger topic
+  # and suits the same cadence. Its free tier is far more generous, so a
+  # half-hourly fetch is not close to any limit there either.
   # ---------------------------------------------------------------------------
   - "* */4 * * *": mimir/input/tools/pv/trigger
 

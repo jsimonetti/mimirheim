@@ -9,6 +9,11 @@ configuration:
     description: >-
       Start the forecast.solar PV forecast fetcher. Requires pv-fetcher.yaml
       in the add-on config directory.
+  enable_pv_openmeteo:
+    name: Enable PV Open-Meteo
+    description: >-
+      Start the Open-Meteo PV forecast fetcher. Requires pv-openmeteo.yaml
+      in the add-on config directory.
   enable_pv_ml_learner:
     name: Enable PV ML Learner
     description: >-

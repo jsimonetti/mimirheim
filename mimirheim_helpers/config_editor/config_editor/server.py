@@ -226,6 +226,12 @@ def _load_helper_models() -> dict[str, tuple[Any, list[str]]]:
         pass
 
     try:
+        from pv_openmeteo.config import PvOpenMeteoConfig
+        result["pv-openmeteo.yaml"] = (PvOpenMeteoConfig, [])
+    except ImportError:
+        pass
+
+    try:
         from pv_ml_learner.config import PvLearnerConfig
         result["pv-ml-learner.yaml"] = (PvLearnerConfig, [])
     except ImportError:

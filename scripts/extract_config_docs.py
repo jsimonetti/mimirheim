@@ -400,6 +400,16 @@ def _build_targets(root: Path) -> list[Target]:
             ),
         ),
         Target(
+            key="pv-openmeteo",
+            source_path=helpers / "pv" / "open-meteo" / "pv_openmeteo" / "config.py",
+            output_path=ref / "Config-PV-Open-Meteo.md",
+            title="pv_openmeteo (Open-Meteo) — Configuration Reference",
+            intro=(
+                "Auto-generated from `pv_openmeteo/config.py`. "
+                "See [PV-Open-Meteo](PV-Open-Meteo) for the guide."
+            ),
+        ),
+        Target(
             key="pv-ml-learner",
             source_path=helpers / "pv" / "pv_ml_learner" / "pv_ml_learner" / "config.py",
             output_path=ref / "Config-PV-ML-Learner.md",
