@@ -26,6 +26,7 @@ container starts:
 | `scheduler` | `/config/scheduler.yaml` | `scheduler` |
 | `nordpool` | `/config/nordpool.yaml` | `nordpool` |
 | `pv-fetcher` | `/config/pv-fetcher.yaml` | `pv_fetcher` |
+| `pv-openmeteo` | `/config/pv-openmeteo.yaml` | `pv_openmeteo` |
 | `pv-ml-learner` | `/config/pv-ml-learner.yaml` | `pv_ml_learner` |
 | `baseload-ha` | `/config/baseload-ha.yaml` | `baseload_ha` |
 | `baseload-ha-db` | `/config/baseload-ha-db.yaml` | `baseload_ha_db` |

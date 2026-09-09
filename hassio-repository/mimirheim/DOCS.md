@@ -34,6 +34,7 @@ accessible via the **File editor** add-on or Samba share
 | `mimirheim.yaml` | Yes | Core solver configuration |
 | `nordpool.yaml` | Optional | Nordpool price fetcher |
 | `pv-fetcher.yaml` | Optional | forecast.solar PV forecasts |
+| `pv-openmeteo.yaml` | Optional | Open-Meteo PV forecasts |
 | `pv-ml-learner.yaml` | Optional | ML-based PV forecast learner |
 | `baseload-ha.yaml` | Optional | Baseload from HA REST API |
 | `baseload-ha-db.yaml` | Optional | Baseload from HA SQLite database |

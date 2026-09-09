@@ -52,6 +52,7 @@ _ENTRY_POINT_SOURCES = [
     "mimirheim_helpers/baseload/homeassistant_db/baseload_ha_db/__main__.py",
     "mimirheim_helpers/baseload/static/baseload_static/__main__.py",
     "mimirheim_helpers/pv/forecast.solar/pv_fetcher/__main__.py",
+    "mimirheim_helpers/pv/open-meteo/pv_openmeteo/__main__.py",
     "mimirheim_helpers/pv/pv_ml_learner/pv_ml_learner/__main__.py",
     "mimirheim_helpers/reporter/reporter/__main__.py",
     "mimirheim_helpers/scheduler/scheduler/__main__.py",

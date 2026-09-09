@@ -34,6 +34,7 @@ _CASES = [
     ("nordpool.yaml", "nordpool.config", "NordpoolConfig"),
     ("zonneplan.yaml", "zonneplan_prices.config", "ZonneplanPricesConfig"),
     ("pv-fetcher.yaml", "pv_fetcher.config", "PvFetcherConfig"),
+    ("pv-openmeteo.yaml", "pv_openmeteo.config", "PvOpenMeteoConfig"),
     ("pv-ml-learner.yaml", "pv_ml_learner.config", "PvLearnerConfig"),
     ("baseload-ha.yaml", "baseload_ha.config", "BaseloadConfig"),
     ("baseload-ha-db.yaml", "baseload_ha_db.config", "BaseloadConfig"),

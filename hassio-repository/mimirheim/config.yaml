@@ -49,6 +49,7 @@ options:
   enable_nordpool: false
   enable_zonneplan: false
   enable_pv_fetcher: false
+  enable_pv_openmeteo: false
   enable_pv_ml_learner: false
   enable_baseload_ha: false
   enable_baseload_ha_db: false
@@ -61,6 +62,7 @@ schema:
   enable_nordpool: bool
   enable_zonneplan: bool
   enable_pv_fetcher: bool
+  enable_pv_openmeteo: bool
   enable_pv_ml_learner: bool
   enable_baseload_ha: bool
   enable_baseload_ha_db: bool
