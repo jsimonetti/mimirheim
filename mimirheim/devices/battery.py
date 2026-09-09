@@ -69,6 +69,10 @@ class Battery:
         # selected direction. See add_constraints for why the direction binary
         # mode[t] cannot carry this information on its own.
         self._active: dict[int, Any] = {}
+        # True when build_and_solve handed this battery a system-wide direction
+        # binary instead of letting it create its own. Set by set_external_mode,
+        # which runs before add_variables.
+        self._mode_is_shared: bool = False
         self._dt: float = 0.25  # set from ctx in add_variables
 
         # SOS2 piecewise-linear efficiency model fields.

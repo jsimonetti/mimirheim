@@ -669,6 +669,7 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
     # minimize_consumption is lexicographic and spends part of it on its
     # phase-1 solve inside build(). Passing the returned value through is what
     # keeps a two-phase solve inside the configured budget.
+    objective_builder = ObjectiveBuilder()
     solve_budget_seconds = objective_builder.build(
         ctx, all_devices, grid, bundle, config
     )

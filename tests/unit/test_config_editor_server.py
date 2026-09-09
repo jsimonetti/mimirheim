@@ -318,7 +318,7 @@ def test_static_path_traversal_returns_400(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def test_get_helper_configs_returns_all_known_helpers(tmp_path: Path) -> None:
-    """GET /api/helper-configs with empty config dir returns all 9 helpers as disabled."""
+    """GET /api/helper-configs with empty config dir returns all 10 helpers as disabled."""
     server = _make_server(tmp_path)
     status, headers, body = _dispatch_get(server, "/api/helper-configs")
     assert status == 200
@@ -327,6 +327,7 @@ def test_get_helper_configs_returns_all_known_helpers(tmp_path: Path) -> None:
         "nordpool.yaml",
         "zonneplan.yaml",
         "pv-fetcher.yaml",
+        "pv-openmeteo.yaml",
         "pv-ml-learner.yaml",
         "baseload-static.yaml",
         "baseload-ha.yaml",
@@ -358,7 +359,7 @@ def test_get_helper_configs_enabled_when_file_present(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def test_get_helper_schemas_returns_all_helpers(tmp_path: Path) -> None:
-    """GET /api/helper-schemas returns schema objects for all 9 known helpers."""
+    """GET /api/helper-schemas returns schema objects for all 10 known helpers."""
     server = _make_server(tmp_path)
     status, headers, body = _dispatch_get(server, "/api/helper-schemas")
     assert status == 200
@@ -367,6 +368,7 @@ def test_get_helper_schemas_returns_all_helpers(tmp_path: Path) -> None:
         "nordpool.yaml",
         "zonneplan.yaml",
         "pv-fetcher.yaml",
+        "pv-openmeteo.yaml",
         "pv-ml-learner.yaml",
         "baseload-static.yaml",
         "baseload-ha.yaml",

@@ -258,6 +258,7 @@ def test_wizard_invalid_output_is_rejected() -> None:
 @pytest.mark.parametrize("model_cls_import", [
     ("nordpool.config", "NordpoolConfig"),
     ("pv_fetcher.config", "PvFetcherConfig"),
+    ("pv_openmeteo.config", "PvOpenMeteoConfig"),
     ("pv_ml_learner.config", "PvLearnerConfig"),
     ("baseload_static.config", "BaseloadConfig"),
     ("baseload_ha.config", "BaseloadConfig"),
@@ -283,6 +284,7 @@ def test_helper_all_fields_have_ui_label(model_cls_import: tuple[str, str]) -> N
 @pytest.mark.parametrize("model_cls_import", [
     ("nordpool.config", "NordpoolConfig"),
     ("pv_fetcher.config", "PvFetcherConfig"),
+    ("pv_openmeteo.config", "PvOpenMeteoConfig"),
     ("pv_ml_learner.config", "PvLearnerConfig"),
     ("baseload_static.config", "BaseloadConfig"),
     ("baseload_ha.config", "BaseloadConfig"),

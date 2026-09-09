@@ -30,8 +30,8 @@ mkdir -p /share/mimirheim/reports
 
 # Read each enable flag from /data/options.json via bashio and publish to
 # the s6 container environment.
-for SERVICE in nordpool zonneplan pv_fetcher pv_ml_learner baseload_ha baseload_ha_db \
-               baseload_static scheduler reporter config_editor; do
+for SERVICE in nordpool zonneplan pv_fetcher pv_openmeteo pv_ml_learner baseload_ha \
+               baseload_ha_db baseload_static scheduler reporter config_editor; do
     KEY="enable_${SERVICE}"
     ENV_VAR="ENABLE_$(echo "${SERVICE}" | tr '[:lower:]' '[:upper:]')"
     if bashio::config.true "${KEY}"; then

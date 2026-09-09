@@ -13,6 +13,7 @@
 #   /config/nordpool.yaml       — Nordpool day-ahead price fetcher
 #   /config/zonneplan.yaml      — Zonneplan dynamic price fetcher
 #   /config/pv-fetcher.yaml     — forecast.solar PV forecast fetcher
+#   /config/pv-openmeteo.yaml   — Open-Meteo PV forecast fetcher
 #   /config/pv-ml-learner.yaml  — ML-based PV forecast learner
 #   /config/baseload-ha.yaml    — Home Assistant baseload fetcher (REST API)
 #   /config/baseload-ha-db.yaml  — Home Assistant baseload fetcher (database)
@@ -26,6 +27,7 @@
 #   /app/examples/nordpool.yaml
 #   /app/examples/zonneplan.yaml
 #   /app/examples/pv-fetcher.yaml
+#   /app/examples/pv-openmeteo.yaml
 #   /app/examples/pv-ml-learner.yaml
 #   /app/examples/baseload-ha.yaml
 #   /app/examples/baseload-ha-db.yaml

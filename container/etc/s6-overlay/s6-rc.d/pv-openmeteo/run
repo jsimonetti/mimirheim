@@ -1,0 +1,14 @@
+#!/command/with-contenv sh
+exec 2>&1
+if [ "${ENABLE_PV_OPENMETEO:-true}" != "true" ]; then
+    echo "pv-openmeteo: disabled via add-on options"
+    /command/s6-svc -d /run/service/pv-openmeteo
+    exit 0
+fi
+CONFIG=/config/pv-openmeteo.yaml
+if [ ! -f "$CONFIG" ]; then
+    echo "pv-openmeteo: $CONFIG not found — service disabled"
+    /command/s6-svc -d /run/service/pv-openmeteo
+    exit 0
+fi
+exec /app/.venv/bin/python -m pv_openmeteo --config "$CONFIG"
