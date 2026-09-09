@@ -9,10 +9,12 @@ Three strategies are supported:
 - ``minimize_cost``: minimise net energy cost against time-varying import and
   export prices, with each step weighted by a per-step confidence value.
 - ``minimize_consumption``: minimise total grid import lexicographically, then
-  maximise export revenue subject to the optimal import bound. This is the only
-  strategy that calls ``ctx.solver.solve()`` internally (phase-1 solve). The
-  caller must call ``ctx.solver.solve()`` once more to complete phase 2, using
-  the budget that ``build`` returns.
+  maximise export revenue subject to the import bound phase 1 found. This is
+  the only strategy that calls ``ctx.solver.solve()`` internally (phase-1
+  solve). The caller must call ``ctx.solver.solve()`` once more to complete
+  phase 2, using the budget that ``build`` returns. When phase 1 cannot
+  establish the bound, phase 2 runs with a weaker one or none and
+  ``strategy_degraded`` says so; see ``_minimize_consumption``.
 - ``balanced``: weighted sum of cost and self-sufficiency objectives, blended
   according to ``config.objectives.balanced_weights``.
 
@@ -21,6 +23,7 @@ This module imports from ``mimirheim.core`` and ``mimirheim.devices`` but never 
 any I/O.
 """
 
+import logging
 from typing import Any
 
 from mimirheim.config.schema import BalancedWeightsConfig, MimirheimConfig
@@ -29,15 +32,27 @@ from mimirheim.core.confidence import weight_by_confidence
 from mimirheim.core.context import ModelContext
 from mimirheim.devices.grid import Grid
 
+logger = logging.getLogger("mimirheim.solver")
+
 
 class ObjectiveBuilder:
     """Assembles the MILP objective and hard-cap constraints for a single solve.
 
-    ``ObjectiveBuilder`` is a stateless helper class — it has no instance
-    variables and every call to ``build`` is independent. It is a class rather
-    than a plain function so that it can be replaced by a test double or
-    subclassed to inject alternative objective logic.
+    ``strategy_degraded`` is set when the requested strategy could not be
+    carried out and a weaker one was used instead; the caller copies it onto
+    the result so the substitution is visible rather than silent.
+
+    An instance carries that one piece of state and ``build()`` does not reset
+    it, so a builder is good for one solve. ``build_and_solve`` constructs a
+    fresh one each cycle. It is a class rather than a plain function so it can
+    be replaced by a test double or subclassed to inject alternative objective
+    logic.
     """
+
+    def __init__(self) -> None:
+        # Set when a strategy falls back to a weaker objective. Read by the
+        # caller after build().
+        self.strategy_degraded = False
 
     def build(
         self,
@@ -300,7 +315,12 @@ class ObjectiveBuilder:
 
         Phase 1 (executed inside this method):
             Minimise ``Σ_t import[t]``. ``ctx.solver.solve()`` is called here
-            to find the optimal total import I*.
+            to find the optimal total import I*. Two outcomes fall short of
+            that and both set ``strategy_degraded``: a time-limited incumbent
+            ("feasible") is locked as I* although it is an achievable volume
+            rather than the proven minimum; no incumbent at all ("infeasible")
+            leaves nothing to lock, so phase 2 is set up as the plain cost
+            objective and this method returns early.
 
         Phase 2 (set up here; executed by the caller):
             Add a hard constraint ``Σ_t import[t] <= I* + ε`` to preserve
@@ -351,7 +371,47 @@ class ObjectiveBuilder:
             import_sum = import_sum + v
 
         ctx.solver.set_objective_minimize(import_sum)
-        ctx.solver.solve(time_limit_seconds=phase_budget)
+        phase_1_status = ctx.solver.solve(time_limit_seconds=phase_budget)
+
+        if phase_1_status == "feasible":
+            # An incumbent, but not a proven minimum. Locking it still bounds
+            # phase 2 by a volume the model can actually achieve, so the
+            # schedule is sound — but it is not the minimum this strategy
+            # promises, and reporting it as one would overstate what was
+            # solved.
+            logger.warning(
+                "minimize_consumption phase 1 hit its time limit without "
+                "proving the minimum import volume; locking the incumbent."
+            )
+            self.strategy_degraded = True
+
+        if phase_1_status == "infeasible":
+            # No incumbent, so there are no variable values to read. var_value
+            # is float(var.x) and var.x is None here, which would raise a
+            # TypeError out of the solve loop rather than returning an
+            # infeasible SolveResult — the schedule topic would keep its
+            # previous contents.
+            #
+            # Skipping the lock leaves phase 2 to solve the unconstrained cost
+            # objective. Either it finds nothing and the caller reports
+            # infeasible honestly, or it succeeds, in which case a
+            # cost-optimal schedule is a better answer than a crash. The
+            # strategy's volume guarantee is lost for this cycle; that is
+            # already lost the moment phase 1 cannot answer.
+            logger.warning(
+                "minimize_consumption phase 1 produced no solution; skipping "
+                "the import-volume lock and solving for cost alone this cycle."
+            )
+            # The schedule that comes out is cost-optimal, not volume-optimal,
+            # and the two genuinely differ: with a cheap early tariff the cost
+            # objective will import to bank value in the battery where the
+            # volume objective would import nothing. Publishing it under the
+            # requested strategy name without saying so would misrepresent it.
+            self.strategy_degraded = True
+            self._set_objective(
+                ctx, self._cost_objective_terms(ctx, devices, grid, bundle, config)
+            )
+            return config.solver.time_limit_seconds - phase_budget
 
         # Record the optimal total import and lock it in with a small slack.
         # The slack prevents numeric infeasibility if the phase-1 optimal value

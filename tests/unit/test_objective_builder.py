@@ -761,3 +761,151 @@ def test_solver_time_limit_must_be_positive() -> None:
         SolverConfig(time_limit_seconds=0.0)
     with pytest.raises(ValidationError):
         SolverConfig(time_limit_seconds=-1.0)
+
+
+def test_minimize_consumption_survives_a_phase_1_with_no_solution() -> None:
+    """Phase 1 without an incumbent must not take the whole solve down.
+
+    _minimize_consumption reads every import variable to compute the volume it
+    locks in. When phase 1 finds no solution there is nothing to read: var_value
+    is float(var.x) and var.x is None, so the lock raises TypeError out of the
+    solve loop. The caller then has no SolveResult at all, so the schedule topic
+    keeps its previous contents — a stale retained plan presented as current.
+
+    Reachable whenever phase 1's share of the budget is too short for the
+    solver to find a first incumbent on a large model, so it is a matter of
+    site size and time limit, not a corner case.
+    """
+    from unittest.mock import patch
+
+    from mimirheim.core.solver_backend import CBCSolverBackend
+
+    ctx = ModelContext(solver=CBCSolverBackend(), horizon=4, dt=0.25)
+    grid, bat = _build_devices(ctx, _battery_inputs(soc_kwh=0.0))
+    for t in ctx.T:
+        ctx.solver.add_constraint(grid.net_power(t) + bat.net_power(t) == 0)
+
+    bundle = _bundle(strategy="minimize_consumption")
+    config = _make_config()
+
+    original = CBCSolverBackend.solve
+    calls: list[int] = []
+
+    def _phase_1_finds_nothing(self, time_limit_seconds):
+        calls.append(1)
+        if len(calls) == 1:
+            # Do not solve at all, so no incumbent exists and every var.x is
+            # None. Running the real solve first and only faking the status
+            # would leave values behind and prove nothing.
+            return "infeasible"
+        return original(self, time_limit_seconds=time_limit_seconds)
+
+    with patch.object(CBCSolverBackend, "solve", _phase_1_finds_nothing):
+        # The assertion is that this returns at all rather than raising.
+        budget = ObjectiveBuilder().build(ctx, [bat], grid, bundle, config)
+
+    assert budget > 0.0
+    assert ctx.solver.solve(time_limit_seconds=budget) in (
+        "optimal",
+        "feasible",
+        "infeasible",
+    )
+
+
+def test_a_degraded_minimize_consumption_says_so() -> None:
+    """A cost-optimal schedule must not be published as a volume-optimal one.
+
+    When phase 1 finds nothing there is no volume to lock, so phase 2 solves
+    for cost alone. The two genuinely differ — with a cheap early tariff the
+    cost objective imports to bank value in the battery where the volume
+    objective imports nothing — and SolveResult.strategy still names what was
+    requested. strategy_degraded is the only thing that distinguishes them.
+    """
+    from unittest.mock import patch
+
+    from mimirheim.core.solver_backend import CBCSolverBackend
+
+    ctx = ModelContext(solver=CBCSolverBackend(), horizon=4, dt=0.25)
+    grid, bat = _build_devices(ctx, _battery_inputs(soc_kwh=0.0))
+    for t in ctx.T:
+        ctx.solver.add_constraint(grid.net_power(t) + bat.net_power(t) == 0)
+
+    bundle = _bundle(strategy="minimize_consumption")
+    config = _make_config()
+
+    healthy = ObjectiveBuilder()
+    healthy.build(ctx, [bat], grid, bundle, config)
+    assert healthy.strategy_degraded is False
+
+    ctx2 = ModelContext(solver=CBCSolverBackend(), horizon=4, dt=0.25)
+    grid2, bat2 = _build_devices(ctx2, _battery_inputs(soc_kwh=0.0))
+    for t in ctx2.T:
+        ctx2.solver.add_constraint(grid2.net_power(t) + bat2.net_power(t) == 0)
+
+    original = CBCSolverBackend.solve
+    calls: list[int] = []
+
+    def _phase_1_finds_nothing(self, time_limit_seconds):
+        calls.append(1)
+        if len(calls) == 1:
+            return "infeasible"
+        return original(self, time_limit_seconds=time_limit_seconds)
+
+    degraded = ObjectiveBuilder()
+    with patch.object(CBCSolverBackend, "solve", _phase_1_finds_nothing):
+        degraded.build(ctx2, [bat2], grid2, bundle, config)
+
+    assert degraded.strategy_degraded is True
+
+
+def test_a_time_limited_phase_1_is_locked_but_reported_as_degraded() -> None:
+    """An incumbent that is not a proven minimum is still locked, and says so.
+
+    Phase 1 returning "feasible" means the solver ran out of time holding an
+    achievable import volume with no proof it is the minimum. Locking it keeps
+    phase 2 sound, so the lock must still be applied; but the strategy's
+    promise of a minimal volume has not been kept, so the result must not be
+    published as if it had.
+
+    The tariff is built so that the two answers differ: a cheap import at step
+    0 and a rich export at step 1 make the cost objective want to import and
+    re-export, while the battery alone can carry the load, so the minimum
+    import volume is zero. Import staying at zero is the lock at work.
+    """
+    from unittest.mock import patch
+
+    from mimirheim.core.solver_backend import CBCSolverBackend
+
+    ctx = ModelContext(solver=CBCSolverBackend(), horizon=4, dt=0.25)
+    grid, bat = _build_devices(ctx, _battery_inputs(soc_kwh=5.0))
+    for t in ctx.T:
+        ctx.solver.add_constraint(grid.net_power(t) + bat.net_power(t) == 1.0)
+
+    bundle = _bundle(
+        strategy="minimize_consumption",
+        prices=[0.01, 0.30, 0.30, 0.30],
+        export_prices=[0.0, 0.50, 0.0, 0.0],
+    )
+    config = _make_config()
+
+    original = CBCSolverBackend.solve
+    calls: list[int] = []
+
+    def _phase_1_times_out(self, time_limit_seconds):
+        calls.append(1)
+        status = original(self, time_limit_seconds=time_limit_seconds)
+        # Solve for real so every variable holds a value, then report what
+        # CBC reports when the time limit cuts the search short.
+        return "feasible" if len(calls) == 1 else status
+
+    builder = ObjectiveBuilder()
+    with patch.object(CBCSolverBackend, "solve", _phase_1_times_out):
+        budget = builder.build(ctx, [bat], grid, bundle, config)
+
+    assert builder.strategy_degraded is True
+
+    assert ctx.solver.solve(time_limit_seconds=budget) in ("optimal", "feasible")
+    total_import = sum(ctx.solver.var_value(grid.import_[t]) for t in ctx.T)
+    assert total_import < 1e-3, (
+        f"phase 2 imported {total_import:.3f} kW: the incumbent was not locked"
+    )

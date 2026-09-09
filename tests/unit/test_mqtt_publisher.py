@@ -1291,3 +1291,29 @@ def test_solve_time_is_carried_in_the_schedule_payload() -> None:
 
     payload = _published(client, "mimir/strategy/schedule")
     assert payload["solve_time_utc"] == "2026-06-01T09:00:00Z"
+
+
+def test_strategy_degraded_is_published_beside_the_strategy() -> None:
+    """The flag must reach every topic a consumer reads the strategy from.
+
+    A degraded minimize_consumption result carries the requested strategy
+    name, so a consumer of any of these topics has no other way to tell that
+    the schedule is not what that name promises.
+    """
+    mock_client = MagicMock()
+    publisher = MqttPublisher(client=mock_client, config=_make_config())
+    result = _make_result("optimal").model_copy(update={"strategy_degraded": True})
+
+    publisher.publish_result(result)
+    publisher.publish_last_solve_status(result=result, error=None)
+
+    assert _published(mock_client, "mimir/strategy/schedule")["strategy_degraded"] is True
+    assert _published(mock_client, "mimir/strategy/current")["strategy_degraded"] is True
+    assert _published(mock_client, "mimir/status/last_solve")["strategy_degraded"] is True
+
+    # An undegraded result publishes the flag too, so consumers can rely on
+    # the key being present rather than inferring from its absence.
+    mock_client.reset_mock()
+    publisher.publish_result(_make_result("optimal"))
+    assert _published(mock_client, "mimir/strategy/schedule")["strategy_degraded"] is False
+    assert _published(mock_client, "mimir/strategy/current")["strategy_degraded"] is False

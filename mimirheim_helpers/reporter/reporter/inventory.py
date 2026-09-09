@@ -136,6 +136,9 @@ def _build_entry(
         "input_file": f"{dump_base}_input.json",
         "output_file": f"{dump_base}_output.json",
         "strategy": out.get("strategy", ""),
+        # Carried so the index can tell a genuine minimize_consumption run from
+        # the cost-objective fallback, which keeps the same strategy name.
+        "strategy_degraded": bool(out.get("strategy_degraded", False)),
         "solve_status": out.get("solve_status", ""),
         "horizon_steps": len(schedule),
         "naive_cost_eur": round(naive, 4),
