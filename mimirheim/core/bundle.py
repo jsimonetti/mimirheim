@@ -291,9 +291,11 @@ class SolveBundle(BaseModel):
             PV arrays, resampled to the 15-minute grid with a hold-previous
             step function.
         pv_forecasts: Per-array PV forecast in kW per step, keyed by
-            pv_arrays device name. The power balance uses these; the summed
-            pv_forecast is retained for the naive-cost baseline and for
-            backward-compatible dump files.
+            pv_arrays device name. Both the power balance and the naive-cost
+            baseline are built from these, each array clipped to its own
+            ceiling first. The summed pv_forecast is retained for
+            backward-compatible dump files and is the baseline's fallback when
+            no PV array is configured.
         base_load_forecast: Forecast of non-controllable (static) household
             load in kW per step. Sum of all configured static loads, resampled
             the same way.
@@ -388,9 +390,10 @@ class SolveBundle(BaseModel):
     def _pv_forecasts_consistent(self) -> "SolveBundle":
         """Reject bundles whose per-array series disagree with the summed series.
 
-        The power balance uses ``pv_forecasts`` while the naive-cost baseline
-        uses the summed ``pv_forecast``. If the two diverge, an otherwise
-        correct schedule reports a wrong baseline and saving. The tolerance
+        The power balance and the naive-cost baseline are both built from
+        ``pv_forecasts``, while dump files and consumers such as the reporter
+        read the summed ``pv_forecast``. If the two diverge, the schedule and
+        the picture drawn of it describe different days. The tolerance
         of 0.005 kW per step allows for per-array values that were rounded
         to 3 decimals independently of the rounded sum (dump files).
         """

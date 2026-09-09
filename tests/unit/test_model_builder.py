@@ -2,12 +2,19 @@
 
 Tests call _compute_naive_cost and _compute_optimised_cost directly without
 a solver. All tests must fail before the implementation exists (TDD).
+
+The exception is the staged-array baseline test at the end, which goes through
+build_and_solve: what it guards is the ceiling model_builder picks per array,
+which is not visible from _compute_naive_cost alone.
 """
 
 from datetime import datetime, timezone
 
+import pytest
+
+from mimirheim.config.schema import MimirheimConfig
 from mimirheim.core.bundle import DeviceSetpoint, SolveBundle
-from mimirheim.core.model_builder import _compute_naive_cost
+from mimirheim.core.model_builder import _compute_naive_cost, build_and_solve
 
 
 def _bundle(
@@ -133,3 +140,79 @@ def test_device_setpoint_soc_kwh_accepts_float() -> None:
     """DeviceSetpoint.soc_kwh stores the provided float for storage devices."""
     sp = DeviceSetpoint(kw=-1.5, type="battery", soc_kwh=5.5)
     assert sp.soc_kwh == 5.5
+
+
+def test_naive_cost_uses_the_clipped_pv_series_when_given_one() -> None:
+    """The baseline must not be credited with PV the arrays cannot produce.
+
+    build_and_solve hands the devices the raw per-array series, which they
+    clip to max_power_kw themselves, and separately clips its own copy to
+    each array's max_deliverable_kw before calling this function. Both paths
+    therefore work under the same physical limits even though they arrive
+    there by different routes. Comparing an optimised plan built on 5 kW
+    against a baseline built on the raw 8 kW forecast would understate the
+    saving the optimiser found.
+    """
+    bundle = _bundle(
+        import_prices=[0.25, 0.25],
+        export_prices=[0.0, 0.0],
+        pv_forecast=[8.0, 8.0],
+        base_load_forecast=[8.0, 8.0],
+    )
+    # Unclipped: PV covers the load exactly, so the naive cost is zero.
+    assert _compute_naive_cost(bundle, horizon=2, dt=0.25) == 0.0
+
+    # Clipped to a 5 kW array: 3 kW is imported each step.
+    # 3 kW x 0.25 h x 0.25 EUR/kWh = 0.1875 EUR per step.
+    clipped = _compute_naive_cost(bundle, horizon=2, dt=0.25, pv_forecast_kw=[5.0, 5.0])
+    assert abs(clipped - 0.375) < 1e-9
+
+
+def test_naive_cost_falls_back_to_the_bundle_series() -> None:
+    """A caller with no configured PV array passes None and gets the old behaviour."""
+    bundle = _bundle(
+        import_prices=[0.25, 0.25],
+        export_prices=[0.0, 0.0],
+        pv_forecast=[2.0, 2.0],
+        base_load_forecast=[4.0, 4.0],
+    )
+    assert _compute_naive_cost(bundle, horizon=2, dt=0.25) == _compute_naive_cost(
+        bundle, horizon=2, dt=0.25, pv_forecast_kw=None
+    )
+
+
+def test_naive_cost_of_a_staged_array_stops_at_the_highest_register() -> None:
+    """End to end: the baseline may not exceed what a staged inverter can deliver.
+
+    max_power_kw is 10.0 but the highest register is 5.0, which the schema
+    permits. The forecast is 10.0 kW against a 8.0 kW load, so the deliverable
+    5.0 kW leaves 3.0 kW to import each step:
+    3.0 kW x 0.25 h x 0.25 EUR/kWh x 4 steps = 0.75 EUR.
+
+    Clipping the baseline to max_power_kw instead would have PV cover the load
+    outright and report an export credit. This asserts through build_and_solve
+    so that swapping max_deliverable_kw back for max_power_kw fails here.
+    """
+    horizon = 4
+    config = MimirheimConfig.model_validate(
+        {
+            "mqtt": {"host": "localhost", "client_id": "test"},
+            "grid": {"import_limit_kw": 20.0, "export_limit_kw": 20.0},
+            "pv_arrays": {
+                "roof": {"max_power_kw": 10.0, "production_stages": [0.0, 5.0]},
+            },
+            "static_loads": {"base": {}},
+        }
+    )
+    bundle = SolveBundle(
+        solve_time_utc=datetime(2026, 6, 1, 12, tzinfo=timezone.utc),
+        horizon_prices=[0.25] * horizon,
+        horizon_export_prices=[0.10] * horizon,
+        horizon_confidence=[1.0] * horizon,
+        pv_forecast=[10.0] * horizon,
+        base_load_forecast=[8.0] * horizon,
+        pv_forecasts={"roof": [10.0] * horizon},
+    )
+
+    result = build_and_solve(bundle, config)
+    assert result.naive_cost_eur == pytest.approx(0.75, abs=1e-9)

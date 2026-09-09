@@ -1556,6 +1556,12 @@ class PvConfig(BaseModel):
     )
     production_stages: list[float] | None = Field(
         default=None,
+        # An empty list is not a valid staged inverter, and without this bound
+        # _validate_production_stages reads stages[0] and raises IndexError,
+        # which escapes config loading as a traceback rather than a readable
+        # validation error. PvDevice.max_deliverable_kw relies on the same
+        # guarantee when it reads the last stage.
+        min_length=1,
         description=(
             "Discrete power levels the inverter accepts, in ascending order, starting "
             "with 0.0. When set, the solver selects exactly one stage per step. "
