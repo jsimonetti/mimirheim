@@ -59,11 +59,18 @@ class Battery:
         # soc_low[t] represents the SOC deficit below the optimal lower level at
         # step t, in kWh. Zero when SOC >= optimal_lower_soc_kwh.
         self._soc_low: dict[int, Any] = {}
-        # Populated only when both min_charge_kw and min_discharge_kw are set.
-        # active[t] is 1 when the battery runs at step t and 0 when it is idle.
-        # See add_constraints for why the direction binary mode[t] cannot carry
-        # this information on its own.
+        # Populated when both min_charge_kw and min_discharge_kw are set, and
+        # when the direction binary is shared and either one is — see
+        # add_variables for why sharing changes the requirement.
+        # active[t] = 0 holds the battery at rest at step t; active[t] = 1
+        # permits it to run and arms whichever floor is configured for the
+        # selected direction. See add_constraints for why the direction binary
+        # mode[t] cannot carry this information on its own.
         self._active: dict[int, Any] = {}
+        # True when build_and_solve handed this battery a system-wide direction
+        # binary instead of letting it create its own. Set by set_external_mode,
+        # which runs before add_variables.
+        self._mode_is_shared: bool = False
         self._dt: float = 0.25  # set from ctx in add_variables
 
         # SOS2 piecewise-linear efficiency model fields.
@@ -233,7 +240,7 @@ class Battery:
                 # optimal_lower_soc_kwh - min_soc_kwh.
                 self._soc_low[t] = ctx.solver.add_var(lb=0.0, ub=soc_low_ub)
 
-        # Add active[t] only when both minimum power floors are configured.
+        # Add active[t] only when the minimum power floors require it.
         #
         # active[t] is a binary "the battery is running this step" flag. It is
         # needed because mode[t] encodes direction, not activity: with both
@@ -245,10 +252,21 @@ class Battery:
         # always be driven to zero, so idling is already reachable and no extra
         # binary is created. This keeps the variable count unchanged for the
         # common case, where neither floor is set.
-        if (
-            self.config.min_charge_kw is not None
-            and self.config.min_discharge_kw is not None
-        ):
+        #
+        # That reasoning depends on the battery owning its own mode, and stops
+        # holding the moment the mode is shared. With one direction binary
+        # across several batteries, a neighbour that wants to charge sets
+        # mode[t] to 1 for everyone, and a battery with only min_charge_kw set
+        # is then forced to charge whether or not it has the headroom. One
+        # battery sitting at capacity therefore makes the whole charging
+        # direction infeasible and no battery can charge in that step — the
+        # opposite of what sharing is for. So when the mode is shared, either
+        # floor is enough to need an activity binary.
+        floors = (
+            self.config.min_charge_kw is not None,
+            self.config.min_discharge_kw is not None,
+        )
+        if all(floors) or (self._mode_is_shared and any(floors)):
             for t in ctx.T:
                 self._active[t] = ctx.solver.add_var(lb=0.0, ub=1.0, integer=True)
 
@@ -392,11 +410,15 @@ class Battery:
             # every step regardless of price. The active[t] binary declared in
             # add_variables supplies the missing third state.
             #
-            # active[t] = 0 means the battery is at rest this step; active[t] = 1
-            # means it is running in the direction mode[t] selects.
+            # active[t] = 0 means the battery is at rest this step. active[t] = 1
+            # permits it to run in the direction mode[t] selects and arms that
+            # direction's floor, if one is configured; an unfloored direction
+            # is still free down to zero.
             if t in self._active:
-                # Both floors are configured, so the idle state is modelled
-                # explicitly. Four constraints per step:
+                # The idle state is modelled explicitly: both floors are
+                # configured, or the mode is shared and one is (see
+                # add_variables). Two constraints per step, plus one per
+                # configured floor:
                 #
                 #   charge_ac    <= max_charge_kw    * active[t]
                 #   discharge_ac <= max_discharge_kw * active[t]
@@ -414,21 +436,30 @@ class Battery:
                 #     mode[t] = 0 (discharging).
                 #
                 # The reachable states are therefore exactly: idle, charge at or
-                # above min_charge_kw, discharge at or above min_discharge_kw.
+                # above min_charge_kw, discharge at or above min_discharge_kw,
+                # with an unfloored direction free down to zero.
                 ctx.solver.add_constraint(
                     self.charge_ac_kw(t) <= max_charge_kw * self._active[t]
                 )
                 ctx.solver.add_constraint(
                     self.discharge_ac_kw(t) <= max_discharge_kw * self._active[t]
                 )
-                ctx.solver.add_constraint(
-                    self.charge_ac_kw(t)
-                    >= self.config.min_charge_kw * (self.mode[t] + self._active[t] - 1)
-                )
-                ctx.solver.add_constraint(
-                    self.discharge_ac_kw(t)
-                    >= self.config.min_discharge_kw * (self._active[t] - self.mode[t])
-                )
+                # Each floor is applied only if it is configured. Both are set
+                # in the common case, but a shared direction binary also brings
+                # a battery here with just one of them (see add_variables), and
+                # multiplying by a missing floor would fail.
+                if self.config.min_charge_kw is not None:
+                    ctx.solver.add_constraint(
+                        self.charge_ac_kw(t)
+                        >= self.config.min_charge_kw
+                        * (self.mode[t] + self._active[t] - 1)
+                    )
+                if self.config.min_discharge_kw is not None:
+                    ctx.solver.add_constraint(
+                        self.discharge_ac_kw(t)
+                        >= self.config.min_discharge_kw
+                        * (self._active[t] - self.mode[t])
+                    )
             else:
                 # At most one floor is configured. mode[t] on its own is
                 # sufficient here: the unfloored direction can always be driven
@@ -572,6 +603,7 @@ class Battery:
                 solver variable for that step.
         """
         self.mode = dict(mode_vars)
+        self._mode_is_shared = True
 
     def net_power(self, t: int) -> Any:
         """Return the net power expression at time step ``t``.

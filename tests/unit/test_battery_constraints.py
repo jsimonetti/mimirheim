@@ -747,6 +747,168 @@ def test_two_batteries_both_can_be_idle() -> None:
     assert ctx.solver.var_value(bat2.discharge_seg[0, 0]) < 1e-6
 
 
+def test_a_full_neighbour_with_a_charge_floor_cannot_block_shared_charging() -> None:
+    """A shared direction binary must not make charging unreachable.
+
+    A battery with min_charge_kw but no min_discharge_kw gets no activity
+    binary when it owns its mode, because it can always idle by taking the
+    discharge direction and driving it to zero. With a shared mode that escape
+    is gone: mode 1 forces *this* battery to charge whenever any neighbour
+    charges. Sitting at capacity with a 1 kW floor, it then cannot satisfy the
+    floor, so the whole charging direction is infeasible and the neighbour can
+    never charge either. One step, so the full battery cannot make itself
+    headroom by discharging first: requiring the neighbour to gain 0.5 kWh is
+    infeasible without the fix and trivially feasible with it.
+    """
+    ctx = _make_ctx(horizon=1)
+    full = Battery(
+        name="full",
+        config=BatteryConfig(
+            capacity_kwh=10.0,
+            min_soc_kwh=0.0,
+            charge_segments=[_seg(3.0)],
+            discharge_segments=[_seg(3.0)],
+            min_charge_kw=1.0,
+        ),
+    )
+    empty = Battery(name="empty", config=_config(charge_segs=[_seg(3.0)]))
+
+    shared_mode = {t: ctx.solver.add_var(lb=0.0, ub=1.0, integer=True) for t in ctx.T}
+    full.set_external_mode(shared_mode)
+    empty.set_external_mode(shared_mode)
+    full.add_variables(ctx)
+    empty.add_variables(ctx)
+    full.add_constraints(ctx, inputs=_inputs(soc_kwh=10.0))
+    empty.add_constraints(ctx, inputs=_inputs(soc_kwh=1.0))
+
+    ctx.solver.add_constraint(empty.soc[0] >= 1.5)
+    ctx.solver.set_objective_minimize(full.charge_ac_kw(0))
+    status = ctx.solver.solve()
+
+    assert status != "infeasible", (
+        "the full neighbour's charge floor blocked the shared charging direction"
+    )
+    assert ctx.solver.var_value(empty.soc[0]) >= 1.5 - 1e-6
+    assert ctx.solver.var_value(full.charge_ac_kw(0)) < 1e-6, (
+        "the full battery was made to charge past capacity"
+    )
+
+
+def test_a_charge_floor_still_binds_on_a_shared_mode() -> None:
+    """Adding the activity binary must not quietly disable the floor itself.
+
+    With the mode shared and only min_charge_kw set, a battery that does charge
+    still has to charge at or above the floor; the new binary only adds the
+    option of not charging at all.
+    """
+    ctx = _make_ctx(horizon=1)
+    floored = Battery(
+        name="floored",
+        config=BatteryConfig(
+            capacity_kwh=10.0,
+            min_soc_kwh=0.0,
+            charge_segments=[_seg(3.0)],
+            discharge_segments=[_seg(3.0)],
+            min_charge_kw=1.0,
+        ),
+    )
+    other = Battery(name="other", config=_config(charge_segs=[_seg(3.0)]))
+
+    shared_mode = {0: ctx.solver.add_var(lb=0.0, ub=1.0, integer=True)}
+    floored.set_external_mode(shared_mode)
+    other.set_external_mode(shared_mode)
+    floored.add_variables(ctx)
+    other.add_variables(ctx)
+    floored.add_constraints(ctx, inputs=_inputs(soc_kwh=5.0))
+    other.add_constraints(ctx, inputs=_inputs(soc_kwh=5.0))
+
+    # Ask for a sliver of charge and make more of it expensive.
+    ctx.solver.add_constraint(floored.charge_ac_kw(0) >= 0.1)
+    ctx.solver.set_objective_minimize(floored.charge_ac_kw(0))
+    status = ctx.solver.solve()
+
+    assert status != "infeasible"
+    assert ctx.solver.var_value(floored.charge_ac_kw(0)) >= 1.0 - 1e-6, (
+        "a charging floored battery on a shared mode must respect its floor"
+    )
+
+
+def test_an_empty_neighbour_with_a_discharge_floor_cannot_block_shared_discharging() -> None:
+    """Mirror image: a discharge floor on an empty battery under a shared mode.
+
+    mode 0 is the discharging direction for everyone. A battery at its minimum
+    SOC with min_discharge_kw but no min_charge_kw would be forced to discharge
+    at or above its floor the moment any neighbour discharges, which it cannot,
+    so nothing could discharge. Requiring the neighbour to shed 0.5 kWh in one
+    step is infeasible without the activity binary.
+    """
+    ctx = _make_ctx(horizon=1)
+    empty = Battery(
+        name="empty",
+        config=BatteryConfig(
+            capacity_kwh=10.0,
+            min_soc_kwh=0.0,
+            charge_segments=[_seg(3.0)],
+            discharge_segments=[_seg(3.0)],
+            min_discharge_kw=1.0,
+        ),
+    )
+    full = Battery(name="full", config=_config(discharge_segs=[_seg(3.0)]))
+
+    shared_mode = {0: ctx.solver.add_var(lb=0.0, ub=1.0, integer=True)}
+    empty.set_external_mode(shared_mode)
+    full.set_external_mode(shared_mode)
+    empty.add_variables(ctx)
+    full.add_variables(ctx)
+    empty.add_constraints(ctx, inputs=_inputs(soc_kwh=0.0))
+    full.add_constraints(ctx, inputs=_inputs(soc_kwh=5.0))
+
+    ctx.solver.add_constraint(full.soc[0] <= 4.5)
+    ctx.solver.set_objective_minimize(empty.discharge_ac_kw(0))
+    status = ctx.solver.solve()
+
+    assert status != "infeasible", (
+        "the empty neighbour's discharge floor blocked the shared discharging direction"
+    )
+    assert ctx.solver.var_value(full.soc[0]) <= 4.5 + 1e-6
+    assert ctx.solver.var_value(empty.discharge_ac_kw(0)) < 1e-6, (
+        "the empty battery was made to discharge below its minimum"
+    )
+
+
+def test_a_discharge_floor_still_binds_on_a_shared_mode() -> None:
+    """The mirror of the charge-floor guard: discharging still means at or above the floor."""
+    ctx = _make_ctx(horizon=1)
+    floored = Battery(
+        name="floored",
+        config=BatteryConfig(
+            capacity_kwh=10.0,
+            min_soc_kwh=0.0,
+            charge_segments=[_seg(3.0)],
+            discharge_segments=[_seg(3.0)],
+            min_discharge_kw=1.0,
+        ),
+    )
+    other = Battery(name="other", config=_config(discharge_segs=[_seg(3.0)]))
+
+    shared_mode = {0: ctx.solver.add_var(lb=0.0, ub=1.0, integer=True)}
+    floored.set_external_mode(shared_mode)
+    other.set_external_mode(shared_mode)
+    floored.add_variables(ctx)
+    other.add_variables(ctx)
+    floored.add_constraints(ctx, inputs=_inputs(soc_kwh=5.0))
+    other.add_constraints(ctx, inputs=_inputs(soc_kwh=5.0))
+
+    ctx.solver.add_constraint(floored.discharge_ac_kw(0) >= 0.1)
+    ctx.solver.set_objective_minimize(floored.discharge_ac_kw(0))
+    status = ctx.solver.solve()
+
+    assert status != "infeasible"
+    assert ctx.solver.var_value(floored.discharge_ac_kw(0)) >= 1.0 - 1e-6, (
+        "a discharging floored battery on a shared mode must respect its floor"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Minimum operating power constraints (Plan 38C)
 # ---------------------------------------------------------------------------
