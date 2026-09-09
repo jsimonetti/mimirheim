@@ -49,6 +49,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from mimirheim.config.schema import MimirheimConfig
+from mimirheim.core.battery_care import is_newer, is_older, track_full_charge
 from mimirheim.core.bundle import (
     BatteryInputs,
     CombiHeatPumpInputs,
@@ -132,6 +133,36 @@ class ReadinessState:
         for bat_cfg in config.batteries.values():
             if bat_cfg.inputs is not None:
                 self._sensor_topics.add(bat_cfg.inputs.soc.topic)
+
+        # Full-charge policy (see core/battery_care.py). Two lookups: from a
+        # battery's SOC topic, so an arriving reading can be checked against
+        # the threshold as it lands, and from its status topic, so the retained
+        # payload republished by mimirheim itself seeds the timestamp on
+        # startup. The status topic is deliberately NOT a sensor topic: a fresh
+        # installation has no retained value, and waiting for one would block
+        # every solve forever.
+        self._battery_soc_owner: dict[str, str] = {}
+        self._battery_care_owner: dict[str, str] = {}
+        self._last_full_utc: dict[str, datetime] = {}
+        self._care_since_utc: dict[str, datetime] = {}
+        # Full charges seen live in this process, as opposed to timestamps
+        # restored from the broker. Only these mean "the battery just finished
+        # a balance charge", which is what lets the publisher clear the derived
+        # status fields; a retained history correction must not do that.
+        self._observed_full_utc: dict[str, datetime] = {}
+        # Start of the current unbroken run of SOC readings at or above the
+        # full-charge threshold, per battery. This is the measured hold: a
+        # full charge is recorded only once the run has lasted hold_hours.
+        # Memory only, by design -- a restart mid-hold costs one extra hold,
+        # which is cheaper than a second retained field to keep honest.
+        self._above_since_utc: dict[str, datetime] = {}
+        for name, bat_cfg in config.batteries.items():
+            if not bat_cfg.soc_ratchet.enabled:
+                continue
+            if bat_cfg.inputs is not None:
+                self._battery_soc_owner[bat_cfg.inputs.soc.topic] = name
+            if bat_cfg.outputs.soc_ratchet is not None:
+                self._battery_care_owner[bat_cfg.outputs.soc_ratchet] = name
 
         for ev_cfg in config.ev_chargers.values():
             if ev_cfg.inputs is not None:
@@ -234,8 +265,155 @@ class ReadinessState:
         with self._lock:
             if topic == self._strategy_topic:
                 self._current_strategy = validated_input
+                return
+            self._entries[topic] = (validated_input, datetime.now(UTC))
+            self._observe_battery_care_locked(topic, validated_input)
+
+    def _observe_battery_care_locked(self, topic: str, validated_input: Any) -> None:
+        """Maintain the last-measured-full timestamp for the full-charge policy.
+
+        Called for every message, under the lock, because the observation has
+        to happen when the reading arrives rather than when the next solve runs.
+        A battery can peak between two solves — SOC readings arrive every minute
+        or two, solves every fifteen — and a peak that is not recorded when it
+        happens is a balance charge the policy will demand all over again.
+
+        Two topics matter:
+
+        - A battery SOC topic: the value is already in kWh by the time it
+          reaches here, so it can be compared against the threshold directly.
+          Only a measurement can reset the policy; nothing the solver planned
+          is consulted.
+        - A battery status topic: mimirheim publishes it retained and the
+          broker replays it on connect, which is how the timestamp survives a
+          restart. It is merged rather than seeded: the retained message and
+          the first SOC reading race on every connect, so a strictly newer
+          retained timestamp does replace what is held, while an older or
+          equal one is discarded. That is what keeps a replayed message from
+          overwriting a fresher observation made since startup.
+
+        Args:
+            topic: The MQTT topic the message arrived on.
+            validated_input: The already-validated value for that topic.
+        """
+        name = self._battery_soc_owner.get(topic)
+        if name is not None:
+            cfg = self._config.batteries[name]
+            # The first reading starts the clock for a battery with no history,
+            # so the policy has a baseline to measure the interval from. Set
+            # once and never moved: refreshing it on every reading would keep
+            # the deadline permanently one interval away.
+            self._care_since_utc.setdefault(name, datetime.now(UTC))
+            # One reading at the top is a touch. The reset needs the SOC to
+            # have stayed there for hold_hours, so the run is threaded from
+            # reading to reading and only its completion counts.
+            above_since, observed = track_full_charge(
+                config=cfg.soc_ratchet,
+                capacity_kwh=cfg.capacity_kwh,
+                soc_kwh=validated_input,
+                now=datetime.now(UTC),
+                above_since_utc=self._above_since_utc.get(name),
+            )
+            if above_since is None:
+                self._above_since_utc.pop(name, None)
             else:
-                self._entries[topic] = (validated_input, datetime.now(UTC))
+                self._above_since_utc[name] = above_since
+            if observed is not None:
+                self._last_full_utc[name] = observed
+                self._observed_full_utc[name] = observed
+            return
+
+        name = self._battery_care_owner.get(topic)
+        if name is not None and validated_input is not None:
+            last_full, care_since = validated_input
+            # Not setdefault, in either direction: the retained message and the
+            # first SOC reading race on every connect, and the MQTT handlers
+            # are registered SOC-first, so a plain "first writer wins" would
+            # usually discard the persisted values. For the last full charge
+            # the later timestamp is the true one; for the baseline it is the
+            # earlier, since restarting the process does not restart the
+            # interval the battery has been waiting through.
+            #
+            # A timestamp in the future is not a full charge that has not
+            # happened yet, it is a clock that disagrees — the publisher's and
+            # ours. It has to be dropped here rather than merged, because
+            # "later wins" would then make it permanent: no real measurement
+            # can ever beat it, so the policy would sit dormant until the
+            # fictional time passed, and the retained topic would keep handing
+            # the same value back after every restart.
+            now = datetime.now(UTC)
+            if last_full is not None and last_full > now:
+                logger.warning(
+                    "Battery %s: retained last_full_utc %s is in the future; "
+                    "ignoring it as clock skew.",
+                    name,
+                    last_full.isoformat(),
+                )
+                last_full = None
+            if care_since is not None and care_since > now:
+                logger.warning(
+                    "Battery %s: retained care_since_utc %s is in the future; "
+                    "ignoring it as clock skew.",
+                    name,
+                    care_since.isoformat(),
+                )
+                care_since = None
+
+            if is_newer(last_full, self._last_full_utc.get(name)):
+                self._last_full_utc[name] = last_full
+            if is_older(care_since, self._care_since_utc.get(name)):
+                self._care_since_utc[name] = care_since
+
+    def battery_care_observations(self) -> dict[str, datetime]:
+        """Return full charges observed live in this process, per battery.
+
+        The solve loop hands these to the publisher so that a full charge
+        observed while the solver was running is still what reaches the
+        retained topic. Reading the snapshot instead would publish whatever was
+        true when the solve started, which on a slow solve moves the broker's
+        record backwards.
+
+        Deliberately excludes timestamps restored from the broker. A retained
+        value arriving late is history, not an event: treating it as one would
+        have the publisher report a battery as freshly balanced when it is
+        still months overdue.
+
+        Returns:
+            A copy of the map, keyed by battery name. Empty when no battery
+            enables the policy or none has been seen full since startup.
+        """
+        with self._lock:
+            return dict(self._observed_full_utc)
+
+    def battery_care_history(self) -> dict[str, datetime]:
+        """Return the best known last-full timestamp per battery, live or restored.
+
+        Passed to the publisher alongside the live observations so that a
+        retained correction arriving during a solve is not republished over by
+        the older value the snapshot carried — the retained topic is the
+        policy's only durable store, so losing a correction there loses it for
+        good. Unlike an observation this is history: it moves the timestamp
+        without implying the battery has just been balanced.
+
+        Returns:
+            A copy of the map, keyed by battery name.
+        """
+        with self._lock:
+            return dict(self._last_full_utc)
+
+    def battery_care_baselines(self) -> dict[str, datetime]:
+        """Return the earliest known policy baseline per battery.
+
+        Published alongside the observations for the same reason: a retained
+        baseline that arrives during a solve is a correction the result cannot
+        know about, and republishing the snapshot's later value over it would
+        lose the interval the battery has already been waiting through.
+
+        Returns:
+            A copy of the map, keyed by battery name.
+        """
+        with self._lock:
+            return dict(self._care_since_utc)
 
     def is_ready(self) -> bool:
         """Return True if all required inputs are present and forecast coverage is sufficient.
@@ -384,7 +562,11 @@ class ReadinessState:
                     entry = self._entries.get(cfg.inputs.soc.topic)
                     if entry is not None:
                         soc_kwh, _ = entry
-                        battery_inputs[name] = BatteryInputs(soc_kwh=soc_kwh)
+                        battery_inputs[name] = BatteryInputs(
+                            soc_kwh=soc_kwh,
+                            last_full_utc=self._last_full_utc.get(name),
+                            care_since_utc=self._care_since_utc.get(name),
+                        )
 
             # EV inputs: combine the parsed EV state (SOC + optional
             # departure target) with the plug bool into EvInputs.

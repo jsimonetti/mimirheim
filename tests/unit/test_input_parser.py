@@ -181,3 +181,55 @@ def test_parse_datetime_rejects_invalid() -> None:
     """A non-datetime string raises ValueError."""
     with pytest.raises(ValueError):
         parse_datetime("not-a-date")
+
+
+# ---------------------------------------------------------------------------
+# parse_battery_care
+# ---------------------------------------------------------------------------
+
+
+def test_parse_battery_care_reads_the_timestamp() -> None:
+    from mimirheim.io.input_parser import parse_battery_care
+
+    payload = (
+        b'{"last_full_utc": "2026-06-01T09:15:00+00:00",'
+        b' "care_since_utc": "2026-05-01T00:00:00+00:00", "floor_kwh": 0.5}'
+    )
+    last_full, care_since = parse_battery_care(payload)
+    assert last_full == datetime(2026, 6, 1, 9, 15, tzinfo=UTC)
+    assert care_since == datetime(2026, 5, 1, tzinfo=UTC)
+
+
+def test_parse_battery_care_accepts_a_battery_never_seen_full() -> None:
+    from mimirheim.io.input_parser import parse_battery_care
+
+    assert parse_battery_care(b'{"last_full_utc": null, "floor_kwh": 0.0}') == (
+        None,
+        None,
+    )
+
+
+def test_parse_battery_care_ignores_the_derived_fields() -> None:
+    """Only the timestamp is authoritative; the floor is recomputed each solve.
+
+    Trusting a retained floor would let it outlive the timestamp that justified
+    it, for instance after the interval or the step size was reconfigured.
+    """
+    from mimirheim.io.input_parser import parse_battery_care
+
+    payload = b'{"last_full_utc": "2026-06-01T09:15:00+00:00", "floor_kwh": 99.0}'
+    assert parse_battery_care(payload)[0] == datetime(2026, 6, 1, 9, 15, tzinfo=UTC)
+
+
+def test_parse_battery_care_rejects_a_non_object_payload() -> None:
+    from mimirheim.io.input_parser import parse_battery_care
+
+    with pytest.raises(ValueError):
+        parse_battery_care(b"[]")
+
+
+def test_parse_battery_care_rejects_malformed_json() -> None:
+    from mimirheim.io.input_parser import parse_battery_care
+
+    with pytest.raises(ValueError):
+        parse_battery_care(b"{nope")

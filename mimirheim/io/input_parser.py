@@ -275,6 +275,50 @@ def parse_power_forecast(payload: bytes | str) -> list[PowerForecastStep]:
     return [PowerForecastStep.model_validate(item) for item in data]
 
 
+def parse_battery_care(
+    payload: bytes | str,
+) -> tuple[datetime | None, datetime | None]:
+    """Parse the retained full-charge policy status for one battery.
+
+    mimirheim publishes this payload itself and reads it back on startup. Two
+    fields are authoritative on the way in: ``last_full_utc``, the timestamp of
+    the last *measured* full charge, and ``care_since_utc``, when the policy
+    first saw the battery. Everything else in the payload is derived from those
+    and is recomputed on the next solve, so it is deliberately
+    ignored here rather than trusted — a stale floor read back from the broker
+    would otherwise outlive the timestamp that justified it.
+
+    Args:
+        payload: Raw MQTT payload, the JSON object published by
+            ``MqttPublisher.publish_battery_care``. Example::
+
+                {"last_full_utc": "2026-06-01T09:15:00+00:00", "floor_kwh": 0.5}
+
+    Returns:
+        ``(last_full_utc, care_since_utc)``. Either element is None when the
+        payload does not carry it: a battery that has never been observed full,
+        or a payload written before the policy had a baseline for it.
+
+    Raises:
+        ValueError: If the payload is not a JSON object, or if either timestamp
+            is present but unparseable.
+    """
+    text = _decode(payload).strip()
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"battery care payload is not valid JSON: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"battery care payload must be a JSON object, got {type(data).__name__}"
+        )
+    def _field(key: str) -> datetime | None:
+        raw = data.get(key)
+        return None if raw is None else parse_datetime(str(raw))
+
+    return _field("last_full_utc"), _field("care_since_utc")
+
+
 def parse_datetime(payload: bytes | str) -> datetime:
     """Parse an ISO 8601 UTC datetime payload.
 

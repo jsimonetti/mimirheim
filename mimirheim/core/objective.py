@@ -42,17 +42,21 @@ class ObjectiveBuilder:
     carried out and a weaker one was used instead; the caller copies it onto
     the result so the substitution is visible rather than silent.
 
-    An instance carries that one piece of state and ``build()`` does not reset
-    it, so a builder is good for one solve. ``build_and_solve`` constructs a
-    fresh one each cycle. It is a class rather than a plain function so it can
-    be replaced by a test double or subclassed to inject alternative objective
-    logic.
+    An instance carries state — ``strategy_degraded`` and whether the hard caps
+    have been added — and ``build()`` resets neither, so a builder is good for
+    one solve. ``build_and_solve`` constructs a fresh one each cycle. It is a
+    class rather than a plain function so it can be replaced by a test double
+    or subclassed to inject alternative objective logic.
     """
 
     def __init__(self) -> None:
         # Set when a strategy falls back to a weaker objective. Read by the
         # caller after build().
         self.strategy_degraded = False
+        # add_hard_cap_constraints is idempotent per builder, so a caller that
+        # needs the caps in place before the objective exists can add them
+        # early without build() duplicating every row afterwards.
+        self._hard_caps_added = False
 
     def build(
         self,
@@ -103,7 +107,7 @@ class ObjectiveBuilder:
             ValueError: If ``bundle.strategy`` is not one of the three
                 supported strings.
         """
-        self._add_hard_cap_constraints(ctx, grid, config)
+        self.add_hard_cap_constraints(ctx, grid, config)
         budget = config.solver.time_limit_seconds
 
         if bundle.strategy == "minimize_cost":
@@ -120,7 +124,7 @@ class ObjectiveBuilder:
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _add_hard_cap_constraints(
+    def add_hard_cap_constraints(
         self, ctx: ModelContext, grid: Grid, config: MimirheimConfig
     ) -> None:
         """Add per-step hard caps on import and export power, if configured.
@@ -129,11 +133,21 @@ class ObjectiveBuilder:
         The solver will never return a solution that violates them. They are
         independent of strategy and are applied before any objective is set.
 
+        ``build`` calls this itself, so most callers need not. It is public and
+        idempotent for the one caller that must: anything solving the model
+        *before* the objective is built sees a model without these caps unless
+        it adds them first, and would draw conclusions from a trajectory the
+        final model forbids.
+
         Args:
             ctx: Model context with solver and time horizon.
             grid: The grid device whose variables are capped.
             config: Static configuration containing optional maximum limits.
         """
+        if self._hard_caps_added:
+            return
+        self._hard_caps_added = True
+
         if config.constraints.max_import_kw is not None:
             for t in ctx.T:
                 ctx.solver.add_constraint(
@@ -390,7 +404,7 @@ class ObjectiveBuilder:
             # is float(var.x) and var.x is None here, which would raise a
             # TypeError out of the solve loop rather than returning an
             # infeasible SolveResult — the schedule topic would keep its
-            # previous contents.
+            # previous contents and the policy state would never be published.
             #
             # Skipping the lock leaves phase 2 to solve the unconstrained cost
             # objective. Either it finds nothing and the caller reports

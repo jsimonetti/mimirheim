@@ -208,6 +208,10 @@ class CBCSolverBackend:
         # output — mimirheim owns its own logging.
         self._m = mip.Model(solver_name=mip.CBC)
         self._m.verbose = 0
+        # Set by every solve(). True only when CBC proved the model
+        # unsatisfiable, as opposed to running out of time without an
+        # incumbent — both of which solve() reports as "infeasible".
+        self.last_status_proved_infeasible = False
         # Accept a solution whose objective value is within 0.5 % of the true
         # optimum. For a residential energy schedule this is imperceptible in
         # practice: on a €50/day schedule the error is at most 25 cents.
@@ -315,15 +319,30 @@ class CBCSolverBackend:
         Args:
             time_limit_seconds: Wall-clock time budget for this solve.
 
+        ``last_status_proved_infeasible`` records whether CBC actually proved
+        the model unsatisfiable, because the returned string does not: several
+        distinct outcomes collapse into ``"infeasible"`` and callers that only
+        need "can I extract a schedule" are right not to care. A caller
+        deciding what a failure *means* — as the full-charge probe does, where
+        "no model can do this" and "the solver ran out of time" call for
+        opposite responses — has to be able to tell them apart.
+
+        Args:
+            time_limit_seconds: Wall-clock time budget for this solve.
+
         Returns:
             ``"optimal"``, ``"feasible"``, or ``"infeasible"``.
         """
         status = self._m.optimize(max_seconds=time_limit_seconds)
+        self.last_status_proved_infeasible = status in (
+            MipStatus.INFEASIBLE,
+            MipStatus.INT_INFEASIBLE,
+        )
         if status == MipStatus.OPTIMAL:
             return "optimal"
         if status == MipStatus.FEASIBLE:
             return "feasible"
-        if status in (MipStatus.INFEASIBLE, MipStatus.INT_INFEASIBLE):
+        if self.last_status_proved_infeasible:
             return "infeasible"
         # NO_SOLUTION_FOUND, UNBOUNDED, LOADED, ERROR, or any other status.
         # Treat as infeasible: no schedule can be extracted safely.

@@ -723,6 +723,11 @@ class BatteryOutputsConfig(BaseModel):
     ``BatteryCapabilitiesConfig`` must also be True for the topic to be active.
 
     Attributes:
+        soc_ratchet: Topic carrying the full-charge policy status. Published
+            retained and consumed by mimirheim itself on startup, so the
+            "last measured full charge" timestamp survives a restart. Always
+            set: defaults to
+            ``'{mqtt.topic_prefix}/status/battery/{name}/soc_ratchet'``.
         exchange_mode: Topic to publish the closed-loop exchange mode flag
             (``"true"`` or ``"false"``). Published only when
             ``capabilities.zero_exchange`` is True. Always set: defaults to
@@ -741,6 +746,228 @@ class BatteryOutputsConfig(BaseModel):
         ),
         json_schema_extra={"ui_label": "Exchange mode topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/output/battery/{name}/exchange_mode"},
     )
+    soc_ratchet: str | None = Field(
+        default=None,
+        description=(
+            "MQTT topic for the full-charge policy status, published retained and "
+            "read back on startup. "
+            "Defaults to '{mqtt.topic_prefix}/status/battery/{name}/soc_ratchet' "
+            "when not set."
+        ),
+        json_schema_extra={"ui_label": "SOC ratchet status topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/status/battery/{name}/soc_ratchet"},
+    )
+
+class SocRatchetConfig(BaseModel):
+    """Periodic full-charge policy for a lithium battery.
+
+    A lithium pack whose cells are never brought to the top of their range stops
+    balancing: the BMS has no opportunity to equalise, the weakest cell drifts,
+    and usable capacity falls away without anything reporting a fault. The cure
+    is a full charge every so often, and the question is only how to make the
+    optimiser pay for it in the cheapest hours rather than at an arbitrary
+    moment.
+
+    The mechanism is a ratchet with a deadline and a hold. A dynamic minimum SOC
+    climbs by a step for every interval that passes without a measured full
+    charge, up to a cap; once the due time falls inside the horizon the SOC is
+    constrained to reach the target and to stay there. Three design choices,
+    each because this is a planner with a horizon rather than a controller
+    reacting to live SOC:
+
+    - The climb is driven by **time since the last observed full charge**, not
+      by depth of discharge. Elapsed time without balancing is the quantity that
+      matters. A trigger keyed to hitting the floor never fires for a battery
+      that cycles shallowly forever, and that is precisely the pack whose cells
+      drift unnoticed.
+    - A success resets the floor to zero rather than unwinding it stepwise. A
+      floor that decays gradually is hysteresis for a trigger that fires per
+      discharge episode; with a time-based trigger, reaching the threshold means
+      the goal was met and the next interval starts clean.
+    - The charge is **held** at the top, and it is planned to ``target_pct``
+      rather than to the reset threshold. Passive balancing bleeds the highest
+      cells at tens of milliamps, and only while they sit in the upper voltage
+      knee; the BMS recalibrates its SOC estimate only once the charge current
+      has tapered at the voltage limit. Both need dwell time at the top. That
+      dwell does not happen by itself when a planner dictates the SOC
+      trajectory, so the plan asks for it explicitly: ``soc[t] >= target`` on
+      enough consecutive step boundaries to cover ``hold_hours``. A single
+      quarter-hour at 97% gives neither, which is why the target is 100% and
+      the reset threshold is not.
+
+    The rising floor alone cannot guarantee a full charge - it is capped well
+    below 100%, and it only squeezes the usable window. So once the deadline
+    enters the solve horizon, the SOC is constrained to reach ``target_pct``
+    and stay there for ``hold_hours``. That is a constraint on the state at a
+    time, not an instruction to charge at a time: the solver still chooses
+    which quarter-hours to buy the energy in, which is the whole reason for
+    doing this inside the optimiser instead of leaving it to the inverter.
+
+    A hard constraint rather than a priced preference, for the same reason the
+    EV departure target is one: a partially completed balance charge is not a
+    balance charge. It is also the only shape that works under every strategy.
+    ``minimize_consumption`` fixes the total import volume in a first phase that
+    sees only constraints, so a penalty term would be invisible to it at any
+    magnitude; under ``balanced`` a penalty competes with the configured
+    weights. A constraint is respected by both, and it needs no tuning knob
+    whose right value depends on the price curve.
+
+    Which step the target is pinned to is decided by the solver, not by this
+    configuration - see ``model_builder._probe_care_targets``.
+
+    Attributes:
+        enabled: Whether the policy is active. Defaults to False, so an existing
+            configuration behaves exactly as it did before this field existed.
+        target_interval_days: How long the battery may go without reaching
+            ``full_threshold_pct`` before the floor starts climbing, and the
+            deadline used once it enters the horizon. Default 7 days, a
+            convention rather than a derivation: often enough that a pack
+            cycling shallowly gets a regular balancing opportunity, rare enough
+            that the policy stays out of the daily plan, and a week keeps the
+            deadline outside a 48-hour horizon for most of the week, so the
+            mechanism stays invisible until it is nearly due. Use the pack
+            manufacturer's interval where one is specified.
+        full_threshold_pct: The observed state of charge, as a percentage of
+            ``capacity_kwh``, that counts as a full charge and resets the
+            policy. Default 97%, not 100%: a BMS reports an estimate, not a
+            measurement, and is not guaranteed to show a round 100 even after a
+            completed charge.
+            A reset it can never see would pin the pack full forever. Only a
+            measured SOC resets the policy - a plan
+            that intended a full charge and fell short must not count, or the
+            mechanism congratulates itself while the cells never balance.
+        step_pct: Percentage points of capacity added to the floor for each
+            elapsed interval without a full charge. Default 5.0: coarse enough
+            that a missed interval narrows the window visibly, fine enough that
+            a single missed interval does not take a large slice of the
+            arbitrage room at once. A convention, not a derivation.
+        cap_pct: Hard ceiling on the dynamic floor, as a percentage of capacity.
+            Default 80.0: well below the threshold, so a neglected pack is
+            squeezed hard but keeps a usable band. The cap is explicit rather
+            than emergent
+            because a floor that climbs unbounded leaves the battery unable to
+            do anything useful, which is a worse failure than a late balance.
+        target_pct: The SOC, as a percentage of ``capacity_kwh``, the plan is
+            asked to reach and hold. Default 100: only at the top of the
+            configured capacity do the cells sit in the voltage knee where the
+            balancer works; lower it if the reported SOC cannot reach 100.
+            Must be at least
+            ``full_threshold_pct``; a plan that aims below what counts as
+            success could never reset the policy. The two are deliberately
+            separate numbers: this is what to plan for, ``full_threshold_pct``
+            is what a BMS reading has to show for the plan to have worked.
+        hold_hours: How long the SOC must stay at or above ``target_pct`` once
+            it gets there, in hours. Default 2.0: a passive balancer bleeds at
+            tens of milliamps, so what it can correct scales with dwell time,
+            and the charge current needs time of the same order to taper at the
+            voltage limit. Both are pack-specific; two hours is the order of
+            magnitude a charger's absorption stage typically runs, so set this
+            from the pack's documentation where it gives a figure. Rounded up
+            to whole steps in the plan. Applies to the
+            observation as well: the policy resets only after a reading has
+            been at or above ``full_threshold_pct`` for this long without
+            dipping, so a plan that touched the top and fell away does not
+            count. 0 restores a single-step touch, planned and observed.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable the periodic full-charge policy. Off by default.",
+        json_schema_extra={"ui_label": "Enable SOC ratchet", "ui_group": "basic"},
+    )
+    target_interval_days: float = Field(
+        default=7.0,
+        gt=0.0,
+        le=365.0,
+        description="Days the battery may go without a full charge before the floor climbs.",
+        json_schema_extra={"ui_label": "Target interval (days)", "ui_group": "basic"},
+    )
+    full_threshold_pct: float = Field(
+        default=97.0,
+        gt=0.0,
+        le=100.0,
+        description="Observed SOC, in percent of capacity, that counts as a full charge.",
+        json_schema_extra={"ui_label": "Full threshold (%)", "ui_group": "basic"},
+    )
+    step_pct: float = Field(
+        default=5.0,
+        gt=0.0,
+        le=100.0,
+        description="Percentage points of capacity added to the floor per missed interval.",
+        json_schema_extra={"ui_label": "Ratchet step (%)", "ui_group": "advanced"},
+    )
+    cap_pct: float = Field(
+        default=80.0,
+        gt=0.0,
+        le=100.0,
+        description="Ceiling on the dynamic floor, in percent of capacity.",
+        json_schema_extra={"ui_label": "Ratchet cap (%)", "ui_group": "advanced"},
+    )
+    target_pct: float = Field(
+        default=100.0,
+        gt=0.0,
+        le=100.0,
+        description="SOC, in percent of capacity, the plan is asked to reach and hold.",
+        json_schema_extra={"ui_label": "Charge target (%)", "ui_group": "advanced"},
+    )
+    hold_hours: float = Field(
+        default=2.0,
+        ge=0.0,
+        le=24.0,
+        description="Hours the SOC must stay at or above the target once reached. 0 = a single touch.",
+        json_schema_extra={"ui_label": "Hold at target (hours)", "ui_group": "advanced"},
+    )
+
+    @model_validator(mode="after")
+    def _check_target_bounds(self) -> "SocRatchetConfig":
+        """Reject a plan target the reset can never see.
+
+        The plan charges to ``target_pct``; the policy resets when a reading
+        shows ``full_threshold_pct``. If the first is below the second, every
+        balance charge completes exactly as planned and the policy never learns
+        it did: the floor keeps climbing and the deadline is re-imposed at step
+        0 forever. Equal is fine and is the pre-hold behaviour.
+        """
+        if self.target_pct < self.full_threshold_pct:
+            raise ValueError(
+                f"target_pct ({self.target_pct}) must be at least full_threshold_pct "
+                f"({self.full_threshold_pct}); a plan that aims below what counts as "
+                "a full charge can never reset the policy."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _check_cap_bounds(self) -> "SocRatchetConfig":
+        """Reject caps that make the climb meaningless in either direction.
+
+        Below one step, the floor jumps straight to its ceiling on the first
+        missed interval: a configuration that reads like a gradual climb and
+        behaves like a switch.
+
+        At or above the full-charge threshold, the floor can rise to where the
+        battery is pinned at the top with almost nothing left to discharge — no
+        arbitrage, no backup. That is a worse outcome than a late balance
+        charge, and it is the failure the cap exists to prevent, so a cap that
+        permits it is rejected rather than silently clamped.
+
+        The cap is configurable rather than fixed: a site with a large pack may
+        reasonably want a different ceiling, and a site is better placed than a
+        device to know how much reserve it needs.
+        """
+        if self.cap_pct < self.step_pct:
+            raise ValueError(
+                f"cap_pct ({self.cap_pct}) must be at least step_pct "
+                f"({self.step_pct}); a smaller cap makes the climb a single jump."
+            )
+        if self.cap_pct >= self.full_threshold_pct:
+            raise ValueError(
+                f"cap_pct ({self.cap_pct}) must be below full_threshold_pct "
+                f"({self.full_threshold_pct}); a floor that reaches the full-charge "
+                "threshold pins the battery at the top with almost nothing to discharge."
+            )
+        return self
+
 
 class BatteryConfig(BaseModel):
     """Configuration for a DC-coupled residential battery.
@@ -782,6 +1009,8 @@ class BatteryConfig(BaseModel):
         reduce_charge_min_kw: Minimum charge power at capacity_kwh when derated.
         reduce_discharge_below_soc_kwh: SOC threshold below which discharge is derated.
         reduce_discharge_min_kw: Minimum discharge power at min_soc_kwh when derated.
+        soc_ratchet: Periodic full-charge policy for cell balancing. Disabled
+            by default, in which case nothing about the solve changes.
         capabilities: Hardware capability flags.
         inputs: MQTT input topics for live battery state readings.
         outputs: MQTT output topics for battery control signals (e.g. zero-export
@@ -928,6 +1157,11 @@ class BatteryConfig(BaseModel):
         default_factory=BatteryOutputsConfig,
         description="MQTT output topic configuration for battery control signals.",
         json_schema_extra={"ui_label": "Output topics", "ui_group": "advanced"},
+    )
+    soc_ratchet: SocRatchetConfig = Field(
+        default_factory=SocRatchetConfig,
+        description="Periodic full-charge policy. Disabled by default.",
+        json_schema_extra={"ui_label": "SOC ratchet", "ui_group": "advanced"},
     )
     min_charge_kw: float | None = Field(
         default=None,
@@ -2843,6 +3077,8 @@ class MimirheimConfig(BaseModel):
                 cfg.inputs.soc.topic = _topics.battery_soc_topic(p, name)
             if cfg.outputs.exchange_mode is None:
                 cfg.outputs.exchange_mode = _topics.battery_exchange_mode_topic(p, name)
+            if cfg.outputs.soc_ratchet is None:
+                cfg.outputs.soc_ratchet = _topics.battery_soc_ratchet_topic(p, name)
 
         for name, cfg in self.ev_chargers.items():
             if cfg.inputs is not None:

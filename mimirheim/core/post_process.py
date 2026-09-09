@@ -70,6 +70,9 @@ def apply_gain_threshold(
       mandatory; idling the EV charger would strand the vehicle.
     - Any deferrable load has an active scheduling window. The appliance must
       run within the window; idling it would miss the deadline entirely.
+    - Any battery had a full-charge target enforced on this solve. The balance
+      charge is mandatory work; idling the battery would strip it out while the
+      retained status still reported the target as met.
     - The gain is negative (the optimised schedule is already worse than naive,
       which indicates mandatory work such as EV charging is driving up costs;
       idling would make things worse, not better).
@@ -98,6 +101,12 @@ def apply_gain_threshold(
     if _has_active_deadline(bundle):
         return result
 
+    if any(
+        status.enforced_target_kwh is not None
+        for status in result.battery_care.values()
+    ):
+        return result
+
     gain = result.naive_cost_eur - result.optimised_cost_eur
 
     # Only suppress when gain is a small positive number. Negative gain means
@@ -122,6 +131,14 @@ def _has_active_deadline(bundle: SolveBundle) -> bool:
     An EV deadline is active when a vehicle is plugged in, has a target SOC,
     and the deadline has not yet passed. A deferrable load deadline is active
     when the load has a scheduling window registered in the bundle.
+
+    A battery full-charge deadline counts too, and for the same reason. The
+    idle schedule zeroes battery power, so suppressing dispatch on a cycle
+    where the solver was required to reach ``full_threshold_pct`` would strip
+    out the balance charge while the retained status still reported the target
+    as enforced — the policy would look satisfied on every topic and never
+    actually run. The gain threshold exists to avoid cycling the battery for a
+    few cents; it must not also veto mandatory work.
 
     Args:
         bundle: The current solve inputs.

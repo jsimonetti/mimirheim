@@ -21,11 +21,18 @@ never from ``mimirheim.io.input_parser`` or ``mimirheim.core.readiness``.
 
 import json
 import logging
+import threading
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from mimirheim.config.schema import MimirheimConfig
-from mimirheim.core.bundle import DeviceSetpoint, ScheduleStep, SolveResult
+from mimirheim.core.battery_care import care_plan, is_newer, is_older
+from mimirheim.core.bundle import (
+    BatteryCareStatus,
+    DeviceSetpoint,
+    ScheduleStep,
+    SolveResult,
+)
 
 logger = logging.getLogger("mimirheim.publisher")
 
@@ -94,6 +101,21 @@ class MqttPublisher:
         self._client = client
         self._config = config
         self._last_result: SolveResult | None = None
+        # Freshest observed full-charge timestamps, set by the solve loop just
+        # before publishing. See set_battery_care_overrides.
+        # The solve loop and the MQTT network thread both set and publish care
+        # state, so the whole read-and-publish is serialised. The lock alone is
+        # not enough: two threads can still publish in the wrong order if one
+        # is descheduled, so _care_published_full and _care_published_since
+        # record what is already on the topic and refuse to regress it. That
+        # topic is the only durable store of both timestamps, and a regression
+        # there survives a restart.
+        self._care_lock = threading.Lock()
+        self._care_published_full: dict[str, datetime] = {}
+        self._care_published_since: dict[str, datetime] = {}
+        self._care_overrides: dict[str, datetime] = {}
+        self._care_baselines: dict[str, datetime] = {}
+        self._care_history: dict[str, datetime] = {}
 
     @staticmethod
     def _step_origin(result: SolveResult) -> datetime:
@@ -166,6 +188,12 @@ class MqttPublisher:
         # downstream consumers (e.g. HA json_attributes_template for apexcharts)
         # have a time axis without needing to compute offsets themselves.
         schedule_dict = result.model_dump(mode="json")
+        if not schedule_dict.get("battery_care"):
+            # An installation with no full-charge policy configured must see
+            # the payload it saw before the policy existed. An always-present
+            # empty map is a schema change for every consumer of the schedule
+            # topic, bought for nothing.
+            schedule_dict.pop("battery_care", None)
         for step in schedule_dict["schedule"]:
             step["ts"] = (
                 step_start + timedelta(minutes=15 * step["t"])
@@ -226,6 +254,238 @@ class MqttPublisher:
 
             # 8. Deferrable load recommended-start output topics.
             self._publish_deferrable_recommended_starts(result)
+
+        # 9. Full-charge policy status, outside the schedule guard: the floor
+        # and the last-full timestamp are true whether or not this solve
+        # produced a schedule, and mimirheim reads this topic back on startup.
+        self.publish_battery_care(result)
+
+    def set_battery_care_overrides(
+        self,
+        observations: dict[str, datetime],
+        baselines: dict[str, datetime] | None = None,
+        history: dict[str, datetime] | None = None,
+    ) -> None:
+        """Supply state that changed after the solve's snapshot was taken.
+
+        The solve loop reads both from ``ReadinessState`` immediately before
+        publishing, so anything that arrived on the MQTT thread while the
+        solver was running still reaches the retained topic. Without it a slow
+        solve can move the broker's record backwards.
+
+        The three are handled differently on purpose. An observation is an
+        event: the battery finished a balance charge, so the derived fields are
+        reset with it. A baseline only ever corrects the start of the interval
+        backwards. History moves the last-full timestamp forward without
+        claiming anything about the present, which is what a retained value
+        restored from the broker is.
+
+        Args:
+            observations: Full charges seen live since startup, per battery.
+            baselines: Earliest known policy baseline per battery.
+            history: Best known last-full timestamp per battery, including
+                values restored from the broker.
+        """
+        with self._care_lock:
+            self._care_overrides = dict(observations)
+            self._care_baselines = dict(baselines or {})
+            self._care_history = dict(history or {})
+
+    def _care_status_snapshot(self) -> dict[str, BatteryCareStatus]:
+        """Rebuild policy state from observations when no solve result exists.
+
+        Used on the paths that have no solve result to describe: a solve that
+        raised before producing one, and a trigger rejected for readiness.
+        Every field here is derivable
+        without a model: the floor is a pure function of the reference
+        timestamp, the interval and the step, which is the property that lets
+        the policy survive a restart in the first place. A horizon of zero
+        keeps ``care_plan`` from proposing a deadline, since there is no
+        horizon this cycle to place one in.
+
+        Returns:
+            One entry per battery with the policy enabled and a status topic
+            configured, keyed by battery name.
+        """
+        now = datetime.now(UTC)
+        out: dict[str, BatteryCareStatus] = {}
+        for name, cfg in self._config.batteries.items():
+            if not cfg.soc_ratchet.enabled or cfg.outputs.soc_ratchet is None:
+                continue
+            # The freshest of the two, not the first that happens to be set.
+            # A live observation and a retained correction can both be present
+            # and either can be newer, and publish_battery_care applies the
+            # same max further down. Taking the override unconditionally here
+            # would compute the floor and the age from the older timestamp and
+            # then publish the newer one beside them.
+            observed = self._care_overrides.get(name)
+            restored = self._care_history.get(name)
+            last_full = observed if is_newer(observed, restored) else restored
+            care_since = self._care_baselines.get(name)
+            if last_full is None and care_since is None:
+                continue
+            plan = care_plan(
+                config=cfg.soc_ratchet,
+                capacity_kwh=cfg.capacity_kwh,
+                last_full_utc=last_full,
+                care_since_utc=care_since,
+                solve_time_utc=now,
+                horizon=0,
+                dt=0.25,
+            )
+            out[name] = BatteryCareStatus(
+                last_full_utc=last_full,
+                care_since_utc=care_since,
+                floor_kwh=plan.floor_kwh,
+                hours_since_full=plan.hours_since_full,
+                hold_steps=plan.hold_steps,
+            )
+        return out
+
+    def publish_battery_care(self, result: SolveResult | None) -> None:
+        """Publish each battery's full-charge policy status, retained.
+
+        The payload serves two purposes at once. It is the observability the
+        policy needs — a minimum-SOC floor that moves without saying so is
+        exactly the failure mode being replaced — and it is the only store of
+        the "last measured full charge" timestamp, which mimirheim reads back
+        on startup. Retained at QoS 1 for that reason: a restart with no
+        retained value would reset the policy and the cells would never
+        balance.
+
+        Batteries without the policy enabled contribute no entry to
+        ``result.battery_care`` and are silently skipped.
+
+        Public because it is called directly on the paths that never reach
+        ``publish_result``: an infeasible result, a solve that raised, and a
+        trigger rejected because readiness was not met. The policy state is true whether or not a schedule came out,
+        and losing it for a cycle would mean losing a full charge observation
+        that has nowhere else to live — the broker would keep an older
+        timestamp and a restart would re-arm a policy the battery has already
+        satisfied.
+
+        Args:
+            result: The output from the most recent ``build_and_solve`` call,
+                or None when the solve raised before producing one. In that
+                case the payload is rebuilt from the observations alone: the
+                floor is a pure function of the timestamps, and the
+                forward-looking fields are left empty because no horizon was
+                ever built to place them in.
+        """
+        # Held across the whole read-and-publish, because the solve loop and
+        # the MQTT network thread both land here. Without it one thread can
+        # install its maps between the other's read and its publish, and the
+        # message that lands last wins regardless of which is newer.
+        #
+        # Holding a non-reentrant lock across client.publish() is safe here,
+        # and worth stating because it does not look it. paho's publish()
+        # enqueues and returns; nothing in mimirheim calls wait_for_publish or
+        # bounds the queue with max_queued_messages_set, so it never waits on
+        # the network thread. That matters because the not-ready trigger path
+        # calls this *from* that thread, and a publish that blocked on it would
+        # deadlock against itself. Nothing re-enters either: the only other
+        # acquisition is set_battery_care_overrides, and publish_result calls
+        # publish_battery_care without holding the lock.
+        with self._care_lock:
+            statuses = (
+                result.battery_care
+                if result is not None
+                else self._care_status_snapshot()
+            )
+            self._publish_care_statuses(statuses)
+
+    def _publish_care_statuses(
+        self, statuses: dict[str, BatteryCareStatus]
+    ) -> None:
+        """Apply the override precedence and publish. Caller holds ``_care_lock``."""
+        for name, status in statuses.items():
+            cfg = self._config.batteries.get(name)
+            if cfg is None or cfg.outputs.soc_ratchet is None:
+                continue
+            fresher = self._care_overrides.get(name)
+            if is_newer(fresher, status.last_full_utc):
+                # A full charge observed while the solver was running is not in
+                # the snapshot this result was built from. Publishing the stale
+                # value would put an older timestamp on the retained topic, and
+                # a restart before the next successful solve would read it back
+                # and re-arm a policy that had already been satisfied.
+                #
+                # The forward-looking fields go with it. They describe a
+                # policy that was overdue at snapshot time and has since been
+                # satisfied; publishing a fresh reset timestamp beside a
+                # standing floor and a pending deadline would show consumers a
+                # state that never existed.
+                #
+                # enforced_target_kwh, enforced_step and enforced_hold_steps
+                # deliberately stay. They are not a pending demand but a record
+                # of what the solve was actually held to, which does not stop
+                # being true because a reading arrived afterwards. Clearing
+                # them would also put this payload at odds with the same fields
+                # in the schedule topic, which carries the solve unedited.
+                # hold_steps stays too: it is the configured hold, a property
+                # of the policy rather than of this cycle's demand, and
+                # care_plan reports it whether or not a target is pending.
+                status = status.model_copy(
+                    update={
+                        "last_full_utc": fresher,
+                        "floor_kwh": 0.0,
+                        "hours_since_full": 0.0,
+                        "full_target_kwh": None,
+                        "deadline_step": None,
+                    }
+                )
+            known = self._care_history.get(name)
+            if is_newer(known, status.last_full_utc):
+                # A retained correction that arrived after the snapshot. It is
+                # history, not an event, so only the timestamp moves: the floor
+                # and the deadline still describe the battery as the solve
+                # found it.
+                status = status.model_copy(update={"last_full_utc": known})
+
+            earliest = self._care_baselines.get(name)
+            if is_older(earliest, status.care_since_utc):
+                # A baseline correction only moves the start of the interval
+                # backwards. It says nothing about the battery's current state,
+                # so nothing derived is touched.
+                status = status.model_copy(update={"care_since_utc": earliest})
+
+            # Never let either timestamp regress. Two threads publish here, and
+            # the lock only makes one transaction atomic — a caller that read
+            # the maps first can still publish second, putting older state on a
+            # retained topic that is the policy's only durable store.
+            #
+            # The two move in opposite directions, so each needs its own guard.
+            # last_full_utc only ever advances; letting it fall back re-arms a
+            # policy the battery has already satisfied. care_since_utc only
+            # ever retreats, because it marks the start of the interval the
+            # battery has been waiting through; letting it advance discards
+            # elapsed waiting, and for a battery never yet seen full that is
+            # the only clock it has — pushing it forward on every stale publish
+            # postpones its first balance charge indefinitely.
+            # If either timestamp would regress, this whole payload is a view
+            # of the policy older than the one already retained, so it is
+            # dropped rather than corrected. Patching just the timestamps and
+            # publishing the rest was the first attempt, and it produced a
+            # worse artefact than the regression it prevented: a fresh
+            # last_full_utc paired with the floor, age, target and deadline
+            # from the stale snapshot, which is a state that never existed.
+            # Skipping loses nothing, because the broker keeps the better
+            # message and the next solve republishes.
+            if is_newer(self._care_published_full.get(name), status.last_full_utc):
+                continue
+            if is_older(self._care_published_since.get(name), status.care_since_utc):
+                continue
+            if status.last_full_utc is not None:
+                self._care_published_full[name] = status.last_full_utc
+            if status.care_since_utc is not None:
+                self._care_published_since[name] = status.care_since_utc
+
+            self._client.publish(
+                cfg.outputs.soc_ratchet,
+                json.dumps(status.model_dump(mode="json")),
+                qos=1,
+                retain=True,
+            )
 
     def _publish_deferrable_recommended_starts(self, result: SolveResult) -> None:
         """Publish solver-recommended start datetimes for deferrable loads.
@@ -369,6 +629,12 @@ class MqttPublisher:
                 None or when the solve was infeasible. Must not contain raw
                 exception tracebacks.
         """
+        # An error means the cycle failed, whatever else came back. A result
+        # can be present and still be wrong to report as "ok": the exception
+        # may have struck in post-processing or partway through publishing, so
+        # the schedule on the broker is not the one this result describes.
+        if error is not None:
+            result = None
         is_infeasible = result is not None and result.solve_status == "infeasible"
 
         if result is None or is_infeasible:

@@ -346,14 +346,51 @@ def main() -> None:
             # drops any field not listed in the constructor call.
             result = apply_gain_threshold(result, bundle, config)
             result = assign_control_authority(result, bundle, config)
+            # Hand over any full charge observed since the snapshot was taken,
+            # so a slow solve cannot publish a stale timestamp over a fresher
+            # one on the retained policy topic.
+            publisher.set_battery_care_overrides(
+                readiness.battery_care_observations(),
+                readiness.battery_care_baselines(),
+                readiness.battery_care_history(),
+            )
             if result.solve_status != "infeasible":
                 publisher.publish_result(result)
+            else:
+                # No schedule to publish, but the policy state still has to
+                # reach the broker: it is the only store of the last measured
+                # full charge, and an infeasible cycle must not lose it.
+                publisher.publish_battery_care(result)
         except Exception as exc:
             # The traceback goes to the log, where it is useful and private.
             # Only a one-line summary reaches the retained status topic; see
             # _format_solve_error.
             logger.exception("Solve failed.")
             error_msg = _format_solve_error(exc)
+            try:
+                # A full charge observed since the last cycle lives only in
+                # memory until it is published, and the retained topic is the
+                # only store of it. Losing it here would leave the broker
+                # holding an older timestamp, so a restart would re-arm a
+                # policy the battery has already satisfied — and keep doing so
+                # for as long as the solve keeps failing.
+                publisher.set_battery_care_overrides(
+                    readiness.battery_care_observations(),
+                    readiness.battery_care_baselines(),
+                    readiness.battery_care_history(),
+                )
+                # If build_and_solve got as far as a result, publish that
+                # rather than a no-horizon snapshot: the exception may have
+                # come from post-processing or from partway through
+                # publish_result, and replacing the real policy state with a
+                # bare one would drop the target and the deadline the solve
+                # actually computed.
+                publisher.publish_battery_care(result)
+            except Exception:
+                # Never let the policy topic turn a failed solve into a
+                # crashed daemon; the status topic below still reports the
+                # original error.
+                logger.exception("Could not publish battery care state.")
 
         publisher.publish_last_solve_status(result, error_msg)
 

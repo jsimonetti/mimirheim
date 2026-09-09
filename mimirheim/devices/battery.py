@@ -11,9 +11,11 @@ its static parameters from ``BatteryConfig``. All solver interactions go through
 ``ModelContext.solver`` (a ``SolverBackend``); ``python-mip`` is never imported here.
 """
 
+from datetime import datetime
 from typing import Any
 
 from mimirheim.config.schema import BatteryConfig
+from mimirheim.core.battery_care import CarePlan, care_plan
 from mimirheim.core.bundle import BatteryInputs
 from mimirheim.core.context import ModelContext
 
@@ -82,6 +84,26 @@ class Battery:
         # Precomputed linear expressions (solver objects) for AC and DC power.
         # charge_ac_kw[t] = Σ_s (w_charge[t, s] × P_c[s])
         # charge_dc_kw[t] = Σ_s (w_charge[t, s] × P_c[s] × η_c[s])
+        # The full-charge policy's demands for the current solve cycle, set by
+        # add_constraints. Read by the publisher for the status topic; None
+        # until a solve has run, and inert when the policy is disabled.
+        self.care: CarePlan | None = None
+        # True when build_and_solve handed this battery a system-wide direction
+        # binary instead of letting it create its own. Set by set_external_mode,
+        # which runs before add_variables.
+        self._mode_is_shared: bool = False
+        # The full-charge target actually imposed on the model as
+        # (step, soc_kwh), or None when none was. Set by
+        # enforce_care_target after the builder has probed for a reachable
+        # anchor; read for the status topic, where a target below
+        # care.full_target_kwh is the signal that the policy could not be
+        # honoured in full this cycle.
+        self.care_target: tuple[int, float, int] | None = None
+        # The measured SOC this solve started from. Recorded so the probe can
+        # tell whether the battery arrived at the top already: the starting
+        # state is a boundary like any soc[t], and a hold that begins there
+        # needs one fewer constrained step.
+        self.initial_soc_kwh: float | None = None
         self._charge_ac_expr: dict[int, Any] = {}
         self._charge_dc_expr: dict[int, Any] = {}
         self._discharge_ac_expr: dict[int, Any] = {}
@@ -286,7 +308,12 @@ class Battery:
         if t not in self.mode:
             self.mode[t] = ctx.solver.add_var(lb=0.0, ub=1.0, integer=True)
 
-    def add_constraints(self, ctx: ModelContext, inputs: BatteryInputs) -> None:
+    def add_constraints(
+        self,
+        ctx: ModelContext,
+        inputs: BatteryInputs,
+        solve_time_utc: datetime | None = None,
+    ) -> None:
         """Add SOC tracking and mode-guard constraints.
 
         This method must be called after ``add_variables`` and requires a fresh
@@ -322,10 +349,19 @@ class Battery:
             total_charge[t]    ≤ max_charge_kw    × mode[t]
             total_discharge[t] ≤ max_discharge_kw × (1 − mode[t])
 
+        **Full-charge policy** — see ``_add_care_constraints``. Nothing is
+        added unless ``config.soc_ratchet.enabled`` and a ``solve_time_utc``
+        was supplied.
+
         Args:
             ctx: The current solve context.
             inputs: Validated live battery state from MQTT, providing the
-                initial SOC used at ``t=0``.
+                initial SOC used at ``t=0`` and the timestamp of the last
+                measured full charge.
+            solve_time_utc: UTC timestamp at the start of this solve cycle.
+                Required by the full-charge policy to turn its interval into a
+                horizon step. When None the policy is skipped, which is what
+                the solver-only unit tests rely on.
         """
         max_charge_kw = self._max_charge_kw()
         max_discharge_kw = self._max_discharge_kw()
@@ -577,6 +613,148 @@ class Battery:
                     self.discharge_ac_kw(t) + slope_d * soc_prev <= rhs_d
                 )
 
+        self._add_care_constraints(ctx, inputs, solve_time_utc)
+
+    def _add_care_constraints(
+        self,
+        ctx: ModelContext,
+        inputs: BatteryInputs,
+        solve_time_utc: datetime | None,
+    ) -> None:
+        """Apply the ratchet floor and work out what the policy is asking for.
+
+        The policy is described in ``SocRatchetConfig`` and computed in
+        ``core/battery_care.py``. This method adds only the floor. The
+        full-charge target is a separate constraint added later by
+        ``enforce_care_target``, because the step it can safely be pinned to is
+        not known until the builder has probed the model for one.
+
+        **The ratchet floor.** For every step:
+
+        .. code-block::
+
+            soc[t] >= min(ratchet_floor_kwh, inputs.soc_kwh)
+
+        The floor is a lower bound the solver may not discharge through, which
+        is what makes the usable window narrow as the battery goes unbalanced.
+        It is *not* an instruction to charge, and it carries no objective term.
+
+        The ``min`` matters. A floor that has just stepped up will often sit
+        above the current SOC, because the step is precisely what happens when
+        the battery has been sitting low. Writing ``soc[t] >= floor``
+        unconditionally would then be infeasible at ``t=0``, since the SOC
+        cannot jump, and the whole schedule would be lost to protect a policy
+        about cell balancing. Clamping to the present SOC reproduces the
+        hardware behaviour instead: an inverter with a floor above the current
+        SOC does not teleport the battery, it stops discharging.
+
+        Known limitation of that clamp: the bound is one constant for the whole
+        horizon, so a battery starting below the floor may charge above it and
+        then discharge back down to where it started. The hardware would hold
+        the floor once it had been reached. Expressing "once above, stay above"
+        needs either a binary per step or a forced charge ramp, and the first
+        costs solve time on every battery while the second buys energy without
+        consulting prices. The full-charge target is what actually forces the
+        charge, so the gap is bounded: the battery cannot end up worse off than
+        it started, and the balance charge still happens on time.
+
+        Args:
+            ctx: The current solve context.
+            inputs: Live battery state, providing the current SOC and the last
+                measured full charge.
+            solve_time_utc: Start of this solve cycle, or None to skip the
+                policy entirely.
+        """
+        self.initial_soc_kwh = inputs.soc_kwh
+        if not self.config.soc_ratchet.enabled or solve_time_utc is None:
+            self.care = None
+            return
+
+        plan = care_plan(
+            config=self.config.soc_ratchet,
+            capacity_kwh=self.config.capacity_kwh,
+            last_full_utc=inputs.last_full_utc,
+            care_since_utc=inputs.care_since_utc,
+            solve_time_utc=solve_time_utc,
+            horizon=len(ctx.T),
+            dt=ctx.dt,
+        )
+        self.care = plan
+
+        floor = min(plan.floor_kwh, inputs.soc_kwh)
+        if floor > self.config.min_soc_kwh:
+            # Below this the variable bound already binds, so adding the
+            # constraint would only enlarge the model.
+            for t in ctx.T:
+                ctx.solver.add_constraint(self.soc[t] >= floor)
+
+    def enforce_care_target(
+        self,
+        ctx: ModelContext,
+        step: int,
+        target_kwh: float,
+        boundaries: int = 1,
+        hold_steps: int = 0,
+    ) -> None:
+        """Require the SOC to reach ``target_kwh`` at ``step`` and stay there.
+
+        .. code-block::
+
+            soc[t] >= target_kwh    for t in [step, step + boundaries)
+
+        ``soc[t]`` is the SOC at the *end* of step ``t``, so the battery is at
+        the top for the whole of an interval only when both the boundary
+        before it and the boundary after it are. The two counts are therefore
+        kept apart. ``boundaries`` is how many consecutive ``soc[t]`` are
+        constrained; ``hold_steps`` is how many whole intervals that amounts
+        to, which is ``boundaries - 1`` when the charge arrives on the first
+        constrained boundary and ``boundaries`` when the battery was already at
+        the top when the horizon began, because then the measured starting SOC
+        is the boundary before ``soc[0]``. The caller knows which; this method
+        only records it.
+
+        A hard constraint, matching the EV departure target, and for the same
+        reason: a partially completed balance charge is not a balance charge.
+        Being hard is also what makes it work under every strategy. A soft
+        penalty would be invisible to ``minimize_consumption``, which fixes the
+        total import volume in a first phase that sees only constraints, and it
+        would compete with the weights under ``balanced``. A constraint is
+        respected by both.
+
+        The hold is the part a single-step target cannot express. The cells
+        balance only while they sit in the upper voltage knee, and the BMS
+        recalibrates its SOC only after the charge current has tapered at the
+        voltage limit; both take time. One quarter-hour at the top followed by
+        a discharge satisfies ``soc[step] >= target`` and does neither. The
+        run is clipped to the horizon: what fits is enforced, and the next
+        rolling solve, which still finds the policy unsatisfied because the
+        reset needs a measured hold, carries it on.
+
+        The caller is responsible for passing a ``step``, ``target_kwh`` and
+        ``hold_steps`` the model can actually deliver — see
+        ``model_builder._probe_care_targets``, which reads them off a
+        trajectory the solver has already produced. Reachability is not
+        estimated here, and must not be: it depends on charge derating, the
+        minimum charge power, the efficiency curve and every other constraint
+        in the model at once, which is a question only the solver can answer.
+
+        Args:
+            ctx: The current solve context.
+            step: First horizon step the target applies to.
+            target_kwh: SOC required across the run, in kWh.
+            boundaries: Consecutive ``soc[t]`` to constrain, from ``step``.
+                At least one is always pinned. Clipped to the horizon.
+            hold_steps: Whole intervals at the top this represents, recorded
+                in ``care_target`` for the status topic. 0 is a touch.
+        """
+        run = range(step, min(step + max(1, boundaries), len(ctx.T)))
+        for t in run:
+            ctx.solver.add_constraint(self.soc[t] >= target_kwh)
+        # If the horizon clipped the run, the intervals shrink by the same
+        # number of boundaries lost.
+        lost = max(1, boundaries) - len(run)
+        self.care_target = (step, target_kwh, max(0, hold_steps - lost))
+
     def set_external_mode(self, mode_vars: dict[int, Any]) -> None:
         """Replace per-step mode variables with externally-supplied shared ones.
 
@@ -719,7 +897,9 @@ class Battery:
 
                soc_penalty(t) = soc_low_penalty_eur_per_kwh_h × soc_low[t] × dt
 
-        Both terms are zero by default.
+        Both terms are zero by default. The periodic full-charge policy
+        contributes nothing here: it is a constraint, not a cost. See
+        ``_add_care_constraints``.
 
         Args:
             t: Time step index within ``ctx.T``.

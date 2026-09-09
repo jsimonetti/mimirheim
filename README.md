@@ -737,6 +737,123 @@ the derived default.
 | `outputs.zero_export_mode` | string or null | null | MQTT topic for the zero-export mode flag. Only published when `capabilities.zero_export_mode` is true. |
 | `inputs.soc.topic` | string or null | derived | MQTT topic for SOC readings. Derived as `{prefix}/input/battery/{name}/soc` when absent. |
 | `inputs.soc.unit` | `kwh` or `percent` | — | Unit of the published SOC value. |
+| `outputs.soc_ratchet` | string or null | derived | MQTT topic for the full-charge policy status. Derived as `{prefix}/status/battery/{name}/soc_ratchet` when absent. Published retained and read back on startup. |
+| `soc_ratchet.enabled` | bool | false | Enable the periodic full-charge policy. When false nothing about the solve changes. |
+| `soc_ratchet.target_interval_days` | float > 0 | 7.0 | How long the battery may go without a measured full charge. The default is a convention; use the pack manufacturer's interval where one is specified. |
+| `soc_ratchet.full_threshold_pct` | float (0, 100] | 97.0 | Measured SOC, in percent of capacity, that counts as a full charge and resets the policy. |
+| `soc_ratchet.step_pct` | float (0, 100] | 5.0 | Percentage points of capacity added to the minimum SOC per missed interval. The default is a convention. |
+| `soc_ratchet.cap_pct` | float (0, 100] | 80.0 | Ceiling on the dynamic floor. Must be at least `step_pct` and strictly below `full_threshold_pct`; a floor that reaches the full-charge threshold would leave the battery pinned at the top with almost nothing to discharge. Configurable rather than fixed because a site knows better than a device how much reserve it needs. |
+| `soc_ratchet.target_pct` | float (0, 100] | 100.0 | SOC the plan is asked to reach and hold. Must be at least `full_threshold_pct`. Separate from the threshold on purpose: this is what to plan for, the threshold is what a BMS reading has to show for the plan to have worked. |
+| `soc_ratchet.hold_hours` | float 0–24 | 2.0 | How long the SOC must stay at or above `target_pct` once reached, in hours; rounded up to whole steps. Also the measured hold the reset requires. 0 restores a single-step touch. |
+
+#### Periodic full charge (`soc_ratchet`)
+
+A lithium pack that is never charged to the top stops balancing its cells, and
+the capacity is lost quietly. A floor enforced by the inverter on its own is
+invisible to a planner: a schedule that targets below it is not refused, only
+under-delivered. This policy puts the mechanism inside the solve instead.
+
+Three things happen once it is enabled. Each `target_interval_days` without a
+measured full charge raises a dynamic minimum SOC by `step_pct` of capacity, up
+to `cap_pct`, which narrows the usable window at no cost in the objective. Once
+the due time falls inside the solve horizon, the SOC is constrained to reach
+`target_pct`, so the charge actually completes. And it is then held there for
+`hold_hours`, because reaching the top once is a touch, not a balance charge.
+The constraint is on state at a time, not an instruction to charge at a time:
+the solver still picks the cheapest quarter-hours to buy the energy in.
+
+The hold is where the balancing happens. A passive BMS bleeds the highest cells
+through resistors at tens of milliamps, and only while they sit in the upper
+voltage knee; it also recalibrates its SOC estimate only once the charge
+current has tapered at the voltage limit. Both need time at the top, and that
+dwell does not happen by itself when a planner dictates the SOC trajectory, so
+the plan asks for it explicitly. Two hours is the default: what a balancer at
+tens of milliamps can correct scales with dwell time, the charge current needs
+time of the same order to taper at the limit, and both are pack-specific, so
+set `hold_hours` from the pack's documentation where it gives a figure.
+
+`target_pct` and `full_threshold_pct` are two numbers because they answer two
+questions. The plan aims for 100%, because only at the top of the configured
+capacity are the cells in the knee where the balancer works. The reset accepts
+97%, because a BMS reports an estimate and is not guaranteed to show a round
+100 even after a completed charge. Planning for the threshold instead would
+stop at the edge of the knee.
+
+The target is a hard constraint, like the EV departure target, because a
+partially completed balance charge is not a balance charge. That also makes it
+the only shape that works under every strategy: `minimize_consumption` fixes
+the total import volume in a first phase that sees only constraints, so a
+priced preference would be invisible to it at any magnitude, and under
+`balanced` a price competes with the configured weights. It needs no tuning
+knob whose correct value would depend on your price curve.
+
+Which step the target is pinned to is decided by the solver rather than
+configured. On the few cycles where a charge is due, the model is solved once
+with the objective "close the gap to each due battery's target" - a question
+with no economics in it, and one whose only additions are gap variables that do
+not restrict the feasible set, so it is feasible whenever the model itself is.
+The resulting trajectory is a witness: the target is pinned to the first step
+at or after the deadline where that trajectory reached `target_pct`, so the
+constraint is one the witness already satisfies and the policy cannot make the
+solve infeasible.
+
+If the witness never reaches the target, the highest SOC it did reach is
+required instead - but only when the probe ran to optimality. A probe that
+merely ran out of time says nothing at all, so nothing is imposed and the
+status reports the target as unenforced rather than quietly rewriting it
+downward.
+
+Read a reduced `enforced_target_kwh` as a floor rather than a verdict on the
+hardware: usually it means the load, the import limit or the charge power is
+outrunning the policy, but it can also be a reachable full charge the probe's
+objective did not steer towards, in which case the next cycle retries. Both
+outcomes are visible on the status topic - `enforced_target_kwh` below
+`full_target_kwh` means a reduced floor was imposed, and `enforced_target_kwh`
+absent while `full_target_kwh` is set means the probe could not settle it at
+all.
+
+Pinning to the first reachable step at or after the deadline is what handles
+an overdue battery: its deadline is step 0, and the target lands on an early
+quarter-hour it can genuinely be full by, rather than on a step that is
+infeasible now or on a horizon end that recedes by one step on every rolling
+solve. It is the first such step in the witness, not a proven earliest.
+
+The hold is read off the same witness: from the pinned step, the run of
+consecutive step boundaries the witness stayed at the target, up to
+`hold_hours` worth of intervals (one boundary more than intervals, since the
+SOC is measured at the end of each step). A run cut short - by the end of the horizon, or by a load the battery has to carry
+with no grid to serve it - is enforced as far as it goes and reported as
+`enforced_hold_steps` below `hold_steps`. The next rolling solve continues it,
+because the reset needs a measured hold, not a planned one.
+
+The hold only applies when the witness actually reaches `target_pct`. If it
+never does - charge derating near the top on a short horizon is the usual
+cause - the reduced target is enforced for a single step, as before. A pack in
+that situation should have `target_pct` set to what it can reach, so the run
+applies; that is what the field is for.
+
+The policy resets only on a **measured** SOC that has stayed at or above
+`full_threshold_pct` for `hold_hours` without dipping. Deliberately the
+threshold, not `target_pct`: the plan asks for 100% because only at the top of
+the configured capacity are the cells in the voltage knee, but the proof accepts
+97% because a BMS cannot be relied
+on to report a round 100, and a reset it can never see would pin the pack full
+forever. A plan that intended a full charge and fell short does not count, and
+neither does a reading that touched the top and fell away.
+
+The timestamp recorded is when the hold completed, and it keeps advancing for
+as long as the battery stays at the top, so the next interval counts from when
+the pack last *left* the top rather than from when it first arrived there. A
+pack that sits full for a day was balancing for that day. It is published
+retained to `outputs.soc_ratchet` and read back from there on startup, so a
+restart does not reset the policy. The run itself is not persisted: a restart
+mid-hold costs one extra hold at the top.
+
+When enabling this policy, switch off any dynamic SOC floor on the inverter
+side and keep only its static safety floor. Two ratchets working the same pack
+make both unpredictable, and a floor mimirheim cannot see is under-delivered
+silently; the intended end state is that mimirheim owns both the SOC band and
+the climb to full.
 
 Each `charge_segments` / `discharge_segments` entry:
 
@@ -950,6 +1067,7 @@ a Home Assistant entity topic) or when sharing a topic between multiple instance
 | Config field | Derived topic |
 |---|---|
 | `batteries.{name}.outputs.exchange_mode` | `{p}/output/battery/{name}/exchange_mode` |
+| `batteries.{name}.outputs.soc_ratchet` | `{p}/status/battery/{name}/soc_ratchet` |
 | `ev_chargers.{name}.outputs.exchange_mode` | `{p}/output/ev/{name}/exchange_mode` |
 | `ev_chargers.{name}.outputs.loadbalance_cmd` | `{p}/output/ev/{name}/loadbalance` |
 | `pv_arrays.{name}.outputs.power_limit_kw` | `{p}/output/pv/{name}/power_limit_kw` |

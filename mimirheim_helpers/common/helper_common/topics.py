@@ -460,6 +460,25 @@ def battery_exchange_mode_topic(prefix: str, name: str) -> str:
     return f"{prefix}/output/battery/{name}/exchange_mode"
 
 
+def battery_soc_ratchet_topic(prefix: str, name: str) -> str:
+    """Return the topic carrying a battery's full-charge policy status.
+
+    Corresponds to ``batteries.{name}.outputs.soc_ratchet``. The payload is
+    published retained by mimirheim and read back by mimirheim on startup: it
+    is both the observable record of where the floor currently sits and the
+    only place the "when was this battery last full" timestamp is kept, so a
+    restart does not reset the policy and leave the cells unbalanced forever.
+
+    Args:
+        prefix: The ``mqtt.topic_prefix`` value from mimirheim config.
+        name: The battery device name.
+
+    Returns:
+        e.g. ``"mimir/status/battery/home_battery/soc_ratchet"``.
+    """
+    return f"{prefix}/status/battery/{name}/soc_ratchet"
+
+
 def ev_exchange_mode_topic(prefix: str, name: str) -> str:
     """Return the topic for the EV charger zero-exchange mode command.
 
