@@ -520,6 +520,15 @@ class SolveResult(BaseModel):
 
     Attributes:
         strategy: The strategy that was active during this solve.
+        strategy_degraded: True when the requested strategy could not be
+            carried out in full and a weaker one produced this schedule. Set by
+            ``minimize_consumption`` on either of the two ways its first phase
+            can fail to establish a minimum: no solution at all, in which case
+            no volume is locked and the second phase solves for cost alone; or
+            a time-limited incumbent, which is locked but is an achievable
+            volume rather than a proven minimum. ``strategy`` still names what
+            was asked for, so this flag is the only thing saying the schedule
+            does not carry the minimum-import guarantee that name implies.
         solve_time_utc: The 15-minute slot boundary that step 0 of ``schedule``
             refers to, copied from ``SolveBundle.solve_time_utc``. This is the
             single time origin for the whole result: every consumer that needs
@@ -567,6 +576,13 @@ class SolveResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     strategy: str
+    strategy_degraded: bool = Field(
+        default=False,
+        description=(
+            "True when the requested strategy could not be carried out and a "
+            "weaker one produced this schedule."
+        ),
+    )
     solve_time_utc: datetime | None = Field(
         default=None,
         description=(

@@ -1,5 +1,6 @@
 {
   "strategy": "minimize_cost",
+  "strategy_degraded": false,
   "solve_time_utc": "2026-04-03T15:30:00Z",
   "objective_value": -94.196041,
   "solve_status": "optimal",

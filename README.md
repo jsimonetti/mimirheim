@@ -208,6 +208,8 @@ If `building_thermal` is configured, indoor temperature tracking follows the sam
 
 The active optimisation strategy is read from the MQTT topic `{prefix}/input/strategy`. Publish a retained value to change strategy without restarting mimirheim. The default when the topic has not been received is `minimize_cost`.
 
+`strategy_degraded` appears on the `schedule`, `current` and `last_solve` topics — beside `strategy` on the first two, and on its own in the last-solve summary, which does not carry the strategy name. It is set when the requested strategy could not be carried out and a weaker one produced the schedule, which only `minimize_consumption` can do: its first phase establishes the minimum import volume that the second phase is then held to, and that phase can either find no solution at all (no volume is locked and the second phase solves for cost alone) or return a time-limited incumbent (locked, but an achievable volume rather than a proven minimum). Either way `strategy` still names what was asked for, so this flag is the only thing that distinguishes the result from a genuine one. An error `last_solve` payload carries no strategy information and omits it.
+
 | Strategy | Behaviour |
 |---|---|
 | `minimize_cost` | Maximise revenue and minimise import cost. Default. |
@@ -531,6 +533,7 @@ Published retained after every successful solve. Contains the complete dispatch 
 ```json
 {
   "strategy": "minimize_cost",
+  "strategy_degraded": false,
   "solve_time_utc": "2026-06-01T09:00:00Z",
   "objective_value": 1.24,
   "solve_status": "optimal",
@@ -566,6 +569,7 @@ Published retained alongside the schedule. Contains the current-step summary for
   "grid_import_kw": 0.0,
   "grid_export_kw": 0.0,
   "strategy": "minimize_cost",
+  "strategy_degraded": false,
   "solve_status": "optimal"
 }
 ```
@@ -591,6 +595,7 @@ On success:
 {
   "status": "ok",
   "solve_status": "optimal",
+  "strategy_degraded": false,
   "generated_at": "2026-03-30T14:15:00+00:00"
 }
 ```

@@ -161,7 +161,7 @@
       }
       tr.innerHTML =
         '<td>' + localTime(r.ts) + '</td>' +
-        '<td>' + (r.strategy || '—') + '</td>' +
+        '<td>' + (r.strategy ? (r.strategy + (r.strategy_degraded ? ' (degraded)' : '')) : '—') + '</td>' +
         '<td>' + (r.horizon_steps ? (r.horizon_steps * 0.25).toFixed(2) + ' h' : '—') + '</td>' +
         '<td>' + (r.naive_cost_eur !== undefined ? r.naive_cost_eur.toFixed(4) : '—') + '</td>' +
         '<td style="' + colorEffective(eff) + '">' + effStr + '</td>' +

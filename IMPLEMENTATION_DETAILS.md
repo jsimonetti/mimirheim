@@ -861,7 +861,7 @@ class ObjectiveBuilder:
 Internally it branches on `bundle.strategy`:
 
 - **`minimize_cost`** — weighted objective dominated by `confidence[t] × (import_price[t] × import[t] − export_price[t] × export[t])`. Import and export penalties derived from `constraints` block are added.
-- **`minimize_consumption`** — lexicographic two-solve: first minimise total grid import (Phase 1), then minimise full net cost subject to the import bound found in Phase 1 (Phase 2). Phase 2 uses the same objective as `minimize_cost`, so export revenue and device wear are still optimised within the import constraint.
+- **`minimize_consumption`** — lexicographic two-solve: first minimise total grid import (Phase 1), then minimise full net cost subject to the import bound found in Phase 1 (Phase 2). Phase 2 uses the same objective as `minimize_cost`, so export revenue and device wear are still optimised within the import constraint. If Phase 1 finds no solution there is no bound to lock and no variable values to read, so the lock is skipped, Phase 2 solves for cost alone, and `SolveResult.strategy_degraded` is set. The same flag is set when Phase 1 returns a time-limited incumbent: the lock is applied, but to an achievable volume rather than a proven minimum. Either way the schedule is published under the requested strategy name, and the flag is what says the strategy's guarantee was not delivered.
 - **`balanced`** — weighted combination of cost and self-sufficiency terms using `balanced_weights` from config.
 
 All three modes add:

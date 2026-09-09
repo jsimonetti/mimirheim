@@ -216,3 +216,42 @@ def test_naive_cost_of_a_staged_array_stops_at_the_highest_register() -> None:
 
     result = build_and_solve(bundle, config)
     assert result.naive_cost_eur == pytest.approx(0.75, abs=1e-9)
+
+
+def test_a_degraded_objective_is_reported_on_the_result() -> None:
+    """build_and_solve must copy the builder's flag onto the SolveResult.
+
+    ObjectiveBuilder records the degradation; the result is what gets
+    published. A flag that stays on the builder is never seen by anyone.
+    """
+    from unittest.mock import patch
+
+    from mimirheim.core import model_builder
+    from mimirheim.core.objective import ObjectiveBuilder
+
+    class _Degrading(ObjectiveBuilder):
+        def build(self, *args, **kwargs):
+            budget = super().build(*args, **kwargs)
+            self.strategy_degraded = True
+            return budget
+
+    horizon = 4
+    config = MimirheimConfig.model_validate(
+        {
+            "mqtt": {"host": "localhost", "client_id": "test"},
+            "grid": {"import_limit_kw": 20.0, "export_limit_kw": 20.0},
+            "static_loads": {"base": {}},
+        }
+    )
+    bundle = SolveBundle(
+        solve_time_utc=datetime(2026, 6, 1, 12, tzinfo=timezone.utc),
+        horizon_prices=[0.25] * horizon,
+        horizon_export_prices=[0.10] * horizon,
+        horizon_confidence=[1.0] * horizon,
+        pv_forecast=[0.0] * horizon,
+        base_load_forecast=[1.0] * horizon,
+    )
+
+    assert build_and_solve(bundle, config).strategy_degraded is False
+    with patch.object(model_builder, "ObjectiveBuilder", _Degrading):
+        assert build_and_solve(bundle, config).strategy_degraded is True
