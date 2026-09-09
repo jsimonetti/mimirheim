@@ -737,6 +737,78 @@ the derived default.
 | `outputs.zero_export_mode` | string or null | null | MQTT topic for the zero-export mode flag. Only published when `capabilities.zero_export_mode` is true. |
 | `inputs.soc.topic` | string or null | derived | MQTT topic for SOC readings. Derived as `{prefix}/input/battery/{name}/soc` when absent. |
 | `inputs.soc.unit` | `kwh` or `percent` | — | Unit of the published SOC value. |
+| `outputs.soc_ratchet` | string or null | derived | MQTT topic for the full-charge policy status. Derived as `{prefix}/status/battery/{name}/soc_ratchet` when absent. Published retained and read back on startup. |
+| `soc_ratchet.enabled` | bool | false | Enable the periodic full-charge policy. When false nothing about the solve changes. |
+| `soc_ratchet.target_interval_days` | float > 0 | 7.0 | How long the battery may go without a measured full charge. The default is a convention; use the pack manufacturer's interval where one is specified. |
+| `soc_ratchet.full_threshold_pct` | float (0, 100] | 97.0 | Measured SOC, in percent of capacity, that counts as a full charge and resets the policy. |
+| `soc_ratchet.step_pct` | float (0, 100] | 5.0 | Percentage points of capacity added to the minimum SOC per missed interval. The default is a convention. |
+| `soc_ratchet.cap_pct` | float (0, 100] | 80.0 | Ceiling on the dynamic floor. Must be at least `step_pct` and strictly below `full_threshold_pct`; a floor that reaches the full-charge threshold would leave the battery pinned at the top with almost nothing to discharge. Configurable rather than fixed because a site knows better than a device how much reserve it needs. |
+
+#### Periodic full charge (`soc_ratchet`)
+
+A lithium pack that is never charged to the top stops balancing its cells, and
+the capacity is lost quietly. A floor enforced by the inverter on its own is
+invisible to a planner: a schedule that targets below it is not refused, only
+under-delivered. This policy puts the mechanism inside the solve instead.
+
+Two things happen once it is enabled. Each `target_interval_days` without a
+measured full charge raises a dynamic minimum SOC by `step_pct` of capacity, up
+to `cap_pct`, which narrows the usable window at no cost in the objective. And
+once the due time falls inside the solve horizon, the SOC at one step is
+constrained to reach `full_threshold_pct`, so the charge actually completes.
+The second part is a constraint on state at a time, not an instruction to
+charge at a time: the solver still picks the cheapest quarter-hours to buy the
+energy in.
+
+The target is a hard constraint, like the EV departure target, because a
+partially completed balance charge is not a balance charge. That also makes it
+the only shape that works under every strategy: `minimize_consumption` fixes
+the total import volume in a first phase that sees only constraints, so a
+priced preference would be invisible to it at any magnitude, and under
+`balanced` a price competes with the configured weights. It needs no tuning
+knob whose correct value would depend on your price curve.
+
+Which step the target is pinned to is decided by the solver rather than
+configured. On the few cycles where a charge is due, the model is solved once
+with the objective "close the gap to each due battery's target" - a question
+with no economics in it, and one whose only additions are gap variables that do
+not restrict the feasible set, so it is feasible whenever the model itself is.
+The resulting trajectory is a witness: the target is pinned to the first step
+at or after the deadline where that trajectory reached the threshold, so the
+constraint is one the witness already satisfies and the policy cannot make the
+solve infeasible.
+
+If the witness never reaches the threshold, the highest SOC it did reach is
+required instead - but only when the probe ran to optimality. A probe that
+merely ran out of time says nothing at all, so nothing is imposed and the
+status reports the target as unenforced rather than quietly rewriting it
+downward.
+
+Read a reduced `enforced_target_kwh` as a floor rather than a verdict on the
+hardware: usually it means the load, the import limit or the charge power is
+outrunning the policy, but it can also be a reachable full charge the probe's
+objective did not steer towards, in which case the next cycle retries. Both
+outcomes are visible on the status topic - `enforced_target_kwh` below
+`full_target_kwh` means a reduced floor was imposed, and `enforced_target_kwh`
+absent while `full_target_kwh` is set means the probe could not settle it at
+all.
+
+Pinning to the first reachable step at or after the deadline is what handles
+an overdue battery: its deadline is step 0, and the target lands on an early
+quarter-hour it can genuinely be full by, rather than on a step that is
+infeasible now or on a horizon end that recedes by one step on every rolling
+solve. It is the first such step in the witness, not a proven earliest.
+
+The policy resets only on a **measured** SOC reaching the threshold. A plan that
+intended a full charge and fell short does not count. The timestamp of the last
+measured full charge is published retained to `outputs.soc_ratchet` and read
+back from there on startup, so a restart does not reset the policy.
+
+When enabling this policy, switch off any dynamic SOC floor on the inverter
+side and keep only its static safety floor. Two ratchets working the same pack
+make both unpredictable, and a floor mimirheim cannot see is under-delivered
+silently; the intended end state is that mimirheim owns both the SOC band and
+the climb to full.
 
 Each `charge_segments` / `discharge_segments` entry:
 
@@ -950,6 +1022,7 @@ a Home Assistant entity topic) or when sharing a topic between multiple instance
 | Config field | Derived topic |
 |---|---|
 | `batteries.{name}.outputs.exchange_mode` | `{p}/output/battery/{name}/exchange_mode` |
+| `batteries.{name}.outputs.soc_ratchet` | `{p}/status/battery/{name}/soc_ratchet` |
 | `ev_chargers.{name}.outputs.exchange_mode` | `{p}/output/ev/{name}/exchange_mode` |
 | `ev_chargers.{name}.outputs.loadbalance_cmd` | `{p}/output/ev/{name}/loadbalance` |
 | `pv_arrays.{name}.outputs.power_limit_kw` | `{p}/output/pv/{name}/power_limit_kw` |

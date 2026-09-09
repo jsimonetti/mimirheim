@@ -52,7 +52,7 @@
     },
     "BatteryConfig": {
       "additionalProperties": false,
-      "description": "Configuration for a DC-coupled residential battery.\n\nTwo efficiency models are supported:\n\n**Stacked-segment model** (``charge_segments``): Each segment is an independent LP\nvariable bounded by a flat efficiency. Use this when the efficiency curve is\napproximated by a small number of steps. This was the original model.\n\n**SOS2 piecewise-linear model** (``charge_efficiency_curve``): Uses a SOS2\nconstraint to interpolate efficiency linearly between breakpoints. Use this when\nyou have manufacturer-measured efficiency at several power levels and need accurate\ncontinuous interpolation.\n\nExactly one of ``charge_segments`` or ``charge_efficiency_curve`` must be\nprovided for each direction. Providing both, or neither, raises a\n``ValidationError``.\n\nAttributes:\n    capacity_kwh: Usable battery capacity in kWh.\n    min_soc_kwh: Minimum state of charge to maintain, in kWh.\n    charge_segments: Stacked-segment efficiency model for charging. At least\n        one segment required. Mutually exclusive with charge_efficiency_curve.\n    discharge_segments: Stacked-segment efficiency model for discharging.\n    charge_efficiency_curve: SOS2 piecewise-linear efficiency curve for charging.\n        At least two breakpoints required. First breakpoint must be at 0 kW.\n        Mutually exclusive with charge_segments.\n    discharge_efficiency_curve: SOS2 piecewise-linear efficiency curve for\n        discharging. Same constraints as charge_efficiency_curve.\n    wear_cost_eur_per_kwh: Cost per kWh of energy throughput in EUR.\n    optimal_lower_soc_kwh: Preferred minimum SOC in kWh. A soft lower\n        bound: dropping below it costs\n        ``soc_low_penalty_eur_per_kwh_h`` per kWh of deficit per hour\n        rather than being forbidden, so the solver still discharges past it\n        when the price spread pays for the penalty.\n    soc_low_penalty_eur_per_kwh_h: Penalty rate for negative SOC deviation.\n    reduce_charge_above_soc_kwh: SOC threshold above which charge is derated.\n    reduce_charge_min_kw: Minimum charge power at capacity_kwh when derated.\n    reduce_discharge_below_soc_kwh: SOC threshold below which discharge is derated.\n    reduce_discharge_min_kw: Minimum discharge power at min_soc_kwh when derated.\n    capabilities: Hardware capability flags.\n    inputs: MQTT input topics for live battery state readings.\n    outputs: MQTT output topics for battery control signals (e.g. zero-export\n        mode flag). All fields default to None (no publishing).",
+      "description": "Configuration for a DC-coupled residential battery.\n\nTwo efficiency models are supported:\n\n**Stacked-segment model** (``charge_segments``): Each segment is an independent LP\nvariable bounded by a flat efficiency. Use this when the efficiency curve is\napproximated by a small number of steps. This was the original model.\n\n**SOS2 piecewise-linear model** (``charge_efficiency_curve``): Uses a SOS2\nconstraint to interpolate efficiency linearly between breakpoints. Use this when\nyou have manufacturer-measured efficiency at several power levels and need accurate\ncontinuous interpolation.\n\nExactly one of ``charge_segments`` or ``charge_efficiency_curve`` must be\nprovided for each direction. Providing both, or neither, raises a\n``ValidationError``.\n\nAttributes:\n    capacity_kwh: Usable battery capacity in kWh.\n    min_soc_kwh: Minimum state of charge to maintain, in kWh.\n    charge_segments: Stacked-segment efficiency model for charging. At least\n        one segment required. Mutually exclusive with charge_efficiency_curve.\n    discharge_segments: Stacked-segment efficiency model for discharging.\n    charge_efficiency_curve: SOS2 piecewise-linear efficiency curve for charging.\n        At least two breakpoints required. First breakpoint must be at 0 kW.\n        Mutually exclusive with charge_segments.\n    discharge_efficiency_curve: SOS2 piecewise-linear efficiency curve for\n        discharging. Same constraints as charge_efficiency_curve.\n    wear_cost_eur_per_kwh: Cost per kWh of energy throughput in EUR.\n    optimal_lower_soc_kwh: Preferred minimum SOC in kWh. A soft lower\n        bound: dropping below it costs\n        ``soc_low_penalty_eur_per_kwh_h`` per kWh of deficit per hour\n        rather than being forbidden, so the solver still discharges past it\n        when the price spread pays for the penalty.\n    soc_low_penalty_eur_per_kwh_h: Penalty rate for negative SOC deviation.\n    reduce_charge_above_soc_kwh: SOC threshold above which charge is derated.\n    reduce_charge_min_kw: Minimum charge power at capacity_kwh when derated.\n    reduce_discharge_below_soc_kwh: SOC threshold below which discharge is derated.\n    reduce_discharge_min_kw: Minimum discharge power at min_soc_kwh when derated.\n    soc_ratchet: Periodic full-charge policy for cell balancing. Disabled\n        by default, in which case nothing about the solve changes.\n    capabilities: Hardware capability flags.\n    inputs: MQTT input topics for live battery state readings.\n    outputs: MQTT output topics for battery control signals (e.g. zero-export\n        mode flag). All fields default to None (no publishing).",
       "properties": {
         "capacity_kwh": {
           "description": "Usable capacity in kWh.",
@@ -261,6 +261,12 @@
           "ui_group": "advanced",
           "ui_label": "Output topics"
         },
+        "soc_ratchet": {
+          "$ref": "#/$defs/SocRatchetConfig",
+          "description": "Periodic full-charge policy. Disabled by default.",
+          "ui_group": "advanced",
+          "ui_label": "SOC ratchet"
+        },
         "min_charge_kw": {
           "anyOf": [
             {
@@ -317,7 +323,7 @@
     },
     "BatteryOutputsConfig": {
       "additionalProperties": false,
-      "description": "MQTT output topic configuration for a battery device.\n\nEach field is optional. A ``None`` value means mimirheim will not publish that\nparticular output. The corresponding capability flag in\n``BatteryCapabilitiesConfig`` must also be True for the topic to be active.\n\nAttributes:\n    exchange_mode: Topic to publish the closed-loop exchange mode flag\n        (``\"true\"`` or ``\"false\"``). Published only when\n        ``capabilities.zero_exchange`` is True. Always set: defaults to\n        ``\"{mqtt.topic_prefix}/output/battery/{name}/exchange_mode\"`` when\n        not provided explicitly.",
+      "description": "MQTT output topic configuration for a battery device.\n\nEach field is optional. A ``None`` value means mimirheim will not publish that\nparticular output. The corresponding capability flag in\n``BatteryCapabilitiesConfig`` must also be True for the topic to be active.\n\nAttributes:\n    soc_ratchet: Topic carrying the full-charge policy status. Published\n        retained and consumed by mimirheim itself on startup, so the\n        \"last measured full charge\" timestamp survives a restart. Always\n        set: defaults to\n        ``'{mqtt.topic_prefix}/status/battery/{name}/soc_ratchet'``.\n    exchange_mode: Topic to publish the closed-loop exchange mode flag\n        (``\"true\"`` or ``\"false\"``). Published only when\n        ``capabilities.zero_exchange`` is True. Always set: defaults to\n        ``\"{mqtt.topic_prefix}/output/battery/{name}/exchange_mode\"`` when\n        not provided explicitly.",
       "properties": {
         "exchange_mode": {
           "anyOf": [
@@ -334,6 +340,22 @@
           "ui_group": "advanced",
           "ui_label": "Exchange mode topic",
           "ui_placeholder": "{mqtt.topic_prefix}/output/battery/{name}/exchange_mode"
+        },
+        "soc_ratchet": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "MQTT topic for the full-charge policy status, published retained and read back on startup. Defaults to '{mqtt.topic_prefix}/status/battery/{name}/soc_ratchet' when not set.",
+          "title": "Soc Ratchet",
+          "ui_group": "advanced",
+          "ui_label": "SOC ratchet status topic",
+          "ui_placeholder": "{mqtt.topic_prefix}/status/battery/{name}/soc_ratchet"
         }
       },
       "title": "BatteryOutputsConfig",
@@ -1965,6 +1987,62 @@
         }
       },
       "title": "ReportingConfig",
+      "type": "object"
+    },
+    "SocRatchetConfig": {
+      "additionalProperties": false,
+      "description": "Periodic full-charge policy for a lithium battery.\n\nA lithium pack whose cells are never brought to the top of their range stops\nbalancing: the BMS has no opportunity to equalise, the weakest cell drifts,\nand usable capacity falls away without anything reporting a fault. The cure\nis a full charge every so often, and the question is only how to make the\noptimiser pay for it in the cheapest hours rather than at an arbitrary\nmoment.\n\nThe mechanism is a ratchet with a deadline. A dynamic minimum SOC climbs by\na step for every interval that passes without a measured full charge, up to\na cap; once the due time falls inside the horizon the SOC is constrained to\nreach the threshold. Two design choices, both because this is a planner\nwith a horizon rather than a controller reacting to live SOC:\n\n- The climb is driven by **time since the last observed full charge**, not\n  by depth of discharge. Elapsed time without balancing is the quantity that\n  matters. A trigger keyed to hitting the floor never fires for a battery\n  that cycles shallowly forever, and that is precisely the pack whose cells\n  drift unnoticed.\n- A success resets the floor to zero rather than unwinding it stepwise. A\n  floor that decays gradually is hysteresis for a trigger that fires per\n  discharge episode; with a time-based trigger, reaching the threshold means\n  the goal was met and the next interval starts clean.\n\nThe rising floor alone cannot guarantee a full charge - it is capped well\nbelow 100%, and it only squeezes the usable window. So once the deadline\nenters the solve horizon, the SOC at one step is constrained to reach\n``full_threshold_pct``. That is a constraint on the state at a time, not an\ninstruction to charge at a time: the solver still chooses which\nquarter-hours to buy the energy in, which is the whole reason for doing this\ninside the optimiser instead of leaving it to the inverter.\n\nA hard constraint rather than a priced preference, for the same reason the\nEV departure target is one: a partially completed balance charge is not a\nbalance charge. It is also the only shape that works under every strategy.\n``minimize_consumption`` fixes the total import volume in a first phase that\nsees only constraints, so a penalty term would be invisible to it at any\nmagnitude; under ``balanced`` a penalty competes with the configured\nweights. A constraint is respected by both, and it needs no tuning knob\nwhose right value depends on the price curve.\n\nWhich step the target is pinned to is decided by the solver, not by this\nconfiguration - see ``model_builder._probe_care_targets``.\n\nAttributes:\n    enabled: Whether the policy is active. Defaults to False, so an existing\n        configuration behaves exactly as it did before this field existed.\n    target_interval_days: How long the battery may go without reaching\n        ``full_threshold_pct`` before the floor starts climbing, and the\n        deadline used once it enters the horizon. Default 7 days, a\n        convention rather than a derivation: often enough that a pack\n        cycling shallowly gets a regular balancing opportunity, rare enough\n        that the policy stays out of the daily plan, and a week keeps the\n        deadline outside a 48-hour horizon for most of the week, so the\n        mechanism stays invisible until it is nearly due. Use the pack\n        manufacturer's interval where one is specified.\n    full_threshold_pct: The observed state of charge, as a percentage of\n        ``capacity_kwh``, that counts as a full charge and resets the\n        policy. Default 97%, not 100%: a BMS reports an estimate, not a\n        measurement, and is not guaranteed to show a round 100 even after a\n        completed charge.\n        A reset it can never see would pin the pack full forever. Only a\n        measured SOC resets the policy - a plan\n        that intended a full charge and fell short must not count, or the\n        mechanism congratulates itself while the cells never balance.\n    step_pct: Percentage points of capacity added to the floor for each\n        elapsed interval without a full charge. Default 5.0: coarse enough\n        that a missed interval narrows the window visibly, fine enough that\n        a single missed interval does not take a large slice of the\n        arbitrage room at once. A convention, not a derivation.\n    cap_pct: Hard ceiling on the dynamic floor, as a percentage of capacity.\n        Default 80.0: well below the threshold, so a neglected pack is\n        squeezed hard but keeps a usable band. The cap is explicit rather\n        than emergent\n        because a floor that climbs unbounded leaves the battery unable to\n        do anything useful, which is a worse failure than a late balance.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Enable the periodic full-charge policy. Off by default.",
+          "title": "Enabled",
+          "type": "boolean",
+          "ui_group": "basic",
+          "ui_label": "Enable SOC ratchet"
+        },
+        "target_interval_days": {
+          "default": 7.0,
+          "description": "Days the battery may go without a full charge before the floor climbs.",
+          "exclusiveMinimum": 0.0,
+          "maximum": 365.0,
+          "title": "Target Interval Days",
+          "type": "number",
+          "ui_group": "basic",
+          "ui_label": "Target interval (days)"
+        },
+        "full_threshold_pct": {
+          "default": 97.0,
+          "description": "Observed SOC, in percent of capacity, that counts as a full charge.",
+          "exclusiveMinimum": 0.0,
+          "maximum": 100.0,
+          "title": "Full Threshold Pct",
+          "type": "number",
+          "ui_group": "basic",
+          "ui_label": "Full threshold (%)"
+        },
+        "step_pct": {
+          "default": 5.0,
+          "description": "Percentage points of capacity added to the floor per missed interval.",
+          "exclusiveMinimum": 0.0,
+          "maximum": 100.0,
+          "title": "Step Pct",
+          "type": "number",
+          "ui_group": "advanced",
+          "ui_label": "Ratchet step (%)"
+        },
+        "cap_pct": {
+          "default": 80.0,
+          "description": "Ceiling on the dynamic floor, in percent of capacity.",
+          "exclusiveMinimum": 0.0,
+          "maximum": 100.0,
+          "title": "Cap Pct",
+          "type": "number",
+          "ui_group": "advanced",
+          "ui_label": "Ratchet cap (%)"
+        }
+      },
+      "title": "SocRatchetConfig",
       "type": "object"
     },
     "SocTopicConfig": {

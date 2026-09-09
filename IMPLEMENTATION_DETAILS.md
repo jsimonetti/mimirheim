@@ -850,13 +850,18 @@ Only one device may hold the closed-loop enforcer role per time step. The arbitr
 
 ### ObjectiveBuilder
 
-A single `ObjectiveBuilder` class is responsible for translating the `strategy` field from `SolveBundle` into the MIP objective expression. Nothing else in the model-building pipeline sets the objective.
+A single `ObjectiveBuilder` class translates the `strategy` field from `SolveBundle` into the MIP objective expression for the schedule.
 
 ```python
 # mimirheim/core/objective.py
 class ObjectiveBuilder:
-    def build(self, ctx: ModelContext, devices: list[Device], grid: Grid, bundle: SolveBundle, config: MimirheimConfig) -> None: ...
+    def add_hard_cap_constraints(self, ctx: ModelContext, grid: Grid, config: MimirheimConfig) -> None: ...
+    def build(self, ctx, devices, grid, bundle, config) -> float: ...   # returns the solver budget left
 ```
+
+`build()` returns the wall-clock budget remaining for the caller's solve, because a lexicographic strategy spends part of it internally.
+
+One other component installs an objective and solves: `_probe_care_targets` in `model_builder.py`, which runs before `build()` on cycles where a battery full-charge target is due. It minimises the gap to each due battery's target — a feasibility question with no economics in it — purely to find a step the target can be pinned to, then hands the model back untouched apart from that constraint. `add_hard_cap_constraints` is public and idempotent so the probe can guarantee the grid caps are in place before it solves.
 
 Internally it branches on `bundle.strategy`:
 
@@ -869,7 +874,7 @@ All three modes add:
 - Import/export hard cap enforcement from `constraints.import_limit_kw` / `constraints.export_limit_kw` (added as constraints, not objective terms)
 - Confidence weighting: every economic term is multiplied by `bundle.horizon_confidence[t]`
 
-The lexicographic solve for `minimize_consumption` is the only case where `build_and_solve()` calls the solver twice internally. The two solves are hidden behind the same `build_and_solve()` signature — callers see one call and one `SolveResult`.
+`build_and_solve()` may therefore call the solver more than once: the `minimize_consumption` phase 1, and the full-charge probe on cycles where a target is due. Both are hidden behind the same signature — callers see one call and one `SolveResult` — and both take their time from `solver.time_limit_seconds` rather than adding to it.
 
 ### Power balance constraint
 

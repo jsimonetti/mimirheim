@@ -35,6 +35,7 @@ from typing import Any
 from mimirheim.config.schema import MimirheimConfig
 from mimirheim.core.readiness import ReadinessState
 from mimirheim.io.input_parser import (
+    parse_battery_care,
     parse_battery_inputs,
     parse_combi_hp_sh_demand,
     parse_combi_hp_temp,
@@ -309,6 +310,24 @@ class MqttClient:
                         None,
                         f"Trigger received but readiness not met. {reason}",
                     )
+                    # A full charge seen while inputs were missing still has to
+                    # reach the broker. The observation lives only in memory
+                    # until it is published, and a battery can sit above its
+                    # threshold for many not-ready cycles; a restart in that
+                    # window would read back the older retained timestamp and
+                    # re-arm a policy the battery has already satisfied.
+                    try:
+                        self._publisher.set_battery_care_overrides(
+                            self._readiness.battery_care_observations(),
+                            self._readiness.battery_care_baselines(),
+                            self._readiness.battery_care_history(),
+                        )
+                        self._publisher.publish_battery_care(None)
+                    except Exception:
+                        # This runs on the MQTT network thread, where an
+                        # escaping exception takes down message handling
+                        # entirely. A missed policy publish is not worth that.
+                        logger.exception("Could not publish battery care state.")
             return
 
         # --- Data topics: update readiness only, never queue a solve ---
@@ -381,6 +400,17 @@ class MqttClient:
                 handlers[topic] = _make_bat_parser(
                     bat_cfg.capacity_kwh, bat_cfg.inputs.soc.unit
                 )
+
+        # Battery full-charge policy status. mimirheim publishes this topic
+        # itself, retained, and subscribes to its own output so the broker
+        # replays the last-measured-full timestamp on connect. That round trip
+        # is the persistence: without it the policy would restart from "never
+        # seen full" on every deploy and never complete a balance charge.
+        # Only subscribed for batteries that enable the policy, so nothing
+        # changes for a configuration that leaves it off.
+        for bat_cfg in config.batteries.values():
+            if bat_cfg.soc_ratchet.enabled and bat_cfg.outputs.soc_ratchet is not None:
+                handlers[bat_cfg.outputs.soc_ratchet] = parse_battery_care
 
         # EV SOC topics + plug state.
         for ev_cfg in config.ev_chargers.values():

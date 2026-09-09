@@ -18,6 +18,7 @@ but never from ``mimirheim.io``.
 
 import json
 import logging
+import time
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -25,6 +26,7 @@ from typing import Any
 
 from mimirheim.config.schema import MimirheimConfig
 from mimirheim.core.bundle import (
+    BatteryCareStatus,
     DeviceSetpoint,
     ScheduleStep,
     SolveBundle,
@@ -45,6 +47,184 @@ from mimirheim.devices.thermal_boiler import ThermalBoilerDevice
 from mimirheim.devices.combi_heat_pump import CombiHeatPumpDevice
 
 logger = logging.getLogger("mimirheim.solver")
+
+# Slack between a solver reading and a constraint built from it. CBC returns
+# values a few ULPs off the true optimum, so pinning soc[t] to exactly what the
+# probe reported can be marginally tighter than what the probe proved feasible.
+_CARE_EPS_KWH = 1e-6
+
+
+def _probe_care_targets(
+    ctx: ModelContext,
+    batteries: list[Battery],
+    config: MimirheimConfig,
+) -> float:
+    """Pin each due full-charge target to a step the model can actually reach.
+
+    A hard ``soc[step] >= target`` is the right shape for this policy — it is
+    the EV-departure idiom, it survives ``minimize_consumption``'s import lock,
+    and it cannot be outbid by ``balanced``'s weights. It has one requirement:
+    the step and the target must be reachable, or the model is infeasible and a
+    policy about cell balancing costs the entire schedule.
+
+    Reachability cannot be estimated outside the solver. It depends on charge
+    derating, the minimum charge power, a piecewise (and possibly
+    non-monotonic) efficiency curve, the load, the import limit and every other
+    device sharing the connection, all at once. An earlier version of this
+    feature tried, in ~200 lines, and five review rounds each found another
+    configuration where it was wrong — in both directions, so neither erring
+    high nor erring low was safe.
+
+    So this asks the solver. It minimises the total gap between each due
+    battery and its own target across the horizon — a question with no
+    economics in it, and one whose only additions are gap variables that do not
+    restrict the feasible set, so it is feasible whenever the model itself is —
+    and reads the answer off the resulting trajectory:
+
+    - That trajectory is a **witness**. Every target imposed below is one the
+      witness already satisfies, so the model with the target added is feasible
+      by construction. That is the guarantee this function provides, and it
+      holds on every branch below: the policy cannot make the solve infeasible.
+    - For each battery, the target is pinned to the first step at or after its
+      deadline where the witness reached the threshold. "At or after" is what
+      handles an overdue battery: its deadline is step 0, and the anchor lands
+      on an early quarter-hour it can genuinely be full by, rather than on a
+      step that is infeasible now or on a horizon end that recedes by one step
+      on every rolling solve. "Early", not "earliest": it is the first such
+      step in one witness, and no claim is made that no earlier one exists.
+    - When the witness never reaches the threshold, the best SOC it did reach
+      is imposed instead — but only on a *proven optimal* probe. A trajectory
+      that merely ran out of time says nothing at all, and nothing is imposed;
+      the status reports the target as unenforced.
+
+      Read that reduced value as a **floor, not a ceiling**: "the model can
+      certainly get this high", not "this is the most it can do". Minimising
+      the summed gap does not answer "can this battery reach its target at
+      *some* step", which is a disjunction and needs a binary per step to ask
+      properly. Two cases make the sum prefer a trajectory that never reaches
+      a target that is in fact reachable: a battery that hovers just below the
+      threshold for many steps scores better than one that touches it once and
+      is then forced down; and with two batteries, refilling an
+      already-satisfied one can shave more off the total than lifting the
+      other to its threshold. In both, the enforced target is lower than what
+      was possible, so the balance charge is under-enforced this cycle and
+      retried on the next. That is a bounded, self-correcting loss, and it is
+      strictly better than enforcing nothing, which is the only alternative
+      that avoids the binaries.
+
+    The per-battery gap, rather than total stored energy, is what keeps this
+    honest with two batteries. Maximising ``Σ soc`` rewards filling the
+    efficient battery past its own threshold before charging a less efficient
+    one at all, so a jointly optimal trajectory can leave one battery short
+    when a trajectory satisfying both exists. Summing each battery's own
+    shortfall has no such preference: a kWh only counts while that battery is
+    below its target. The gap variables exist for this solve only and never
+    enter the economic objective, so they are not a priced preference and
+    cannot be outbid.
+
+    Args:
+        ctx: The solve context, with every constraint already added —
+            including the grid hard caps, which are normally added by
+            ``ObjectiveBuilder`` and must be in place before this runs.
+        batteries: All battery devices in the model.
+        config: Static configuration, for the solver budget.
+
+    Returns:
+        Seconds of the cycle's solver budget consumed. Zero when no battery had
+        a target due, in which case no probe was run and the model is untouched.
+    """
+    due = [
+        bat
+        for bat in batteries
+        if bat.care is not None
+        and bat.care.deadline_step is not None
+        and bat.care.full_target_kwh is not None
+    ]
+    if not due:
+        return 0.0
+
+    # A third of the cycle, so the two-phase minimize_consumption strategy
+    # still has a workable half left after this. The probe carries no prices,
+    # so it normally finishes far inside that.
+    budget = config.solver.time_limit_seconds / 3.0
+    started = time.monotonic()
+
+    gap_sum: Any = None
+    for bat in due:
+        assert bat.care is not None and bat.care.full_target_kwh is not None
+        for t in ctx.T:
+            if t < bat.care.deadline_step:
+                continue
+            gap = ctx.solver.add_var(lb=0.0, ub=bat.config.capacity_kwh)
+            ctx.solver.add_constraint(gap >= bat.care.full_target_kwh - bat.soc[t])
+            gap_sum = gap if gap_sum is None else gap_sum + gap
+
+    if gap_sum is None:
+        return time.monotonic() - started
+
+    ctx.solver.set_objective_minimize(gap_sum)
+    status = ctx.solver.solve(time_limit_seconds=budget)
+    elapsed = time.monotonic() - started
+
+    if status == "infeasible":
+        # No witness, so nothing is imposed. Either the model is already
+        # unsatisfiable for reasons unrelated to this policy — in which case
+        # the caller's solve will report that — or the probe ran out of time,
+        # which says nothing about what is reachable.
+        logger.warning(
+            "Full-charge probe produced no trajectory (%s); leaving the target "
+            "unenforced for %s.",
+            "model is infeasible"
+            if getattr(ctx.solver, "last_status_proved_infeasible", False)
+            else "no solution within the probe budget",
+            ", ".join(bat.name for bat in due),
+        )
+        return elapsed
+
+    for bat in due:
+        assert bat.care is not None and bat.care.full_target_kwh is not None
+        target = bat.care.full_target_kwh
+        window = [t for t in ctx.T if t >= bat.care.deadline_step]
+        witness = {t: ctx.solver.var_value(bat.soc[t]) for t in window}
+
+        # No tolerance on the way in. A witness a hair below the target does
+        # not satisfy ``soc >= target``, so accepting it here would impose a
+        # constraint the witness does not meet and give up the one guarantee
+        # this function exists to provide.
+        reached = [t for t in window if witness[t] >= target]
+        if reached:
+            bat.enforce_care_target(ctx, reached[0], target)
+            continue
+
+        if status != "optimal":
+            # The probe stopped early. Its best SOC is a lower bound on what
+            # the hardware can do, not a ceiling, so reducing the target to it
+            # would silently under-enforce the policy.
+            logger.warning(
+                "Full-charge probe for battery %s did not prove its limit "
+                "within the budget; leaving the target unenforced.",
+                bat.name,
+            )
+            continue
+
+        # Proven out of reach this horizon: hold the model to the best the
+        # witness managed. The epsilon keeps a constraint built from a solver
+        # reading from being marginally tighter than the reading itself.
+        best_step = max(window, key=lambda t: witness[t])
+        best_kwh = witness[best_step] - _CARE_EPS_KWH
+        if best_kwh <= 0.0:
+            continue
+        logger.info(
+            "Battery %s cannot reach its full-charge target of %.2f kWh in "
+            "this horizon; requiring %.2f kWh at step %d instead.",
+            bat.name,
+            target,
+            best_kwh,
+            best_step,
+        )
+        bat.enforce_care_target(ctx, best_step, best_kwh)
+
+    return elapsed
 
 
 def _dt_from_horizon(horizon: int) -> float:
@@ -241,7 +421,11 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
                 f"Battery {bat.name!r} appears in config but has no entry in "
                 f"bundle.battery_inputs."
             )
-        bat.add_constraints(ctx, inputs=bat_inputs)
+        # solve_time_utc is what turns the full-charge policy's interval into
+        # a horizon step; without it the policy is skipped entirely.
+        bat.add_constraints(
+            ctx, inputs=bat_inputs, solve_time_utc=bundle.solve_time_utc
+        )
 
     unknown_pv = set(bundle.pv_forecasts) - set(config.pv_arrays)
     if unknown_pv:
@@ -369,17 +553,65 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
         else:
             ctx.solver.add_constraint(device_net + grid_net == 0)
 
+    # --- Full-charge target ---
+    # Adding it here, after every other constraint and before the objective,
+    # is deliberate: the probe needs the complete model.
+    # The grid hard caps have to exist before the probe solves, or its witness
+    # can rely on import the final model forbids and the target derived from it
+    # makes that model infeasible. ObjectiveBuilder normally adds them at the
+    # top of build(); adding them here is idempotent.
+    objective_builder = ObjectiveBuilder()
+    objective_builder.add_hard_cap_constraints(ctx, grid, config)
+
+    probe_seconds = _probe_care_targets(ctx, batteries, config)
+
+    # Carried on the result so the publisher can put the floor and the
+    # last-full timestamp on a retained topic. That topic is also where the
+    # timestamp is read back from after a restart, so this is the persistence
+    # path as much as the observability one. Built after the probe because
+    # enforced_target_kwh is not known until then, and before the solve because
+    # the policy state is true whether or not a schedule comes out.
+    battery_care: dict[str, BatteryCareStatus] = {}
+    for bat in batteries:
+        if bat.care is None:
+            continue
+        bat_inputs = bundle.battery_inputs[bat.name]
+        battery_care[bat.name] = BatteryCareStatus(
+            last_full_utc=bat_inputs.last_full_utc,
+            # Carried through so the retained payload can restore it: a battery
+            # never yet seen full has nothing else to measure its first interval
+            # from, and losing the baseline on every restart would keep its
+            # first balance charge permanently out of reach.
+            care_since_utc=bat_inputs.care_since_utc,
+            floor_kwh=bat.care.floor_kwh,
+            hours_since_full=bat.care.hours_since_full,
+            full_target_kwh=bat.care.full_target_kwh,
+            deadline_step=bat.care.deadline_step,
+            enforced_target_kwh=(
+                bat.care_target[1] if bat.care_target is not None else None
+            ),
+            enforced_step=(
+                bat.care_target[0] if bat.care_target is not None else None
+            ),
+        )
+
     # --- Objective ---
     # build() returns the solver budget left for the solve below. Most
     # strategies leave the whole of config.solver.time_limit_seconds, but
     # minimize_consumption is lexicographic and spends part of it on its
     # phase-1 solve inside build(). Passing the returned value through is what
     # keeps a two-phase solve inside the configured budget.
-    objective_builder = ObjectiveBuilder()
     solve_budget_seconds = objective_builder.build(
         ctx, all_devices, grid, bundle, config
     )
     strategy_degraded = objective_builder.strategy_degraded
+    # The probe spent part of the cycle's budget, so the final solve gets what
+    # is left rather than the full allowance. Floored just above zero rather
+    # than at a whole second, so a cycle configured with a short budget is not
+    # silently given several times what it asked for. The floor is still a
+    # floor: a time_limit_seconds below 1 ms would overrun it, which is not a
+    # configuration worth contorting this arithmetic for.
+    solve_budget_seconds = max(1e-3, solve_budget_seconds - probe_seconds)
 
     # --- Log model size ---
     # Logged at DEBUG so it appears when the operator runs with --log-level DEBUG
@@ -410,6 +642,12 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
             objective_value=0.0,
             solve_status="infeasible",
             schedule=[],
+            # The policy state is true whether or not a schedule came out, and
+            # it is the only copy of the last-measured-full timestamp. Dropping
+            # it here would mean a full charge observed just before an
+            # infeasible cycle never reaches the broker, and a restart would
+            # re-arm a policy that had just been satisfied.
+            battery_care=battery_care,
         )
 
     obj_val = ctx.solver.objective_value()
@@ -605,6 +843,7 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
         soc_credit_eur=_compute_soc_credit(bundle, schedule, config, dt),
         schedule=schedule,
         deferrable_recommended_starts=deferrable_recommended_starts,
+        battery_care=battery_care,
     )
 
 

@@ -1317,3 +1317,589 @@ def test_strategy_degraded_is_published_beside_the_strategy() -> None:
     publisher.publish_result(_make_result("optimal"))
     assert _published(mock_client, "mimir/strategy/schedule")["strategy_degraded"] is False
     assert _published(mock_client, "mimir/strategy/current")["strategy_degraded"] is False
+
+
+# ---------------------------------------------------------------------------
+# Battery full-charge policy status
+# ---------------------------------------------------------------------------
+
+
+def test_publishes_battery_care_status_retained() -> None:
+    """The status topic is retained because it is also the policy's only store.
+
+    mimirheim subscribes to this topic itself so the broker replays the
+    last-measured-full timestamp after a restart. Published unretained, the
+    policy would forget on every deploy and the cells would never balance.
+    """
+    from datetime import datetime, timezone
+
+    from mimirheim.core.bundle import BatteryCareStatus
+
+    mock_client = MagicMock()
+    config = _make_config()
+    publisher = MqttPublisher(client=mock_client, config=config)
+    result = _make_result()
+    result.battery_care = {
+        "bat": BatteryCareStatus(
+            last_full_utc=datetime(2026, 6, 1, 9, 15, tzinfo=timezone.utc),
+            floor_kwh=1.5,
+            hours_since_full=51.0,
+            full_target_kwh=9.7,
+            deadline_step=42,
+        )
+    }
+
+    publisher.publish_result(result)
+
+    topic = config.batteries["bat"].outputs.soc_ratchet
+    calls = [c for c in mock_client.publish.call_args_list if c.args[0] == topic]
+    assert len(calls) == 1
+    assert calls[0].kwargs["retain"] is True
+    assert calls[0].kwargs["qos"] == 1
+
+    payload = json.loads(calls[0].args[1])
+    assert payload["last_full_utc"].startswith("2026-06-01T09:15:00")
+    assert payload["floor_kwh"] == 1.5
+    assert payload["hours_since_full"] == 51.0
+    assert payload["deadline_step"] == 42
+
+
+def test_no_care_status_published_for_a_battery_without_the_policy() -> None:
+    mock_client = MagicMock()
+    config = _make_config()
+    publisher = MqttPublisher(client=mock_client, config=config)
+
+    publisher.publish_result(_make_result())
+
+    topic = config.batteries["bat"].outputs.soc_ratchet
+    assert not [c for c in mock_client.publish.call_args_list if c.args[0] == topic]
+
+
+def test_care_status_is_published_even_without_a_schedule() -> None:
+    """An infeasible solve still knows where the floor is, and must say so."""
+    from datetime import datetime, timezone
+
+    from mimirheim.core.bundle import BatteryCareStatus
+
+    mock_client = MagicMock()
+    config = _make_config()
+    publisher = MqttPublisher(client=mock_client, config=config)
+    result = _infeasible_result()
+    result.battery_care = {
+        "bat": BatteryCareStatus(
+            last_full_utc=datetime(2026, 6, 1, 9, 15, tzinfo=timezone.utc),
+            floor_kwh=2.0,
+            hours_since_full=51.0,
+        )
+    }
+
+    publisher.publish_result(result)
+
+    topic = config.batteries["bat"].outputs.soc_ratchet
+    assert len([c for c in mock_client.publish.call_args_list if c.args[0] == topic]) == 1
+
+
+def test_a_fresher_observation_overrides_a_stale_result_timestamp() -> None:
+    """A full charge seen while the solver ran must not be published over.
+
+    The result was built from a snapshot taken before the solve. If an
+    observation arrived on the MQTT thread in the meantime, publishing the
+    snapshot's timestamp would move the broker's record backwards, and a
+    restart before the next successful solve would re-arm a policy that had
+    already been satisfied.
+    """
+    from datetime import datetime, timezone
+
+    from mimirheim.core.bundle import BatteryCareStatus
+
+    mock_client = MagicMock()
+    config = _make_config()
+    publisher = MqttPublisher(client=mock_client, config=config)
+    result = _make_result()
+    stale = datetime(2026, 6, 1, 9, 15, tzinfo=timezone.utc)
+    fresh = datetime(2026, 6, 1, 9, 45, tzinfo=timezone.utc)
+    result.battery_care = {
+        "bat": BatteryCareStatus(last_full_utc=stale, floor_kwh=0.5)
+    }
+    publisher.set_battery_care_overrides({"bat": fresh})
+
+    publisher.publish_result(result)
+
+    topic = config.batteries["bat"].outputs.soc_ratchet
+    call = next(c for c in mock_client.publish.call_args_list if c.args[0] == topic)
+    payload = json.loads(call.args[1])
+    assert payload["last_full_utc"].startswith("2026-06-01T09:45:00")
+    # The derived fields describe a policy that was overdue when the snapshot
+    # was taken and has since been satisfied. Publishing the fresh timestamp
+    # beside a standing floor would show a state that never existed.
+    assert payload["floor_kwh"] == 0.0
+    assert payload["hours_since_full"] == 0.0
+    assert payload["deadline_step"] is None
+
+
+def test_an_older_override_does_not_move_the_timestamp_backwards() -> None:
+    from datetime import datetime, timezone
+
+    from mimirheim.core.bundle import BatteryCareStatus
+
+    mock_client = MagicMock()
+    config = _make_config()
+    publisher = MqttPublisher(client=mock_client, config=config)
+    result = _make_result()
+    current = datetime(2026, 6, 1, 9, 45, tzinfo=timezone.utc)
+    result.battery_care = {
+        "bat": BatteryCareStatus(last_full_utc=current, floor_kwh=0.5)
+    }
+    publisher.set_battery_care_overrides(
+        {"bat": datetime(2026, 6, 1, 9, 15, tzinfo=timezone.utc)}
+    )
+
+    publisher.publish_result(result)
+
+    topic = config.batteries["bat"].outputs.soc_ratchet
+    call = next(c for c in mock_client.publish.call_args_list if c.args[0] == topic)
+    assert json.loads(call.args[1])["last_full_utc"].startswith("2026-06-01T09:45:00")
+
+
+def test_schedule_payload_is_unchanged_when_no_policy_is_configured() -> None:
+    """An installation without the policy must see the payload it saw before.
+
+    An always-present empty map is a schema change on the authoritative
+    schedule topic for every existing consumer, bought for nothing.
+    """
+    mock_client = MagicMock()
+    config = _make_config()
+    publisher = MqttPublisher(client=mock_client, config=config)
+
+    publisher.publish_result(_make_result())
+
+    call = next(
+        c for c in mock_client.publish.call_args_list
+        if c.args[0] == config.outputs.schedule
+    )
+    assert "battery_care" not in json.loads(call.args[1])
+
+
+def test_a_retained_baseline_correction_is_not_treated_as_a_fresh_charge() -> None:
+    """Only a live observation means the battery just finished a balance charge.
+
+    A retained baseline arriving late moves the start of the interval, not the
+    battery's state. Treating it as an event would publish hours_since_full of
+    zero and no deadline for a battery that is still months overdue.
+    """
+    from datetime import datetime, timezone
+
+    from mimirheim.core.bundle import BatteryCareStatus
+
+    mock_client = MagicMock()
+    config = _make_config()
+    publisher = MqttPublisher(client=mock_client, config=config)
+    result = _make_result()
+    result.battery_care = {
+        "bat": BatteryCareStatus(
+            last_full_utc=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            floor_kwh=2.0,
+            hours_since_full=3600.0,
+            deadline_step=5,
+        )
+    }
+    # No live observation; only a corrected baseline arrived during the solve.
+    publisher.set_battery_care_overrides({}, {"bat": datetime(2025, 6, 1, tzinfo=timezone.utc)})
+
+    publisher.publish_result(result)
+
+    topic = config.batteries["bat"].outputs.soc_ratchet
+    call = next(c for c in mock_client.publish.call_args_list if c.args[0] == topic)
+    payload = json.loads(call.args[1])
+    assert payload["floor_kwh"] == 2.0
+    assert payload["hours_since_full"] == 3600.0
+    assert payload["deadline_step"] == 5
+    assert payload["care_since_utc"].startswith("2025-06-01")
+
+
+def test_a_baseline_correction_only_moves_the_interval_start_backwards() -> None:
+    from datetime import datetime, timezone
+
+    from mimirheim.core.bundle import BatteryCareStatus
+
+    mock_client = MagicMock()
+    config = _make_config()
+    publisher = MqttPublisher(client=mock_client, config=config)
+    result = _make_result()
+    original = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    result.battery_care = {
+        "bat": BatteryCareStatus(care_since_utc=original, floor_kwh=0.0)
+    }
+    publisher.set_battery_care_overrides({}, {"bat": datetime(2026, 3, 1, tzinfo=timezone.utc)})
+
+    publisher.publish_result(result)
+
+    topic = config.batteries["bat"].outputs.soc_ratchet
+    call = next(c for c in mock_client.publish.call_args_list if c.args[0] == topic)
+    assert json.loads(call.args[1])["care_since_utc"].startswith("2026-01-01")
+
+
+def test_a_retained_correction_arriving_during_a_solve_is_not_republished_over() -> None:
+    """The retained topic is the only durable store, so a lost correction is lost.
+
+    The correction moves the timestamp but leaves the derived fields alone: it
+    is history, not a report that the battery has just been balanced.
+    """
+    from datetime import datetime, timezone
+
+    from mimirheim.core.bundle import BatteryCareStatus
+
+    mock_client = MagicMock()
+    config = _make_config()
+    publisher = MqttPublisher(client=mock_client, config=config)
+    result = _make_result()
+    result.battery_care = {
+        "bat": BatteryCareStatus(
+            last_full_utc=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            floor_kwh=2.0,
+            hours_since_full=3600.0,
+            deadline_step=5,
+        )
+    }
+    publisher.set_battery_care_overrides(
+        {}, {}, {"bat": datetime(2026, 2, 1, tzinfo=timezone.utc)}
+    )
+
+    publisher.publish_result(result)
+
+    topic = config.batteries["bat"].outputs.soc_ratchet
+    call = next(c for c in mock_client.publish.call_args_list if c.args[0] == topic)
+    payload = json.loads(call.args[1])
+    assert payload["last_full_utc"].startswith("2026-02-01")
+    assert payload["floor_kwh"] == 2.0
+    assert payload["deadline_step"] == 5
+
+
+def test_care_state_is_published_when_there_is_no_solve_result() -> None:
+    """A failed solve must not lose a full charge that was observed since.
+
+    The observation lives in memory until it is published, and the retained
+    topic is its only store. If a solve raises after a reading recorded the
+    battery as full, publishing nothing leaves the broker holding the older
+    timestamp — so a restart re-arms a policy the battery has already
+    satisfied, and keeps doing so for as long as the solve keeps failing.
+
+    With no result there is no horizon, so only the fields derivable from the
+    timestamps are published: the floor is a pure function of them, which is
+    the property that lets the policy survive a restart at all.
+    """
+    import json
+    from datetime import UTC, datetime, timedelta
+    from unittest.mock import MagicMock
+
+    import paho.mqtt.client as mqtt
+
+    from mimirheim.config.schema import MimirheimConfig
+    from mimirheim.io.mqtt_publisher import MqttPublisher
+
+    config = MimirheimConfig.model_validate(
+        {
+            "mqtt": {"host": "localhost", "client_id": "test"},
+            "grid": {"import_limit_kw": 10.0, "export_limit_kw": 10.0},
+            "batteries": {
+                "home": {
+                    "capacity_kwh": 10.0,
+                    "charge_segments": [{"power_max_kw": 3.0, "efficiency": 0.95}],
+                    "discharge_segments": [{"power_max_kw": 3.0, "efficiency": 0.95}],
+                    "soc_ratchet": {"enabled": True},
+                }
+            },
+        }
+    )
+    observed = datetime.now(UTC) - timedelta(minutes=3)
+
+    client = MagicMock()
+    client.publish.return_value.rc = mqtt.MQTT_ERR_SUCCESS
+    pub = MqttPublisher(client=client, config=config)
+    pub.set_battery_care_overrides({"home": observed}, {}, {})
+
+    pub.publish_battery_care(None)
+
+    topic = config.batteries["home"].outputs.soc_ratchet
+    call = next(c for c in client.publish.call_args_list if c.args[0] == topic)
+    payload = json.loads(call.args[1])
+    assert payload["last_full_utc"] is not None
+    assert payload["floor_kwh"] == 0.0
+    assert payload["full_target_kwh"] is None
+
+
+def test_the_failure_snapshot_uses_the_freshest_timestamp() -> None:
+    """A stale floor must not be published beside a fresh reset timestamp.
+
+    A live observation and a retained correction can both be present, and
+    either can be the newer one. Taking the observation unconditionally
+    computes floor_kwh and hours_since_full from the older timestamp while
+    publish_battery_care goes on to publish the newer one, producing a payload
+    that contradicts itself: a standing floor next to a reset that clears it.
+    """
+    import json
+    from datetime import UTC, datetime, timedelta
+    from unittest.mock import MagicMock
+
+    import paho.mqtt.client as mqtt
+
+    from mimirheim.config.schema import MimirheimConfig
+    from mimirheim.io.mqtt_publisher import MqttPublisher
+
+    config = MimirheimConfig.model_validate(
+        {
+            "mqtt": {"host": "localhost", "client_id": "test"},
+            "grid": {"import_limit_kw": 10.0, "export_limit_kw": 10.0},
+            "batteries": {
+                "home": {
+                    "capacity_kwh": 10.0,
+                    "charge_segments": [{"power_max_kw": 3.0, "efficiency": 0.95}],
+                    "discharge_segments": [{"power_max_kw": 3.0, "efficiency": 0.95}],
+                    "soc_ratchet": {"enabled": True},
+                }
+            },
+        }
+    )
+    now = datetime.now(UTC)
+    stale_observation = now - timedelta(days=8)
+    fresh_history = now - timedelta(days=1)
+
+    client = MagicMock()
+    client.publish.return_value.rc = mqtt.MQTT_ERR_SUCCESS
+    pub = MqttPublisher(client=client, config=config)
+    pub.set_battery_care_overrides(
+        {"home": stale_observation}, {}, {"home": fresh_history}
+    )
+
+    pub.publish_battery_care(None)
+
+    topic = config.batteries["home"].outputs.soc_ratchet
+    call = next(c for c in client.publish.call_args_list if c.args[0] == topic)
+    payload = json.loads(call.args[1])
+
+    # One day since the last full charge, so no interval has elapsed and the
+    # floor is still zero. Reading the eight-day-old value would give 0.5.
+    assert payload["floor_kwh"] == 0.0
+    assert payload["hours_since_full"] == pytest.approx(24.0, abs=0.1)
+
+
+def test_the_recorded_full_charge_never_moves_backwards() -> None:
+    """A later publish carrying older state must not regress the topic.
+
+    This is the monotonic guard, not the lock. Two sequential publishes stand
+    in for the interleaving the guard exists to survive: the solve loop and
+    the MQTT network thread each read the care maps and then publish, and the
+    one that reads first can publish second. Reproducing the schedule itself
+    would be timing-dependent, so the guard is tested directly on the state it
+    protects — a retained topic that is the only durable store of the last
+    measured full charge, where a regression re-arms a satisfied policy on the
+    next restart.
+    """
+    import json
+    from datetime import UTC, datetime, timedelta
+    from unittest.mock import MagicMock
+
+    import paho.mqtt.client as mqtt
+
+    from mimirheim.config.schema import MimirheimConfig
+    from mimirheim.io.mqtt_publisher import MqttPublisher
+
+    config = MimirheimConfig.model_validate(
+        {
+            "mqtt": {"host": "localhost", "client_id": "test"},
+            "grid": {"import_limit_kw": 10.0, "export_limit_kw": 10.0},
+            "batteries": {
+                "home": {
+                    "capacity_kwh": 10.0,
+                    "charge_segments": [{"power_max_kw": 3.0, "efficiency": 0.95}],
+                    "discharge_segments": [{"power_max_kw": 3.0, "efficiency": 0.95}],
+                    "soc_ratchet": {"enabled": True},
+                }
+            },
+        }
+    )
+    now = datetime.now(UTC)
+    client = MagicMock()
+    client.publish.return_value.rc = mqtt.MQTT_ERR_SUCCESS
+    pub = MqttPublisher(client=client, config=config)
+    topic = config.batteries["home"].outputs.soc_ratchet
+
+    # The newer observation reaches the topic first.
+    pub.set_battery_care_overrides({"home": now - timedelta(hours=1)}, {}, {})
+    pub.publish_battery_care(None)
+
+    # A thread holding older state publishes afterwards.
+    pub.set_battery_care_overrides({"home": now - timedelta(days=9)}, {}, {})
+    pub.publish_battery_care(None)
+
+    last = [c for c in client.publish.call_args_list if c.args[0] == topic][-1]
+    payload = json.loads(last.args[1])
+    published = datetime.fromisoformat(payload["last_full_utc"])
+    assert published == now - timedelta(hours=1), (
+        "a late publish carrying older state moved last_full_utc backwards"
+    )
+
+
+def test_an_error_is_never_reported_as_a_successful_solve() -> None:
+    """A result can be present and still be the wrong thing to report.
+
+    The solve loop catches exceptions from post-processing and from partway
+    through publishing, by which point build_and_solve has already returned.
+    Reporting "ok" then claims a schedule reached the broker when it may not
+    have.
+    """
+    import json
+    from unittest.mock import MagicMock
+
+    import paho.mqtt.client as mqtt
+
+    from mimirheim.config.schema import MimirheimConfig
+    from mimirheim.core.bundle import SolveResult
+    from mimirheim.io.mqtt_publisher import MqttPublisher
+
+    config = MimirheimConfig.model_validate(
+        {
+            "mqtt": {"host": "localhost", "client_id": "test"},
+            "grid": {"import_limit_kw": 10.0, "export_limit_kw": 10.0},
+        }
+    )
+    client = MagicMock()
+    client.publish.return_value.rc = mqtt.MQTT_ERR_SUCCESS
+    pub = MqttPublisher(client=client, config=config)
+
+    pub.publish_last_solve_status(
+        SolveResult(
+            strategy="minimize_cost",
+            solve_status="optimal",
+            objective_value=1.0,
+            schedule=[],
+        ),
+        "post-processing blew up",
+    )
+
+    call = next(
+        c for c in client.publish.call_args_list if c.args[0] == config.outputs.last_solve
+    )
+    payload = json.loads(call.args[1])
+    assert payload["status"] != "ok"
+
+
+def test_the_policy_baseline_never_moves_forwards() -> None:
+    """The two care timestamps regress in opposite directions.
+
+    care_since_utc marks the start of the interval the battery has been
+    waiting through, so it only ever retreats. Letting a stale publish push it
+    forward discards elapsed waiting — and for a battery never yet seen full
+    it is the only clock the policy has, so a caller that keeps advancing it
+    postpones the first balance charge indefinitely rather than delaying it a
+    cycle. Guarding last_full_utc alone does not cover this.
+    """
+    import json
+    from datetime import UTC, datetime, timedelta
+    from unittest.mock import MagicMock
+
+    import paho.mqtt.client as mqtt
+
+    from mimirheim.config.schema import MimirheimConfig
+    from mimirheim.io.mqtt_publisher import MqttPublisher
+
+    config = MimirheimConfig.model_validate(
+        {
+            "mqtt": {"host": "localhost", "client_id": "test"},
+            "grid": {"import_limit_kw": 10.0, "export_limit_kw": 10.0},
+            "batteries": {
+                "home": {
+                    "capacity_kwh": 10.0,
+                    "charge_segments": [{"power_max_kw": 3.0, "efficiency": 0.95}],
+                    "discharge_segments": [{"power_max_kw": 3.0, "efficiency": 0.95}],
+                    "soc_ratchet": {"enabled": True},
+                }
+            },
+        }
+    )
+    now = datetime.now(UTC)
+    client = MagicMock()
+    client.publish.return_value.rc = mqtt.MQTT_ERR_SUCCESS
+    pub = MqttPublisher(client=client, config=config)
+    topic = config.batteries["home"].outputs.soc_ratchet
+
+    # The true baseline, twenty days back, reaches the topic first.
+    pub.set_battery_care_overrides({}, {"home": now - timedelta(days=20)}, {})
+    pub.publish_battery_care(None)
+
+    # A stale caller publishes a much later baseline afterwards.
+    pub.set_battery_care_overrides({}, {"home": now - timedelta(hours=1)}, {})
+    pub.publish_battery_care(None)
+
+    last = [c for c in client.publish.call_args_list if c.args[0] == topic][-1]
+    published = datetime.fromisoformat(json.loads(last.args[1])["care_since_utc"])
+    assert published == now - timedelta(days=20), (
+        "a late publish carrying newer state discarded the elapsed interval"
+    )
+
+
+def test_a_stale_payload_is_dropped_rather_than_part_corrected() -> None:
+    """Patching the timestamp alone produces a state that never existed.
+
+    A stale publish carries stale derived fields too. Restoring only the
+    monotonic timestamp and letting the rest through pairs a fresh
+    last_full_utc — which says the battery was just balanced, so the floor is
+    zero and nothing is due — with the floor, age, target and deadline from
+    the older snapshot. The whole payload is dropped instead; the broker keeps
+    the better message and the next solve republishes.
+    """
+    import json
+    from datetime import UTC, datetime, timedelta
+    from unittest.mock import MagicMock
+
+    import paho.mqtt.client as mqtt
+
+    from mimirheim.config.schema import MimirheimConfig
+    from mimirheim.core.bundle import BatteryCareStatus, SolveResult
+    from mimirheim.io.mqtt_publisher import MqttPublisher
+
+    config = MimirheimConfig.model_validate(
+        {
+            "mqtt": {"host": "localhost", "client_id": "test"},
+            "grid": {"import_limit_kw": 10.0, "export_limit_kw": 10.0},
+            "batteries": {
+                "home": {
+                    "capacity_kwh": 10.0,
+                    "charge_segments": [{"power_max_kw": 3.0, "efficiency": 0.95}],
+                    "discharge_segments": [{"power_max_kw": 3.0, "efficiency": 0.95}],
+                    "soc_ratchet": {"enabled": True},
+                }
+            },
+        }
+    )
+    now = datetime.now(UTC)
+    client = MagicMock()
+    client.publish.return_value.rc = mqtt.MQTT_ERR_SUCCESS
+    pub = MqttPublisher(client=client, config=config)
+    topic = config.batteries["home"].outputs.soc_ratchet
+
+    def _result(last_full, floor, target):
+        return SolveResult(
+            strategy="minimize_cost",
+            solve_status="optimal",
+            objective_value=0.0,
+            schedule=[],
+            battery_care={
+                "home": BatteryCareStatus(
+                    last_full_utc=last_full,
+                    floor_kwh=floor,
+                    full_target_kwh=target,
+                )
+            },
+        )
+
+    # A fresh full charge: floor cleared, nothing due.
+    pub.publish_battery_care(_result(now - timedelta(hours=1), 0.0, None))
+    # A stale snapshot from eight days back, with the floor it had then.
+    pub.publish_battery_care(_result(now - timedelta(days=8), 2.0, 9.7))
+
+    sent = [c for c in client.publish.call_args_list if c.args[0] == topic]
+    assert len(sent) == 1, "the stale payload was published instead of dropped"
+    payload = json.loads(sent[0].args[1])
+    assert payload["floor_kwh"] == 0.0
+    assert payload["full_target_kwh"] is None

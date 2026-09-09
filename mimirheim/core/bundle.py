@@ -29,11 +29,31 @@ class BatteryInputs(BaseModel):
 
     Attributes:
         soc_kwh: Current state of charge in kWh. Must be non-negative.
+        last_full_utc: When the battery was last *measured* at or above the
+            full-charge threshold of its ``soc_ratchet`` policy. None when it
+            has never been seen full, or when no policy is configured. The
+            value is observed rather than planned: it comes from a SOC reading
+            that actually reached the threshold, never from a schedule that
+            intended to. It survives restarts because it is republished to a
+            retained topic and read back on startup.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     soc_kwh: float = Field(ge=0, description="State of charge in kWh.")
+    last_full_utc: datetime | None = Field(
+        default=None,
+        description="UTC timestamp of the last measured full charge.",
+    )
+    care_since_utc: datetime | None = Field(
+        default=None,
+        description=(
+            "UTC timestamp of the first SOC reading the full-charge policy saw "
+            "for this battery. Used as the interval baseline until a full charge "
+            "is observed, so a battery that never reaches the threshold on its "
+            "own still gets its first balance charge scheduled."
+        ),
+    )
 
 
 class EvInputs(BaseModel):
@@ -508,6 +528,81 @@ class ScheduleStep(BaseModel):
     devices: dict[str, DeviceSetpoint]
 
 
+class BatteryCareStatus(BaseModel):
+    """Where one battery's full-charge policy stands after a solve.
+
+    Published retained, and read back by mimirheim on startup: this payload is
+    both the observability requirement and the persistence mechanism. A floor
+    that moves invisibly is precisely the failure mode the policy exists to
+    replace, and a timestamp that does not survive a restart means the policy
+    resets on every deploy and the cells never balance.
+
+    Attributes:
+        last_full_utc: When the battery was last measured at or above the
+            threshold. None when it has never been observed full.
+        care_since_utc: When the policy first saw a reading for this battery.
+            It is the interval baseline until a full charge is observed, so a
+            battery that never reaches the threshold unaided is still brought
+            up eventually rather than left dormant.
+        floor_kwh: The dynamic floor the ratchet contributed to this solve, in
+            kWh. Zero when the policy is satisfied or disabled. This is the
+            ratchet's own contribution, not the enforced floor, which is the
+            higher of this and ``min_soc_kwh``.
+        hours_since_full: Hours between the last measured full charge and this
+            solve. None when never observed full.
+        full_target_kwh: The SOC the solver was asked to reach by the deadline,
+            or None when no full charge was due inside the horizon.
+        deadline_step: Horizon step the policy asked for the target by, or
+            None. The step actually constrained is ``enforced_step``, which is
+            at or after this one.
+        enforced_target_kwh: The SOC actually required of the model, in kWh,
+            and the field to watch. Equal to ``full_target_kwh`` in the normal
+            case. A lower value is a floor the solve was held to when no
+            trajectory reaching the full target was found — usually because the
+            load, the import limit or the charge power is outrunning the
+            policy, though it can also be a trajectory the probe simply did not
+            find (see ``model_builder._probe_care_targets``). None means
+            nothing was imposed at all: either no target was due, in which case
+            ``full_target_kwh`` is None too, or one was due and the probe could
+            not settle it within its budget, in which case ``full_target_kwh``
+            is set. The two are distinguished by that pairing.
+        enforced_step: The horizon step ``enforced_target_kwh`` was pinned to.
+            At or after ``deadline_step``; later when the battery could not be
+            full by the deadline itself. None whenever
+            ``enforced_target_kwh`` is None.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    last_full_utc: datetime | None = Field(
+        default=None, description="UTC timestamp of the last measured full charge."
+    )
+    care_since_utc: datetime | None = Field(
+        default=None,
+        description="UTC timestamp of the first SOC reading the policy saw.",
+    )
+    floor_kwh: float = Field(ge=0.0, description="Dynamic ratchet floor in kWh.")
+    hours_since_full: float | None = Field(
+        default=None, description="Hours since the last measured full charge."
+    )
+    full_target_kwh: float | None = Field(
+        default=None, description="SOC required at the deadline step, in kWh."
+    )
+    deadline_step: int | None = Field(
+        default=None, description="Horizon step the policy asked for the full-charge target by."
+    )
+    enforced_target_kwh: float | None = Field(
+        default=None,
+        ge=0.0,
+        description="SOC in kWh the solve was actually required to reach.",
+    )
+    enforced_step: int | None = Field(
+        default=None,
+        ge=0,
+        description="Horizon step the enforced full-charge target was pinned to.",
+    )
+
+
 class SolveResult(BaseModel):
     """Complete output of one mimirheim solve cycle.
 
@@ -631,5 +726,12 @@ class SolveResult(BaseModel):
             "Solver-chosen start datetimes for deferrable loads in binary scheduling "
             "state, keyed by device name. The datetime is the first step in the schedule "
             "where the load has a nonzero power setpoint."
+        ),
+    )
+    battery_care: dict[str, BatteryCareStatus] = Field(
+        default_factory=dict,
+        description=(
+            "Full-charge policy status per battery, for batteries with soc_ratchet "
+            "enabled. Empty when no battery configures the policy."
         ),
     )

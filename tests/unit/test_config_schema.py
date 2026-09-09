@@ -2787,3 +2787,74 @@ def test_empty_production_stages_is_a_validation_error() -> None:
             topic_forecast="mimir/input/pv_forecast",
             production_stages=[],
         )
+
+
+# ---------------------------------------------------------------------------
+# SocRatchetConfig
+# ---------------------------------------------------------------------------
+
+
+def test_soc_ratchet_defaults_are_inert() -> None:
+    """An untouched battery config must behave as it did before the policy existed."""
+    from mimirheim.config.schema import SocRatchetConfig
+
+    cfg = SocRatchetConfig()
+    assert cfg.enabled is False
+    assert cfg.target_interval_days == 7.0
+    assert cfg.full_threshold_pct == 97.0
+    assert cfg.step_pct == 5.0
+    assert cfg.cap_pct == 80.0
+
+
+def test_soc_ratchet_rejects_a_cap_below_one_step() -> None:
+    """A cap under one step turns a gradual climb into a switch."""
+    from mimirheim.config.schema import SocRatchetConfig
+
+    with pytest.raises(ValidationError):
+        SocRatchetConfig(enabled=True, step_pct=10.0, cap_pct=5.0)
+
+
+def test_soc_ratchet_rejects_a_cap_at_or_above_the_full_threshold() -> None:
+    """A floor that reaches the threshold pins the battery full and useless."""
+    from mimirheim.config.schema import SocRatchetConfig
+
+    with pytest.raises(ValidationError):
+        SocRatchetConfig(enabled=True, full_threshold_pct=90.0, cap_pct=90.0)
+    with pytest.raises(ValidationError):
+        SocRatchetConfig(enabled=True, full_threshold_pct=90.0, cap_pct=95.0)
+
+
+def test_soc_ratchet_field_bounds() -> None:
+    from mimirheim.config.schema import SocRatchetConfig
+
+    for kwargs in (
+        {"target_interval_days": 0.0},
+        {"target_interval_days": -1.0},
+        {"full_threshold_pct": 0.0},
+        {"full_threshold_pct": 101.0},
+        {"step_pct": 0.0},
+        {"cap_pct": 0.0},
+    ):
+        with pytest.raises(ValidationError):
+            SocRatchetConfig(enabled=True, **kwargs)
+
+
+def test_soc_ratchet_status_topic_is_derived() -> None:
+    """Every battery gets a status topic, whether or not the policy is on."""
+    cfg = MimirheimConfig.model_validate(
+        {
+            "mqtt": {"host": "localhost", "client_id": "t"},
+            "grid": {"import_limit_kw": 10.0, "export_limit_kw": 10.0},
+            "batteries": {
+                "home": {
+                    "capacity_kwh": 10.0,
+                    "charge_segments": [{"power_max_kw": 3.0, "efficiency": 0.95}],
+                    "discharge_segments": [{"power_max_kw": 3.0, "efficiency": 0.95}],
+                }
+            },
+        }
+    )
+    assert (
+        cfg.batteries["home"].outputs.soc_ratchet
+        == "mimir/status/battery/home/soc_ratchet"
+    )

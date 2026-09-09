@@ -204,3 +204,200 @@ def test_readiness_is_thread_safe() -> None:
         t.join()
 
     assert not errors, f"Thread exceptions: {errors}"
+
+
+# ---------------------------------------------------------------------------
+# Battery full-charge policy: observation and restart persistence
+# ---------------------------------------------------------------------------
+
+
+def _ratchet_config(**ratchet: object) -> MimirheimConfig:
+    """One battery with the full-charge policy enabled and explicit topics."""
+    from mimirheim.config.schema import BatteryOutputsConfig, SocRatchetConfig
+
+    settings: dict = {"enabled": True, "full_threshold_pct": 97.0}
+    settings.update(ratchet)
+    return MimirheimConfig(
+        mqtt=MqttConfig(host="localhost", client_id="test"),
+        outputs=OutputsConfig(
+            schedule="mimir/schedule",
+            current="mimir/current",
+            last_solve="mimir/status",
+            availability="mimir/status/availability",
+        ),
+        grid=GridConfig(import_limit_kw=10.0, export_limit_kw=5.0),
+        batteries={
+            "bat": BatteryConfig(
+                capacity_kwh=10.0,
+                charge_segments=[_seg()],
+                discharge_segments=[_seg()],
+                soc_ratchet=SocRatchetConfig(**settings),
+                inputs=BatteryInputsConfig(
+                    soc=SocTopicConfig(topic="mimir/input/battery/bat/soc", unit="kwh"),
+                ),
+                outputs=BatteryOutputsConfig(
+                    soc_ratchet="mimir/status/battery/bat/soc_ratchet",
+                ),
+            )
+        },
+    )
+
+
+def test_measured_full_charge_is_recorded_when_the_reading_arrives() -> None:
+    """The observation happens on arrival, not at the next solve.
+
+    SOC readings come in every minute or two and solves run every fifteen. A
+    peak observed only at solve time is a balance charge the policy would
+    demand all over again.
+    """
+    state = ReadinessState(_ratchet_config())
+    before = datetime.now(UTC)
+
+    state.update("mimir/input/battery/bat/soc", 9.8)
+
+    assert state._last_full_utc["bat"] >= before
+
+
+def test_a_reading_below_the_threshold_records_nothing() -> None:
+    state = ReadinessState(_ratchet_config())
+    state.update("mimir/input/battery/bat/soc", 9.6)
+    assert "bat" not in state._last_full_utc
+
+
+def test_retained_status_seeds_the_timestamp_across_a_restart() -> None:
+    """The retained payload mimirheim published is what survives the restart."""
+    state = ReadinessState(_ratchet_config())
+    last_full = datetime(2026, 5, 30, 8, 0, tzinfo=UTC)
+
+    state.update("mimir/status/battery/bat/soc_ratchet", (last_full, None))
+
+    assert state._last_full_utc["bat"] == last_full
+
+
+def test_a_replayed_retained_message_cannot_overwrite_a_fresh_observation() -> None:
+    """Retained messages arrive on every reconnect, not only at startup.
+
+    Letting one overwrite a full charge observed since startup would move the
+    timestamp backwards and re-arm a policy that had just been satisfied.
+    """
+    state = ReadinessState(_ratchet_config())
+    state.update("mimir/input/battery/bat/soc", 9.9)
+    observed = state._last_full_utc["bat"]
+
+    state.update(
+        "mimir/status/battery/bat/soc_ratchet",
+        (datetime(2026, 1, 1, tzinfo=UTC), None),
+    )
+
+    assert state._last_full_utc["bat"] == observed
+
+
+def test_the_status_topic_does_not_gate_readiness() -> None:
+    """A fresh installation has no retained status; solving must not wait for one."""
+    state = ReadinessState(_ratchet_config())
+    assert "mimir/status/battery/bat/soc_ratchet" not in state._sensor_topics
+
+
+def test_a_disabled_policy_observes_nothing() -> None:
+    state = ReadinessState(_ratchet_config(enabled=False))
+    state.update("mimir/input/battery/bat/soc", 10.0)
+    assert state._last_full_utc == {}
+
+
+def test_a_persisted_baseline_survives_an_soc_first_startup() -> None:
+    """Retained status and live SOC race on every connect, and SOC usually wins.
+
+    MQTT handlers are registered SOC-first and the broker replays retained
+    messages in its own order. A plain first-writer-wins would therefore
+    discard the persisted baseline on a normal restart and reset the interval
+    the battery has already been waiting through — which for a battery never
+    yet seen full is the only thing keeping the policy alive.
+    """
+    state = ReadinessState(_ratchet_config())
+    original = datetime(2026, 5, 1, tzinfo=UTC)
+
+    state.update("mimir/input/battery/bat/soc", 5.0)  # sets a "now" baseline
+    state.update("mimir/status/battery/bat/soc_ratchet", (None, original))
+
+    assert state._care_since_utc["bat"] == original
+
+
+def test_the_baseline_never_moves_forward() -> None:
+    """A later retained baseline cannot postpone an interval already running."""
+    state = ReadinessState(_ratchet_config())
+    original = datetime(2026, 5, 1, tzinfo=UTC)
+
+    state.update("mimir/status/battery/bat/soc_ratchet", (None, original))
+    state.update(
+        "mimir/status/battery/bat/soc_ratchet",
+        (None, datetime(2026, 5, 20, tzinfo=UTC)),
+    )
+
+    assert state._care_since_utc["bat"] == original
+
+
+def test_a_later_retained_full_charge_wins() -> None:
+    """Two instances or a re-publish can carry a fresher timestamp than ours."""
+    state = ReadinessState(_ratchet_config())
+    state.update(
+        "mimir/status/battery/bat/soc_ratchet",
+        (datetime(2026, 5, 1, tzinfo=UTC), None),
+    )
+    later = datetime(2026, 5, 30, tzinfo=UTC)
+
+    state.update("mimir/status/battery/bat/soc_ratchet", (later, None))
+
+    assert state._last_full_utc["bat"] == later
+
+
+def test_observations_are_exposed_for_the_publisher() -> None:
+    state = ReadinessState(_ratchet_config())
+    state.update("mimir/input/battery/bat/soc", 9.9)
+    assert "bat" in state.battery_care_observations()
+
+
+def test_only_live_observations_are_offered_as_publisher_overrides() -> None:
+    """A timestamp restored from the broker is history, not an event.
+
+    The publisher clears the derived status fields when an override is newer,
+    on the grounds that the battery has just been balanced. A retained value
+    arriving late must not trigger that, or a months-overdue battery is
+    published as freshly full.
+    """
+    state = ReadinessState(_ratchet_config())
+
+    state.update(
+        "mimir/status/battery/bat/soc_ratchet",
+        (datetime(2026, 5, 1, tzinfo=UTC), None),
+    )
+
+    assert state._last_full_utc["bat"] == datetime(2026, 5, 1, tzinfo=UTC)
+    assert state.battery_care_observations() == {}
+
+    state.update("mimir/input/battery/bat/soc", 9.9)
+    assert "bat" in state.battery_care_observations()
+
+
+def test_baselines_are_exposed_for_the_publisher() -> None:
+    state = ReadinessState(_ratchet_config())
+    original = datetime(2026, 5, 1, tzinfo=UTC)
+    state.update("mimir/status/battery/bat/soc_ratchet", (None, original))
+    assert state.battery_care_baselines() == {"bat": original}
+
+
+def test_a_retained_timestamp_from_the_future_is_ignored() -> None:
+    """A future timestamp is a disagreeing clock, not a charge yet to come.
+
+    It has to be dropped at ingest rather than merged, because "later wins"
+    would make it permanent: no real measurement could ever beat it, so the
+    policy would sit dormant until the fictional time passed, and the retained
+    topic would hand the same value back after every restart.
+    """
+    state = ReadinessState(_ratchet_config())
+    future = datetime.now(UTC) + timedelta(days=1)
+
+    state.update("mimir/status/battery/bat/soc_ratchet", (future, None))
+
+    assert state.battery_care_history().get("bat") is None, (
+        "a future retained timestamp was accepted and can never be superseded"
+    )
