@@ -215,7 +215,9 @@ def _ratchet_config(**ratchet: object) -> MimirheimConfig:
     """One battery with the full-charge policy enabled and explicit topics."""
     from mimirheim.config.schema import BatteryOutputsConfig, SocRatchetConfig
 
-    settings: dict = {"enabled": True, "full_threshold_pct": 97.0}
+    # hold_hours 0 keeps the pre-hold tests a single-reading reset; the hold
+    # wiring tests pass their own value.
+    settings: dict = {"enabled": True, "full_threshold_pct": 97.0, "hold_hours": 0.0}
     settings.update(ratchet)
     return MimirheimConfig(
         mqtt=MqttConfig(host="localhost", client_id="test"),
@@ -401,3 +403,60 @@ def test_a_retained_timestamp_from_the_future_is_ignored() -> None:
     assert state.battery_care_history().get("bat") is None, (
         "a future retained timestamp was accepted and can never be superseded"
     )
+
+
+def test_a_full_charge_is_recorded_only_after_the_hold_has_been_measured(monkeypatch) -> None:
+    """Time at the top has to be observed, not planned, and not a single touch.
+
+    The wiring test for the hold: the first reading above the threshold starts
+    the clock and records nothing; a reading two hours later completes it.
+    The pure arithmetic is covered in test_battery_care; this checks that the
+    readiness tracker threads the run between readings.
+    """
+    from mimirheim.core import readiness as readiness_module
+
+    t0 = datetime(2026, 6, 1, 12, 0, tzinfo=UTC)
+    current = {"now": t0}
+
+    class _Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):  # noqa: D102
+            return current["now"]
+
+    monkeypatch.setattr(readiness_module, "datetime", _Clock)
+
+    state = ReadinessState(_ratchet_config(hold_hours=2.0))
+
+    state.update("mimir/input/battery/bat/soc", 9.8)
+    assert "bat" not in state._last_full_utc, "a touch must not count as a full charge"
+
+    current["now"] = t0 + timedelta(hours=1)
+    state.update("mimir/input/battery/bat/soc", 9.9)
+    assert "bat" not in state._last_full_utc
+
+    current["now"] = t0 + timedelta(hours=2)
+    state.update("mimir/input/battery/bat/soc", 9.8)
+    assert state._last_full_utc["bat"] == t0 + timedelta(hours=2)
+    assert state.battery_care_observations()["bat"] == t0 + timedelta(hours=2)
+
+
+def test_a_dip_during_the_hold_starts_it_over(monkeypatch) -> None:
+    from mimirheim.core import readiness as readiness_module
+
+    t0 = datetime(2026, 6, 1, 12, 0, tzinfo=UTC)
+    current = {"now": t0}
+
+    class _Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):  # noqa: D102
+            return current["now"]
+
+    monkeypatch.setattr(readiness_module, "datetime", _Clock)
+
+    state = ReadinessState(_ratchet_config(hold_hours=2.0))
+    state.update("mimir/input/battery/bat/soc", 9.8)
+    current["now"] = t0 + timedelta(hours=1)
+    state.update("mimir/input/battery/bat/soc", 9.6)  # dipped
+    current["now"] = t0 + timedelta(hours=2, minutes=30)
+    state.update("mimir/input/battery/bat/soc", 9.8)  # only 1h30 since the dip
+    assert "bat" not in state._last_full_utc

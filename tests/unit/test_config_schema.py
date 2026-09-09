@@ -2858,3 +2858,34 @@ def test_soc_ratchet_status_topic_is_derived() -> None:
         cfg.batteries["home"].outputs.soc_ratchet
         == "mimir/status/battery/home/soc_ratchet"
     )
+
+
+def test_soc_ratchet_plans_for_the_top_and_holds_there_by_default() -> None:
+    """Plan for the voltage limit, hold long enough to balance, reset on the threshold."""
+    from mimirheim.config.schema import SocRatchetConfig
+
+    cfg = SocRatchetConfig()
+    assert cfg.target_pct == 100.0
+    assert cfg.hold_hours == 2.0
+    # The reset threshold is unchanged: a BMS need not report a round 100.
+    assert cfg.full_threshold_pct == 97.0
+
+
+def test_soc_ratchet_rejects_a_target_below_the_full_threshold() -> None:
+    """A plan that aims below what counts as success can never reset the policy."""
+    from mimirheim.config.schema import SocRatchetConfig
+
+    with pytest.raises(ValidationError):
+        SocRatchetConfig(enabled=True, full_threshold_pct=97.0, target_pct=96.0)
+    # Equal is allowed: it is the pre-hold behaviour, plan for what you reset on.
+    SocRatchetConfig(enabled=True, full_threshold_pct=97.0, target_pct=97.0)
+
+
+def test_soc_ratchet_hold_bounds() -> None:
+    from mimirheim.config.schema import SocRatchetConfig
+
+    SocRatchetConfig(enabled=True, hold_hours=0.0)  # a touch, as before
+    with pytest.raises(ValidationError):
+        SocRatchetConfig(enabled=True, hold_hours=-0.25)
+    with pytest.raises(ValidationError):
+        SocRatchetConfig(enabled=True, hold_hours=24.25)

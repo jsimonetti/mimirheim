@@ -28,6 +28,10 @@ def _cfg(**overrides: object) -> SocRatchetConfig:
         "cap_pct": 80.0,
     }
     base.update(overrides)
+    # Pre-hold defaults for the pre-hold tests: plan for the threshold, hold
+    # for a single step. The hold tests below override both explicitly.
+    base.setdefault("target_pct", base["full_threshold_pct"])
+    base.setdefault("hold_hours", 0.0)
     return SocRatchetConfig(**base)
 
 
@@ -301,3 +305,146 @@ def test_absent_timestamps_resolve_the_same_way_for_both_rules() -> None:
         assert rule(None, _NOW) is False, f"{rule.__name__}: None should not win"
         assert rule(_NOW, None) is True, f"{rule.__name__}: should beat an absent value"
         assert rule(None, None) is False, f"{rule.__name__}: nothing to say"
+
+
+# ---------------------------------------------------------------------------
+# Hold at the top, and plan for 100%
+# ---------------------------------------------------------------------------
+
+
+def test_the_plan_asks_for_the_target_not_the_reset_threshold() -> None:
+    """Plan for CVL; reset on the observed threshold. Two numbers, not one."""
+    plan = _plan(
+        last_full_utc=_NOW - timedelta(days=7) + timedelta(hours=3),
+        cfg=_cfg(full_threshold_pct=97.0, target_pct=100.0),
+    )
+    assert plan.full_target_kwh == pytest.approx(10.0)
+    # And the reset still keys off 97, not 100.
+    assert observe_full_charge(
+        config=_cfg(full_threshold_pct=97.0, target_pct=100.0),
+        capacity_kwh=_CAPACITY,
+        soc_kwh=9.7,
+        now=_NOW,
+    ) == _NOW
+
+
+def test_hold_hours_become_whole_steps() -> None:
+    plan = _plan(last_full_utc=_NOW, cfg=_cfg(hold_hours=2.0))
+    assert plan.hold_steps == 8
+    # A partial step rounds up: the hold is a minimum, not an estimate.
+    assert _plan(last_full_utc=_NOW, cfg=_cfg(hold_hours=0.3)).hold_steps == 2
+    assert _plan(last_full_utc=_NOW, cfg=_cfg(hold_hours=0.0)).hold_steps == 0
+
+
+def test_a_disabled_policy_has_no_hold() -> None:
+    assert _plan(last_full_utc=_NOW, cfg=_cfg(enabled=False)).hold_steps == 0
+
+
+def test_a_touch_does_not_complete_a_hold() -> None:
+    """One reading at the top is a touch, not a balance charge."""
+    from mimirheim.core.battery_care import track_full_charge
+
+    above_since, full = track_full_charge(
+        config=_cfg(hold_hours=2.0),
+        capacity_kwh=_CAPACITY,
+        soc_kwh=9.8,
+        now=_NOW,
+        above_since_utc=None,
+    )
+    assert above_since == _NOW
+    assert full is None
+
+
+def test_a_sustained_hold_completes_and_records_the_completion_time() -> None:
+    """The timestamp is when the hold finished, not when the SOC crossed the line.
+
+    That is the moment the cells have had their time at the top, and it is the
+    reference the next interval should run from.
+    """
+    from mimirheim.core.battery_care import track_full_charge
+
+    crossed = _NOW
+    above_since, full = track_full_charge(
+        config=_cfg(hold_hours=2.0),
+        capacity_kwh=_CAPACITY,
+        soc_kwh=9.8,
+        now=crossed + timedelta(hours=2),
+        above_since_utc=crossed,
+    )
+    assert above_since == crossed
+    assert full == crossed + timedelta(hours=2)
+
+
+def test_a_reading_just_short_of_the_hold_does_not_complete_it() -> None:
+    from mimirheim.core.battery_care import track_full_charge
+
+    _, full = track_full_charge(
+        config=_cfg(hold_hours=2.0),
+        capacity_kwh=_CAPACITY,
+        soc_kwh=9.8,
+        now=_NOW + timedelta(hours=1, minutes=59),
+        above_since_utc=_NOW,
+    )
+    assert full is None
+
+
+def test_a_dip_below_the_threshold_restarts_the_hold() -> None:
+    """Time at the top only counts while it is contiguous."""
+    from mimirheim.core.battery_care import track_full_charge
+
+    above_since, full = track_full_charge(
+        config=_cfg(hold_hours=2.0),
+        capacity_kwh=_CAPACITY,
+        soc_kwh=9.69,
+        now=_NOW + timedelta(hours=1),
+        above_since_utc=_NOW,
+    )
+    assert above_since is None
+    assert full is None
+
+
+def test_a_dip_after_the_hold_has_elapsed_completes_it() -> None:
+    """Silence means unchanged, so the pack was at the top until this reading.
+
+    9.8 at noon, nothing for three hours, then 9.6: under the same rule that
+    lets a constant 100% complete a hold without a single reading, that is
+    three hours at the top followed by leaving it now. The run ends, and the
+    completion is recorded at the moment the pack left.
+    """
+    from mimirheim.core.battery_care import track_full_charge
+
+    above_since, full = track_full_charge(
+        config=_cfg(hold_hours=2.0),
+        capacity_kwh=_CAPACITY,
+        soc_kwh=9.6,
+        now=_NOW + timedelta(hours=3),
+        above_since_utc=_NOW,
+    )
+    assert above_since is None
+    assert full == _NOW + timedelta(hours=3)
+
+
+def test_a_zero_hold_is_a_touch() -> None:
+    """hold_hours=0 reproduces the pre-hold behaviour exactly."""
+    from mimirheim.core.battery_care import track_full_charge
+
+    above_since, full = track_full_charge(
+        config=_cfg(hold_hours=0.0),
+        capacity_kwh=_CAPACITY,
+        soc_kwh=9.7,
+        now=_NOW,
+        above_since_utc=None,
+    )
+    assert full == _NOW
+
+
+def test_a_disabled_policy_tracks_nothing() -> None:
+    from mimirheim.core.battery_care import track_full_charge
+
+    assert track_full_charge(
+        config=_cfg(enabled=False),
+        capacity_kwh=_CAPACITY,
+        soc_kwh=10.0,
+        now=_NOW,
+        above_since_utc=_NOW - timedelta(hours=5),
+    ) == (None, None)

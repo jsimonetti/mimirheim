@@ -338,6 +338,7 @@ class MqttPublisher:
                 care_since_utc=care_since,
                 floor_kwh=plan.floor_kwh,
                 hours_since_full=plan.hours_since_full,
+                hold_steps=plan.hold_steps,
             )
         return out
 
@@ -415,12 +416,15 @@ class MqttPublisher:
                 # standing floor and a pending deadline would show consumers a
                 # state that never existed.
                 #
-                # enforced_target_kwh and enforced_step deliberately stay. They
-                # are not a pending demand but a record of what the solve was
-                # actually held to, which does not stop being true because a
-                # reading arrived afterwards. Clearing them would also put this
-                # payload at odds with the same fields in the schedule topic,
-                # which carries the solve unedited.
+                # enforced_target_kwh, enforced_step and enforced_hold_steps
+                # deliberately stay. They are not a pending demand but a record
+                # of what the solve was actually held to, which does not stop
+                # being true because a reading arrived afterwards. Clearing
+                # them would also put this payload at odds with the same fields
+                # in the schedule topic, which carries the solve unedited.
+                # hold_steps stays too: it is the configured hold, a property
+                # of the policy rather than of this cycle's demand, and
+                # care_plan reports it whether or not a target is pending.
                 status = status.model_copy(
                     update={
                         "last_full_utc": fresher,

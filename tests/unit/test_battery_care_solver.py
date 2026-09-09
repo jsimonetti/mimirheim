@@ -25,8 +25,21 @@ _T0 = datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc)
 _CAPACITY = 10.0
 
 
+# Pre-hold policy values for the scenarios below that were written against a
+# single-step target at the reset threshold. Their step arithmetic depends on
+# it: 100% needs one more charging step than 97%, and a two-hour hold changes
+# where the probe can pin the run. The hold has its own tests at the end.
+_PRE_HOLD: dict = {"target_pct": 97.0, "hold_hours": 0.0}
+
+
 def _config(*, wear_cost: float = 0.0, **ratchet: object) -> MimirheimConfig:
-    """A single battery, no PV, one static load, and a roomy grid connection."""
+    """A single battery, no PV, one static load, and a roomy grid connection.
+
+    Unless a test says otherwise the policy plans for the reset threshold and
+    holds for a single step. That is the pre-hold behaviour these scenarios
+    were written against; their step arithmetic depends on it. The hold and
+    the 100% target have their own tests below, which set both explicitly.
+    """
     battery: dict = {
         "capacity_kwh": _CAPACITY,
         "min_soc_kwh": 1.0,
@@ -35,6 +48,8 @@ def _config(*, wear_cost: float = 0.0, **ratchet: object) -> MimirheimConfig:
         "wear_cost_eur_per_kwh": wear_cost,
     }
     if ratchet:
+        ratchet.setdefault("target_pct", ratchet.get("full_threshold_pct", 97.0))
+        ratchet.setdefault("hold_hours", 0.0)
         battery["soc_ratchet"] = ratchet
     return MimirheimConfig.model_validate(
         {
@@ -325,7 +340,7 @@ def test_a_target_missed_on_efficiency_is_met_one_step_late() -> None:
                     "min_soc_kwh": 1.0,
                     "charge_segments": [{"power_max_kw": 2.0, "efficiency": 0.9}],
                     "discharge_segments": [{"power_max_kw": 2.0, "efficiency": 0.9}],
-                    "soc_ratchet": {"enabled": True},
+                    "soc_ratchet": {"enabled": True, **_PRE_HOLD},
                 }
             },
             "static_loads": {"base": {}},
@@ -369,7 +384,7 @@ def test_an_overdue_charge_still_completes_under_charge_derating() -> None:
                     "discharge_segments": [{"power_max_kw": 5.0, "efficiency": 1.0}],
                     "reduce_charge_above_soc_kwh": 8.0,
                     "reduce_charge_min_kw": 1.0,
-                    "soc_ratchet": {"enabled": True},
+                    "soc_ratchet": {"enabled": True, **_PRE_HOLD},
                 }
             },
             "static_loads": {"base": {}},
@@ -416,7 +431,7 @@ def test_a_poor_sos2_curve_delays_the_charge_without_breaking_the_solve() -> Non
                         {"power_kw": 0.0, "efficiency": 0.99},
                         {"power_kw": 2.0, "efficiency": 0.95},
                     ],
-                    "soc_ratchet": {"enabled": True},
+                    "soc_ratchet": {"enabled": True, **_PRE_HOLD},
                 }
             },
             "static_loads": {"base": {}},
@@ -511,7 +526,7 @@ def test_a_minimum_charge_power_near_capacity_does_not_stall_the_policy() -> Non
                     "min_discharge_kw": 2.0,
                     "reduce_charge_above_soc_kwh": 8.8,
                     "reduce_charge_min_kw": 1.5,
-                    "soc_ratchet": {"enabled": True},
+                    "soc_ratchet": {"enabled": True, **_PRE_HOLD},
                 }
             },
             "static_loads": {"base": {}},
@@ -560,7 +575,7 @@ def test_the_target_is_met_by_charging_less_hard_when_that_is_what_fits() -> Non
                         {"power_kw": 0.0, "efficiency": 0.99},
                         {"power_kw": 2.0, "efficiency": 0.95},
                     ],
-                    "soc_ratchet": {"enabled": True, "full_threshold_pct": 99.0},
+                    "soc_ratchet": {"enabled": True, "full_threshold_pct": 99.0, "target_pct": 99.0, "hold_hours": 0.0},
                 }
             },
             "static_loads": {"base": {}},
@@ -702,7 +717,7 @@ def test_the_probe_respects_the_grid_import_cap() -> None:
                     "min_soc_kwh": 1.0,
                     "charge_segments": [{"power_max_kw": 5.0, "efficiency": 1.0}],
                     "discharge_segments": [{"power_max_kw": 5.0, "efficiency": 1.0}],
-                    "soc_ratchet": {"enabled": True},
+                    "soc_ratchet": {"enabled": True, **_PRE_HOLD},
                 }
             },
             "static_loads": {"base": {}},
@@ -774,7 +789,7 @@ def test_a_lossy_battery_is_not_skipped_for_an_efficient_one() -> None:
     """
     common = {
         "min_soc_kwh": 0.5,
-        "soc_ratchet": {"enabled": True},
+        "soc_ratchet": {"enabled": True, **_PRE_HOLD},
     }
     config = MimirheimConfig.model_validate(
         {
@@ -851,7 +866,7 @@ def test_a_full_neighbour_cannot_block_an_overdue_battery_from_charging() -> Non
             "grid": {"import_limit_kw": 20.0, "export_limit_kw": 0.0},
             "batteries": {
                 "full": {**common, "min_charge_kw": 1.0},
-                "due": {**common, "soc_ratchet": {"enabled": True}},
+                "due": {**common, "soc_ratchet": {"enabled": True, **_PRE_HOLD}},
             },
             "static_loads": {"base": {}},
         }
@@ -877,3 +892,190 @@ def test_a_full_neighbour_cannot_block_an_overdue_battery_from_charging() -> Non
         "the full neighbour's charge floor blocked the shared charging "
         "direction, so the overdue battery could never charge"
     )
+
+
+# ---------------------------------------------------------------------------
+# Hold at the top, and plan for 100%
+# ---------------------------------------------------------------------------
+
+
+def test_the_full_charge_is_held_for_the_configured_time() -> None:
+    """Reaching the target once is a touch; the cells need time at the top.
+
+    Two hours at quarter-hourly steps is eight intervals at the target. soc[t]
+    is the SOC at the end of step t, so that is nine consecutive boundaries at
+    or above the target, the first being the one the charge arrives on. Eight
+    boundaries would be seven intervals: 1.75 h for a configured 2 h.
+    """
+    bundle = _bundle(
+        soc_kwh=8.0,
+        last_full_utc=_T0 - timedelta(days=7) + timedelta(hours=3),
+        prices=[0.20] * 24,
+    )
+    result = build_and_solve(bundle, _config(enabled=True, target_pct=100.0, hold_hours=2.0))
+
+    status = result.battery_care["home"]
+    soc = _soc_series(result)
+    assert status.hold_steps == 8
+    assert status.enforced_hold_steps == 8
+    start = status.enforced_step
+    assert all(soc[t] >= 10.0 - 1e-6 for t in range(start, start + 9))
+
+
+def test_a_hold_that_runs_past_the_horizon_is_clipped_not_dropped() -> None:
+    """What fits is enforced; the next rolling solve continues it.
+
+    Deadline at step 11 of a 16-step horizon leaves five boundaries, which is
+    four intervals at the top. Refusing the hold because eight do not fit
+    would leave an overdue battery unenforced on every short horizon.
+    """
+    bundle = _bundle(
+        soc_kwh=8.0,
+        last_full_utc=_T0 - timedelta(days=7) + timedelta(hours=3),
+        prices=[0.20] * 16,
+    )
+    result = build_and_solve(bundle, _config(enabled=True, target_pct=100.0, hold_hours=2.0))
+
+    status = result.battery_care["home"]
+    assert status.enforced_step == 11
+    assert status.enforced_hold_steps == 4
+    assert all(s >= 10.0 - 1e-6 for s in _soc_series(result)[11:16])
+
+
+def test_a_hold_the_hardware_cannot_sustain_is_enforced_as_far_as_it_goes() -> None:
+    """A load with no grid to serve it must come out of the battery.
+
+    The battery starts full and overdue, so the target is due at step 0 and
+    the witness is at the top from the start. From step 2 there is a 4 kW load
+    and no import, so the battery has to carry it and cannot stay full. The
+    battery arrived full, so its starting SOC is the first boundary; with the
+    witness at the top at the end of steps 0 and 1 that is two intervals, and
+    that is what is enforced: a short hold rather than none, and rather than
+    an infeasible eight.
+    """
+    battery: dict = {
+        "capacity_kwh": _CAPACITY,
+        "min_soc_kwh": 1.0,
+        "charge_segments": [{"power_max_kw": 5.0, "efficiency": 1.0}],
+        "discharge_segments": [{"power_max_kw": 5.0, "efficiency": 1.0}],
+        "soc_ratchet": {"enabled": True, "target_pct": 100.0, "hold_hours": 2.0},
+    }
+    config = MimirheimConfig.model_validate(
+        {
+            "mqtt": {"host": "localhost", "client_id": "test"},
+            "grid": {"import_limit_kw": 0.0, "export_limit_kw": 20.0},
+            "batteries": {"home": battery},
+            "static_loads": {"base": {}},
+        }
+    )
+    horizon = 8
+    bundle = SolveBundle(
+        solve_time_utc=_T0,
+        horizon_prices=[0.20] * horizon,
+        horizon_export_prices=[0.15] * horizon,
+        horizon_confidence=[1.0] * horizon,
+        pv_forecast=[0.0] * horizon,
+        base_load_forecast=[0.0, 0.0] + [4.0] * (horizon - 2),
+        battery_inputs={
+            "home": {"soc_kwh": _CAPACITY, "last_full_utc": _T0 - timedelta(days=8)}
+        },
+    )
+    result = build_and_solve(bundle, config)
+
+    status = result.battery_care["home"]
+    soc = _soc_series(result)
+    assert status.enforced_step == 0
+    assert status.enforced_hold_steps == 2
+    assert soc[0] >= 10.0 - 1e-6 and soc[1] >= 10.0 - 1e-6
+    assert soc[2] < 10.0
+
+
+def test_a_battery_that_arrived_full_counts_its_starting_state() -> None:
+    """The measured starting SOC is a boundary; soc[0..7] then closes 8 intervals.
+
+    Same shape as the test above, with the load arriving at step 8 instead of
+    step 2. Counting boundaries from soc[0] alone would demand soc[0..8], see
+    the load cut the run at eight boundaries, and report seven intervals for a
+    hold the battery physically delivered in full.
+    """
+    battery: dict = {
+        "capacity_kwh": _CAPACITY,
+        "min_soc_kwh": 1.0,
+        "charge_segments": [{"power_max_kw": 5.0, "efficiency": 1.0}],
+        "discharge_segments": [{"power_max_kw": 5.0, "efficiency": 1.0}],
+        "soc_ratchet": {"enabled": True, "target_pct": 100.0, "hold_hours": 2.0},
+    }
+    config = MimirheimConfig.model_validate(
+        {
+            "mqtt": {"host": "localhost", "client_id": "test"},
+            "grid": {"import_limit_kw": 0.0, "export_limit_kw": 20.0},
+            "batteries": {"home": battery},
+            "static_loads": {"base": {}},
+        }
+    )
+    horizon = 14
+    bundle = SolveBundle(
+        solve_time_utc=_T0,
+        horizon_prices=[0.20] * horizon,
+        horizon_export_prices=[0.15] * horizon,
+        horizon_confidence=[1.0] * horizon,
+        pv_forecast=[0.0] * horizon,
+        base_load_forecast=[0.0] * 8 + [4.0] * (horizon - 8),
+        battery_inputs={
+            "home": {"soc_kwh": _CAPACITY, "last_full_utc": _T0 - timedelta(days=8)}
+        },
+    )
+    result = build_and_solve(bundle, config)
+
+    status = result.battery_care["home"]
+    soc = _soc_series(result)
+    assert status.enforced_step == 0
+    assert status.enforced_hold_steps == 8
+    assert all(s >= 10.0 - 1e-6 for s in soc[:8])
+    assert soc[8] < 10.0
+
+
+def test_a_target_of_one_hundred_percent_reaches_the_bound() -> None:
+    """The target sits on the SOC variable's upper bound and must still be met.
+
+    A backend that lands a hair under the bound must not be read as having
+    missed the target; the tolerance on the way in is what this checks.
+    """
+    bundle = _bundle(
+        soc_kwh=8.0,
+        last_full_utc=_T0 - timedelta(days=7) + timedelta(hours=3),
+        prices=[0.20] * 16,
+    )
+    result = build_and_solve(
+        bundle, _config(enabled=True, full_threshold_pct=97.0, target_pct=100.0, hold_hours=0.0)
+    )
+
+    status = result.battery_care["home"]
+    assert status.full_target_kwh == pytest.approx(_CAPACITY)
+    assert status.enforced_target_kwh == pytest.approx(_CAPACITY, abs=1e-5)
+    assert _soc_series(result)[status.enforced_step] >= _CAPACITY - 1e-5
+
+
+def test_a_zero_hold_on_a_battery_already_full_still_reports_a_touch() -> None:
+    """soc[0] is pinned, which is physically one interval, but a touch is 0."""
+    bundle = _bundle(
+        soc_kwh=_CAPACITY,
+        last_full_utc=_T0 - timedelta(days=8),
+        prices=[0.20] * 8,
+    )
+    result = build_and_solve(bundle, _config(enabled=True, target_pct=100.0, hold_hours=0.0))
+    status = result.battery_care["home"]
+    assert status.enforced_step == 0
+    assert status.enforced_hold_steps == 0
+
+
+def test_a_zero_hold_enforces_a_single_step() -> None:
+    bundle = _bundle(
+        soc_kwh=8.0,
+        last_full_utc=_T0 - timedelta(days=7) + timedelta(hours=3),
+        prices=[0.20] * 16,
+    )
+    result = build_and_solve(bundle, _config(enabled=True, hold_hours=0.0))
+    status = result.battery_care["home"]
+    assert status.hold_steps == 0
+    assert status.enforced_hold_steps == 0

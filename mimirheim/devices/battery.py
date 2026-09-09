@@ -94,7 +94,12 @@ class Battery:
         # anchor; read for the status topic, where a target below
         # care.full_target_kwh is the signal that the policy could not be
         # honoured in full this cycle.
-        self.care_target: tuple[int, float] | None = None
+        self.care_target: tuple[int, float, int] | None = None
+        # The measured SOC this solve started from. Recorded so the probe can
+        # tell whether the battery arrived at the top already: the starting
+        # state is a boundary like any soc[t], and a hold that begins there
+        # needs one fewer constrained step.
+        self.initial_soc_kwh: float | None = None
         self._charge_ac_expr: dict[int, Any] = {}
         self._charge_dc_expr: dict[int, Any] = {}
         self._discharge_ac_expr: dict[int, Any] = {}
@@ -656,6 +661,7 @@ class Battery:
             solve_time_utc: Start of this solve cycle, or None to skip the
                 policy entirely.
         """
+        self.initial_soc_kwh = inputs.soc_kwh
         if not self.config.soc_ratchet.enabled or solve_time_utc is None:
             self.care = None
             return
@@ -679,13 +685,29 @@ class Battery:
                 ctx.solver.add_constraint(self.soc[t] >= floor)
 
     def enforce_care_target(
-        self, ctx: ModelContext, step: int, target_kwh: float
+        self,
+        ctx: ModelContext,
+        step: int,
+        target_kwh: float,
+        boundaries: int = 1,
+        hold_steps: int = 0,
     ) -> None:
-        """Require the SOC to reach ``target_kwh`` by ``step``.
+        """Require the SOC to reach ``target_kwh`` at ``step`` and stay there.
 
         .. code-block::
 
-            soc[step] >= target_kwh
+            soc[t] >= target_kwh    for t in [step, step + boundaries)
+
+        ``soc[t]`` is the SOC at the *end* of step ``t``, so the battery is at
+        the top for the whole of an interval only when both the boundary
+        before it and the boundary after it are. The two counts are therefore
+        kept apart. ``boundaries`` is how many consecutive ``soc[t]`` are
+        constrained; ``hold_steps`` is how many whole intervals that amounts
+        to, which is ``boundaries - 1`` when the charge arrives on the first
+        constrained boundary and ``boundaries`` when the battery was already at
+        the top when the horizon began, because then the measured starting SOC
+        is the boundary before ``soc[0]``. The caller knows which; this method
+        only records it.
 
         A hard constraint, matching the EV departure target, and for the same
         reason: a partially completed balance charge is not a balance charge.
@@ -695,21 +717,39 @@ class Battery:
         would compete with the weights under ``balanced``. A constraint is
         respected by both.
 
-        The caller is responsible for passing a ``step`` and ``target_kwh`` the
-        model can actually reach — see ``model_builder._probe_care_targets``,
-        which reads them off a trajectory the solver has already produced.
-        Reachability is not estimated here, and must not be: it depends on
-        charge derating, the minimum charge power, the efficiency curve and
-        every other constraint in the model at once, which is a question only
-        the solver can answer.
+        The hold is the part a single-step target cannot express. The cells
+        balance only while they sit in the upper voltage knee, and the BMS
+        recalibrates its SOC only after the charge current has tapered at the
+        voltage limit; both take time. One quarter-hour at the top followed by
+        a discharge satisfies ``soc[step] >= target`` and does neither. The
+        run is clipped to the horizon: what fits is enforced, and the next
+        rolling solve, which still finds the policy unsatisfied because the
+        reset needs a measured hold, carries it on.
+
+        The caller is responsible for passing a ``step``, ``target_kwh`` and
+        ``hold_steps`` the model can actually deliver — see
+        ``model_builder._probe_care_targets``, which reads them off a
+        trajectory the solver has already produced. Reachability is not
+        estimated here, and must not be: it depends on charge derating, the
+        minimum charge power, the efficiency curve and every other constraint
+        in the model at once, which is a question only the solver can answer.
 
         Args:
             ctx: The current solve context.
-            step: Horizon step the target applies to.
-            target_kwh: SOC required at that step, in kWh.
+            step: First horizon step the target applies to.
+            target_kwh: SOC required across the run, in kWh.
+            boundaries: Consecutive ``soc[t]`` to constrain, from ``step``.
+                At least one is always pinned. Clipped to the horizon.
+            hold_steps: Whole intervals at the top this represents, recorded
+                in ``care_target`` for the status topic. 0 is a touch.
         """
-        self.care_target = (step, target_kwh)
-        ctx.solver.add_constraint(self.soc[step] >= target_kwh)
+        run = range(step, min(step + max(1, boundaries), len(ctx.T)))
+        for t in run:
+            ctx.solver.add_constraint(self.soc[t] >= target_kwh)
+        # If the horizon clipped the run, the intervals shrink by the same
+        # number of boundaries lost.
+        lost = max(1, boundaries) - len(run)
+        self.care_target = (step, target_kwh, max(0, hold_steps - lost))
 
     def set_external_mode(self, mode_vars: dict[int, Any]) -> None:
         """Replace per-step mode variables with externally-supplied shared ones.

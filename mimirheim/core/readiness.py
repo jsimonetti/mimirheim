@@ -49,7 +49,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from mimirheim.config.schema import MimirheimConfig
-from mimirheim.core.battery_care import is_newer, is_older, observe_full_charge
+from mimirheim.core.battery_care import is_newer, is_older, track_full_charge
 from mimirheim.core.bundle import (
     BatteryInputs,
     CombiHeatPumpInputs,
@@ -150,6 +150,12 @@ class ReadinessState:
         # a balance charge", which is what lets the publisher clear the derived
         # status fields; a retained history correction must not do that.
         self._observed_full_utc: dict[str, datetime] = {}
+        # Start of the current unbroken run of SOC readings at or above the
+        # full-charge threshold, per battery. This is the measured hold: a
+        # full charge is recorded only once the run has lasted hold_hours.
+        # Memory only, by design -- a restart mid-hold costs one extra hold,
+        # which is cheaper than a second retained field to keep honest.
+        self._above_since_utc: dict[str, datetime] = {}
         for name, bat_cfg in config.batteries.items():
             if not bat_cfg.soc_ratchet.enabled:
                 continue
@@ -298,12 +304,20 @@ class ReadinessState:
             # once and never moved: refreshing it on every reading would keep
             # the deadline permanently one interval away.
             self._care_since_utc.setdefault(name, datetime.now(UTC))
-            observed = observe_full_charge(
+            # One reading at the top is a touch. The reset needs the SOC to
+            # have stayed there for hold_hours, so the run is threaded from
+            # reading to reading and only its completion counts.
+            above_since, observed = track_full_charge(
                 config=cfg.soc_ratchet,
                 capacity_kwh=cfg.capacity_kwh,
                 soc_kwh=validated_input,
                 now=datetime.now(UTC),
+                above_since_utc=self._above_since_utc.get(name),
             )
+            if above_since is None:
+                self._above_since_utc.pop(name, None)
+            else:
+                self._above_since_utc[name] = above_since
             if observed is not None:
                 self._last_full_utc[name] = observed
                 self._observed_full_utc[name] = observed

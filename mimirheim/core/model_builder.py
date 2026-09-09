@@ -86,12 +86,25 @@ def _probe_care_targets(
       by construction. That is the guarantee this function provides, and it
       holds on every branch below: the policy cannot make the solve infeasible.
     - For each battery, the target is pinned to the first step at or after its
-      deadline where the witness reached the threshold. "At or after" is what
-      handles an overdue battery: its deadline is step 0, and the anchor lands
-      on an early quarter-hour it can genuinely be full by, rather than on a
-      step that is infeasible now or on a horizon end that recedes by one step
-      on every rolling solve. "Early", not "earliest": it is the first such
-      step in one witness, and no claim is made that no earlier one exists.
+      deadline where the witness reached the target, and held from there for
+      as many consecutive steps as the witness stayed there, up to the
+      configured hold. "At or after" is what handles an overdue battery: its
+      deadline is step 0, and the anchor lands on an early quarter-hour it can
+      genuinely be full by, rather than on a step that is infeasible now or on
+      a horizon end that recedes by one step on every rolling solve. "Early",
+      not "earliest": it is the first such step in one witness, and no claim
+      is made that no earlier one exists. The run is likewise the run *from
+      that step*, not the longest run anywhere: finding the best run is the
+      same per-step disjunction the sum cannot ask. A run cut short -- by the
+      horizon end or by a load the battery has to carry -- is enforced as far
+      as it goes and reported as ``enforced_hold_steps``; the next cycle
+      continues it, because the reset needs a measured hold, not a planned one.
+    - The comparison on the way in carries a tolerance of ``_CARE_EPS_KWH``.
+      With ``target_pct`` at 100 the target sits on the SOC variable's upper
+      bound, and a backend that lands a hair under it would otherwise fall
+      into the reduced branch on every cycle. What is then enforced is the
+      lesser of the target and the run's minimum less the same epsilon, so
+      the witness still satisfies it and the guarantee stands.
     - When the witness never reaches the threshold, the best SOC it did reach
       is imposed instead — but only on a *proven optimal* probe. A trajectory
       that merely ran out of time says nothing at all, and nothing is imposed;
@@ -187,13 +200,64 @@ def _probe_care_targets(
         window = [t for t in ctx.T if t >= bat.care.deadline_step]
         witness = {t: ctx.solver.var_value(bat.soc[t]) for t in window}
 
-        # No tolerance on the way in. A witness a hair below the target does
-        # not satisfy ``soc >= target``, so accepting it here would impose a
-        # constraint the witness does not meet and give up the one guarantee
-        # this function exists to provide.
-        reached = [t for t in window if witness[t] >= target]
+        # Tolerance on the way in, and the enforced value is then taken from
+        # the witness rather than from the target, so a constraint is never
+        # imposed that the witness itself does not meet. That is the one
+        # guarantee this function exists to provide, and it has to survive a
+        # target that sits on the variable's upper bound.
+        reached = [t for t in window if witness[t] >= target - _CARE_EPS_KWH]
         if reached:
-            bat.enforce_care_target(ctx, reached[0], target)
+            start = reached[0]
+            # Boundaries, not intervals. soc[t] is the SOC at the END of step
+            # t, so the battery is at the top for the whole of step t+1 only
+            # if both soc[t] and soc[t+1] are. A hold of H intervals is
+            # therefore H + 1 consecutive boundaries at the target, the first
+            # being the one the charge arrives on. Counting H boundaries would
+            # deliver H - 1 intervals: 1.75 h for a configured 2 h.
+            #
+            # Unless the battery arrived at the top already. Then the measured
+            # starting SOC is the boundary before soc[0], the first interval
+            # closes at soc[0], and H boundaries are enough. Without this a
+            # full battery is held a quarter-hour longer than asked and, when
+            # a load cuts the run, reported one interval short of what it
+            # physically delivered.
+            arrived_full = (
+                start == 0
+                and bat.initial_soc_kwh is not None
+                and bat.initial_soc_kwh >= target - _CARE_EPS_KWH
+            )
+            want = max(1, bat.care.hold_steps + (0 if arrived_full else 1))
+            run = [start]
+            for t in range(start + 1, start + want):
+                if t not in witness or witness[t] < target - _CARE_EPS_KWH:
+                    break
+                run.append(t)
+            # Capped at what was asked: a battery that arrived full with a
+            # hold of 0 still has soc[0] pinned, which is one interval held,
+            # but it was asked for a touch and a touch reports 0.
+            intervals = min(bat.care.hold_steps, len(run) - (0 if arrived_full else 1))
+            run_min = min(witness[t] for t in run)
+            enforced = target if run_min >= target else run_min - _CARE_EPS_KWH
+            if enforced <= 0.0:
+                # Only reachable with a target below the tolerance itself, but
+                # a negative value would fail the status model and take the
+                # solve down over a reporting field. Same guard as below.
+                continue
+            if intervals < bat.care.hold_steps:
+                # debug, not info: while the deadline sits near the horizon end
+                # this fires on every rolling solve until the run fits, and
+                # enforced_hold_steps on the status topic already reports it.
+                logger.debug(
+                    "Battery %s: full-charge hold of %d interval(s) cannot be "
+                    "sustained from step %d in this horizon; holding for %d.",
+                    bat.name,
+                    bat.care.hold_steps,
+                    start,
+                    intervals,
+                )
+            bat.enforce_care_target(
+                ctx, start, enforced, boundaries=len(run), hold_steps=intervals
+            )
             continue
 
         if status != "optimal":
@@ -222,7 +286,7 @@ def _probe_care_targets(
             best_kwh,
             best_step,
         )
-        bat.enforce_care_target(ctx, best_step, best_kwh)
+        bat.enforce_care_target(ctx, best_step, best_kwh, boundaries=1, hold_steps=0)
 
     return elapsed
 
@@ -592,6 +656,10 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
             ),
             enforced_step=(
                 bat.care_target[0] if bat.care_target is not None else None
+            ),
+            hold_steps=bat.care.hold_steps,
+            enforced_hold_steps=(
+                bat.care_target[2] if bat.care_target is not None else None
             ),
         )
 

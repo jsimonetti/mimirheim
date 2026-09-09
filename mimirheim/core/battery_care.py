@@ -8,7 +8,7 @@ under-delivered, so every downstream
 assumption in that plan is wrong. This module is what lets mimirheim own the
 policy instead.
 
-Two quantities come out of it, both derived from a single piece of state: the
+Three quantities come out of it, all derived from a single piece of state: the
 timestamp at which the battery was last *measured* full.
 
 - **The floor.** Each elapsed target interval without a full charge adds one
@@ -16,9 +16,23 @@ timestamp at which the battery was last *measured* full.
   simply narrows the usable window, biasing the plan upward.
 - **The deadline.** The floor alone cannot force a full charge, because it is
   capped well below the top. So once the due time falls inside the solve
-  horizon, the caller constrains the SOC to reach the threshold. That is a
+  horizon, the caller constrains the SOC to reach the target. That is a
   constraint on state at a time, not an instruction to charge at a time: the
   solver still picks the cheap quarter-hours.
+- **The hold.** Reaching the top once is a touch, not a balance charge. Passive
+  balancing bleeds the high cells at tens of milliamps and only while they sit
+  in the upper voltage knee; the BMS recalibrates its SOC estimate only after
+  the charge current has tapered at the voltage limit. Both need time, and
+  that dwell does not happen by itself when a planner dictates the SOC
+  trajectory, so the plan asks for it: the target is held across enough
+  consecutive step boundaries to cover ``hold_hours``, and the policy resets
+  only when a *reading* has stayed at or above the threshold for that long.
+
+The plan aims for ``target_pct`` (100 by default, the top of the configured
+capacity) and
+resets on ``full_threshold_pct`` (97 by default, what a BMS can be relied on
+to report). They are two numbers because they answer two questions: what to
+plan for, and what a measurement has to show for the plan to have worked.
 
 What this module does not do:
 - It does not touch the solver. It returns numbers; ``BatteryDevice`` turns
@@ -29,6 +43,7 @@ What this module does not do:
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -56,12 +71,18 @@ class CarePlan:
             ``deadline_step`` is None.
         hours_since_full: Hours since the last measured full charge, for the
             status topic. None when the battery has never been seen full.
+        hold_steps: How many consecutive steps the SOC must stay at or above
+            ``full_target_kwh`` once it gets there: ``hold_hours`` rounded up
+            to whole steps. 0 when the policy is off or configured as a touch.
+            How many of those the model could actually deliver is settled by
+            the probe and reported as ``enforced_hold_steps``.
     """
 
     floor_kwh: float
     deadline_step: int | None
     full_target_kwh: float | None
     hours_since_full: float | None
+    hold_steps: int = 0
 
 
 def is_newer(candidate: datetime | None, current: datetime | None) -> bool:
@@ -149,6 +170,89 @@ def observe_full_charge(
     return None
 
 
+def track_full_charge(
+    *,
+    config: SocRatchetConfig,
+    capacity_kwh: float,
+    soc_kwh: float,
+    now: datetime,
+    above_since_utc: datetime | None,
+) -> tuple[datetime | None, datetime | None]:
+    """Advance the measured hold by one reading.
+
+    ``observe_full_charge`` answers "is this reading at the top". This answers
+    the question the policy actually has: "has it *stayed* there long enough".
+    The run is tracked as the time of the first reading at or above the
+    threshold; a reading below it ends the run, and the run must be contiguous
+    -- time at the top counts only while it is unbroken, because balancing
+    stops the moment the cells leave the voltage knee.
+
+    The hold completes when ``now - above_since >= hold_hours``, and the
+    completion time is what is recorded, not the crossing: it is the moment the
+    cells have had their time, and the reference the next interval should run
+    from. While the battery goes on sitting full, every further reading also
+    completes the hold and advances the timestamp. That is deliberate: a
+    battery that is full right now has zero hours since its last full charge,
+    and ``last_full_utc`` only ever moves forward anyway.
+
+    The run itself is held by the caller and lives in memory only. A restart
+    mid-hold therefore costs one extra hold at the top. That is a bounded price
+    for a rare event and not worth a second retained field.
+
+    A gap between readings does not break the run. Silence is taken to mean
+    "unchanged", which is what an on-change publisher means by it, and it is
+    the only reading under which a battery sitting at a constant 100% -- the
+    normal state during a hold -- could ever complete one: such a publisher
+    sends nothing until the SOC moves, and a dip below the threshold is a move,
+    so it does arrive. A periodic publisher that falls silent for hours is a
+    fault in the telemetry, not a hold, and the SOC topic carries no staleness
+    window anywhere else in mimirheim either; inventing one here would trade a
+    rare false positive for a routine false negative.
+
+    With ``hold_hours`` of 0 the first reading at the top completes the hold,
+    which is the pre-hold behaviour. The departure rule above applies to a
+    touch as well: the reading that ends the run records the moment the pack
+    left the top. Against the old behaviour, which recorded the last reading
+    *at* the top, that moves the timestamp forward by at most one publish
+    interval, in the direction of what actually happened.
+
+    Args:
+        config: The battery's full-charge policy.
+        capacity_kwh: Usable capacity in kWh.
+        soc_kwh: Measured state of charge in kWh, never a solver value.
+        now: When the reading arrived.
+        above_since_utc: Start of the current run of readings at or above the
+            threshold, or None when the last reading was below it.
+
+    Returns:
+        ``(above_since, full_utc)``. ``above_since`` is the run to carry to the
+        next reading, None when this reading ended it. ``full_utc`` is ``now``
+        when this reading completes the hold -- including a reading below the
+        threshold that ends a run which had already lasted the hold -- else
+        None; as with ``observe_full_charge``, None means "no new observation".
+    """
+    hold = timedelta(hours=config.hold_hours)
+    if observe_full_charge(
+        config=config, capacity_kwh=capacity_kwh, soc_kwh=soc_kwh, now=now
+    ) is None:
+        # The run ends here. But silence means "unchanged" (see above), so a
+        # below-threshold reading arriving after the hold had already elapsed
+        # says the battery sat at the top until this very reading: the hold
+        # completed, and the pack has just left the top. Discarding it would
+        # contradict the rule the run was tracked under.
+        if (
+            config.enabled
+            and above_since_utc is not None
+            and now - _as_utc(above_since_utc) >= hold
+        ):
+            return None, now
+        return None, None
+    started = _as_utc(above_since_utc) if above_since_utc is not None else now
+    if now - started >= hold:
+        return started, now
+    return started, None
+
+
 def care_plan(
     *,
     config: SocRatchetConfig,
@@ -184,6 +288,7 @@ def care_plan(
             deadline_step=None,
             full_target_kwh=None,
             hours_since_full=None,
+            hold_steps=0,
         )
 
     # A battery never seen full still needs its first balance charge, so the
@@ -198,6 +303,7 @@ def care_plan(
             deadline_step=None,
             full_target_kwh=None,
             hours_since_full=None,
+            hold_steps=_hold_steps(config, dt),
         )
 
     reference = _as_utc(reference)
@@ -238,6 +344,7 @@ def care_plan(
         deadline_step=deadline_step,
         full_target_kwh=full_target_kwh,
         hours_since_full=hours_since_full,
+        hold_steps=_hold_steps(config, dt),
     )
 
 
@@ -276,7 +383,7 @@ def _deadline(
     makes the solve infeasible. The question is answered by the solver instead,
     in ``model_builder._probe_care_targets``.
     """
-    target_kwh = _full_threshold_kwh(config, capacity_kwh)
+    target_kwh = _full_target_kwh(config, capacity_kwh)
 
     if due_at <= solve_time_utc:
         return (0, target_kwh) if horizon > 0 else (None, None)
@@ -296,8 +403,32 @@ def _deadline(
 
 
 def _full_threshold_kwh(config: SocRatchetConfig, capacity_kwh: float) -> float:
-    """Return the SOC in kWh that counts as a full charge."""
+    """Return the measured SOC in kWh that counts as a full charge."""
     return capacity_kwh * config.full_threshold_pct / 100.0
+
+
+def _full_target_kwh(config: SocRatchetConfig, capacity_kwh: float) -> float:
+    """Return the SOC in kWh the plan is asked to reach and hold.
+
+    Distinct from the threshold on purpose. The plan aims for the top of the
+    configured capacity, where the cells sit in the voltage knee; the reset
+    accepts what a BMS can be relied on to report. Planning for the threshold
+    instead would stop at the
+    edge of the voltage knee, where the balancer has barely started.
+    """
+    return capacity_kwh * config.target_pct / 100.0
+
+
+def _hold_steps(config: SocRatchetConfig, dt: float) -> int:
+    """Return ``hold_hours`` as whole steps, rounded up.
+
+    Up, not to nearest: the hold is a minimum the cells need, not an estimate.
+    The epsilon keeps an exact multiple (2.0 h at 0.25 h steps) from rounding
+    to nine through float error.
+    """
+    if not config.enabled or config.hold_hours <= 0.0:
+        return 0
+    return max(1, math.ceil(config.hold_hours / dt - 1e-9))
 
 
 def _as_utc(value: datetime) -> datetime:

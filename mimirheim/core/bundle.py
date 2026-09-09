@@ -570,6 +570,25 @@ class BatteryCareStatus(BaseModel):
             At or after ``deadline_step``; later when the battery could not be
             full by the deadline itself. None whenever
             ``enforced_target_kwh`` is None.
+        hold_steps: The configured hold, ``hold_hours`` rounded up to whole
+            steps. A property of the policy, not of this cycle's demand: it is
+            reported whenever the policy is enabled, whether or not a target
+            is pending, and it does not change when one is satisfied. 0 for a
+            touch.
+        enforced_hold_steps: How many whole intervals the solve was actually
+            held at ``enforced_target_kwh``. The last constrained boundary is
+            ``enforced_step + enforced_hold_steps`` when the charge arrives on
+            ``enforced_step``, and one less when the battery was already at
+            the target as the horizon began, because the measured starting SOC
+            then counts as the first boundary -- except that a touch always
+            pins ``enforced_step`` itself, whichever case applies. Equal to
+            ``hold_steps`` in the normal case, 0 for a touch. Lower when the run was clipped by the end of the horizon,
+            in which case the next rolling solve continues it, or when the
+            probe found the model could not sustain the top for that long --
+            a load with no grid to serve it, typically. Read it the way
+            ``enforced_target_kwh`` is read: what was proven and imposed, not
+            a ceiling on the hardware. None whenever ``enforced_target_kwh``
+            is None.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -600,6 +619,16 @@ class BatteryCareStatus(BaseModel):
         default=None,
         ge=0,
         description="Horizon step the enforced full-charge target was pinned to.",
+    )
+    hold_steps: int = Field(
+        default=0,
+        ge=0,
+        description="Configured hold at the target, in whole steps.",
+    )
+    enforced_hold_steps: int | None = Field(
+        default=None,
+        ge=0,
+        description="Intervals after enforced_step the solve was actually held at the target.",
     )
 
 
