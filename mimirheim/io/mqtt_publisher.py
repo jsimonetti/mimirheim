@@ -187,6 +187,7 @@ class MqttPublisher:
             # Override the integer step index with a human-readable UTC datetime.
             step_dict["t"] = step_start.strftime("%Y-%m-%dT%H:%M:%SZ")
             step_dict["strategy"] = result.strategy
+            step_dict["strategy_degraded"] = result.strategy_degraded
             step_dict["solve_status"] = result.solve_status
             # Inject the solver-recommended start time into the per-device entry
             # that already carries kw and type, so all device state is co-located.
@@ -382,6 +383,11 @@ class MqttPublisher:
             payload = json.dumps({
                 "status": "ok",
                 "solve_status": result.solve_status,
+                # Without this, a cost-optimal schedule produced by the
+                # minimize_consumption fallback is indistinguishable here from
+                # a genuine volume-minimising one: the strategy name is the
+                # same on both.
+                "strategy_degraded": result.strategy_degraded,
                 "dispatch_suppressed": result.dispatch_suppressed,
                 "naive_cost_eur": round(result.naive_cost_eur, 4),
                 "optimised_cost_eur": round(result.optimised_cost_eur, 4),

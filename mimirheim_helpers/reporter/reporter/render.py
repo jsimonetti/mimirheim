@@ -38,6 +38,18 @@ from reporter.metrics import compute_economic_metrics, compute_schedule_metrics
 # ---------------------------------------------------------------------------
 
 
+def _strategy_label(out: dict) -> str:
+    """Return the strategy name, marked when it was not the one carried out.
+
+    ``minimize_consumption`` falls back to a plain cost objective when its
+    first phase cannot bound the import volume, and keeps its own name on the
+    result. Rendering that name alone would present a cost-optimal schedule as
+    a volume-optimal one.
+    """
+    name = str(out.get("strategy", "?"))
+    return f"{name} (degraded)" if out.get("strategy_degraded") else name
+
+
 def build_report_html(inp: dict, out: dict) -> str:
     """Build a complete HTML report from a mimirheim dump pair.
 
@@ -76,7 +88,7 @@ def build_report_html(inp: dict, out: dict) -> str:
     display_time = inp.get("triggered_at_utc") or inp.get("solve_time_utc", "")
     page_title = (
         f"mimirheim report — {display_time} | "
-        f"{out.get('strategy', '?')} | {out.get('solve_status', '?')}"
+        f"{_strategy_label(out)} | {out.get('solve_status', '?')}"
     )
 
     sections: list[str] = []
@@ -126,7 +138,7 @@ def build_report_html(inp: dict, out: dict) -> str:
             ),
             dict(
                 text=(
-                    f"{out.get('strategy', '?')} │ {out.get('solve_status', '?')}"
+                    f"{_strategy_label(out)} │ {out.get('solve_status', '?')}"
                 ),
                 xref="paper", yref="paper",
                 x=0.0, y=1.09,
@@ -473,7 +485,7 @@ def _render_summary_html(inp: dict, out: dict, schedule: list[dict]) -> str:
         "<thead><tr><th colspan='2'>Economic summary</th></tr></thead>"
         "<tbody>"
         + row("Solve time (UTC)", str(inp.get("triggered_at_utc") or inp.get("solve_time_utc", "—")))
-        + row("Strategy", str(out.get("strategy", "—")))
+        + row("Strategy", _strategy_label(out) if out.get("strategy") else "—")
         + row("Solve status", str(out.get("solve_status", "—")))
         + row("Horizon", f"{n_steps} steps ({horizon_h:.2f} h)")
         + row(

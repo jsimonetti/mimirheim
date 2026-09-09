@@ -375,9 +375,11 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
     # minimize_consumption is lexicographic and spends part of it on its
     # phase-1 solve inside build(). Passing the returned value through is what
     # keeps a two-phase solve inside the configured budget.
-    solve_budget_seconds = ObjectiveBuilder().build(
+    objective_builder = ObjectiveBuilder()
+    solve_budget_seconds = objective_builder.build(
         ctx, all_devices, grid, bundle, config
     )
+    strategy_degraded = objective_builder.strategy_degraded
 
     # --- Log model size ---
     # Logged at DEBUG so it appears when the operator runs with --log-level DEBUG
@@ -403,6 +405,7 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
     if status == "infeasible":
         return SolveResult(
             strategy=bundle.strategy,
+            strategy_degraded=strategy_degraded,
             solve_time_utc=bundle.solve_time_utc,
             objective_value=0.0,
             solve_status="infeasible",
@@ -581,6 +584,7 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
 
     return SolveResult(
         strategy=bundle.strategy,
+        strategy_degraded=strategy_degraded,
         # The single time origin for this result. Every consumer that maps a
         # step index to a wall-clock time reads it from here rather than from
         # the clock, so a result published (or re-published after a broker
