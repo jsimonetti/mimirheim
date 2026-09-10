@@ -20,6 +20,7 @@ from unittest.mock import MagicMock, patch
 
 import paho.mqtt.client as mqtt
 import pytest
+from freezegun import freeze_time
 
 from helper_common.cycle import CycleResult
 from pv_openmeteo.__main__ import PvOpenMeteoDaemon
@@ -27,6 +28,19 @@ from pv_openmeteo.config import PvOpenMeteoConfig
 from pv_openmeteo.fetcher import FetchError, RatelimitError
 
 _NOW = datetime.now(tz=timezone.utc)
+
+
+@pytest.fixture(autouse=True)
+def _frozen_now():
+    """Pin ``datetime.now()`` to ``_NOW`` for every test in this module.
+
+    ``_run_cycle`` measures the forecast horizon against the wall clock at
+    call time. Without freezing it, the gap between module import (when
+    ``_NOW`` is captured) and test execution drifts with the rest of the
+    suite's runtime, making the horizon assertions flaky.
+    """
+    with freeze_time(_NOW):
+        yield
 
 
 def _make_config(signal_mimir: bool = False) -> PvOpenMeteoConfig:
