@@ -1657,21 +1657,63 @@ def test_outputs_custom_prefix_reflected_in_derived_topics() -> None:
 
 
 def test_inputs_prices_derived_from_prefix() -> None:
-    """When inputs section is omitted, inputs.prices is derived from prefix."""
+    """When inputs section is omitted, inputs.prices defaults to a one-element list derived from prefix."""
     from mimirheim.config.schema import MimirheimConfig
 
     config = MimirheimConfig.model_validate(_minimal_hioo_config_no_outputs())
-    assert config.inputs.prices == "mimir/input/prices"
+    assert config.inputs.prices == ["mimir/input/prices"]
 
 
 def test_inputs_prices_explicit_override_preserved() -> None:
-    """An explicit inputs.prices value is kept unchanged."""
+    """An explicit inputs.prices list is kept unchanged."""
+    from mimirheim.config.schema import MimirheimConfig
+
+    raw = _minimal_hioo_config_no_outputs()
+    raw["inputs"] = {"prices": ["shared/nordpool/prices"]}
+    config = MimirheimConfig.model_validate(raw)
+    assert config.inputs.prices == ["shared/nordpool/prices"]
+
+
+def test_inputs_prices_bare_string_coerces_to_one_element_list() -> None:
+    """A bare string value for inputs.prices coerces to a one-element list."""
     from mimirheim.config.schema import MimirheimConfig
 
     raw = _minimal_hioo_config_no_outputs()
     raw["inputs"] = {"prices": "shared/nordpool/prices"}
     config = MimirheimConfig.model_validate(raw)
-    assert config.inputs.prices == "shared/nordpool/prices"
+    assert config.inputs.prices == ["shared/nordpool/prices"]
+
+
+def test_inputs_prices_explicit_list_preserved_in_order() -> None:
+    """An explicit multi-element list is preserved in the given order."""
+    from mimirheim.config.schema import MimirheimConfig
+
+    raw = _minimal_hioo_config_no_outputs()
+    raw["inputs"] = {"prices": ["nordpool/prices", "zonneplan/prices"]}
+    config = MimirheimConfig.model_validate(raw)
+    assert config.inputs.prices == ["nordpool/prices", "zonneplan/prices"]
+
+
+def test_inputs_prices_empty_list_defaults_to_prefix_derived() -> None:
+    """An explicit empty list is defaulted the same way as an omitted field."""
+    from mimirheim.config.schema import MimirheimConfig
+
+    raw = _minimal_hioo_config_no_outputs()
+    raw["inputs"] = {"prices": []}
+    config = MimirheimConfig.model_validate(raw)
+    assert config.inputs.prices == ["mimir/input/prices"]
+
+
+def test_inputs_prices_duplicate_topics_rejected() -> None:
+    """Duplicate topics in inputs.prices raise a validation error."""
+    from pydantic import ValidationError
+
+    from mimirheim.config.schema import MimirheimConfig
+
+    raw = _minimal_hioo_config_no_outputs()
+    raw["inputs"] = {"prices": ["a/prices", "b/prices", "a/prices"]}
+    with pytest.raises(ValidationError, match="[Dd]uplicate"):
+        MimirheimConfig.model_validate(raw)
 
 
 def test_reporting_notify_topic_derived_from_prefix() -> None:

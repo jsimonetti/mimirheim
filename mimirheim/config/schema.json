@@ -1497,22 +1497,17 @@
     },
     "InputsConfig": {
       "additionalProperties": false,
-      "description": "MQTT input topic configuration.\n\nThese are the topics on which mimirheim receives data from external tools and\nhome automation integrations. All topics are retained by publishers so\nmimirheim receives the latest value immediately on (re)connect.\n\nAttributes:\n    prices: Topic on which per-step import and export price data is\n        published. Defaults to ``{mqtt.topic_prefix}/input/prices`` when\n        not set. Set explicitly when the topic does not match the default\n        pattern, for example when multiple mimirheim instances share one broker\n        but publish prices to a shared topic.",
+      "description": "MQTT input topic configuration.\n\nThese are the topics on which mimirheim receives data from external tools and\nhome automation integrations. All topics are retained by publishers so\nmimirheim receives the latest value immediately on (re)connect.\n\nAttributes:\n    prices: Topics on which per-step import and export price data is\n        published, in priority order. Defaults to a one-element list,\n        ``[{mqtt.topic_prefix}/input/prices]``, when left empty. Each\n        topic is resampled to the 15-minute solver grid independently and\n        the results are merged per step by highest confidence, with\n        earlier list entries winning ties. Set explicitly to add\n        alternative or supplementary price sources, for example a\n        longer-horizon predictive source alongside day-ahead prices.",
       "properties": {
         "prices": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Topic for per-step price data. Defaults to '{mqtt.topic_prefix}/input/prices' when not set.",
+          "description": "Price topics in priority order. Defaults to a one-element list, '[{mqtt.topic_prefix}/input/prices]', when left empty. Merged per step by highest confidence; earlier entries win ties.",
+          "items": {
+            "type": "string"
+          },
           "title": "Prices",
+          "type": "array",
           "ui_group": "advanced",
-          "ui_label": "Prices topic",
+          "ui_label": "Prices topics",
           "ui_placeholder": "{mqtt.topic_prefix}/input/prices"
         }
       },

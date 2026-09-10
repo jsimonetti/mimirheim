@@ -266,13 +266,18 @@ Confidence is a per-step floating-point value in `[0.0, 1.0]` supplied externall
 
 A step with `confidence: 0.3` contributes 30% of its face-value revenue signal to the objective. The solver still plans that step — it will still charge the battery if the discounted value justifies it — but makes more conservative decisions.
 
+`inputs.prices` accepts a list of topics, in priority order, instead of a single topic (a bare string is coerced to a one-element list). Each topic is resampled independently to the 15-minute solver grid; the results are then merged step by step, taking whichever source reports the highest confidence for that step, with earlier list entries winning ties. A source only competes for a given step if that step falls within the source's own real timestamp range — a shorter-horizon source is never held forward past its last known timestamp to outrank a longer-horizon one. This lets a lower-confidence predictive source extend the usable horizon beyond a shorter, higher-confidence source (e.g. day-ahead prices) without ever being able to override it while it has real data.
+
 ---
 
 ## 6. Input Schema
 
 ### Prices — `{prefix}/input/prices`
 
-Published retained. Required. Payload is a JSON array of timestamped price steps:
+Published retained. Required — at least one configured price topic must be
+covering the current time (see §5, Confidence Model, for the multi-topic
+merge rule). Payload on each price topic is a JSON array of timestamped price
+steps:
 
 ```json
 [
@@ -310,7 +315,7 @@ Published retained. Required for each configured PV array. Payload is a JSON arr
 
 - `kw` is the forecast output power in kilowatts. Must be non-negative.
 - `confidence` is optional per step; defaults to 1.0.
-- mimirheim resamples to the 15-minute solver grid using linear interpolation between adjacent known points.
+- mimirheim resamples to the 15-minute solver grid using a step (hold-previous) function: `kw` is the average power over the interval starting at `ts`, so every 15-minute slot inside that interval takes the same value.
 
 ### Static load forecast — topic from `static_loads.*.topic_forecast`
 
@@ -1135,7 +1140,7 @@ The solve is blocked if `n_steps` falls below `readiness.min_horizon_hours × 4`
 
 ### Gap warnings
 
-If any forecast series has a gap wider than `readiness.max_gap_hours` within the active horizon, mimirheim logs a warning. Gap detection is informational — it does not block the solve. Gaps are filled by the resampler (step function for prices, linear interpolation for power).
+If any forecast series has a gap wider than `readiness.max_gap_hours` within the active horizon, mimirheim logs a warning. Gap detection is informational — it does not block the solve. Gaps are filled by the resampler (step function, hold-previous, for both prices and power).
 
 ### Optional inputs
 

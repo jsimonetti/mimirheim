@@ -10,9 +10,14 @@ coverage window across all required forecast series. See ``compute_horizon_steps
 for the precise definition.
 
 Resampling strategies:
-    - **Prices** (``resample_prices``): step function. A price quoted for a
-      given timestamp applies until the next known timestamp. This matches
-      how day-ahead market prices work.
+    - **Prices** (``merge_price_sources``): step function per source. Within
+      a source, a price quoted for a given timestamp applies until that
+      source's next known timestamp — this matches how day-ahead market
+      prices work. Across sources (mimirheim accepts more than one price
+      topic), each step of the merged result takes the source with the
+      highest reported confidence, restricted to sources with real
+      timestamp coverage of that step; see ``merge_price_sources`` for the
+      full tier rule.
     - **Power forecasts** (``resample_power``): step function (hold-previous). Each
       forecast.solar hourly value represents the average power for the interval
       starting at that timestamp (e.g. ``watts[09:00]`` = average power during
@@ -150,32 +155,87 @@ def find_gaps(
     return gaps
 
 
-def resample_prices(
-    steps: list[PriceStep],
+def compute_price_horizon_steps(
+    solve_start: datetime,
+    sources: list[list[PriceStep]],
+) -> int:
+    """Compute the number of available 15-minute price steps, unioned across sources.
+
+    Unlike ``compute_horizon_steps`` (which takes the *minimum* coverage
+    because every series it is given is mandatory), price sources are
+    optional alternatives: the whole point of accepting more than one is that
+    a longer-horizon source should extend the usable horizon rather than be
+    capped by a shorter, higher-confidence one. This function therefore takes
+    the *maximum* of the per-source coverage instead of the minimum.
+
+    Args:
+        solve_start: The 15-minute-aligned start of the horizon.
+        sources: One list of ``PriceStep`` per configured price topic. A
+            source with no data at all is skipped rather than short-circuiting
+            the whole computation to 0.
+
+    Returns:
+        The number of available 15-minute steps. Zero if no source has any
+        data at or after solve_start.
+    """
+    ends: list[datetime] = []
+    for source in sources:
+        last = _last_ts_at_or_after(source, solve_start)
+        if last is not None:
+            ends.append(last)
+
+    if not ends:
+        return 0
+
+    horizon_end = max(ends)
+    steps = int((horizon_end - solve_start).total_seconds() / (60 * _STEP_MINUTES))
+    return max(0, steps)
+
+
+def merge_price_sources(
+    sources: list[list[PriceStep]],
     solve_start: datetime,
     n_steps: int,
 ) -> tuple[list[float], list[float], list[float]]:
-    """Resample price steps to the 15-minute grid using a step (constant) function.
+    """Merge multiple price sources onto the 15-minute grid, highest confidence wins.
 
-    For each 15-minute output step at time ``t_i``, the price is taken from
-    the most recent ``PriceStep`` whose ``.ts <= t_i``. If every step is after
-    ``t_i`` the first known step is used, extending the earliest known price
-    backwards to cover the leading edge.
+    Each source is resampled independently using the same step (hold-previous)
+    function as a single price series: the price quoted for a given timestamp
+    applies until that source's next known timestamp. The sources are then
+    merged per output step in two tiers:
 
-    This matches how day-ahead market prices work: a price quoted for 15:00
-    applies unchanged until the next quoted price, regardless of the quoting
-    resolution.
+    1. **Real coverage.** A source is a candidate for step ``t`` only if it has
+       an active (hold-previous) value AND ``t`` falls within that source's own
+       real timestamp range, i.e. ``t <= last_ts(source)``. This is what stops
+       a short-horizon source from being held forward at its own confidence
+       past the end of its actual data — without it, a short-coverage
+       confidence-1.0 source (e.g. day-ahead prices covering only 24 hours)
+       would outrank a longer-horizon predictive source at every step beyond
+       its own last timestamp, permanently defeating the point of merging in
+       a longer-horizon source at all.
+    2. **Leading-edge fallback.** Used only for a step where every source's
+       tier-1 candidacy is empty (``t`` is before every source's first
+       timestamp). Each source with any data at all then contributes its own
+       first step, exactly like the single-source backward-fill behaviour.
+
+    Within whichever tier applies, the candidate with the highest confidence
+    wins; ties are broken by source index (earlier entries in ``sources``,
+    i.e. higher configured priority, win).
 
     Args:
-        steps: Raw price steps, not necessarily sorted.
+        sources: One list of ``PriceStep`` per configured price topic, in
+            priority order (index 0 = highest priority on confidence ties).
+            Each list need not be sorted.
         solve_start: The 15-minute-aligned start of the horizon.
         n_steps: Number of 15-minute steps to produce. Must be >= 1.
 
     Returns:
         A 3-tuple of ``(import_eur_per_kwh, export_eur_per_kwh, confidence)``,
-        each a ``list[float]`` of length ``n_steps``.
+        each a ``list[float]`` of length ``n_steps``, taken from the winning
+        source's own step at each position.
     """
-    sorted_steps = sorted(steps, key=lambda s: s.ts)
+    sorted_sources = [sorted(source, key=lambda s: s.ts) for source in sources]
+    last_ts_per_source = [s[-1].ts if s else None for s in sorted_sources]
 
     imports: list[float] = []
     exports: list[float] = []
@@ -184,21 +244,37 @@ def resample_prices(
     for i in range(n_steps):
         t = solve_start + i * _STEP_DURATION
 
-        # Find the last step at or before t (step function = hold last value).
-        active = None
-        for step in sorted_steps:
-            if step.ts <= t:
-                active = step
-            else:
-                break
+        tier1: list[tuple[int, PriceStep]] = []
+        for idx, sorted_source in enumerate(sorted_sources):
+            active = None
+            for step in sorted_source:
+                if step.ts <= t:
+                    active = step
+                else:
+                    break
+            if active is not None and t <= last_ts_per_source[idx]:  # type: ignore[operator]
+                tier1.append((idx, active))
 
-        if active is None:
-            # All steps are after t; use the first available step.
-            active = sorted_steps[0]
+        if tier1:
+            candidates = tier1
+        else:
+            # Leading-edge fallback: every source's real coverage starts
+            # after t, so extend the earliest known price of each source
+            # backwards, exactly as the single-source case does.
+            candidates = [
+                (idx, sorted_source[0])
+                for idx, sorted_source in enumerate(sorted_sources)
+                if sorted_source
+            ]
 
-        imports.append(active.import_eur_per_kwh)
-        exports.append(active.export_eur_per_kwh)
-        confidences.append(active.confidence)
+        # Highest confidence wins; ties broken by lowest source index (config
+        # priority order). See IMPLEMENTATION_DETAILS.md §7, subsection
+        # "Multi-source price merge".
+        _, winner = min(candidates, key=lambda pair: (-pair[1].confidence, pair[0]))
+
+        imports.append(winner.import_eur_per_kwh)
+        exports.append(winner.export_eur_per_kwh)
+        confidences.append(winner.confidence)
 
     return imports, exports, confidences
 

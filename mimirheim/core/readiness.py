@@ -64,10 +64,11 @@ from mimirheim.core.bundle import (
 )
 from mimirheim.core.forecast import (
     compute_horizon_steps,
+    compute_price_horizon_steps,
     find_gaps,
     floor_to_15min,
+    merge_price_sources,
     resample_power,
-    resample_prices,
 )
 
 logger = logging.getLogger("mimirheim.readiness")
@@ -86,13 +87,25 @@ class ReadinessState:
     sensor topics use presence-only readiness: the solving is blocked only if
     no value has ever been received on the topic.
 
+    Price topics are a special case of coverage-based readiness: mimirheim
+    accepts more than one (``config.inputs.prices``), and treats them as
+    alternatives to be merged rather than a set that must all be present.
+    Horizon coverage for price topics is computed by union (the longest
+    covering source wins) rather than by intersection (see
+    ``compute_price_horizon_steps``), and a price topic that has never
+    published does not block readiness as long as the topics that have
+    published clear ``min_horizon_hours`` between them. PV and load topics
+    keep the original all-required, intersection-based semantics.
+
     Attributes:
         _lock: Threading lock protecting all instance state.
         _entries: Maps MQTT topic → (validated_input, received_at).
         _sensor_topics: Set of sensor topics that must have been received at
             least once before a solve is permitted.
-        _forecast_topics: Set of topics that carry timestamped forecast series.
-        _prices_topic: Topic string for horizon prices.
+        _forecast_topics: Set of PV/load topics that carry timestamped
+            forecast series and are required (intersection-based coverage).
+            Price topics are tracked separately in ``_prices_topics``.
+        _prices_topics: Topic strings for horizon prices, in priority order.
         _pv_topics: PV forecast topic per array, keyed by device name.
         _load_topics: Ordered list of static-load forecast topic strings.
         _current_strategy: The currently active strategy string.
@@ -119,7 +132,7 @@ class ReadinessState:
 
         prefix = config.mqtt.topic_prefix
         self._strategy_topic = f"{prefix}/input/strategy"
-        self._prices_topic = config.inputs.prices or f"{prefix}/input/prices"
+        self._prices_topics: list[str] = config.inputs.prices or [f"{prefix}/input/prices"]
 
         # Convert hours → 15-min step counts.
         self._min_horizon_steps = max(1, int(config.readiness.min_horizon_hours * 4))
@@ -216,9 +229,10 @@ class ReadinessState:
             name: cfg.topic_forecast for name, cfg in config.pv_arrays.items()
         }
         self._load_topics: list[str] = [cfg.topic_forecast for cfg in config.static_loads.values()]
-        self._forecast_topics: set[str] = (
-            {self._prices_topic} | set(self._pv_topics.values()) | set(self._load_topics)
-        )
+        # Price topics are tracked separately (self._prices_topics): they use
+        # union coverage and partial-source tolerance, unlike PV/load topics
+        # which remain all-required and intersection-based.
+        self._forecast_topics: set[str] = set(self._pv_topics.values()) | set(self._load_topics)
 
         # Deferrable load topics: window endpoints and optional start_time.
         # None of these block readiness — all are optional inputs.
@@ -458,7 +472,7 @@ class ReadinessState:
                 solve_start = floor_to_15min(now)
                 empty_topics = [
                     t
-                    for t in sorted(self._forecast_topics)
+                    for t in sorted(self._forecast_topics | set(self._prices_topics))
                     if self._entries.get(t) is None
                     or compute_horizon_steps(
                         solve_start, self._entries[t][0]
@@ -523,10 +537,11 @@ class ReadinessState:
             horizon_end = solve_start + n_steps * timedelta(minutes=15)
             self._check_gaps(solve_start, horizon_end)
 
-            # Resample prices.
-            price_steps: list[PriceStep] = self._entries[self._prices_topic][0]
-            horizon_prices, horizon_export_prices, horizon_confidence = resample_prices(
-                price_steps, solve_start, n_steps
+            # Merge and resample prices from every configured price topic
+            # that has published, highest confidence per step wins.
+            price_sources = self._price_sources_locked()
+            horizon_prices, horizon_export_prices, horizon_confidence = merge_price_sources(
+                price_sources, solve_start, n_steps
             )
 
             # Resample PV forecast per array. Each PvDevice receives its own
@@ -807,21 +822,56 @@ class ReadinessState:
         # Forecast topics: must cover at least min_horizon_steps.
         return self._compute_horizon_steps(now) >= self._min_horizon_steps
 
+    def _price_sources_locked(self) -> list[list[PriceStep]]:
+        """Return the PriceStep lists currently stored for the configured price topics.
+
+        Must only be called when ``_lock`` is already held. A topic that has
+        never published contributes nothing rather than blocking the whole
+        list — coverage tolerates a missing price source, unlike PV/load
+        topics. Order matches ``config.inputs.prices`` (config priority).
+        """
+        sources: list[list[PriceStep]] = []
+        for topic in self._prices_topics:
+            entry = self._entries.get(topic)
+            if entry is not None:
+                sources.append(entry[0])
+        return sources
+
     def _compute_horizon_steps(self, now: datetime) -> int:
-        """Return the number of jointly covered 15-minute steps from solve_start.
+        """Return the number of covered 15-minute steps from solve_start.
 
         Must only be called when ``_lock`` is already held.
+
+        Price topics use union coverage: the longest-reaching configured
+        price source sets the price horizon, and a price topic that has never
+        published does not block the solve as long as the others clear
+        ``min_horizon_steps`` between them (see ``compute_price_horizon_steps``).
+        PV and load topics keep the original all-required, intersection-based
+        semantics: every one of them must have future data.
+
+        When no PV arrays or static loads are configured, ``_forecast_topics``
+        is empty. ``compute_horizon_steps`` called with zero series
+        short-circuits to 0 by its own contract, which would wrongly zero the
+        result for a battery+grid-only config — the price-only branch below
+        exists to avoid that.
 
         Args:
             now: Current UTC time. Used to compute solve_start.
 
         Returns:
-            Number of available 15-minute steps. Zero if any forecast topic
-            has no data or no future data.
+            Number of available 15-minute steps. Zero if price coverage is
+            absent, or if any configured PV/load topic has no future data.
         """
         solve_start = floor_to_15min(now)
-        series: list[list[Any]] = []
 
+        price_steps = compute_price_horizon_steps(solve_start, self._price_sources_locked())
+        if price_steps == 0:
+            return 0
+
+        if not self._forecast_topics:
+            return price_steps
+
+        series: list[list[Any]] = []
         for topic in self._forecast_topics:
             entry = self._entries.get(topic)
             if entry is None:
@@ -829,18 +879,22 @@ class ReadinessState:
             validated_input, _ = entry
             series.append(validated_input)
 
-        return compute_horizon_steps(solve_start, *series)
+        other_steps = compute_horizon_steps(solve_start, *series)
+        return min(price_steps, other_steps)
 
     def _check_gaps(self, solve_start: datetime, horizon_end: datetime) -> None:
         """Log warnings for any gaps exceeding max_gap_hours in forecast series.
 
-        Must only be called when ``_lock`` is already held.
+        Must only be called when ``_lock`` is already held. Each configured
+        price, PV, and load topic is still checked independently — merging
+        price sources for the solver grid does not change how internal gaps
+        within a single topic's own series are detected.
 
         Args:
             solve_start: Start of the horizon window.
             horizon_end: End of the horizon window.
         """
-        for topic in self._forecast_topics:
+        for topic in self._forecast_topics | set(self._prices_topics):
             entry = self._entries.get(topic)
             if entry is None:
                 continue

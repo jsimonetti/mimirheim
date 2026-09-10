@@ -366,10 +366,10 @@ class MqttClient:
         config = self._config
         prefix = config.mqtt.topic_prefix
 
-        # Prices topic: parse into a PricesPayload (import, export, confidence).
-        # For now, parse each prices-related flat list separately and combine.
-        prices_topic = config.inputs.prices
-        handlers[prices_topic] = parse_price_steps
+        # Price topics: each parses independently into a list[PriceStep];
+        # ReadinessState merges the configured topics at snapshot time.
+        for prices_topic in config.inputs.prices:
+            handlers[prices_topic] = parse_price_steps
 
         # Strategy topic: parse the strategy string.
         strategy_topic = f"{prefix}/input/strategy"

@@ -85,12 +85,16 @@ class EvInputs(BaseModel):
 
 
 class PriceStep(BaseModel):
-    """A single timestamped electricity price entry from the MQTT prices topic.
+    """A single timestamped electricity price entry from one of the MQTT price topics.
 
     Price data arrives from day-ahead markets at arbitrary resolution (typically
-    hourly from Nordpool). ``ReadinessState`` stores a list of these and resamples
-    them to the 15-minute solver grid using a step (constant) function: the price
-    quoted for a given timestamp applies until the next known timestamp.
+    hourly from Nordpool), and possibly from more than one topic (see
+    ``config.inputs.prices``). ``ReadinessState`` stores a list of these per
+    topic and merges them onto the 15-minute solver grid using
+    ``core.forecast.merge_price_sources``: within each source, the price
+    quoted for a given timestamp applies (as a step function) until that
+    source's next known timestamp; across sources, the step with the highest
+    confidence wins.
 
     Attributes:
         ts: UTC datetime when this price period begins.

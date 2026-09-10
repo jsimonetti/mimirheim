@@ -48,8 +48,17 @@ The six global topics are derived from `mqtt.topic_prefix` (`p`):
 | `outputs.current` | `mimir/strategy/current` |
 | `outputs.last_solve` | `mimir/status/last_solve` |
 | `outputs.availability` | `mimir/status/availability` |
-| `inputs.prices` | `mimir/input/prices` |
+| `inputs.prices` | `[mimir/input/prices]` (one-element list) |
 | `reporting.notify_topic` | `mimir/status/dump_available` |
+
+`inputs.prices` is the one field in this table that is list-valued rather than
+scalar (see plan 69, "Multi-source price merge"). A bare string in YAML
+coerces to a one-element list. The default-fill validator
+(`_derive_global_topics`) only substitutes the single derived topic when the
+list is empty (`not self.inputs.prices`), so an explicitly configured list —
+including a one-element list — is left untouched. Downstream consumers
+(`ReadinessState`, `MqttClient`) always iterate the list; there is no
+single-topic fallback path left in the code.
 
 Two further topics are not configurable and are always constructed directly from
 the prefix in the IO layer:

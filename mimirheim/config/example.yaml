@@ -594,6 +594,16 @@ mqtt:
 #
 # inputs:
 #   prices: "hio/input/prices"
+#
+# More than one price topic may be listed, in priority order. Each is
+# resampled independently and merged per step by highest confidence, with
+# earlier entries winning confidence ties — for example, day-ahead prices
+# alongside a longer-horizon predictive source:
+#
+# inputs:
+#   prices:
+#     - "hio/input/prices"
+#     - "hio/input/prices_forecast"
 
 # ---------------------------------------------------------------------------
 # Debug

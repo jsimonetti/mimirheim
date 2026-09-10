@@ -12,10 +12,11 @@ from datetime import UTC, datetime
 from mimirheim.core.bundle import PowerForecastStep, PriceStep
 from mimirheim.core.forecast import (
     compute_horizon_steps,
+    compute_price_horizon_steps,
     find_gaps,
     floor_to_15min,
+    merge_price_sources,
     resample_power,
-    resample_prices,
 )
 
 
@@ -163,53 +164,170 @@ def test_find_gaps_threshold_exactly_equal_not_flagged() -> None:
 
 
 # ---------------------------------------------------------------------------
-# resample_prices (step function)
+# merge_price_sources (single-source regression baseline)
 # ---------------------------------------------------------------------------
 
 
-def test_resample_prices_constant_within_period() -> None:
+def test_merge_prices_single_source_constant_within_period() -> None:
     """Price at 14:00 applies to all 15-min slots before the next step (15:00)."""
     steps = [_price(14, imp=0.20), _price(15, imp=0.30)]
-    imp, exp, conf = resample_prices(steps, _ts(14), 4)
+    imp, exp, conf = merge_price_sources([steps], _ts(14), 4)
     # All 4 steps (14:00, 14:15, 14:30, 14:45) use the 14:00 price.
     assert imp == pytest.approx([0.20, 0.20, 0.20, 0.20])
 
 
-def test_resample_prices_step_changes_at_boundary() -> None:
-    """Step at 15:00 takes effect at the 15:00 slot."""
-    steps = [_price(14, imp=0.20), _price(15, imp=0.30)]
-    imp, exp, conf = resample_prices(steps, _ts(14), 8)
+def test_merge_prices_single_source_step_changes_at_boundary() -> None:
+    """Step at 15:00 takes effect at the 15:00 slot.
+
+    A third point at 16:00 (same price as 15:00) extends this source's
+    last_ts so the requested horizon stays within its real coverage — tier-1
+    candidacy requires t <= last_ts, so a horizon that outran the source's own
+    data would no longer be a like-for-like regression check.
+    """
+    steps = [_price(14, imp=0.20), _price(15, imp=0.30), _price(16, imp=0.30)]
+    imp, exp, conf = merge_price_sources([steps], _ts(14), 8)
     # Slots 0–3 = 14:00..14:45 → 0.20; slots 4–7 = 15:00..15:45 → 0.30.
     assert imp[:4] == pytest.approx([0.20] * 4)
     assert imp[4:] == pytest.approx([0.30] * 4)
 
 
-def test_resample_prices_export_and_confidence() -> None:
+def test_merge_prices_single_source_export_and_confidence() -> None:
     """Export price and confidence are resampled independently."""
     steps = [
         PriceStep(ts=_ts(14), import_eur_per_kwh=0.20, export_eur_per_kwh=0.05, confidence=0.9),
         PriceStep(ts=_ts(15), import_eur_per_kwh=0.25, export_eur_per_kwh=0.07, confidence=0.8),
+        PriceStep(ts=_ts(16), import_eur_per_kwh=0.25, export_eur_per_kwh=0.07, confidence=0.8),
     ]
-    imp, exp, conf = resample_prices(steps, _ts(14), 8)
+    imp, exp, conf = merge_price_sources([steps], _ts(14), 8)
     assert exp[:4] == pytest.approx([0.05] * 4)
     assert exp[4:] == pytest.approx([0.07] * 4)
     assert conf[:4] == pytest.approx([0.9] * 4)
     assert conf[4:] == pytest.approx([0.8] * 4)
 
 
-def test_resample_prices_unsorted_input() -> None:
-    """resample_prices handles unsorted input steps correctly."""
+def test_merge_prices_single_source_unsorted_input() -> None:
+    """merge_price_sources handles unsorted input steps correctly."""
     steps = [_price(15, imp=0.30), _price(14, imp=0.20)]  # reversed
-    imp, exp, conf = resample_prices(steps, _ts(14), 4)
+    imp, exp, conf = merge_price_sources([steps], _ts(14), 4)
     assert imp == pytest.approx([0.20] * 4)
 
 
-def test_resample_prices_no_step_before_solve_start() -> None:
-    """If all steps are after solve_start, the first step's price is used."""
+def test_merge_prices_single_source_no_step_before_solve_start() -> None:
+    """If all steps are after solve_start, the first step's price is used (tier-2 fallback)."""
     steps = [_price(15, imp=0.30)]
-    imp, exp, conf = resample_prices(steps, _ts(14), 4)
+    imp, exp, conf = merge_price_sources([steps], _ts(14), 4)
     # Only one step exists (at 15:00), after the solve_start (14:00). Use it.
     assert imp == pytest.approx([0.30] * 4)
+
+
+# ---------------------------------------------------------------------------
+# merge_price_sources (multi-source)
+# ---------------------------------------------------------------------------
+
+
+def test_merge_prices_two_sources_disjoint_no_overlap() -> None:
+    """Two sources with contiguous, non-overlapping real ranges: each step uses whichever source covers it."""
+    source_a = [
+        PriceStep(ts=_ts(14, 0), import_eur_per_kwh=0.20, export_eur_per_kwh=0.05, confidence=0.6),
+        PriceStep(ts=_ts(14, 45), import_eur_per_kwh=0.20, export_eur_per_kwh=0.05, confidence=0.6),
+    ]  # real range 14:00-14:45
+    source_b = [
+        PriceStep(ts=_ts(15, 0), import_eur_per_kwh=0.40, export_eur_per_kwh=0.05, confidence=0.9),
+        PriceStep(ts=_ts(15, 45), import_eur_per_kwh=0.40, export_eur_per_kwh=0.05, confidence=0.9),
+    ]  # real range 15:00-15:45, contiguous with source_a — no gap
+    imp, exp, conf = merge_price_sources([source_a, source_b], _ts(14), 8)
+    assert imp[:4] == pytest.approx([0.20] * 4)
+    assert conf[:4] == pytest.approx([0.6] * 4)
+    assert imp[4:] == pytest.approx([0.40] * 4)
+    assert conf[4:] == pytest.approx([0.9] * 4)
+
+
+def test_merge_prices_short_high_confidence_source_does_not_extrapolate_forward() -> None:
+    """A source only competes within its own real timestamp range.
+
+    Source A (confidence 1.0) has real coverage only up to 15:00 (its
+    last_ts). Source B (confidence 0.4) covers out to 16:00. A must win every
+    step within [first_ts, last_ts] of its own range, but must NOT be held
+    forward past 15:00 to outrank B beyond that point — that would be the
+    forward-extrapolation bug this design exists to avoid.
+    """
+    source_a = [
+        PriceStep(ts=_ts(14), import_eur_per_kwh=0.20, export_eur_per_kwh=0.05, confidence=1.0),
+        PriceStep(ts=_ts(15), import_eur_per_kwh=0.21, export_eur_per_kwh=0.05, confidence=1.0),
+    ]  # last_ts = 15:00
+    source_b = [
+        PriceStep(ts=_ts(14), import_eur_per_kwh=0.90, export_eur_per_kwh=0.05, confidence=0.4),
+        PriceStep(ts=_ts(16), import_eur_per_kwh=0.92, export_eur_per_kwh=0.05, confidence=0.4),
+    ]  # last_ts = 16:00
+    # n_steps=9 keeps t within [14:00, 16:00] — B's own last_ts — so every
+    # step has at least one real tier-1 candidate, per the invariant this
+    # algorithm relies on rather than defensively checks.
+    imp, exp, conf = merge_price_sources([source_a, source_b], _ts(14), 9)
+    # Steps 0-3 (14:00-14:45): within A's range, A's earlier price wins.
+    assert imp[:4] == pytest.approx([0.20] * 4)
+    # Step 4 (15:00): t == last_ts(A), still a tier-1 candidate (inclusive
+    # bound) — A's own step-4 price wins over B's lower confidence.
+    assert imp[4] == pytest.approx(0.21)
+    assert conf[:5] == pytest.approx([1.0] * 5)
+    # Steps 5-7 (15:15-15:45): beyond A's last_ts — A is excluded entirely,
+    # B wins at B's own (lower) confidence. A must not carry its confidence
+    # past its own data.
+    assert imp[5:8] == pytest.approx([0.90] * 3)
+    assert conf[5:] == pytest.approx([0.4] * 4)
+    # Step 8 (16:00): B's own price step advances; still B's last_ts (inclusive).
+    assert imp[8] == pytest.approx(0.92)
+
+
+def test_merge_prices_equal_confidence_earlier_index_wins_tie() -> None:
+    """When two sources report equal confidence for the same step, list order breaks the tie."""
+    source_a = [_price(14, imp=0.20)]
+    source_b = [_price(14, imp=0.99)]
+    imp, exp, conf = merge_price_sources([source_a, source_b], _ts(14), 4)
+    assert imp == pytest.approx([0.20] * 4)
+
+
+def test_merge_prices_leading_edge_fallback_picks_highest_confidence() -> None:
+    """Before any source has data, tier-2 fallback picks highest-confidence-then-earliest-index."""
+    source_a = [_price(16, imp=0.20)]  # confidence 1.0 by default
+    source_b = [
+        PriceStep(ts=_ts(15), import_eur_per_kwh=0.99, export_eur_per_kwh=0.05, confidence=0.5)
+    ]
+    imp, exp, conf = merge_price_sources([source_a, source_b], _ts(14), 4)
+    # solve_start (14:00) is before both sources' first_ts; tier-2 fallback
+    # picks source A's first step (confidence 1.0 beats source B's 0.5).
+    assert imp == pytest.approx([0.20] * 4)
+    assert conf == pytest.approx([1.0] * 4)
+
+
+def test_merge_prices_leading_edge_fallback_tie_break_by_index() -> None:
+    """Tier-2 fallback with equal confidence: earlier list index wins."""
+    source_a = [_price(16, imp=0.20)]
+    source_b = [_price(15, imp=0.99)]
+    imp, exp, conf = merge_price_sources([source_a, source_b], _ts(14), 4)
+    assert imp == pytest.approx([0.20] * 4)
+
+
+# ---------------------------------------------------------------------------
+# compute_price_horizon_steps
+# ---------------------------------------------------------------------------
+
+
+def test_compute_price_horizon_union_beats_intersection() -> None:
+    """A short high-confidence source plus a long low-confidence source yields the long coverage."""
+    short_source = [_price(14), _price(15)]  # covers to 15:00 → 4 steps
+    long_source = [_price(h) for h in range(14, 24)]  # covers to 23:00
+    steps = compute_price_horizon_steps(_ts(14), [short_source, long_source])
+    assert steps == compute_horizon_steps(_ts(14), long_source)
+
+
+def test_compute_price_horizon_empty_sources_returns_zero() -> None:
+    """An empty source list yields a horizon of 0 steps."""
+    assert compute_price_horizon_steps(_ts(14), []) == 0
+
+
+def test_compute_price_horizon_all_empty_sources_returns_zero() -> None:
+    """Sources with no data at all yield a horizon of 0 steps."""
+    assert compute_price_horizon_steps(_ts(14), [[], []]) == 0
 
 
 # ---------------------------------------------------------------------------

@@ -14,12 +14,14 @@ from mimirheim.config.schema import (
     BatteryInputsConfig,
     EfficiencySegment,
     GridConfig,
+    InputsConfig,
     MimirheimConfig,
     MqttConfig,
     OutputsConfig,
     SocTopicConfig,
 )
 from mimirheim.core.readiness import ReadinessState
+from mimirheim.io.input_parser import parse_price_steps
 from mimirheim.io.mqtt_client import MqttClient
 
 
@@ -113,6 +115,27 @@ class TestTriggerDebounce:
             client._on_message(None, None, normal_msg)    # should proceed
 
         assert q.qsize() == 1
+
+
+class TestMultiTopicPrices:
+    def test_every_configured_price_topic_is_subscribed_and_dispatched(self) -> None:
+        """Each topic in config.inputs.prices is subscribed and parsed with parse_price_steps."""
+        config = _make_config()
+        config.inputs = InputsConfig(prices=["a/prices", "b/prices"])
+        readiness = MagicMock(spec=ReadinessState)
+        publisher = MagicMock()
+        paho_mock = MagicMock()
+        client = MqttClient(config, readiness, publisher, paho_mock)
+
+        assert client._topic_handlers["a/prices"] is parse_price_steps
+        assert client._topic_handlers["b/prices"] is parse_price_steps
+
+        reason_code = MagicMock()
+        reason_code.is_failure = False
+        client._on_connect(paho_mock, None, None, reason_code, None)
+        subscribed_topics = {call.args[0] for call in paho_mock.subscribe.call_args_list}
+        assert "a/prices" in subscribed_topics
+        assert "b/prices" in subscribed_topics
 
 
 class TestFaultLogging:

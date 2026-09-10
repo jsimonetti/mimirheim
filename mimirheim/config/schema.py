@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 import helper_common.topics as _topics
 
@@ -375,23 +375,56 @@ class InputsConfig(BaseModel):
     mimirheim receives the latest value immediately on (re)connect.
 
     Attributes:
-        prices: Topic on which per-step import and export price data is
-            published. Defaults to ``{mqtt.topic_prefix}/input/prices`` when
-            not set. Set explicitly when the topic does not match the default
-            pattern, for example when multiple mimirheim instances share one broker
-            but publish prices to a shared topic.
+        prices: Topics on which per-step import and export price data is
+            published, in priority order. Defaults to a one-element list,
+            ``[{mqtt.topic_prefix}/input/prices]``, when left empty. Each
+            topic is resampled to the 15-minute solver grid independently and
+            the results are merged per step by highest confidence, with
+            earlier list entries winning ties. Set explicitly to add
+            alternative or supplementary price sources, for example a
+            longer-horizon predictive source alongside day-ahead prices.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    prices: str | None = Field(
-        default=None,
+    prices: list[str] = Field(
+        default_factory=list,
         description=(
-            "Topic for per-step price data. Defaults to "
-            "'{mqtt.topic_prefix}/input/prices' when not set."
+            "Price topics in priority order. Defaults to a one-element list, "
+            "'[{mqtt.topic_prefix}/input/prices]', when left empty. Merged "
+            "per step by highest confidence; earlier entries win ties."
         ),
-        json_schema_extra={"ui_label": "Prices topic", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/input/prices"},
+        json_schema_extra={"ui_label": "Prices topics", "ui_group": "advanced", "ui_placeholder": "{mqtt.topic_prefix}/input/prices"},
     )
+
+    @field_validator("prices", mode="before")
+    @classmethod
+    def _coerce_prices_to_list(cls, v: object) -> object:
+        """Coerce a bare string to a one-element list.
+
+        Keeps the common single-source case as simple YAML (``prices:
+        my/topic``) while the internal representation is always a list, so
+        every downstream consumer handles one type, not a union.
+        """
+        if isinstance(v, str):
+            return [v]
+        return v
+
+    @field_validator("prices")
+    @classmethod
+    def _reject_duplicate_prices(cls, v: list[str]) -> list[str]:
+        """Reject duplicate topics: ambiguous priority, almost certainly a copy-paste bug."""
+        seen: set[str] = set()
+        duplicates: set[str] = set()
+        for topic in v:
+            if topic in seen:
+                duplicates.add(topic)
+            seen.add(topic)
+        if duplicates:
+            raise ValueError(
+                f"inputs.prices contains duplicate topic(s): {sorted(duplicates)}"
+            )
+        return v
 
 class OutputsConfig(BaseModel):
     """MQTT output topic configuration.
@@ -3051,8 +3084,8 @@ class MimirheimConfig(BaseModel):
         if self.outputs.availability is None:
             self.outputs.availability = _topics.availability_topic(p)
 
-        if self.inputs.prices is None:
-            self.inputs.prices = _topics.prices_topic(p)
+        if not self.inputs.prices:
+            self.inputs.prices = [_topics.prices_topic(p)]
 
         if self.reporting.notify_topic is None:
             self.reporting.notify_topic = _topics.dump_available_topic(p)

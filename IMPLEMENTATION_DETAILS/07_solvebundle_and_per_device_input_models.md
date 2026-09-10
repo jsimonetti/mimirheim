@@ -172,13 +172,26 @@ def compute_horizon_steps(solve_start: datetime, *series: list[PriceStep | Power
     """
 ```
 
-`horizon_end` is the *minimum* of the last known timestamp across all forecast series. This prevents the solver from extrapolating: no series is extended beyond its last data point.
+`horizon_end` is the *minimum* of the last known timestamp across all forecast series. This prevents the solver from extrapolating: no series is extended beyond its last data point. This function (`compute_horizon_steps`) is used for PV and static-load series, which remain mandatory and intersection-based: every configured series must have future data.
 
 **Price resampling (step function):** The price for a given `ts` applies until the next timestamp in the array. Prices between known steps are constant; the last known price does not extend beyond `horizon_end`.
 
-**Power resampling (linear interpolation):** PV generation and static load are interpolated linearly between adjacent known points. Linear interpolation produces smoother ramps and avoids the abrupt jumps that step-function resampling would introduce for slowly varying quantities.
+**Power resampling (step function, hold-previous):** PV generation and static load hold the value of the interval that contains the query time, matching the forecast API's own semantics (`watts[T]` is the average power over `[T, T + duration)`). Linear interpolation would blend two adjacent hourly averages and invent a ramp the data does not describe — most visibly a gradual ramp from zero at sunrise rather than the abrupt step the source data represents. See `resample_power`'s docstring.
 
 **Gap detection:** `find_gaps()` scans a sorted series within `[solve_start, horizon_end]` and returns intervals wider than `readiness.max_gap_hours`. Gaps are reported as warnings and filled by the resampler — they do not block the solve.
+
+### Multi-source price merge
+
+`config.inputs.prices` is a list of MQTT topics, not a single topic. This lets a lower-confidence, longer-horizon predictive source (e.g. a future day-after-day-ahead ML helper) extend the usable planning horizon beyond a shorter, higher-confidence source (e.g. day-ahead market prices) without ever being able to override it while it has real data.
+
+`merge_price_sources(sources: list[list[PriceStep]], solve_start: datetime, n_steps: int)` replaces `resample_prices` as the single entry point; a single-source call is the regression case (`merge_price_sources([one_list], ...)`). For each output step `t`, sources are considered in two tiers:
+
+1. **Real coverage.** A source is a candidate only if it has a hold-previous value at `t` *and* `t <= last_ts(source)` — its own last known timestamp. This is what stops a short-coverage, confidence-1.0 source from being held forward past its own data to permanently outrank a longer-horizon source: without this bound, the merge would never let the longer-horizon source contribute anything, defeating the reason to merge at all.
+2. **Leading-edge fallback.** Used only when every source's tier-1 candidacy is empty (`t` is before every source's `first_ts`). Each source with any data at all contributes its own first step, extending the earliest known price backwards — identical to the pre-merge single-source behaviour.
+
+Whichever tier applies, the candidate with the highest `confidence` wins; ties are broken by source list index (config priority order, lowest index wins).
+
+`compute_price_horizon_steps(solve_start, sources)` computes the price horizon by the *maximum* of per-source coverage (union), the opposite of `compute_horizon_steps`'s *minimum* (intersection) used for PV/load. Price sources are optional alternatives to merge, not a mandatory set that must all be present — capping the horizon at the shortest price source would defeat the purpose of configuring a longer one. `ReadinessState._compute_horizon_steps` combines the two: `min(price_steps, other_steps)` when PV or load topics are configured, or `price_steps` alone when they are not (a battery+grid-only system has no PV/load series to intersect against, and calling `compute_horizon_steps()` with zero series would incorrectly return 0 by its own contract).
 
 `SolveBundle.model_dump()` produces the exact JSON written to golden input files and debug dumps, with no manual field listing. `SolveBundle.model_validate(json)` replays any dump as a regression test directly. This was a design goal from §4 and §5; keeping all inputs in one validated model is what makes it work for free.
 

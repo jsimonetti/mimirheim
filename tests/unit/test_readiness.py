@@ -6,12 +6,14 @@ All tests must fail before the implementation exists (TDD).
 import threading
 from datetime import UTC, datetime, timedelta
 
+import pytest
 
 from mimirheim.config.schema import (
     BatteryConfig,
     BatteryInputsConfig,
     EfficiencySegment,
     GridConfig,
+    InputsConfig,
     MimirheimConfig,
     MqttConfig,
     OutputsConfig,
@@ -55,6 +57,13 @@ def _make_config() -> MimirheimConfig:
             )
         },
     )
+
+
+def _make_config_with_price_topics(topics: list[str]) -> MimirheimConfig:
+    """Same minimal config as _make_config(), with explicit price topics."""
+    config = _make_config()
+    config.inputs = InputsConfig(prices=topics)
+    return config
 
 
 def _make_price_steps(n_hours: int = 24) -> list[PriceStep]:
@@ -204,6 +213,77 @@ def test_readiness_is_thread_safe() -> None:
         t.join()
 
     assert not errors, f"Thread exceptions: {errors}"
+
+
+# ---------------------------------------------------------------------------
+# Multi-source price merge
+# ---------------------------------------------------------------------------
+
+
+def test_readiness_multi_topic_price_one_never_published_merged_coverage_sufficient() -> None:
+    """Two price topics configured; only one has ever published; solve still proceeds."""
+    config = _make_config_with_price_topics(["a/prices", "b/prices"])
+    state = ReadinessState(config)
+    state.update("a/prices", _make_price_steps(24))
+    # "b/prices" never published at all.
+    state.update(_BAT_TOPIC, 5.0)
+    assert state.is_ready()
+    result = state.snapshot()
+    assert isinstance(result, SolveBundle)
+
+
+def test_readiness_multi_topic_price_both_published_merged_coverage_still_short() -> None:
+    """Two price topics configured and published, but unioned coverage is still short."""
+    config = _make_config_with_price_topics(["a/prices", "b/prices"])
+    state = ReadinessState(config)
+    now = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    # Each source alone covers only 15 minutes of future data; even unioned,
+    # coverage tops out at 30 minutes — below the 1-hour (4-step) minimum.
+    state.update(
+        "a/prices",
+        [PriceStep(ts=now, import_eur_per_kwh=0.20, export_eur_per_kwh=0.05)],
+    )
+    state.update(
+        "b/prices",
+        [PriceStep(ts=now + timedelta(minutes=15), import_eur_per_kwh=0.22, export_eur_per_kwh=0.05)],
+    )
+    state.update(_BAT_TOPIC, 5.0)
+    assert not state.is_ready()
+    assert "horizon" in state.not_ready_reason().lower()
+
+
+def test_readiness_battery_grid_only_driven_by_price_coverage_alone() -> None:
+    """A config with no PV arrays and no static loads is not zeroed by an empty PV/load intersection."""
+    config = _make_config_with_price_topics(["mimir/input/prices"])
+    assert not config.pv_arrays
+    assert not config.static_loads
+    state = ReadinessState(config)
+    state.update("mimir/input/prices", _make_price_steps())
+    state.update(_BAT_TOPIC, 5.0)
+    assert state.is_ready()
+
+
+def test_readiness_snapshot_merges_overlapping_price_sources_by_confidence() -> None:
+    """snapshot() merges two overlapping price sources into the expected per-step winner."""
+    config = _make_config_with_price_topics(["a/prices", "b/prices"])
+    state = ReadinessState(config)
+    now = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    source_a = [
+        PriceStep(ts=now + timedelta(hours=i), import_eur_per_kwh=0.20, export_eur_per_kwh=0.05, confidence=1.0)
+        for i in range(25)
+    ]
+    source_b = [
+        PriceStep(ts=now + timedelta(hours=i), import_eur_per_kwh=0.99, export_eur_per_kwh=0.05, confidence=0.4)
+        for i in range(25)
+    ]
+    state.update("a/prices", source_a)
+    state.update("b/prices", source_b)
+    state.update(_BAT_TOPIC, 5.0)
+    assert state.is_ready()
+    result = state.snapshot()
+    # Source A has confidence 1.0 at every overlapping step, so it wins throughout.
+    assert all(p == pytest.approx(0.20) for p in result.horizon_prices)
+    assert all(c == pytest.approx(1.0) for c in result.horizon_confidence)
 
 
 # ---------------------------------------------------------------------------
