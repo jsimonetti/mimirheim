@@ -594,6 +594,9 @@ baseload-ha-db-postgres = [
 config-editor = [
     { name = "ruamel-yaml" },
 ]
+epexpredictor = [
+    { name = "requests" },
+]
 helpers = [
     { name = "apscheduler" },
     { name = "forecast-solar" },
@@ -685,6 +688,7 @@ requires-dist = [
     { name = "pynordpool", marker = "extra == 'helpers'", specifier = ">=0.4.0" },
     { name = "pynordpool", marker = "extra == 'nordpool'", specifier = ">=0.4.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "requests", marker = "extra == 'epexpredictor'", specifier = ">=2.34.2" },
     { name = "requests", marker = "extra == 'helpers'", specifier = ">=2.34.2" },
     { name = "requests", marker = "extra == 'zonneplan'", specifier = ">=2.34.2" },
     { name = "ruamel-yaml", marker = "extra == 'config-editor'", specifier = ">=0.18" },
@@ -696,7 +700,7 @@ requires-dist = [
     { name = "xgboost", marker = "extra == 'helpers'", specifier = ">=3.4.1" },
     { name = "xgboost", marker = "extra == 'pv-ml-learner'", specifier = ">=3.4.1" },
 ]
-provides-extras = ["scheduler", "nordpool", "zonneplan", "pv-fetcher", "pv-openmeteo", "pv-ml-learner", "pv-ml-learner-postgres", "pv-ml-learner-mysql", "baseload-ha", "baseload-ha-db", "baseload-ha-db-postgres", "baseload-ha-db-mysql", "reporter", "config-editor", "helpers"]
+provides-extras = ["scheduler", "nordpool", "zonneplan", "epexpredictor", "pv-fetcher", "pv-openmeteo", "pv-ml-learner", "pv-ml-learner-postgres", "pv-ml-learner-mysql", "baseload-ha", "baseload-ha-db", "baseload-ha-db-postgres", "baseload-ha-db-mysql", "reporter", "config-editor", "helpers"]
 
 [package.metadata.requires-dev]
 dev = [

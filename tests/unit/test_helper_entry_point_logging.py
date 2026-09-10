@@ -39,6 +39,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _LOGGING_ENTRY_POINTS = [
     ("nordpool", "nordpool"),
     ("zonneplan_prices", "zonneplan_prices"),
+    ("epexpredictor_prices", "epexpredictor_prices"),
     ("baseload_ha", "baseload_ha"),
     ("baseload_ha_db", "baseload_ha_db"),
     ("baseload_static", "baseload_static"),
@@ -48,6 +49,7 @@ _LOGGING_ENTRY_POINTS = [
 _ENTRY_POINT_SOURCES = [
     "mimirheim_helpers/prices/nordpool/nordpool/__main__.py",
     "mimirheim_helpers/prices/zonneplan/zonneplan_prices/__main__.py",
+    "mimirheim_helpers/prices/epexpredictor/epexpredictor_prices/__main__.py",
     "mimirheim_helpers/baseload/homeassistant/baseload_ha/__main__.py",
     "mimirheim_helpers/baseload/homeassistant_db/baseload_ha_db/__main__.py",
     "mimirheim_helpers/baseload/static/baseload_static/__main__.py",

@@ -390,6 +390,16 @@ def _build_targets(root: Path) -> list[Target]:
             ),
         ),
         Target(
+            key="epexpredictor",
+            source_path=helpers / "prices" / "epexpredictor" / "epexpredictor_prices" / "config.py",
+            output_path=ref / "Config-EpexPredictor.md",
+            title="epexpredictor_prices — Configuration Reference",
+            intro=(
+                "Auto-generated from `epexpredictor_prices/config.py`. "
+                "See [EpexPredictor](EpexPredictor) for the guide."
+            ),
+        ),
+        Target(
             key="pv-fetcher",
             source_path=helpers / "pv" / "forecast.solar" / "pv_fetcher" / "config.py",
             output_path=ref / "Config-PV-Fetcher.md",

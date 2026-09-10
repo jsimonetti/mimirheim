@@ -232,6 +232,7 @@ function syncHelperPrefixes(oldPrefix, newPrefix, bannerContainer) {
   const prefixHelpers = [
     "nordpool.yaml",
     "zonneplan.yaml",
+    "epexpredictor.yaml",
     "pv-fetcher.yaml",
     "pv-openmeteo.yaml",
     "pv-ml-learner.yaml",
@@ -1640,6 +1641,7 @@ let gHelperSchemas = null;
 const HELPER_FILE_TO_TITLE = {
   "nordpool.yaml":        "Nordpool",
   "zonneplan.yaml":       "Zonneplan",
+  "epexpredictor.yaml":   "EpexPredictor",
   "pv-fetcher.yaml":      "PV Forecast (forecast.solar)",
   "pv-openmeteo.yaml":    "PV Forecast (Open-Meteo)",
   "pv-ml-learner.yaml":   "PV ML Learner",
@@ -2045,6 +2047,7 @@ async function init() {
   registerGroup("Helpers", [
     { label: "Nordpool",         renderFn: (el) => renderHelperTab(el, "nordpool.yaml") },
     { label: "Zonneplan",        renderFn: (el) => renderHelperTab(el, "zonneplan.yaml") },
+    { label: "EpexPredictor",    renderFn: (el) => renderHelperTab(el, "epexpredictor.yaml") },
     { label: "PV Forecast",      renderFn: (el) => renderHelperTab(el, "pv-fetcher.yaml") },
     { label: "PV Open-Meteo",    renderFn: (el) => renderHelperTab(el, "pv-openmeteo.yaml") },
     { label: "PV ML",            renderFn: (el) => renderHelperTab(el, "pv-ml-learner.yaml") },

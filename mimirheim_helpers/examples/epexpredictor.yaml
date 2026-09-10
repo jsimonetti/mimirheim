@@ -1,0 +1,70 @@
+mqtt:
+  host: localhost
+  port: 1883
+  client_id: epexpredictor-prices
+  # username: your-mqtt-username
+  # password: your-mqtt-password
+  # tls_allow_insecure: true
+
+trigger_topic: mimir/input/tools/epexpredictor/trigger
+
+# Defaults to mimir/input/prices, the same topic Nordpool defaults to.
+# If you run this helper alongside Nordpool (or any other price source) to
+# extend the horizon, set this to a distinct topic so both land on separate
+# entries of mimirheim's inputs.prices list.
+output_topic: mimir/input/prices/epexpredictor
+
+# Must match mqtt.topic_prefix in the mimirheim configuration.
+# mimir_topic_prefix: mimir  # default
+
+epexpredictor:
+  area: NL   # DE, AT, BE, NL, SE1, SE2, SE3, SE4, DK1, DK2, ES, PT
+
+  # Hours ahead to request. The API returns about a week of data at most, but
+  # only the first several hours are real day-ahead auction data; the rest is
+  # an increasingly speculative model prediction.
+  horizon_hours: 72
+
+  # import_formula / export_formula work exactly like the Nordpool helper's:
+  # Python expressions using `price` (predicted EUR/kWh) and `ts` (UTC datetime).
+  import_formula: "price"
+  export_formula: "price"
+
+  # price_interval controls the length of one published price step.
+  #   quarter_hourly (default) — matches EPEX's 15-minute market time unit.
+  #   hourly                   — averages via the API's own hourly aggregation.
+  # price_interval: quarter_hourly  # default
+
+# Confidence decay bands, anchored to fetch time — not to the API's own
+# knownUntil real/predicted boundary. Every step's confidence depends only on
+# how far ahead of the fetch it lies.
+confidence_decay:
+  hours_0_to_6: 0.90   # default
+  hours_6_to_24: 0.75  # default
+  hours_24_to_48: 0.55 # default
+  hours_48_plus: 0.35  # default
+
+  # When set, overrides the confidence of every step at or before the API's
+  # knownUntil timestamp (real EPEX auction data) with this fixed value,
+  # leaving steps after knownUntil on the normal fetch-time bands. Set to 1.0
+  # to treat the real portion of this feed as confirmed, the same way the
+  # Nordpool helper always reports confidence 1.0 — this lets this helper's
+  # real steps compete on equal footing with Nordpool in the multi-source
+  # merge instead of being structurally outranked on every overlapping step.
+  known_until_confidence: null  # default: no override
+
+# Set signal_mimir to true and uncomment mimir_trigger_topic to chain this
+# tool into the mimirheim solve loop after prices are published.
+# mimir_trigger_topic: mimir/input/trigger
+
+# HA MQTT discovery. When enabled, the daemon publishes a retained discovery
+# payload that creates a button entity in Home Assistant. Pressing the button
+# sends a message to trigger_topic, firing one fetch cycle.
+# ha_discovery:
+#   enabled: true
+#   discovery_prefix: homeassistant
+#   device_name: EpexPredictor Prices
+
+# Optional. When set, the daemon publishes a JSON stats payload to this MQTT
+# topic after every fetch cycle (success or failure).
+# stats_topic: mimir/input/tools/epexpredictor/stats

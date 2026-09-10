@@ -220,6 +220,12 @@ def _load_helper_models() -> dict[str, tuple[Any, list[str]]]:
         pass
 
     try:
+        from epexpredictor_prices.config import EpexPredictorPricesConfig
+        result["epexpredictor.yaml"] = (EpexPredictorPricesConfig, [])
+    except ImportError:
+        pass
+
+    try:
         from pv_fetcher.config import PvFetcherConfig
         result["pv-fetcher.yaml"] = (PvFetcherConfig, [])
     except ImportError:

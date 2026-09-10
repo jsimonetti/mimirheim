@@ -4,6 +4,11 @@ configuration:
     description: >-
       Start the Nordpool day-ahead price fetcher. Requires nordpool.yaml in
       the add-on config directory.
+  enable_epexpredictor:
+    name: Enable EpexPredictor
+    description: >-
+      Start the EpexPredictor day-ahead price prediction fetcher. Requires
+      epexpredictor.yaml in the add-on config directory.
   enable_pv_fetcher:
     name: Enable PV Fetcher
     description: >-

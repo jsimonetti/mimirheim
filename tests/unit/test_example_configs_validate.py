@@ -33,6 +33,7 @@ _EXAMPLES_DIR = Path(__file__).resolve().parents[2] / "mimirheim_helpers" / "exa
 _CASES = [
     ("nordpool.yaml", "nordpool.config", "NordpoolConfig"),
     ("zonneplan.yaml", "zonneplan_prices.config", "ZonneplanPricesConfig"),
+    ("epexpredictor.yaml", "epexpredictor_prices.config", "EpexPredictorPricesConfig"),
     ("pv-fetcher.yaml", "pv_fetcher.config", "PvFetcherConfig"),
     ("pv-openmeteo.yaml", "pv_openmeteo.config", "PvOpenMeteoConfig"),
     ("pv-ml-learner.yaml", "pv_ml_learner.config", "PvLearnerConfig"),
