@@ -9,30 +9,15 @@ assumption in that plan is wrong. This module is what lets mimirheim own the
 policy instead.
 
 Three quantities come out of it, all derived from a single piece of state: the
-timestamp at which the battery was last *measured* full.
-
-- **The floor.** Each elapsed target interval without a full charge adds one
-  step to a dynamic minimum SOC, capped. It costs nothing in the objective and
-  simply narrows the usable window, biasing the plan upward.
-- **The deadline.** The floor alone cannot force a full charge, because it is
-  capped well below the top. So once the due time falls inside the solve
-  horizon, the caller constrains the SOC to reach the target. That is a
-  constraint on state at a time, not an instruction to charge at a time: the
-  solver still picks the cheap quarter-hours.
-- **The hold.** Reaching the top once is a touch, not a balance charge. Passive
-  balancing bleeds the high cells at tens of milliamps and only while they sit
-  in the upper voltage knee; the BMS recalibrates its SOC estimate only after
-  the charge current has tapered at the voltage limit. Both need time, and
-  that dwell does not happen by itself when a planner dictates the SOC
-  trajectory, so the plan asks for it: the target is held across enough
-  consecutive step boundaries to cover ``hold_hours``, and the policy resets
-  only when a *reading* has stayed at or above the threshold for that long.
+timestamp at which the battery was last *measured* full — a dynamic floor, a
+deadline once one falls due, and a hold once the target is reached. See
+README.md's "Periodic full charge (`soc_ratchet`)" section for the full
+user-facing behaviour of all three.
 
 The plan aims for ``target_pct`` (100 by default, the top of the configured
-capacity) and
-resets on ``full_threshold_pct`` (97 by default, what a BMS can be relied on
-to report). They are two numbers because they answer two questions: what to
-plan for, and what a measurement has to show for the plan to have worked.
+capacity) and resets on ``full_threshold_pct`` (97 by default, what a BMS can
+be relied on to report) — two numbers because they answer two questions: what
+to plan for, and what a measurement has to show for the plan to have worked.
 
 What this module does not do:
 - It does not touch the solver. It returns numbers; ``BatteryDevice`` turns

@@ -133,29 +133,9 @@ class DeferrableLoad:
     ) -> None:
         """Add scheduling constraints for this run cycle.
 
-        Determines the device state from ``start_time`` and ``solve_time_utc``,
-        then applies the appropriate modelling approach. The states are the
-        four described in the module docstring, evaluated in this order:
-
-        - **Running** (``start_time`` present, run currently active): sets
-          ``_fixed_steps`` and ``_elapsed_steps`` so ``net_power(t)`` returns
-          the correct profile values for the remaining steps. No solver
-          variables. Any ``window`` argument is ignored: the load has already
-          started and the window no longer has anything to decide.
-        - **Committed** (``start_time`` present, run starts in the future):
-          sets ``_committed_start_step`` so ``net_power(t)`` returns profile
-          values at the committed horizon steps. No solver variables. Any
-          ``window`` argument is ignored, because the automation has already
-          accepted and programmed this start time and mimirheim must not move
-          it.
-        - **Completed** (``start_time`` present, run entirely in the past): the
-          retained ``start_time`` is stale, so it is disregarded and control
-          falls through to the scheduling case below.
-        - **Scheduling** (``window`` present and no ``start_time`` that is
-          running or committed): binary optimisation over the eligible start
-          steps within the window.
-        - **Unscheduled** (no ``window`` and no running or committed
-          ``start_time``): no-op. ``net_power`` returns 0.
+        Determines the device state from ``start_time`` and ``solve_time_utc``
+        and applies the matching modelling approach — see the module
+        docstring for the four states and the order they are evaluated in.
 
         Args:
             ctx: The current solve context.
@@ -221,62 +201,32 @@ class DeferrableLoad:
         if last_valid_start < earliest_step:
             return
 
-        # Declare start[t] only for the steps the load may actually begin at.
-        #
-        # start[t] is a binary "start decision" variable: 1 if the load begins
-        # at step t, 0 otherwise. Binary because the load either starts or it
-        # does not; there is no partial start. Exactly one of them is 1, which
-        # the sum-to-one constraint below enforces.
-        #
-        # Steps outside the window get no variable at all. Every reader of
-        # self.start already skips absent keys, so declaring fixed-zero
-        # variables for them would add up to one integer variable per horizon
-        # step per load that can only ever take the value zero.
+        # start[t]: binary, 1 if the load begins at step t. Declared only for
+        # steps inside the window — every reader of self.start already skips
+        # absent keys, so a fixed-zero variable for the rest of the horizon
+        # would add an integer variable that could only ever be zero.
         for t in range(earliest_step, last_valid_start + 1):
             self.start[t] = ctx.solver.add_var(lb=0.0, ub=1.0, integer=True)
 
-        # Exactly one start within the window.
-        #
-        # This constraint is the core of the scheduling model. It ensures:
-        # - The load runs exactly once per cycle (not zero, not multiple).
-        # - The start falls within [earliest_step, last_valid_start].
-        #
-        # Without this constraint, the solver would either ignore the load
-        # entirely (if running is costly) or start it at every cheap step
-        # (exploiting cheap electricity multiple times). The sum-to-one
-        # constraint makes the scheduling problem well-defined.
+        # Exactly one start within the window: without this, the solver would
+        # either skip the load entirely or start it at every cheap step.
         eligible_starts = sum(self.start.values())
         ctx.solver.add_constraint(eligible_starts == 1)
 
     def net_power(self, t: int) -> Any:
-        """Return the net power at step ``t``.
+        """Return the net power at step ``t``, negative (consuming) when running.
 
-        Checks device state in priority order:
-
-        **Running state** (``_fixed_steps > 0``): returns the negated profile
-        value at index ``_elapsed_steps + t`` for ``t < _fixed_steps``,
-        0 elsewhere.
-
-        **Committed state** (``_committed_start_step is not None``): returns
-        the negated profile value at index ``t - _committed_start_step`` for
-        steps where the run is active, 0 elsewhere. No solver variable is
-        involved.
-
-        **Scheduling state** (``start`` dict is populated): the power at step
-        ``t`` is the sum of profile-weighted start variables for all start
-        times that place a running step at ``t``:
+        Checks device state in priority order (see module docstring): fixed-draw
+        (running), committed, scheduling, or unscheduled/completed (returns 0).
+        In scheduling state, the power at step ``t`` sums profile-weighted start
+        variables for every start time that would place a running step at ``t``:
 
         .. code-block::
 
             net_power(t) = -Σ_{k = max(0, t - d + 1)}^{t} profile[t - k] × start[k]
 
-        where ``d = len(profile)`` and ``profile[t - k]`` is the power drawn
-        at offset ``t - k`` within the run. This is a linear expression in the
-        binary variables.
-
-        **Unscheduled / completed-no-window state**: returns 0.
-
-        Power is negative (consuming) when the load is running.
+        where ``d = len(profile)``. This is a linear expression in the binary
+        variables.
 
         Args:
             t: Time step index.

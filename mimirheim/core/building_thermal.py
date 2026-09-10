@@ -36,37 +36,15 @@ def add_building_thermal_constraints(
 ) -> None:
     """Constrain indoor temperature to the building's first-order thermal dynamics.
 
-    The building is treated as a single lumped thermal mass. For each step t:
-
-    .. code-block::
-
-        T_indoor[t] = alpha * T_prev
-                    + (dt / C) * P_heat[t]
-                    + beta_outdoor * T_outdoor[t]
-
-    where:
-
-    - ``C`` is ``thermal_capacity_kwh_per_k``, the energy the building stores or
-      releases per degree of indoor temperature change.
-    - ``L`` is ``heat_loss_coeff_kw_per_k``, the power the building loses per
-      degree of indoor-to-outdoor difference.
-    - ``alpha = 1 - dt * L / C`` is the share of the previous indoor temperature
-      the building still holds after one step. ``BuildingThermalConfig``
-      validates that it stays strictly between 0 and 1.
-    - ``beta_outdoor = dt * L / C`` is the pull of outdoor temperature on
-      indoor, and equals ``1 - alpha``. With the heat pump off and a steady
-      outdoor temperature the indoor temperature converges on it.
-    - ``dt / C`` converts the heat delivered in one step (kW times hours, so
-      kWh) into the temperature rise it causes.
-    - ``T_prev`` is the measured indoor temperature at t=0 and the previous
-      step's decision variable thereafter.
-
-    Every term is linear: ``C``, ``L`` and ``dt`` are constants, and
-    ``heat_power_kw`` returns an expression that is linear in the device's own
-    variables.
-
-    The comfort band is not enforced here. It is expressed as bounds on the
-    ``indoor_temp`` variables, which the calling device declares.
+    ``T_indoor[t] = alpha * T_prev + (dt / C) * P_heat[t] + beta_outdoor *
+    T_outdoor[t]``, where ``C`` is ``thermal_capacity_kwh_per_k``, ``L`` is
+    ``heat_loss_coeff_kw_per_k``, and ``T_prev`` is ``current_indoor_temp_c``
+    at ``t=0`` or the previous step's variable thereafter. See
+    IMPLEMENTATION_DETAILS.md §8, subsection "Building thermal model (BTM)",
+    for the derivation of ``alpha``/``beta_outdoor`` and the linearity
+    argument. The comfort band is not enforced here — it is expressed as
+    bounds on the ``indoor_temp`` variables, which the calling device
+    declares.
 
     Args:
         ctx: The current solve context.

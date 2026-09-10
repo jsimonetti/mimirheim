@@ -188,24 +188,9 @@ class PvDevice:
             ctx: The current solve context.
             inputs: The per-step PV forecast for this solve cycle.
         """
-        # Clip the forecast into the range this array can produce, once, so
-        # that every reader of self._forecast sees the same series. Note that
-        # the naive-cost baseline in model_builder clips to
-        # max_deliverable_kw instead, which is lower for a staged inverter
-        # whose highest register sits below max_power_kw. The two ceilings
-        # differ on purpose: see max_deliverable_kw.
-        #
-        # Lower bound: negative values arise from sensor noise or calibration
-        # drift and must not pull the power balance negative.
-        #
-        # Upper bound: max_power_kw is the array's peak output. A forecast
-        # above it describes production the inverter cannot deliver, whether
-        # from a mis-specified array in the forecast tool or a bad sensor. The
-        # solver would otherwise commit the schedule to energy that never
-        # arrives: it would size a battery charge or an EV session against
-        # surplus that is not there and import the shortfall at whatever the
-        # price turns out to be. Hybrid inverters already clip this way
-        # (``hybrid_inverter.py`` bounds its PV by ``max_pv_kw``).
+        # Clip to [0, max_power_kw] once, so every reader of self._forecast
+        # sees the same series (see max_deliverable_kw for why the naive-cost
+        # baseline clips to a different, lower ceiling for staged inverters).
         self._forecast = clip_forecast(inputs.forecast_kw, self.config.max_power_kw)
         caps = self.config.capabilities
         stages = self.config.production_stages
@@ -217,24 +202,13 @@ class PvDevice:
             f = self._forecast[t]
 
             if stages is not None:
-                # Staged mode. The inverter only accepts the specific kW values
-                # listed in production_stages. The solver picks exactly one stage
-                # per step using binary variables.
-                #
-                # For each stage s with registered level stage_kw[s]:
-                #   stage_active[t, s] ∈ {0, 1}
-                #
-                # Exactly-one constraint: Σ_s stage_active[t, s] = 1
-                # This replaces an SOS1 set; an explicit equality constraint is
-                # simpler to express and equally effective for small stage counts.
-                #
-                # Effective output at step t:
-                #   pv_kw[t] = Σ_s min(f, stage_kw[s]) * stage_active[t, s]
-                #
-                # The min() is a scalar precomputed in Python. It ensures that
-                # if the inverter is set to stage 3.0 kW but the forecast is
-                # only 2.2 kW, the actual AC output entering the power balance
-                # is 2.2, not 3.0. No nonlinear terms are introduced.
+                # Staged mode: one binary stage_active[t, s] per registered
+                # level, constrained so exactly one is active per step (an
+                # explicit equality sum, simpler than an SOS1 set at these
+                # stage counts). Effective output sums min(f, stage_kw[s]) —
+                # precomputed in Python, so a register set above the forecast
+                # (sun below the selected stage) still yields the true AC
+                # output, with no nonlinear terms introduced.
                 if not self._stage_kw:
                     # Populate stage_kw once (same values for every step).
                     self._stage_kw = list(stages)
@@ -254,19 +228,12 @@ class PvDevice:
                 self._net_power[t] = sum(eff * v for v, eff in stage_vars)
 
             elif caps.on_off:
-                # Binary curtailment flag. pv_curtailed[t] = 0 means the array
-                # is running (produces the full forecast); pv_curtailed[t] = 1
-                # means the inverter is switched off.
-                #
-                # net_power[t] = f * (1 - pv_curtailed[t])
-                #
-                # Modelling curtailment rather than "on" has a key advantage:
-                # when the forecast is negligible the variable is effectively
-                # free (no effect on the objective or power balance). The solver
-                # will assign it to its lower bound (0), which means "not
-                # curtailed" — the correct default. A pv_on variable would
-                # default to 0 in the same situation, which means "off",
-                # producing a spurious off command to the inverter.
+                # pv_curtailed[t]: binary, 0 = running (full forecast), 1 =
+                # switched off. net_power[t] = f * (1 - pv_curtailed[t]).
+                # Modelled as curtailment rather than "on" so that a free
+                # variable (forecast negligible) defaults to its lower bound
+                # 0 = not curtailed, rather than a pv_on variable defaulting
+                # to 0 = off, which would send a spurious off command.
                 pv_curtailed = ctx.solver.add_var(lb=0.0, ub=1.0, integer=True)
                 self._pv_curtailed[t] = pv_curtailed
                 self._net_power[t] = f * (1 - pv_curtailed)
@@ -302,28 +269,20 @@ class PvDevice:
     def objective_terms(self, t: int) -> Any:
         """Return negligible penalty terms to break solver ties.
 
-        For ``on_off`` mode: returns ``1e-6 * pv_curtailed[t]``. This tiny
-        weight gives the solver a reason to prefer ``pv_curtailed=0`` (array
-        running) whenever the binary is otherwise free — most notably when the
-        forecast is zero and curtailment has no effect on the power balance or
-        the real cost objective.
+        ``on_off`` mode: ``1e-6 * pv_curtailed[t]``, so the solver prefers
+        running whenever the binary is otherwise free (e.g. forecast is zero).
 
-        For staged mode: returns a sum of ``1e-6 * (max_stage_kw - stage_kw[s])
-        * stage_active[t, s]`` over all stages. The penalty is zero for the
-        highest stage and increases for lower stages. This pushes the solver to
-        prefer the highest stage whenever multiple stages produce the same
-        effective output — which happens whenever the forecast is below the
-        stage value (all such stages give ``min(forecast, stage_kw) ==
-        forecast``). Without this term the solver may pick an arbitrary stage
-        among them, writing a lower register value to the inverter than
-        necessary. The hardware would then cap output if the sun produces more
-        than the register during the next interval before a re-solve.
+        Staged mode: ``sum(1e-6 * (max_stage_kw - stage_kw[s]) *
+        stage_active[t, s])``, zero at the highest stage and increasing for
+        lower ones. Multiple stages can produce the same effective output
+        whenever the forecast is below their value; without this tie-break the
+        solver could write an unnecessarily low register value, and the
+        hardware would then cap output if the sun improves before the next
+        re-solve.
 
-        The weight (1e-6 EUR per kW-step) is five to six orders of magnitude
-        smaller than any real electricity price term and cannot influence
-        economically meaningful decisions.
-
-        When neither on_off nor staged mode is enabled, returns 0.
+        The weight is 5-6 orders of magnitude below any real price term and
+        cannot influence economically meaningful decisions. Returns 0 when
+        neither mode is enabled.
 
         Args:
             t: Time step index within ``ctx.T``.
@@ -347,13 +306,9 @@ class PvDevice:
     def is_on(self, t: int) -> bool:
         """Return True if the array should be switched on at step ``t``.
 
-        Reads the ``pv_curtailed[t]`` binary variable set by the solver.
-        ``pv_curtailed[t] = 0`` means the array is running (on); ``1`` means
-        it has been switched off.
-
-        When the forecast is negligible the variable is free and defaults to
-        its lower bound (0 = not curtailed), so no spurious off command is
-        ever sent for low-production steps.
+        Reads the ``pv_curtailed[t]`` binary variable set by the solver (0 =
+        running, 1 = switched off — see ``add_constraints`` for why it is
+        modelled as curtailment rather than an "on" flag).
 
         Must only be called after the solver has run and only when
         ``capabilities.on_off`` is True.

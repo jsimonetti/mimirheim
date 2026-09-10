@@ -57,17 +57,12 @@ class Battery:
         self.discharge_seg: dict[tuple[int, int], Any] = {}
         self.soc: dict[int, Any] = {}
         self.mode: dict[int, Any] = {}
+        # soc_low[t]: SOC deficit below optimal_lower_soc_kwh at step t, in kWh.
         # Populated only when optimal_lower_soc_kwh > min_soc_kwh.
-        # soc_low[t] represents the SOC deficit below the optimal lower level at
-        # step t, in kWh. Zero when SOC >= optimal_lower_soc_kwh.
         self._soc_low: dict[int, Any] = {}
-        # Populated when both min_charge_kw and min_discharge_kw are set, and
-        # when the direction binary is shared and either one is — see
-        # add_variables for why sharing changes the requirement.
-        # active[t] = 0 holds the battery at rest at step t; active[t] = 1
-        # permits it to run and arms whichever floor is configured for the
-        # selected direction. See add_constraints for why the direction binary
-        # mode[t] cannot carry this information on its own.
+        # active[t]: idle-state binary, populated only when a minimum power
+        # floor needs an explicit rest state. See IMPLEMENTATION_DETAILS.md
+        # §8, subsection "Idle-state binary (active[t])".
         self._active: dict[int, Any] = {}
         # True when build_and_solve handed this battery a system-wide direction
         # binary instead of letting it create its own. Set by set_external_mode,
@@ -262,28 +257,10 @@ class Battery:
                 # optimal_lower_soc_kwh - min_soc_kwh.
                 self._soc_low[t] = ctx.solver.add_var(lb=0.0, ub=soc_low_ub)
 
-        # Add active[t] only when the minimum power floors require it.
-        #
-        # active[t] is a binary "the battery is running this step" flag. It is
-        # needed because mode[t] encodes direction, not activity: with both
-        # floors gated on mode[t] alone, every value of mode[t] forces one
-        # direction to run and the battery can never sit idle. See
-        # add_constraints for the constraint set.
-        #
-        # When at most one floor is configured the unfloored direction can
-        # always be driven to zero, so idling is already reachable and no extra
-        # binary is created. This keeps the variable count unchanged for the
-        # common case, where neither floor is set.
-        #
-        # That reasoning depends on the battery owning its own mode, and stops
-        # holding the moment the mode is shared. With one direction binary
-        # across several batteries, a neighbour that wants to charge sets
-        # mode[t] to 1 for everyone, and a battery with only min_charge_kw set
-        # is then forced to charge whether or not it has the headroom. One
-        # battery sitting at capacity therefore makes the whole charging
-        # direction infeasible and no battery can charge in that step — the
-        # opposite of what sharing is for. So when the mode is shared, either
-        # floor is enough to need an activity binary.
+        # active[t] is added only when a minimum power floor needs an explicit
+        # idle state; see IMPLEMENTATION_DETAILS.md §8, subsection "Idle-state
+        # binary (active[t])" for the full reasoning, including why a shared
+        # mode[t] lowers the bar from "both floors set" to "either floor set".
         floors = (
             self.config.min_charge_kw is not None,
             self.config.min_discharge_kw is not None,
@@ -431,49 +408,12 @@ class Battery:
                 self.discharge_ac_kw(t) <= max_discharge_kw * (1 - self.mode[t])
             )
 
-            # Minimum operating power floors.
-            #
-            # Some hardware cannot safely operate below a power threshold — for
-            # example, a DC-coupled inverter with a minimum PWM duty cycle. Below
-            # that threshold the inverter may cut out or behave erratically. The
-            # floors express "run at or above this power, or do not run at all".
-            #
-            # mode[t] alone cannot express that rule when both floors are set.
-            # mode[t] is binary and selects a direction, not an activity level:
-            # gating the charge floor on mode[t] and the discharge floor on
-            # (1 - mode[t]) leaves no value of mode[t] under which the battery
-            # sits still, so idling becomes infeasible and the battery cycles on
-            # every step regardless of price. The active[t] binary declared in
-            # add_variables supplies the missing third state.
-            #
-            # active[t] = 0 means the battery is at rest this step. active[t] = 1
-            # permits it to run in the direction mode[t] selects and arms that
-            # direction's floor, if one is configured; an unfloored direction
-            # is still free down to zero.
+            # Minimum operating power floors (min_charge_kw / min_discharge_kw):
+            # some hardware cannot safely run below a power threshold. See
+            # IMPLEMENTATION_DETAILS.md §8, subsection "Idle-state binary
+            # (active[t])" for why mode[t] alone cannot express this and for
+            # the four-state constraint shape implemented below.
             if t in self._active:
-                # The idle state is modelled explicitly: both floors are
-                # configured, or the mode is shared and one is (see
-                # add_variables). Two constraints per step, plus one per
-                # configured floor:
-                #
-                #   charge_ac    <= max_charge_kw    * active[t]
-                #   discharge_ac <= max_discharge_kw * active[t]
-                #     Force both directions to zero when the battery is at rest.
-                #     Without these the solver could set active[t] = 0 and still
-                #     charge, escaping the floor entirely.
-                #
-                #   charge_ac    >= min_charge_kw    * (mode[t] + active[t] - 1)
-                #     The right-hand side is min_charge_kw only when mode[t] = 1
-                #     and active[t] = 1 (charging). It is 0 or negative in every
-                #     other combination, leaving the constraint slack.
-                #
-                #   discharge_ac >= min_discharge_kw * (active[t] - mode[t])
-                #     Mirror image: binding only when active[t] = 1 and
-                #     mode[t] = 0 (discharging).
-                #
-                # The reachable states are therefore exactly: idle, charge at or
-                # above min_charge_kw, discharge at or above min_discharge_kw,
-                # with an unfloored direction free down to zero.
                 ctx.solver.add_constraint(
                     self.charge_ac_kw(t) <= max_charge_kw * self._active[t]
                 )
@@ -497,17 +437,9 @@ class Battery:
                         * (self._active[t] - self.mode[t])
                     )
             else:
-                # At most one floor is configured. mode[t] on its own is
-                # sufficient here: the unfloored direction can always be driven
-                # to zero, so idling stays reachable and no extra binary is
-                # needed. Keeping this path variable-free matters because it is
-                # the common case.
-                #
-                # The discharge floor is applied to whichever discharge power
-                # expression the current model uses (stacked-segment or SOS2
-                # piecewise-linear). All BatteryConfig instances are required by
-                # schema validation to configure a discharge model, so this
-                # constraint is always reachable.
+                # At most one floor is configured, so mode[t] alone is
+                # sufficient (see the idle-state binary section referenced
+                # above) and this path stays variable-free.
                 if self.config.min_charge_kw is not None:
                     ctx.solver.add_constraint(
                         self.charge_ac_kw(t) >= self.config.min_charge_kw * self.mode[t]
@@ -539,39 +471,12 @@ class Battery:
                     self._soc_low[t] >= self.config.optimal_lower_soc_kwh - self.soc[t]
                 )
 
-        # Power derating near SOC extremes.
-        #
-        # Real inverters reduce charge power as the battery approaches full capacity
-        # and reduce discharge power as it approaches minimum SOC. Both reductions
-        # are approximately linear in the SOC.
-        #
-        # The constraints below implement this linearity directly in the LP. Each
-        # constraint is safe to add unconditionally: when the SOC is outside the
-        # derated region, the right-hand side exceeds the maximum power from the
-        # segment bounds, so the constraint is slack and has no effect.
+        # Power derating near SOC extremes: linear charge/discharge power
+        # reduction near full/empty, evaluated against start-of-step SOC. See
+        # IMPLEMENTATION_DETAILS.md §8, subsection "Power derating near SOC
+        # extremes" for the two-point derivation and why start-of-step SOC.
 
         if self.config.reduce_charge_above_soc_kwh is not None:
-            # Two-point linear function:
-            #   point A: (soc = reduce_charge_above_soc_kwh, power = max_charge_kw)
-            #   point B: (soc = capacity_kwh,                power = reduce_charge_min_kw)
-            #
-            # slope_c = (reduce_charge_min_kw - max_charge_kw)
-            #           / (capacity_kwh - reduce_charge_above_soc_kwh)
-            #
-            # slope_c is always negative (min < max, and denominator > 0).
-            #
-            # The derating bound is evaluated against the START-of-step SOC
-            # (soc_prev), because that is what the inverter observes when deciding
-            # how much charge power to allow. Using the end-of-step SOC (soc[t])
-            # would create a circular dependency between the power decision and the
-            # resulting SOC that, while still linear and valid in LP, would not
-            # match the physically intended behaviour.
-            #
-            # Rearranging power_limit(soc_prev) >= charge_total into LP form:
-            #   charge_total[t] - slope_c * soc_prev <= max_charge_kw - slope_c * reduce_charge_above_soc_kwh
-            #
-            # When soc_prev <= reduce_charge_above_soc_kwh, the RHS >= max_charge_kw,
-            # so the segment-bound upper limits already dominate and this adds nothing.
             slope_c = (
                 (self.config.reduce_charge_min_kw - max_charge_kw)
                 / (self.config.capacity_kwh - self.config.reduce_charge_above_soc_kwh)
@@ -584,24 +489,7 @@ class Battery:
                 )
 
         if self.config.reduce_discharge_below_soc_kwh is not None:
-            # Two-point linear function:
-            #   point A: (soc = reduce_discharge_below_soc_kwh, power = max_discharge_kw)
-            #   point B: (soc = min_soc_kwh,                    power = reduce_discharge_min_kw)
-            #
-            # slope_d = (reduce_discharge_min_kw - max_discharge_kw)
-            #           / (reduce_discharge_below_soc_kwh - min_soc_kwh)
-            #
-            # slope_d is always negative (min < max, and denominator > 0).
-            #
-            # As with charge derating, the bound is applied to the start-of-step
-            # SOC (soc_prev) for physical correctness. The inverter caps discharge
-            # power based on the SOC it observes before the step begins.
-            #
-            # LP form:
-            #   discharge_total[t] + slope_d * soc_prev <= max_discharge_kw + slope_d * reduce_discharge_below_soc_kwh
-            #
-            # When soc_prev >= reduce_discharge_below_soc_kwh, the RHS >= max_discharge_kw,
-            # so the segment bounds dominate and this constraint is slack.
+            # Mirror image of the charge derating above.
             slope_d = (
                 (self.config.reduce_discharge_min_kw - max_discharge_kw)
                 / (self.config.reduce_discharge_below_soc_kwh - self.config.min_soc_kwh)
@@ -624,39 +512,16 @@ class Battery:
         """Apply the ratchet floor and work out what the policy is asking for.
 
         The policy is described in ``SocRatchetConfig`` and computed in
-        ``core/battery_care.py``. This method adds only the floor. The
-        full-charge target is a separate constraint added later by
+        ``core/battery_care.py``. This method adds only the floor
+        (``soc[t] >= min(ratchet_floor_kwh, inputs.soc_kwh)`` for every step);
+        the full-charge target is a separate constraint added later by
         ``enforce_care_target``, because the step it can safely be pinned to is
         not known until the builder has probed the model for one.
 
-        **The ratchet floor.** For every step:
-
-        .. code-block::
-
-            soc[t] >= min(ratchet_floor_kwh, inputs.soc_kwh)
-
-        The floor is a lower bound the solver may not discharge through, which
-        is what makes the usable window narrow as the battery goes unbalanced.
-        It is *not* an instruction to charge, and it carries no objective term.
-
-        The ``min`` matters. A floor that has just stepped up will often sit
-        above the current SOC, because the step is precisely what happens when
-        the battery has been sitting low. Writing ``soc[t] >= floor``
-        unconditionally would then be infeasible at ``t=0``, since the SOC
-        cannot jump, and the whole schedule would be lost to protect a policy
-        about cell balancing. Clamping to the present SOC reproduces the
-        hardware behaviour instead: an inverter with a floor above the current
-        SOC does not teleport the battery, it stops discharging.
-
-        Known limitation of that clamp: the bound is one constant for the whole
-        horizon, so a battery starting below the floor may charge above it and
-        then discharge back down to where it started. The hardware would hold
-        the floor once it had been reached. Expressing "once above, stay above"
-        needs either a binary per step or a forced charge ramp, and the first
-        costs solve time on every battery while the second buys energy without
-        consulting prices. The full-charge target is what actually forces the
-        charge, so the gap is bounded: the battery cannot end up worse off than
-        it started, and the balance charge still happens on time.
+        See README.md's "Periodic full charge (`soc_ratchet`)" section for the
+        user-facing policy behaviour, and IMPLEMENTATION_DETAILS.md §8,
+        subsection "SOC ratchet floor clamp", for why the floor is clamped to
+        the current SOC and the known limitation that follows from it.
 
         Args:
             ctx: The current solve context.
@@ -702,41 +567,20 @@ class Battery:
 
             soc[t] >= target_kwh    for t in [step, step + boundaries)
 
-        ``soc[t]`` is the SOC at the *end* of step ``t``, so the battery is at
-        the top for the whole of an interval only when both the boundary
-        before it and the boundary after it are. The two counts are therefore
-        kept apart. ``boundaries`` is how many consecutive ``soc[t]`` are
-        constrained; ``hold_steps`` is how many whole intervals that amounts
-        to, which is ``boundaries - 1`` when the charge arrives on the first
-        constrained boundary and ``boundaries`` when the battery was already at
-        the top when the horizon began, because then the measured starting SOC
-        is the boundary before ``soc[0]``. The caller knows which; this method
-        only records it.
+        A hard constraint (like the EV departure target), because a partially
+        completed balance charge is not a balance charge and a soft penalty
+        would be invisible to ``minimize_consumption`` and would compete with
+        ``balanced``'s weights.
 
-        A hard constraint, matching the EV departure target, and for the same
-        reason: a partially completed balance charge is not a balance charge.
-        Being hard is also what makes it work under every strategy. A soft
-        penalty would be invisible to ``minimize_consumption``, which fixes the
-        total import volume in a first phase that sees only constraints, and it
-        would compete with the weights under ``balanced``. A constraint is
-        respected by both.
-
-        The hold is the part a single-step target cannot express. The cells
-        balance only while they sit in the upper voltage knee, and the BMS
-        recalibrates its SOC only after the charge current has tapered at the
-        voltage limit; both take time. One quarter-hour at the top followed by
-        a discharge satisfies ``soc[step] >= target`` and does neither. The
-        run is clipped to the horizon: what fits is enforced, and the next
-        rolling solve, which still finds the policy unsatisfied because the
-        reset needs a measured hold, carries it on.
-
-        The caller is responsible for passing a ``step``, ``target_kwh`` and
-        ``hold_steps`` the model can actually deliver — see
-        ``model_builder._probe_care_targets``, which reads them off a
-        trajectory the solver has already produced. Reachability is not
-        estimated here, and must not be: it depends on charge derating, the
-        minimum charge power, the efficiency curve and every other constraint
-        in the model at once, which is a question only the solver can answer.
+        The caller — ``model_builder._probe_care_targets`` — is responsible
+        for passing a ``step``, ``target_kwh`` and ``hold_steps`` the model can
+        actually deliver, read off a witness trajectory the solver has already
+        produced; this method does not re-check reachability. See
+        IMPLEMENTATION_DETAILS.md §8, subsection "Full-charge target probe
+        (two-phase witness solve)", for why reachability is only ever
+        estimated by the solver, and README.md's "Periodic full charge
+        (`soc_ratchet`)" section for the boundaries-vs-intervals distinction
+        between ``boundaries`` and ``hold_steps``.
 
         Args:
             ctx: The current solve context.
@@ -759,22 +603,12 @@ class Battery:
         """Replace per-step mode variables with externally-supplied shared ones.
 
         Called by ``build_and_solve`` when two or more batteries are present,
-        to enforce a shared system charge/discharge direction: all batteries
-        must charge or discharge in the same step. This prevents energy from
-        circulating between batteries (A discharges while B charges) with no
-        net gain to the system.
+        to prevent an anti-roundtrip loss by forcing all batteries to share one
+        charge/discharge direction binary. See IMPLEMENTATION_DETAILS.md §8,
+        subsection "Anti-roundtrip direction binary".
 
-        The shared binary ``bat_system_mode[t]`` has the same semantics as the
-        per-device mode:
-
-        - 1 = all batteries are in the charging direction this step.
-        - 0 = all batteries are in the discharging direction this step.
-
-        Must be called before ``add_variables``. ``add_variables`` skips
-        creating a per-device binary for any step already present in
-        ``self.mode``, so calling in that order leaves no orphaned variables
-        behind. Calling it after ``add_constraints`` has no effect on
-        constraints that have already been added.
+        Must be called before ``add_variables``, which skips creating a
+        per-device binary for any step already present in ``self.mode``.
 
         Args:
             mode_vars: Dict mapping step index ``t`` to the shared binary

@@ -120,41 +120,15 @@ class ThermalBoilerDevice:
     def add_constraints(self, ctx: ModelContext, inputs: ThermalBoilerInputs) -> None:
         """Add all MILP constraints for this thermal boiler.
 
-        Constraints fall into four groups:
-
-        **Temperature dynamics**: At each step t, the tank temperature equals
-        the previous temperature minus the per-step cooling loss plus the
-        heating contribution when the element is active:
-
-            T_tank[t] = T_tank[t−1] − cool_per_step + heat_rise_per_step × heater_on[t]
-
-        where:
-            cool_per_step = cooling_rate_k_per_hour × dt
-            thermal_cap_kwh_per_k = volume_liters × _WATER_THERMAL_CAP_KWH_PER_LITRE_K
-            heat_rise_per_step = elec_power_kw × cop × dt / thermal_cap_kwh_per_k
-
-        For t=0, ``T_tank[−1]`` is replaced by ``inputs.current_temp_c``.
-
-        **Hard temperature bounds**: Enforced as explicit constraints to prevent
-        the solver from overheating or underheating the tank:
-
-            T_tank[t] >= min_temp_c
-            T_tank[t] <= setpoint_c
-
-        **Minimum run length** (only when ``min_run_steps > 1``): Prevents
-        partial runs shorter than the configured minimum. The start sentinel
-        detects on-transitions; once the heater starts, it must remain on for
-        at least ``min_run_steps`` consecutive steps:
-
-            start[t] >= heater_on[t] − heater_on[t−1]   (activates when turning on)
-            start[t] <= heater_on[t]                     (can only be 1 when heater is on)
-            heater_on[t+τ] >= start[t]   for τ in 1 .. min_run_steps−1 and t+τ < T
-
-        The start sentinel is only constrained from above (not equality) so the
-        solver can choose to set it to 0 even when the heater is on continuously.
-        Under a cost-minimisation objective, spurious start=1 values would only
-        tighten the run constraint, which is never beneficial, so the solver
-        naturally drives start to the correct value.
+        Adds, per step: the temperature dynamics equation (``T_tank[t] =
+        T_tank[t-1] - cool_per_step + heat_rise_per_step * heater_on[t]``,
+        with ``inputs.current_temp_c`` as the initial condition at ``t=0``),
+        hard bounds (``min_temp_c <= T_tank[t] <= setpoint_c``, enforced as
+        explicit constraints because the dynamics can otherwise push past
+        tightened variable bounds), and, when ``min_run_steps > 1``, the
+        minimum run-time constraint. See IMPLEMENTATION_DETAILS.md §8,
+        subsection "Thermal boiler and DHW tank dynamics", for the tank model
+        derivation and the start-sentinel run-length mechanism.
 
         Args:
             ctx: The current solve context.
@@ -163,61 +137,40 @@ class ThermalBoilerDevice:
         """
         cfg = self.config
 
-        # Pre-compute thermal parameters (not solver variables — pure Python floats).
-        # These are derived from static config and never change within a solve cycle.
+        # Thermal parameters derived from static config (plain floats, not
+        # solver variables): cool_per_step is the unconditional temperature
+        # drop per step when off (insulation losses plus hot water draws);
+        # heat_rise_per_step is the rise per step when on (elec_power_kw *
+        # cop * dt / thermal_cap_kwh_per_k — cop=1.0 for resistive elements,
+        # >1 for heat pumps).
         thermal_cap_kwh_per_k = cfg.volume_liters * _WATER_THERMAL_CAP_KWH_PER_LITRE_K
-
-        # cool_per_step: the unconditional temperature drop per 15-minute step
-        # when the heater is off. Combines insulation losses and hot water draws.
         cool_per_step = cfg.cooling_rate_k_per_hour * ctx.dt
-
-        # heat_rise_per_step: the temperature increase per step when the heater
-        # is on. Derived from rated electrical power × COP × time, divided by
-        # the tank's thermal mass. COP = 1.0 for resistive elements (all
-        # electrical energy becomes heat); COP > 1 for heat pump (each kWh
-        # electric produces multiple kWh of thermal energy via the refrigeration
-        # cycle).
         heat_rise_per_step = cfg.elec_power_kw * cfg.cop * ctx.dt / thermal_cap_kwh_per_k
 
         for t in ctx.T:
-            # --- Temperature dynamics ---
-            # Using 'prior_temp' avoids an if-branch inside the constraint call.
-            # At t=0 the prior temperature is the current reading from MQTT.
-            # At t>0 it is the solver variable for the previous step.
+            # prior_temp: inputs.current_temp_c at t=0, else the previous
+            # step's solver variable.
             prior_temp: Any = inputs.current_temp_c if t == 0 else self._T_tank[t - 1]
             ctx.solver.add_constraint(
                 self._T_tank[t]
                 == prior_temp - cool_per_step + heat_rise_per_step * self._heater_on[t]
             )
 
-            # --- Hard temperature bounds ---
-            # These must be explicit solver constraints (not variable bounds)
-            # because the right-hand side involves the heater binary, and the
-            # dynamics can cause the variable bounds to be infeasible if tightened.
+            # Hard temperature bounds as explicit constraints, not variable
+            # bounds — the dynamics can otherwise push past a tightened bound.
             ctx.solver.add_constraint(self._T_tank[t] >= cfg.min_temp_c)
             ctx.solver.add_constraint(self._T_tank[t] <= cfg.setpoint_c)
 
-        # --- Minimum run length ---
-        # Only needed when min_run_steps > 1. A heat pump compressor that must
-        # run in blocks (e.g. 4 × 15 min = 1 hour) uses this constraint.
+        # Minimum run length (e.g. a compressor that must run in blocks). See
+        # IMPLEMENTATION_DETAILS.md §8, subsection "Thermal boiler and DHW
+        # tank dynamics", for the start-sentinel mechanism.
         if cfg.min_run_steps > 1:
             for t in range(1, len(ctx.T)):
-                # start[t] >= heater_on[t] - heater_on[t-1]:
-                # When the heater turns on at step t (heater_on[t]=1 but
-                # heater_on[t-1]=0), the right-hand side is 1, forcing start[t]=1.
-                # When already on, or when off, the right side is <= 0 and start
-                # can be 0.
                 ctx.solver.add_constraint(
                     self._start[t] >= self._heater_on[t] - self._heater_on[t - 1]
                 )
-                # start[t] <= heater_on[t]: start cannot be 1 when the heater
-                # is off. This prevents the solver from exploiting the inequality
-                # above when heater_on[t-1] < 0 (impossible since binary).
                 ctx.solver.add_constraint(self._start[t] <= self._heater_on[t])
 
-                # If the heater starts at step t, it must remain on for the
-                # following min_run_steps - 1 steps (the start step itself
-                # is already constrained by start[t] <= heater_on[t]).
                 for tau in range(1, cfg.min_run_steps):
                     if t + tau < len(ctx.T):
                         ctx.solver.add_constraint(

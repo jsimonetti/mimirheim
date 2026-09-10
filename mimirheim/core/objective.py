@@ -273,18 +273,8 @@ class ObjectiveBuilder:
             + Σ_d device.objective_terms(t)
 
         A terminal SoC value term is also added for each storage device (battery
-        and V2H-capable EV when plugged in):
-
-            −(avg_import_price / dt) × soc[T-1]
-
-        The negative sign causes the minimiser to prefer higher terminal SoC.
-        The coefficient is the average import price over the horizon — the
-        expected cost of re-acquiring 1 kWh after the horizon ends — divided by
-        the step duration so that it is commensurate with the per-step power
-        terms above. See ``_terminal_soc_terms`` for why the division is
-        necessary. Without this term the solver treats end-of-horizon stored
-        energy as worthless and drains storage whenever there is any positive
-        export price, even when that price is below the cost of refilling.
+        and V2H-capable EV when plugged in) — see ``_terminal_soc_terms`` for
+        the coefficient and why the division by ``dt`` is necessary.
 
         The confidence weighting means that steps with low-quality forecasts
         contribute less to the objective. A step with confidence=0 is treated
@@ -531,19 +521,10 @@ class ObjectiveBuilder:
     ) -> list[Any]:
         """Build the optional exchange-shaping secondary objective terms.
 
-        When ``config.objectives.exchange_shaping_weight > 0``, returns a list
-        of terms ``[w * import[0], w * export[0], w * import[1], ...]`` for
-        all time steps t. When appended to the primary objective, these terms
-        add ``w * sum_t(import_t + export_t)`` to the minimisation target.
-
-        The weight must be orders of magnitude smaller than typical energy
-        prices (e.g. 1e-4 EUR/kWh vs 0.20 EUR/kWh for retail electricity). At
-        that scale the term cannot reverse a dispatch decision that is
-        economically justified; it only breaks indifference among solutions with
-        equal primary cost, favouring lower total exchange volume.
-
-        Returns an empty list when ``exchange_shaping_weight == 0.0``, leaving
-        existing objective behaviour completely unchanged.
+        Returns ``[w * import[0], w * export[0], w * import[1], ...]`` across
+        all steps (empty when ``exchange_shaping_weight == 0.0``). See
+        IMPLEMENTATION_DETAILS.md §10 for why the weight must stay orders of
+        magnitude below real energy prices.
 
         Args:
             ctx: Model context providing the time horizon.
@@ -612,17 +593,9 @@ class ObjectiveBuilder:
             non-trivial terminal SoC variable. Empty when no storage devices
             are present or all return ``None``.
         """
-        # Compute the average import price across the steps in this horizon.
-        # This is the expected cost of re-acquiring 1 kWh after the horizon.
         avg_import_price = (
             sum(bundle.horizon_prices[t] for t in ctx.T) / len(ctx.T)
         )
-
-        # The economic objective uses price × power (EUR/kWh × kW), while soc
-        # is in kWh. Dividing by dt converts EUR/kWh to EUR/(kWh·step), making
-        # the terminal coefficient commensurate with the per-step power terms.
-        # Without this factor the terminal value is 1/dt times too small and
-        # fails to outweigh export revenue when export_price < avg_import_price.
         terminal_value_coeff = avg_import_price / ctx.dt
 
         terms: list[Any] = []

@@ -61,79 +61,19 @@ def _probe_care_targets(
 ) -> float:
     """Pin each due full-charge target to a step the model can actually reach.
 
-    A hard ``soc[step] >= target`` is the right shape for this policy — it is
-    the EV-departure idiom, it survives ``minimize_consumption``'s import lock,
-    and it cannot be outbid by ``balanced``'s weights. It has one requirement:
-    the step and the target must be reachable, or the model is infeasible and a
-    policy about cell balancing costs the entire schedule.
+    Solves the model once with a purely feasibility-driven objective (minimise
+    the total SOC gap between each due battery and its own target) to obtain a
+    witness trajectory, then pins each battery's target to a step and hold
+    length that witness already achieved. This guarantees the policy can never
+    make the real solve infeasible, at the cost of occasionally under-enforcing
+    a target that was in fact reachable (a bounded, self-correcting loss —
+    retried next cycle).
 
-    Reachability cannot be estimated outside the solver. It depends on charge
-    derating, the minimum charge power, a piecewise (and possibly
-    non-monotonic) efficiency curve, the load, the import limit and every other
-    device sharing the connection, all at once. An earlier version of this
-    feature tried, in ~200 lines, and five review rounds each found another
-    configuration where it was wrong — in both directions, so neither erring
-    high nor erring low was safe.
-
-    So this asks the solver. It minimises the total gap between each due
-    battery and its own target across the horizon — a question with no
-    economics in it, and one whose only additions are gap variables that do not
-    restrict the feasible set, so it is feasible whenever the model itself is —
-    and reads the answer off the resulting trajectory:
-
-    - That trajectory is a **witness**. Every target imposed below is one the
-      witness already satisfies, so the model with the target added is feasible
-      by construction. That is the guarantee this function provides, and it
-      holds on every branch below: the policy cannot make the solve infeasible.
-    - For each battery, the target is pinned to the first step at or after its
-      deadline where the witness reached the target, and held from there for
-      as many consecutive steps as the witness stayed there, up to the
-      configured hold. "At or after" is what handles an overdue battery: its
-      deadline is step 0, and the anchor lands on an early quarter-hour it can
-      genuinely be full by, rather than on a step that is infeasible now or on
-      a horizon end that recedes by one step on every rolling solve. "Early",
-      not "earliest": it is the first such step in one witness, and no claim
-      is made that no earlier one exists. The run is likewise the run *from
-      that step*, not the longest run anywhere: finding the best run is the
-      same per-step disjunction the sum cannot ask. A run cut short -- by the
-      horizon end or by a load the battery has to carry -- is enforced as far
-      as it goes and reported as ``enforced_hold_steps``; the next cycle
-      continues it, because the reset needs a measured hold, not a planned one.
-    - The comparison on the way in carries a tolerance of ``_CARE_EPS_KWH``.
-      With ``target_pct`` at 100 the target sits on the SOC variable's upper
-      bound, and a backend that lands a hair under it would otherwise fall
-      into the reduced branch on every cycle. What is then enforced is the
-      lesser of the target and the run's minimum less the same epsilon, so
-      the witness still satisfies it and the guarantee stands.
-    - When the witness never reaches the threshold, the best SOC it did reach
-      is imposed instead — but only on a *proven optimal* probe. A trajectory
-      that merely ran out of time says nothing at all, and nothing is imposed;
-      the status reports the target as unenforced.
-
-      Read that reduced value as a **floor, not a ceiling**: "the model can
-      certainly get this high", not "this is the most it can do". Minimising
-      the summed gap does not answer "can this battery reach its target at
-      *some* step", which is a disjunction and needs a binary per step to ask
-      properly. Two cases make the sum prefer a trajectory that never reaches
-      a target that is in fact reachable: a battery that hovers just below the
-      threshold for many steps scores better than one that touches it once and
-      is then forced down; and with two batteries, refilling an
-      already-satisfied one can shave more off the total than lifting the
-      other to its threshold. In both, the enforced target is lower than what
-      was possible, so the balance charge is under-enforced this cycle and
-      retried on the next. That is a bounded, self-correcting loss, and it is
-      strictly better than enforcing nothing, which is the only alternative
-      that avoids the binaries.
-
-    The per-battery gap, rather than total stored energy, is what keeps this
-    honest with two batteries. Maximising ``Σ soc`` rewards filling the
-    efficient battery past its own threshold before charging a less efficient
-    one at all, so a jointly optimal trajectory can leave one battery short
-    when a trajectory satisfying both exists. Summing each battery's own
-    shortfall has no such preference: a kWh only counts while that battery is
-    below its target. The gap variables exist for this solve only and never
-    enter the economic objective, so they are not a priced preference and
-    cannot be outbid.
+    See README.md's "Periodic full charge (`soc_ratchet`)" section for the
+    user-facing policy behaviour, and IMPLEMENTATION_DETAILS.md §8, subsection
+    "Full-charge target probe (two-phase witness solve)", for why this asks
+    the solver instead of computing reachability directly and why the
+    objective sums per-battery gaps rather than total stored energy.
 
     Args:
         ctx: The solve context, with every constraint already added —
@@ -208,19 +148,11 @@ def _probe_care_targets(
         reached = [t for t in window if witness[t] >= target - _CARE_EPS_KWH]
         if reached:
             start = reached[0]
-            # Boundaries, not intervals. soc[t] is the SOC at the END of step
-            # t, so the battery is at the top for the whole of step t+1 only
-            # if both soc[t] and soc[t+1] are. A hold of H intervals is
-            # therefore H + 1 consecutive boundaries at the target, the first
-            # being the one the charge arrives on. Counting H boundaries would
-            # deliver H - 1 intervals: 1.75 h for a configured 2 h.
-            #
-            # Unless the battery arrived at the top already. Then the measured
-            # starting SOC is the boundary before soc[0], the first interval
-            # closes at soc[0], and H boundaries are enough. Without this a
-            # full battery is held a quarter-hour longer than asked and, when
-            # a load cuts the run, reported one interval short of what it
-            # physically delivered.
+            # soc[t] is measured at step boundaries, so a hold of H intervals
+            # needs H + 1 consecutive boundaries at the target (one extra
+            # unless the battery arrived already full). See README.md's
+            # "Periodic full charge (soc_ratchet)" section for the full
+            # boundaries-vs-intervals reasoning.
             arrived_full = (
                 start == 0
                 and bat.initial_soc_kwh is not None
@@ -428,32 +360,12 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
         *hybrid_inverters, *thermal_boilers, *space_heating_hps, *combi_heat_pumps,
     ]
 
-    # --- Shared system direction binaries (anti-roundtrip) ---
-    #
-    # When two or more batteries are present, they could individually choose
-    # opposite directions (A charges, B discharges) in the same step. Because
-    # each battery's efficiency and wear cost must be paid, a roundtrip always
-    # delivers less net stored energy than the alternative (A and B both idle,
-    # or only B charging). The efficiency terms in the objective already
-    # penalise this, but under edge-case numeric conditions the solver may
-    # still produce a roundtripping schedule.
-    #
-    # A shared direction binary `bat_system_mode[t]` forces all batteries to
-    # be in the same direction (1=charge, 0=discharge) per step. This adds
-    # one binary variable per step — negligible MILP overhead at residential
-    # scale — and enforces the physical principle that energy should not loop.
-    #
-    # When only one battery is present the constraint is unnecessary; the
-    # per-device mode created by add_variables is used unchanged.
-    #
-    # The same logic applies to EV chargers regardless of V2H capability.
-    # For charge-only EVs the discharge bound is trivially non-binding, so
-    # the shared variable is harmless but maintains uniform activation logic.
-    #
-    # This runs before add_variables so that a device handed a shared binary
-    # never creates a per-device one. Creating both would leave one free
-    # integer variable per step per device in the model, referenced by no
-    # constraint and no objective term.
+    # bat_system_mode[t] / ev_shared_mode[t]: shared charge/discharge direction
+    # binary, one per step, forcing every battery (or every EV charger) to move
+    # the same way. Prevents an anti-roundtrip loss (one device charging while
+    # another discharges in the same step). Runs before add_variables so a
+    # device handed a shared binary never also creates its own. See
+    # IMPLEMENTATION_DETAILS.md §8, subsection "Anti-roundtrip direction binary".
     if len(batteries) >= 2:
         bat_shared_mode = {
             t: ctx.solver.add_var(lb=0.0, ub=1.0, integer=True)
@@ -618,12 +530,11 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
             ctx.solver.add_constraint(device_net + grid_net == 0)
 
     # --- Full-charge target ---
-    # Adding it here, after every other constraint and before the objective,
-    # is deliberate: the probe needs the complete model.
-    # The grid hard caps have to exist before the probe solves, or its witness
-    # can rely on import the final model forbids and the target derived from it
-    # makes that model infeasible. ObjectiveBuilder normally adds them at the
-    # top of build(); adding them here is idempotent.
+    # Added here, after every other constraint and before the objective, so
+    # the probe below sees the complete model, including the grid hard caps
+    # (otherwise its witness could rely on import the final model forbids).
+    # add_hard_cap_constraints is idempotent — ObjectiveBuilder.build() also
+    # calls it later.
     objective_builder = ObjectiveBuilder()
     objective_builder.add_hard_cap_constraints(ctx, grid, config)
 
@@ -722,37 +633,12 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
     obj_val = ctx.solver.objective_value()
 
     # --- Extract schedule ---
-    # For each time step, the solver has chosen setpoints for every device. The
-    # code below reads those values and assembles them into DeviceSetpoint and
-    # ScheduleStep objects.
-    #
-    # Why closed-loop device variables are NOT suppressed for zero-exchange steps
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    # The post-process arbitration layer (control_arbitration.py) will later mark
-    # certain steps as ``zero_exchange_active=True`` for the selected enforcer
-    # device. One might expect the solver variable for that device on that step
-    # to be fixed at zero (since the hardware will act autonomously). Do not do
-    # this. The reasons are:
-    #
-    # 1. SOC continuity: the battery or EV state-of-charge variable is threaded
-    #    across all steps. If the solver variable for a device is suppressed on
-    #    step t, the SOC equation for step t+1 becomes incorrect — the model
-    #    thinks the device is idle but the hardware may be charging or discharging.
-    #    Wrong SOC estimates on adjacent steps lead to incorrect dispatch on the
-    #    steps immediately before and after the closed-loop window.
-    #
-    # 2. Best prediction: the solver's planned setpoint is the best available
-    #    prediction of what the hardware will actually do in closed-loop mode.
-    #    The hardware's firmware PID loop will chase zero exchange; the solver
-    #    models the same goal via its economic objective. The planned setpoints
-    #    are advisory; the hardware enforces the physical constraint autonomously.
-    #
-    # 3. Self-correction: if the hardware does not precisely track the solver's
-    #    planned setpoint (expected — firmware loops are not perfect), the next
-    #    solve cycle self-corrects automatically by reading the fresh SOC from
-    #    MQTT and re-solving with the updated state.
-    #
-    # See IMPLEMENTATION_DETAILS.md §9 for the full design discussion.
+    # For each time step, the solver has chosen setpoints for every device;
+    # the code below reads those values into DeviceSetpoint/ScheduleStep
+    # objects. Closed-loop device variables (steps the arbitration layer will
+    # later mark zero_exchange_active) are deliberately NOT suppressed here —
+    # see IMPLEMENTATION_DETAILS.md §9, subsection "Why the solver does not
+    # zero out closed-loop device variables".
     schedule: list[ScheduleStep] = []
     for t in ctx.T:
         device_setpoints: dict[str, DeviceSetpoint] = {}

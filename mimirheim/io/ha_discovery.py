@@ -165,11 +165,10 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
     })
 
     # --- Per-device setpoint sensors ---
-    # No state_class: these values come from the solver schedule, not hardware.
-    # The state_topic for each device is {prefix}/device/{name}/setpoint.
-    # json_attributes_topic and json_attributes_template expose the full
-    # per-device forecast array sourced from outputs.schedule, enabling
-    # apexcharts-card dashboards without the reporter chart_topic.
+    # No state_class: solver output, not a hardware measurement (see the grid
+    # sensor above). json_attributes_topic/template expose the full per-device
+    # forecast array sourced from outputs.schedule, enabling apexcharts-card
+    # dashboards without the reporter chart_topic.
 
     storage_device_names: set[str] = {
         *config.batteries,
@@ -231,15 +230,13 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
         })
 
     # --- Thermal boiler input sensors ---
-    # The tank temperature is a native HA sensor entity; we do not duplicate it.
+    # The tank temperature is a native HA sensor entity; not duplicated here.
 
     # --- Space heating heat pump input sensors ---
-    # The heat-needed value is an external model output (degree-days derived)
-    # that HA does not track natively. The outdoor temperature forecast is
-    # also not a native HA entity for this mimirheim device. Both are published as
-    # diagnostic sensors for visibility.
-    # The indoor temperature is already a native HA thermostat/sensor entity
-    # and is not duplicated here.
+    # heat_needed_kwh (degree-days derived) and the outdoor temperature
+    # forecast are external model inputs HA does not track natively, so both
+    # get diagnostic sensors. Indoor temperature is a native HA entity and is
+    # not duplicated.
 
     for name, sh_cfg in config.space_heating_hps.items():
         if sh_cfg.inputs is not None:
@@ -257,10 +254,9 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
             })
 
     # --- Combi heat pump input sensors ---
-    # The DHW tank temperature and indoor temperature are native HA sensor
-    # entities and are not duplicated here. The SH heat-needed value and the
-    # outdoor temperature forecast are external model inputs that HA does not
-    # track natively.
+    # DHW tank temperature and indoor temperature are native HA entities and
+    # not duplicated here; SH heat_needed_kwh and the outdoor temperature
+    # forecast are external model inputs, same reasoning as space heating above.
 
     for name, chp_cfg in config.combi_heat_pumps.items():
         if chp_cfg.inputs is not None:
@@ -314,10 +310,9 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
             })
 
     # --- PV output sensors ---
-    # These sensors mirror the control outputs mimirheim publishes to PV inverters:
-    # the production power limit (kW), zero-export mode, on/off mode, and
-    # the mode-agnostic curtailment status.
-    # They are solver outputs, not hardware measurements, so no state_class.
+    # Mirror the control outputs mimirheim publishes to PV inverters: power
+    # limit, zero-export mode, on/off mode, and curtailment status. Solver
+    # outputs, not hardware measurements (no state_class; see grid sensor).
 
     for name, pv_cfg in config.pv_arrays.items():
         if pv_cfg.has_power_limit_output:
@@ -353,9 +348,8 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
             })
 
     # --- EV charger output sensors ---
-    # These sensors mirror the control outputs mimirheim publishes to EV chargers:
-    # exchange_mode (zero-exchange activation) and loadbalance_cmd.
-    # They are solver outputs, not hardware measurements, so no state_class.
+    # Mirror exchange_mode and loadbalance_cmd control outputs; same
+    # no-state_class reasoning as the PV output sensors above.
 
     for name, ev_cfg in config.ev_chargers.items():
         if ev_cfg.has_exchange_mode_output:
@@ -376,9 +370,8 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
             })
 
     # --- Battery output sensors ---
-    # These sensors mirror the control output mimirheim publishes to battery
-    # inverters: the exchange_mode flag for zero-exchange operation.
-    # It is a solver output, not a hardware measurement, so no state_class.
+    # Mirrors the exchange_mode control output for zero-exchange operation;
+    # same no-state_class reasoning as the PV output sensors above.
 
     for name, bat_cfg in config.batteries.items():
         if bat_cfg.has_exchange_mode_output:

@@ -292,13 +292,9 @@ class MqttClient:
                     except queue.Full:
                         logger.debug("Solve queue full; trigger on %r discarded.", topic)
                     except Exception:
-                        # Deliberately broad. This runs on the paho network
-                        # thread, so an escaping exception would take down MQTT
-                        # handling entirely and the daemon would go deaf rather
-                        # than merely skip a solve. Assembling a bundle touches
-                        # every configured device, so the traceback is the only
-                        # thing that identifies which one failed; logger.exception
-                        # records it in full.
+                        # Deliberately broad: this runs on the paho network
+                        # thread, where an escaping exception would take down
+                        # MQTT handling entirely rather than just skip a solve.
                         logger.exception("Failed to assemble SolveBundle on trigger.")
                 else:
                     reason = self._readiness.not_ready_reason()
@@ -341,16 +337,12 @@ class MqttClient:
             validated_input = handler(payload)
             self._readiness.update(topic, validated_input)
         except Exception as exc:
-            # Deliberately broad, for the same reason as the trigger handler:
-            # this runs on the paho network thread. A device publishing a
-            # malformed payload must leave that one topic stale, not stop
-            # mimirheim from reading every other topic.
-            #
-            # The traceback is attached only at DEBUG. A sensor stuck on a bad
-            # payload republishes on every cycle, and a full traceback each
-            # time would bury the rest of the log. The exception message
-            # already names the field and the reason for a Pydantic
-            # ValidationError, which is the common case.
+            # Deliberately broad, same reason as the trigger handler: a
+            # malformed payload must leave only this one topic stale, not
+            # stop mimirheim reading every other topic. Traceback only at
+            # DEBUG — a sensor stuck on a bad payload republishes every
+            # cycle, and the exception message already names the field for
+            # the common case (a Pydantic ValidationError).
             logger.warning(
                 "Failed to parse message on topic %r: %s",
                 topic,

@@ -8,11 +8,9 @@ The Grid device is architecturally different from battery, EV, and load devices:
   referenced directly by ``ObjectiveBuilder``.
 - It has no MQTT runtime inputs — its physical limits come entirely from config.
 
-A physical grid connection cannot simultaneously import and export. This constraint
-is always enforced via a single binary variable ``_grid_dir[t]`` per step. When it
-is 0 the grid may import; when it is 1 the grid may export. Using one binary instead
-of two (one per direction) halves the number of integer variables added to the MILP,
-reducing the size of the branch-and-bound search tree.
+A physical grid connection cannot simultaneously import and export; see
+IMPLEMENTATION_DETAILS.md §8, subsection "Grid device", for the single-binary
+direction encoding used to enforce this and why one binary suffices instead of two.
 
 This module does not import from ``mimirheim.io`` or ``mimirheim.config`` beyond accepting a
 ``GridConfig`` argument at construction. It does not import ``python-mip`` directly;
@@ -34,14 +32,9 @@ class Grid:
       ``import_limit_kw``.
     - ``export_[t]``: power fed into the grid (kW), bounded by
       ``export_limit_kw``.
-    - ``_grid_dir[t]``: a single binary that encodes the allowed direction.
-      0 means the grid may import (export is forced to zero).
-      1 means the grid may export (import is forced to zero).
-
-    A grid connection cannot simultaneously import and export — this is a
-    physical property of the meter, not a configurable policy. One binary per
-    step (rather than two) is sufficient to enforce mutual exclusion; see
-    ``add_constraints`` for the formulation.
+    - ``_grid_dir[t]``: a single binary that encodes the allowed direction (0
+      = import, 1 = export). See the module docstring for why one binary is
+      enough to enforce mutual exclusion.
 
     Attributes:
         name: Fixed string ``"grid"``. Used by the power balance assembler and
@@ -72,91 +65,44 @@ class Grid:
     def add_variables(self, ctx: ModelContext) -> None:
         """Declare import, export, and direction variables for every time step.
 
-        For each step ``t`` in ``ctx.T``:
-
-        - ``import_[t]``: Power imported from the grid in kW. Upper bound is
-          ``config.import_limit_kw``, the physical limit of the grid connection
-          (DNO agreement or main fuse). Without this bound, the solver could
-          import unlimited power to charge batteries and export for arbitrage.
-
-        - ``export_[t]``: Power exported to the grid in kW. Upper bound is
-          ``config.export_limit_kw``. Without this bound, the solver could
-          export unlimited power, violating the DNO connection agreement.
-
-        - ``_grid_dir[t]``: Single binary direction variable.
-          0 = importing step (import may be nonzero, export is forced to 0).
-          1 = exporting step (export may be nonzero, import is forced to 0).
-          The Big-M constraints in ``add_constraints`` enforce this encoding.
+        For each step: ``import_[t]`` in kW, bounded by ``import_limit_kw``
+        (the DNO agreement or main fuse limit); ``export_[t]`` in kW, bounded
+        by ``export_limit_kw`` (zero for zero-export mode); and
+        ``_grid_dir[t]``, the single binary direction selector coupled to both
+        by the Big-M constraints in ``add_constraints``.
 
         Args:
             ctx: The current solve context. Variables are registered on
                 ``ctx.solver`` via ``add_var``.
         """
         for t in ctx.T:
-            # import_[t] represents the power drawn from the public grid at
-            # time step t, in kilowatts. Lower bound: 0 (import is always
-            # non-negative; the sign of the net flow is determined by which
-            # of import or export is nonzero). Upper bound: import_limit_kw,
-            # the maximum power the grid connection agreement permits.
             self.import_[t] = ctx.solver.add_var(
                 lb=0.0,
                 ub=self.config.import_limit_kw,
             )
-
-            # export_[t] represents the power fed into the public grid at
-            # time step t, in kilowatts. Upper bound: export_limit_kw, the
-            # maximum export permitted by the DNO or inverter settings. A
-            # zero export limit (zero_export mode) is expressed here as
-            # export_limit_kw=0 in config.
             self.export_[t] = ctx.solver.add_var(
                 lb=0.0,
                 ub=self.config.export_limit_kw,
             )
-
-            # _grid_dir[t]: binary direction selector.
-            # The solver chooses 0 (import) or 1 (export) at each step.
-            # Big-M constraints in add_constraints link this choice to the
-            # continuous import_[t] and export_[t] variables.
             self._grid_dir[t] = ctx.solver.add_var(lb=0.0, ub=1.0, integer=True)
 
     def add_constraints(self, ctx: ModelContext, inputs: None) -> None:
         """Couple the direction binary to the import and export variables.
 
-        Two Big-M constraints per time step enforce the single-binary
-        direction-exclusion formulation:
-
-        1. ``import_[t] <= import_limit_kw × (1 − grid_dir[t])``
-           When ``grid_dir[t] = 1`` (export step), ``(1 − 1) = 0`` and this
-           reduces to ``import_[t] <= 0``, forcing import to zero. When
-           ``grid_dir[t] = 0`` (import step), this reduces to
-           ``import_[t] <= import_limit_kw``, which the variable bound already
-           enforces, so the constraint is non-binding. ``import_limit_kw`` is
-           the Big-M value: the tightest valid upper bound on ``import_[t]``.
-
-        2. ``export_[t] <= export_limit_kw × grid_dir[t]``
-           When ``grid_dir[t] = 0`` (import step) this forces ``export_[t]``
-           to zero. When ``grid_dir[t] = 1`` (export step) the constraint is
-           non-binding. ``export_limit_kw`` is the Big-M value.
-
-        Together these two constraints mean the solver must choose a direction
-        at each step: it sets ``grid_dir[t]`` to 0 or 1 and the Big-M
-        constraints silence the inactive direction. No explicit mutual exclusion
-        constraint is needed — it is implicit in the single-binary encoding.
+        Two Big-M constraints per step: ``import_[t] <= import_limit_kw * (1 -
+        grid_dir[t])`` and ``export_[t] <= export_limit_kw * grid_dir[t]``.
+        Together they force whichever direction ``grid_dir[t]`` does not
+        select to zero, with no separate mutual-exclusion constraint needed —
+        see IMPLEMENTATION_DETAILS.md §8, subsection "Grid device".
 
         Args:
             ctx: The current solve context.
             inputs: Always ``None`` for the Grid device.
         """
         for t in ctx.T:
-            # Big-M for import: import_[t] <= import_limit_kw * (1 - grid_dir[t]).
-            # When grid_dir[t]=1: forces import_[t] = 0 (export step).
-            # When grid_dir[t]=0: reduces to import_[t] <= import_limit_kw (non-binding).
             ctx.solver.add_constraint(
                 self.import_[t] <= self.config.import_limit_kw * (1 - self._grid_dir[t])
             )
-            # Big-M for export: export_[t] <= export_limit_kw * grid_dir[t].
-            # When grid_dir[t]=0: forces export_[t] = 0 (import step).
-            # When grid_dir[t]=1: reduces to export_[t] <= export_limit_kw (non-binding).
             ctx.solver.add_constraint(
                 self.export_[t] <= self.config.export_limit_kw * self._grid_dir[t]
             )

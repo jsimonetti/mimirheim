@@ -167,43 +167,14 @@ class SpaceHeatingDevice:
     def add_constraints(self, ctx: ModelContext, inputs: SpaceHeatingInputs) -> None:
         """Add all MILP constraints for this space heating heat pump.
 
-        **Zero-demand early exit**: When ``inputs.heat_needed_kwh == 0.0``, all
-        ``_hp_on[t]`` are pinned to zero and no further constraints are added. The
-        HP stays off for the entire horizon.
-
-        **On/off mode** (``config.elec_power_kw`` is not None):
-
-        *Total heat constraint*: The sum of thermal output across all active steps
-        must satisfy the demand:
-
-            Σ_t (elec_power_kw × cop × dt × hp_on[t]) >= heat_needed_kwh
-
-        *Minimum run length* (when ``min_run_steps > 1``): Same sentinel-based
-        formulation as ``ThermalBoilerDevice``:
-
-            start[t] >= hp_on[t] - hp_on[t-1]
-            start[t] <= hp_on[t]
-            hp_on[t+τ] >= start[t]   for τ in 1 .. min_run_steps-1
-
-        **Power-stage (SOS2) mode** (``config.stages`` is not None):
-
-        *Convex combination constraint*: Stage weights must sum to exactly 1:
-
-            Σ_s w[t][s] = 1
-
-        *On indicator linkage*: The binary ``_hp_on[t]`` equals the sum of all
-        non-sentinel stage weights (the HP is "on" when operating at any power
-        above zero):
-
-            hp_on[t] == Σ_{s>=1} w[t][s]
-
-        *Total heat constraint*: The sum of thermal delivered across all steps
-        must satisfy the demand:
-
-            Σ_t Σ_s (w[t][s] × elec_kw[s] × cop[s] × dt) >= heat_needed_kwh
-
-        *Minimum run length*: Applied to the shared ``_hp_on[t]`` binary using
-        the same sentinel formulation as on/off mode.
+        When ``inputs.heat_needed_kwh == 0.0`` and no BTM is configured, all
+        ``_hp_on[t]`` are pinned to zero and no further constraints are added.
+        Otherwise, delegates to ``_add_btm_constraints``,
+        ``_add_constraints_staged``, or ``_add_constraints_on_off`` depending
+        on configuration, then applies the minimum run length constraint via
+        ``_add_min_run_constraints``. See IMPLEMENTATION_DETAILS.md §8,
+        subsection "Thermal boiler and DHW tank dynamics", for the
+        start-sentinel run-length mechanism shared by all of these.
 
         Args:
             ctx: The current solve context.
@@ -325,26 +296,22 @@ class SpaceHeatingDevice:
         total_heat_terms: list[Any] = []
 
         for t in ctx.T:
-            # Convex combination: weights must sum to 1 at every step.
-            # This forces the solver to select exactly one operating point or
-            # a convex blend of two adjacent points (the SOS2 constraint
-            # limits which pairs of weights can be jointly non-zero).
+            # Convex combination: weights sum to 1, selecting one operating
+            # point or a blend of two adjacent ones (SOS2 limits which pairs
+            # can be jointly non-zero).
             ctx.solver.add_constraint(
                 sum(self._w[t][s] for s in range(n_stages)) == 1
             )
 
-            # On-indicator linkage: _hp_on[t] = 1 when operating at any
-            # power stage above the zero sentinel (stage 0). The SOS2
-            # constraint guarantees that the sentinel weight w[t][0] and
-            # any non-zero-stage weight are always in adjacent positions when
-            # both are non-zero, so this sum is a valid binary (between 0 and 1).
+            # hp_on[t] = sum of non-sentinel weights (stage >= 1). Valid as a
+            # binary because SOS2 guarantees the zero-sentinel weight w[t][0]
+            # and any non-zero-stage weight are only ever adjacent, never both
+            # partially nonzero alongside a third.
             non_sentinel_sum = sum(self._w[t][s] for s in range(1, n_stages))
             ctx.solver.add_constraint(self._hp_on[t] == non_sentinel_sum)
 
-            # Collect thermal output terms for the total-heat constraint.
-            # Each non-sentinel stage s contributes:
-            #   w[t][s] × elec_kw[s] × cop[s] × dt  kWh of heat.
-            # Stage 0 contributes zero (elec_kw=0, cop=0) and is excluded.
+            # Each non-sentinel stage contributes w[t][s] * elec_kw[s] *
+            # cop[s] * dt kWh; stage 0 (elec_kw=0, cop=0) contributes nothing.
             for s in range(1, n_stages):
                 total_heat_terms.append(
                     self._w[t][s] * stages[s].elec_kw * stages[s].cop * ctx.dt
@@ -357,15 +324,10 @@ class SpaceHeatingDevice:
     def _add_min_run_constraints(self, ctx: ModelContext) -> None:
         """Add minimum consecutive run length constraints.
 
-        Uses start[t] sentinel variables to detect on-transitions and force the
-        HP to remain on for at least ``min_run_steps`` consecutive steps once
-        started. Only active when ``min_run_steps > 1``.
-
-        The sentinel-based formulation (identical to ThermalBoilerDevice):
-
-            start[t] >= hp_on[t] - hp_on[t-1]   (fires when HP turns on)
-            start[t] <= hp_on[t]                 (cannot fire when HP is off)
-            hp_on[t+τ] >= start[t]               (run must continue for τ steps)
+        See IMPLEMENTATION_DETAILS.md §8, subsection "Thermal boiler and DHW
+        tank dynamics", for the start-sentinel mechanism and this method's two
+        refinements over it (identical to
+        ``CombiHeatPumpDevice._add_min_run_constraints``).
 
         Args:
             ctx: The current solve context.
@@ -376,16 +338,8 @@ class SpaceHeatingDevice:
 
         n = len(ctx.T)
 
-        # A start at step t requires that the HP stays on for steps
-        # t, t+1, ..., t+min_run_steps-1. If the horizon ends before
-        # that window is complete, a fresh start at step t is not feasible.
-        # For such steps, the HP can only be on if it was already running from
-        # an earlier step (hp_on[t] <= hp_on[t-1]). For step 0, there is no
-        # prior step, so the HP cannot start if the window would exceed the
-        # horizon.
         for t in range(n):
             if t + cfg.min_run_steps > n:
-                # Not enough steps remaining for a fresh start here.
                 if t == 0:
                     ctx.solver.add_constraint(self._hp_on[0] == 0)
                 else:
@@ -393,9 +347,6 @@ class SpaceHeatingDevice:
                         self._hp_on[t] <= self._hp_on[t - 1]
                     )
 
-        # Step 0 is always a potential start (no prior step). If the HP is on
-        # at step 0, it must remain on for the following min_run_steps - 1 steps.
-        # (This is a no-op when step 0 was already blocked above.)
         for tau in range(1, cfg.min_run_steps):
             if tau < n:
                 ctx.solver.add_constraint(self._hp_on[tau] >= self._hp_on[0])

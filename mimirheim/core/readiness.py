@@ -578,22 +578,15 @@ class ReadinessState:
                     if soc_entry is not None and plug_entry is not None:
                         ev_state, _ = soc_entry
                         available, _ = plug_entry
-                        # Deliverability clamp. The departure target is a hard
-                        # constraint; a target beyond what the charger can
-                        # physically deliver by the deadline would make the
-                        # entire solve infeasible, losing the schedule for
-                        # every device. Clamping to the deliverable energy
-                        # preserves the intent as far as physics allows: the
-                        # solver charges flat out for the whole window.
-                        # Conflicts with other hard constraints (e.g. grid
-                        # import capacity) are NOT absorbed here and still
-                        # surface as an infeasible solve by design.
-                        #
-                        # The clamp lives here, not in the device model:
-                        # build_and_solve is pure and must not log.
-                        # Step arithmetic mirrors devices.ev._datetime_to_step:
-                        # soc[window_step] includes charging during steps
-                        # 0..window_step, hence the +1.
+                        # Deliverability clamp: a departure target beyond what
+                        # the charger can physically deliver by the deadline
+                        # would make the whole solve infeasible. Clamping here
+                        # (not in the device model, since build_and_solve is
+                        # pure and must not log) preserves intent as far as
+                        # physics allows — other hard constraints (e.g. grid
+                        # import capacity) are NOT absorbed and still surface
+                        # as infeasible by design. Step arithmetic mirrors
+                        # devices.ev._datetime_to_step/_deadline_to_step.
                         target_kwh = ev_state.target_soc_kwh
                         if (
                             target_kwh is not None

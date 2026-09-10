@@ -125,24 +125,12 @@ class SolverBackend(Protocol):
         """Add a SOS type-2 constraint over the given variables.
 
         A SOS2 constraint specifies that at most two adjacent variables (in the
-        order defined by their weights) may be nonzero simultaneously. This is
-        used to enforce piecewise-linear interpolation: only one linear segment
-        of the efficiency curve can be active at each time step, and the solver
-        interpolates between the two breakpoints bounding that segment.
-
-        Because the installed ``python-mip`` version does not expose a native SOS2
-        API, the constraint is implemented via a set of binary auxiliary variables,
-        one per segment, each bounding the weights adjacent to it:
-
-        .. code-block::
-
-            sum(b_i) == 1                           (exactly one segment active)
-            variables[0]   <= b_0
-            variables[i]   <= b_{i-1} + b_i         (interior weights)
-            variables[-1]  <= b_{N-2}
-
-        When b_i = 1, only variables[i] and variables[i+1] can be nonzero.
-        All other variables are forced to zero by the upper bound on the right.
+        order defined by their weights) may be nonzero simultaneously, used to
+        enforce piecewise-linear interpolation along one segment of a curve at
+        a time. See IMPLEMENTATION_DETAILS.md §2, subsection "SOS2
+        implementation", for the binary-auxiliary-variable emulation this
+        Protocol method requires (since not every backend exposes SOS2
+        natively) and the concrete constraint shapes.
 
         Args:
             variables: Solver variable objects to include in the SOS2 constraint.
@@ -212,45 +200,18 @@ class CBCSolverBackend:
         # unsatisfiable, as opposed to running out of time without an
         # incumbent — both of which solve() reports as "infeasible".
         self.last_status_proved_infeasible = False
-        # Accept a solution whose objective value is within 0.5 % of the true
-        # optimum. For a residential energy schedule this is imperceptible in
-        # practice: on a €50/day schedule the error is at most 25 cents.
-        #
-        # The threshold must be at least as large as the model's natural
-        # integrality gap — the gap that cannot be closed by branch-and-bound
-        # within the 59-second wall-clock limit.  The prosumer_ev_48h benchmark
-        # (192 steps, 768 binary variables) has an integrality gap of ~0.18 %:
-        # CBC finds a near-optimal feasible solution quickly but can only prove
-        # the bound once the gap setting permits early termination.  0.5 %
-        # gives comfortable margin above the observed gap across all benchmark
-        # scenarios, ensuring CBC exits as soon as it has a good solution rather
-        # than spending the remaining budget on negligible improvements.
+        # Tuning parameters below (gap tolerance, feasibility emphasis,
+        # threads, rounding heuristic): see IMPLEMENTATION_DETAILS.md §2,
+        # subsection "CBC tuning parameters", for the benchmark data behind
+        # each value.
         self._m.max_mip_gap = 5e-3
-        # Direct solver effort towards finding a first feasible integer solution
-        # quickly.  On the 672-step worst_case_7d scenario the default heuristic
-        # budget is too small to find any feasible solution within the 59-second
-        # wall-clock limit.  FEASIBILITY emphasis tells CBC to run 50 feasibility
-        # pump passes and enable proximity search before branching, which brings
-        # the time-to-first-feasible solution from >59 s to a few seconds on
-        # that scenario.  It has no effect on the gap acceptance threshold.
         self._m.emphasis = mip.SearchEmphasis.FEASIBILITY
-        # Number of threads CBC may use during branch-and-bound. python-mip
-        # interprets -1 as "use all available CPU cores". On a dedicated home
-        # server that is otherwise idle between solve cycles, -1 is the
-        # recommended setting and is the default.
         self._m.threads = threads
-        # Enable the LP-rounding heuristic. After solving the LP relaxation at
-        # each node, CBC rounds fractional binary variables to the nearest
-        # integer and checks whether the resulting assignment is feasible. The
-        # rounding pass has near-zero cost and provides a fast fallback when the
-        # feasibility pump does not converge immediately. Without it, some
-        # models with many near-integer LP solutions spend extra time in the
-        # branch-and-bound tree before a first feasible incumbent is found.
-        #
-        # python-mip does not expose a high-level property for this parameter,
-        # so it is set through the low-level cbclib C binding. INT_PARAM_ROUND_INT_VARS
-        # maps to CBC's roundingHeuristic flag; value 1 enables it.
-        # self._m.solver._model is the opaque C pointer to the CBC model.
+        # python-mip exposes no high-level property for the rounding
+        # heuristic, so it is set through the low-level cbclib C binding.
+        # INT_PARAM_ROUND_INT_VARS maps to CBC's roundingHeuristic flag; value
+        # 1 enables it. self._m.solver._model is the opaque C pointer to the
+        # CBC model.
         cbclib.Cbc_setIntParam(
             self._m.solver._model, cbclib.INT_PARAM_ROUND_INT_VARS, 1
         )
@@ -316,9 +277,6 @@ class CBCSolverBackend:
         the ``OptimizationStatus`` enum to the three strings the rest of mimirheim
         uses: ``"optimal"``, ``"feasible"``, or ``"infeasible"``.
 
-        Args:
-            time_limit_seconds: Wall-clock time budget for this solve.
-
         ``last_status_proved_infeasible`` records whether CBC actually proved
         the model unsatisfiable, because the returned string does not: several
         distinct outcomes collapse into ``"infeasible"`` and callers that only
@@ -362,24 +320,10 @@ class CBCSolverBackend:
     def add_sos2(self, variables: list[Any], weights: list[float]) -> None:
         """Enforce SOS2 adjacency on ``variables`` via binary auxiliary variables.
 
-        python-mip does not expose a native SOS2 constraint API that maps
-        cleanly to the ``SolverBackend`` Protocol, so the constraint is modelled
-        with N-1 binary variables (one per segment in the N-variable set):
-
-        .. code-block::
-
-            sum(b_i) == 1
-            variables[0]   <= b[0]
-            variables[i]   <= b[i-1] + b[i]      (interior variables)
-            variables[-1]  <= b[-1]
-
-        When b[i] = 1, only variables[i] and variables[i+1] can be nonzero;
-        all other variables are forced to zero by their upper-bound constraints.
-
-        The emulation relies only on ``self.add_var`` and
-        ``self.add_constraint``, both defined by the ``SolverBackend`` Protocol,
-        so any future backend can inherit or copy it unchanged rather than
-        needing a native SOS2 API.
+        See IMPLEMENTATION_DETAILS.md §2, subsection "SOS2 implementation",
+        for the constraint derivation. Relies only on ``self.add_var`` and
+        ``self.add_constraint``, both defined by the ``SolverBackend``
+        Protocol, so any future backend can inherit or copy it unchanged.
 
         Args:
             variables: List of solver variable handles to constrain. Must

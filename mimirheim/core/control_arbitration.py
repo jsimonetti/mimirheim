@@ -382,57 +382,10 @@ def assign_control_authority(
 ) -> SolveResult:
     """Assign closed-loop enforcer authority to at most one device per step.
 
-    Implements a four-level scoring cascade to select the best enforcer, with
-    hysteresis and minimum dwell to prevent rapid switching.
-
-    **Step classification**: A step is near-zero-exchange when both
-    ``grid_import_kw`` and ``grid_export_kw`` are below
-    ``config.control.exchange_epsilon_kw``. Only near-zero-exchange steps
-    trigger enforcer selection; all other steps clear all capable devices.
-
-    **Candidate eligibility** (all must hold):
-
-    1. Capability flag enabled (``zero_exchange`` for battery/EV,
-       ``zero_export`` for PV).
-    2. For EVs: vehicle is plugged in (``bundle.ev_inputs[name].available``).
-    3. Absorption headroom >= ``config.control.headroom_margin_kw``.
-
-    **Scoring cascade** (four levels, descending; later levels break ties):
-
-    1. Efficiency at the expected compensation power. PV always scores 0.0.
-    2. Headroom margin (headroom − expected compensation). More slack is better.
-    3. Wear proxy: lower ``wear_cost_eur_per_kwh`` wins.
-    4. Type priority (battery=3, ev=2, pv=1) then device name (lexicographic).
-
-    **Hysteresis**: a challenger must exceed the current enforcer's score by
-    ``config.control.switch_delta`` to trigger a switch.
-
-    **Minimum dwell**: once selected, a device holds the enforcer role for at
-    least ``config.control.min_enforcer_dwell_steps`` consecutive steps,
-    unless it becomes ineligible (availability lost, headroom drops below
-    margin).
-
-    **Loadbalance**:
-
-    ``capabilities.loadbalance`` and ``capabilities.zero_exchange`` are
-    orthogonal: an EV may declare either, both, or neither, and this function
-    evaluates them independently for every device.
-
-    An EV with ``capabilities.loadbalance=True`` receives
-    ``loadbalance_active=True`` on a step when the vehicle is plugged in and
-    nothing else is regulating the same grid current. Two things take
-    precedence:
-
-    - The EV is itself the zero_exchange enforcer on that step. Its own
-      closed-loop firmware already owns the grid current, so it receives
-      ``zero_exchange_active=True`` and ``loadbalance_active=False``.
-    - A battery is the zero_exchange enforcer on that step. The battery's
-      closed-loop controller and an EVSE loadbalance controller both regulate
-      the same measurement, and only one may be authoritative.
-
-    A PV array holding the enforcer role does not suppress load balancing: zero
-    export clamps the array's own production and does not compete for control
-    of the grid current.
+    Implements the four-level scoring cascade, hysteresis, minimum dwell, and
+    loadbalance-suppression rules documented in full in
+    IMPLEMENTATION_DETAILS.md §9, subsections "Enforcer selection" and
+    "Loadbalance suppression".
 
     This function is a pure transformation: it creates new objects and does
     not mutate the input SolveResult, ScheduleStep, or DeviceSetpoint instances.
@@ -524,18 +477,8 @@ def assign_control_authority(
                 dwell_remaining = 0
                 current_score = -1.0
 
-            # Dwell takes priority over the switch_delta hysteresis. While
-            # dwell_remaining is above zero the current enforcer keeps the role
-            # no matter how well a challenger scores; the only thing that can
-            # end a dwell early is the enforcer becoming ineligible, which the
-            # check above has already handled.
-            #
-            # Dwell and switch_delta guard against the same failure in
-            # different ways. switch_delta stops two devices with nearly equal
-            # scores from trading the role back and forth; dwell puts a floor
-            # on how often the role can move at all, so a device whose score
-            # genuinely improves cannot take over mid-sequence and leave the
-            # hardware toggling closed-loop registers every step.
+            # Dwell takes priority over switch_delta hysteresis; see
+            # IMPLEMENTATION_DETAILS.md §9 for why both exist.
             if current_enforcer is not None and dwell_remaining > 0:
                 dwell_remaining -= 1
                 enforcer_name = current_enforcer
@@ -568,40 +511,19 @@ def assign_control_authority(
                             dwell_remaining = max(0, ctrl.min_enforcer_dwell_steps - 1)
                         enforcer_name = current_enforcer
                 else:
-                    # No eligible candidates.
+                    # No eligible candidates: every capable device was dropped
+                    # by _build_candidates (EV unplugged, or headroom below
+                    # control.headroom_margin_kw — e.g. already charging flat
+                    # out, or PV idle). A normal operating state, not a fault
+                    # (hence DEBUG, and only logged when zex_capable is
+                    # non-empty — an installation with no closed-loop hardware
+                    # has nothing worth reading here). The fallback below
+                    # clears every capable device to its explicit setpoint.
                     enforcer_name = None
                     current_enforcer = None
                     dwell_remaining = 0
                     current_score = -1.0
 
-                    # Reaching here means the step needs no grid exchange and
-                    # the system has hardware that could hold that closed-loop,
-                    # but none of it can regulate right now. _build_candidates
-                    # dropped every capable device for one of two reasons:
-                    #
-                    #   - an EV charger has no vehicle plugged in, or
-                    #   - absorption headroom is below
-                    #     control.headroom_margin_kw. For a battery, EV or
-                    #     hybrid inverter headroom is
-                    #     max_charge_kw - charge_kw + discharge_kw, so it
-                    #     reaches zero when the device is already scheduled to
-                    #     charge flat out. For PV it is simply the production
-                    #     at this step, so it is zero whenever the array is
-                    #     idle.
-                    #
-                    # This is a normal operating state, not a fault, which is
-                    # why it logs at DEBUG. The fallback is the assignment
-                    # below: every capable device gets zero_exchange_active
-                    # False and follows the explicit setpoint for this step
-                    # instead of regulating on its own. Dwell tracking has been
-                    # reset above, so the next near-zero-exchange step selects
-                    # an enforcer from scratch rather than inheriting one that
-                    # was already found ineligible.
-                    #
-                    # The zex_capable guard keeps the message out of the log
-                    # entirely on installations with no closed-loop hardware,
-                    # where having no enforcer is the only possible outcome and
-                    # says nothing worth reading.
                     if zex_capable:
                         logger.debug(
                             "Step %d: no eligible zero-exchange enforcer candidates; "
@@ -623,17 +545,9 @@ def assign_control_authority(
                 if name in zex_capable:
                     updates["zero_exchange_active"] = is_enforcer
                 if name in lb_capable:
-                    # Load balancing runs only when nothing else is regulating
-                    # the same grid current:
-                    #
-                    # - Not while this EV is itself the closed-loop enforcer;
-                    #   its zero-exchange firmware already owns the current.
-                    # - Not while a battery is the enforcer; the battery's
-                    #   controller and the EVSE load balancer would fight over
-                    #   the same measurement.
-                    #
-                    # A PV array enforcing zero export only clamps its own
-                    # production and does not conflict.
+                    # Suppressed while this EV or a battery is the enforcer;
+                    # see IMPLEMENTATION_DETAILS.md §9, subsection
+                    # "Loadbalance suppression".
                     updates["loadbalance_active"] = (
                         ev_available.get(name, False)
                         and not is_enforcer

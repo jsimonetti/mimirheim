@@ -71,9 +71,9 @@ class HybridInverterDevice:
         # soc_low[t] = SOC deficit below optimal_lower_soc_kwh at step t, in kWh.
         # Populated only when optimal_lower_soc_kwh > min_soc_kwh.
         self._soc_low: dict[int, Any] = {}
-        # active[t] = 1 when the battery runs at step t, 0 when it is idle.
-        # Populated only when both min_charge_kw and min_discharge_kw are set;
-        # see add_constraints for why mode[t] cannot carry this on its own.
+        # active[t]: idle-state binary, populated only when both power floors
+        # are set. See IMPLEMENTATION_DETAILS.md §8, subsection "Idle-state
+        # binary (active[t])".
         self._active: dict[int, Any] = {}
 
         self._dt: float = 0.25  # set from ctx in add_variables
@@ -167,17 +167,9 @@ class HybridInverterDevice:
             for t in ctx.T:
                 self._soc_low[t] = ctx.solver.add_var(lb=0.0, ub=soc_low_ub)
 
-        # active[t]: binary "the battery is running this step" flag, declared
-        # only when both minimum power floors are configured.
-        #
-        # mode[t] encodes direction, not activity. Gating the charge floor on
-        # mode[t] and the discharge floor on (1 - mode[t]) leaves no value of
-        # mode[t] under which the battery sits still, so idling becomes
-        # infeasible and the battery cycles on every step regardless of price.
-        #
-        # When at most one floor is configured the unfloored direction can
-        # always be driven to zero, so idling is already reachable and no extra
-        # binary is created.
+        # active[t] is added only when both power floors are configured; see
+        # IMPLEMENTATION_DETAILS.md §8, subsection "Idle-state binary
+        # (active[t])".
         if (
             self.config.min_charge_kw is not None
             and self.config.min_discharge_kw is not None
@@ -205,58 +197,19 @@ class HybridInverterDevice:
     def add_constraints(self, ctx: ModelContext, inputs: HybridInverterInputs) -> None:
         """Add all MILP constraints for this hybrid inverter.
 
-        Constraints fall into five groups:
+        Adds, per step: a PV forecast clip (``pv_dc[t]`` bounded by the
+        per-step forecast, clipped to ``max_pv_kw`` — the solver may curtail
+        below this to avoid over-charging the battery or exceeding the grid
+        export limit), the DC bus power balance, the battery direction Big-M
+        guard, and the inverter direction Big-M guard. See
+        IMPLEMENTATION_DETAILS.md §8, subsection "Hybrid inverter DC bus power
+        balance", for the full constraint equations and why two independent
+        direction binaries (battery ``mode[t]`` and inverter ``inv_mode[t]``)
+        are needed.
 
-        **PV forecast clip**: At each step t, pv_dc[t] is bounded above by the
-        per-step forecast value (clipped to max_pv_kw). This converts the
-        static upper bound on the variable (max_pv_kw) to a tighter dynamic
-        bound. The solver may curtail PV (set pv_dc < forecast) to avoid
-        over-charging the battery or exporting past the grid limit.
-
-        **DC bus power balance**: The core hybrid inverter constraint. At each
-        step, all power flows on the DC bus must sum to zero:
-
-            pv_dc[t]
-            + bat_discharge_dc[t]
-            + ac_to_dc[t] × eff_inv     (AC→DC conversion)
-            − bat_charge_dc[t]
-            − dc_to_ac[t] / eff_inv     (DC consumed to produce AC export)
-            == 0
-
-        This constraint couples PV, battery, and inverter in a way that is
-        absent in AC-coupled systems. In particular, PV can directly charge
-        the battery (pv_dc → bat_charge_dc) without any AC round-trip.
-
-        **SOC dynamics**: Energy accounting for the battery across the horizon:
-
-            soc[t] = soc[t−1]
-                     + (bat_charge_dc[t] × eff_bat_charge
-                        − bat_discharge_dc[t] / eff_bat_discharge)
-                     × dt
-
-        bat_charge_dc is measured at the DC bus; only the fraction
-        eff_bat_charge reaches the cells. bat_discharge_dc is the power on the
-        DC bus; the cells must supply bat_discharge_dc / eff_bat_discharge.
-        Because that efficiency is below 1, more cell energy is consumed than
-        appears on the DC bus.
-
-        For t=0, uses ``inputs.soc_kwh`` as the initial state.
-
-        **Battery Big-M guard**: Prevents simultaneous charge and discharge.
-        A binary variable ``mode[t]`` gates each direction:
-
-            bat_charge_dc[t]    ≤ max_charge_kw    × mode[t]
-            bat_discharge_dc[t] ≤ max_discharge_kw × (1 − mode[t])
-
-        **Inverter Big-M guard**: Prevents simultaneous AC import and export.
-        A binary variable ``inv_mode[t]`` gates each AC direction:
-
-            ac_to_dc[t]  ≤ (max_charge_kw / eff_inv)               × inv_mode[t]
-            dc_to_ac[t]  ≤ (max_discharge_kw + max_pv_kw) × eff_inv × (1 − inv_mode[t])
-
-        Without this guard, an LP relaxation could simultaneously import and
-        export at equal prices, which is physically impossible because a single
-        inverter cannot convert in both directions at the same time.
+        SOC dynamics: ``soc[t] = soc[t-1] + (bat_charge_dc[t] * eff_bat_charge
+        - bat_discharge_dc[t] / eff_bat_discharge) * dt``, using
+        ``inputs.soc_kwh`` as the initial state at ``t=0``.
 
         Args:
             ctx: The current solve context.
@@ -282,18 +235,13 @@ class HybridInverterDevice:
         max_ac_export_kw = (cfg.max_discharge_kw + cfg.max_pv_kw) * eff_inv
 
         for t in ctx.T:
-            # --- PV forecast clip ---
-            # Restrict PV output to the per-step forecast, clipped to the hardware
-            # peak. The solver may curtail below this value if DC bus surplus
-            # cannot be stored or exported.
+            # PV forecast clip: pv_dc[t] bounded by the per-step forecast,
+            # clipped to the hardware peak.
             pv_cap = min(inputs.pv_forecast_kw[t], cfg.max_pv_kw)
             ctx.solver.add_constraint(self.pv_dc[t] <= pv_cap)
 
-            # --- DC bus power balance ---
-            # All DC bus power sources must equal all DC bus power sinks.
-            # Sources: PV, battery discharge (DC bus side), and AC→DC conversion.
-            # Sinks: battery charge (DC bus side) and DC consumed to produce
-            # the AC export.
+            # DC bus power balance. See IMPLEMENTATION_DETAILS.md §8,
+            # subsection "Hybrid inverter DC bus power balance".
             ctx.solver.add_constraint(
                 self.pv_dc[t]
                 + self.bat_discharge_dc[t]
@@ -303,11 +251,9 @@ class HybridInverterDevice:
                 == 0
             )
 
-            # --- SOC dynamics ---
-            # Energy stored in the cells increases by bat_charge_dc × eff_bat_charge
-            # and decreases by bat_discharge_dc / eff_bat_discharge per unit time.
-            # The ratio (1 / eff_bat_discharge) > 1 because the cells must release more
-            # energy than appears on the DC bus due to discharge losses.
+            # SOC dynamics: same efficiency asymmetry as Battery (see
+            # IMPLEMENTATION_DETAILS.md §8, subsection "Piecewise efficiency
+            # (battery and EV)").
             if t == 0:
                 ctx.solver.add_constraint(
                     self.soc[t]
@@ -329,11 +275,7 @@ class HybridInverterDevice:
                     * ctx.dt
                 )
 
-            # --- Battery Big-M guard ---
-            # Prevents simultaneous charge and discharge. When mode[t]=1 the
-            # battery charges (discharge is blocked by its bound dropping to 0).
-            # When mode[t]=0 the battery discharges (charge bound drops to 0).
-            # The Big-M values are the physical limits of each variable.
+            # Battery direction Big-M guard (mode[t]): same pattern as Battery.
             ctx.solver.add_constraint(
                 self.bat_charge_dc[t] <= cfg.max_charge_kw * self.mode[t]
             )
@@ -341,11 +283,9 @@ class HybridInverterDevice:
                 self.bat_discharge_dc[t] <= cfg.max_discharge_kw * (1 - self.mode[t])
             )
 
-            # --- Inverter direction Big-M guard ---
-            # A real inverter cannot convert in both directions simultaneously.
-            # inv_mode[t]=1 opens the AC→DC path; inv_mode[t]=0 opens the DC→AC path.
-            # Without this guard the LP relaxation could simultaneously import and
-            # export, which is physically impossible in a single-stage inverter.
+            # Inverter direction Big-M guard (inv_mode[t]): a second,
+            # independent direction binary — see IMPLEMENTATION_DETAILS.md §8,
+            # subsection "Hybrid inverter DC bus power balance".
             ctx.solver.add_constraint(
                 self.ac_to_dc[t] <= max_ac_import_kw * self.inv_mode[t]
             )
@@ -364,32 +304,9 @@ class HybridInverterDevice:
                     self._soc_low[t] >= cfg.optimal_lower_soc_kwh - self.soc[t]
                 )
 
-            # --- Minimum operating power floors ---
-            #
-            # Real inverters cannot operate at arbitrarily low charge or
-            # discharge rates. The floors express "run at or above this power,
-            # or do not run at all", so each one needs a way to say "not
-            # running".
+            # Minimum operating power floors: see IMPLEMENTATION_DETAILS.md §8,
+            # subsection "Idle-state binary (active[t])".
             if t in self._active:
-                # Both floors configured. mode[t] selects direction and
-                # active[t] selects whether the battery runs at all.
-                #
-                #   bat_charge_dc    <= max_charge_kw    * active[t]
-                #   bat_discharge_dc <= max_discharge_kw * active[t]
-                #     Force both directions to zero when idle. Without these the
-                #     solver could set active[t] = 0 and still charge, escaping
-                #     the floor entirely.
-                #
-                #   bat_charge_dc    >= min_charge_kw * (mode[t] + active[t] - 1)
-                #     Binding only when mode[t] = 1 and active[t] = 1; the
-                #     right-hand side is 0 or negative otherwise.
-                #
-                #   bat_discharge_dc >= min_discharge_kw * (active[t] - mode[t])
-                #     Mirror image: binding only when active[t] = 1 and
-                #     mode[t] = 0.
-                #
-                # Reachable states: idle, charge at or above min_charge_kw,
-                # discharge at or above min_discharge_kw.
                 ctx.solver.add_constraint(
                     self.bat_charge_dc[t] <= cfg.max_charge_kw * self._active[t]
                 )
@@ -405,9 +322,6 @@ class HybridInverterDevice:
                     >= cfg.min_discharge_kw * (self._active[t] - self.mode[t])
                 )
             else:
-                # At most one floor configured. mode[t] is sufficient: the
-                # unfloored direction can always be driven to zero, so idling
-                # stays reachable without an extra binary.
                 if cfg.min_charge_kw is not None:
                     ctx.solver.add_constraint(
                         self.bat_charge_dc[t] >= cfg.min_charge_kw * self.mode[t]
@@ -418,20 +332,9 @@ class HybridInverterDevice:
                         >= cfg.min_discharge_kw * (1 - self.mode[t])
                     )
 
-        # --- Charge derating ---
-        # At high SOC, many batteries cannot sustain peak charge power. This
-        # block enforces a linear derating: charge power falls from max_charge_kw
-        # at reduce_charge_above_soc_kwh to reduce_charge_min_kw at capacity_kwh.
-        #
-        # The constraint is: bat_charge_dc[t] <= slope_c * soc_prev + intercept_c
-        # where soc_prev is the SOC at the start of step t. This is a linear
-        # relationship between the SOC state variable and the charge power limit.
-        #
-        # Derivation of slope_c and intercept_c:
-        #   At soc_prev = reduce_charge_above_soc_kwh: limit = max_charge_kw
-        #   At soc_prev = capacity_kwh:                limit = reduce_charge_min_kw
-        #   slope_c = (min_kw - max_kw) / (capacity - threshold)  [negative]
-        #   intercept_c = max_kw - slope_c * threshold
+        # Charge derating near full: same two-point linear model as Battery.
+        # See IMPLEMENTATION_DETAILS.md §8, subsection "Power derating near
+        # SOC extremes".
         if cfg.reduce_charge_above_soc_kwh is not None and cfg.reduce_charge_min_kw is not None:
             slope_c = (cfg.reduce_charge_min_kw - cfg.max_charge_kw) / (
                 cfg.capacity_kwh - cfg.reduce_charge_above_soc_kwh
@@ -443,16 +346,8 @@ class HybridInverterDevice:
                     self.bat_charge_dc[t] - slope_c * soc_prev <= rhs_c
                 )
 
-        # --- Discharge derating ---
-        # At low SOC, the battery may not sustain peak discharge power. This
-        # enforces a linear derating: discharge power falls from max_discharge_kw
-        # at reduce_discharge_below_soc_kwh to reduce_discharge_min_kw at min_soc_kwh.
-        #
-        # slope_d is positive (power increases as SOC increases).
-        #   At soc_prev = min_soc_kwh:                     limit = reduce_discharge_min_kw
-        #   At soc_prev = reduce_discharge_below_soc_kwh:  limit = max_discharge_kw
-        #   slope_d = (max_kw - min_kw) / (threshold - min_soc_kwh)
-        #   intercept_d = max_kw - slope_d * threshold
+        # Discharge derating near empty: mirror image of the charge derating
+        # above.
         if (
             cfg.reduce_discharge_below_soc_kwh is not None
             and cfg.reduce_discharge_min_kw is not None

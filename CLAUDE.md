@@ -6,7 +6,7 @@ This file governs how an AI coding agent should behave when working on the mimir
 
 ## Source of truth
 
-**README.md** is the authoritative specification for external behaviour: MQTT topics, configuration schema, output format, and strategy semantics. **IMPLEMENTATION_DETAILS.md** is the authoritative specification for internal architecture: class design, data flow, concurrency model, testing approach, and all implementation decisions.
+**README.md** is the authoritative specification for external behaviour: MQTT topics, configuration schema, output format, and strategy semantics. **IMPLEMENTATION_DETAILS.md** is the authoritative specification for internal architecture: class design, data flow, concurrency model, testing approach, and all implementation decisions. It is a table of contents: each numbered section is a one-line summary linking to the full prose under `IMPLEMENTATION_DETAILS/NN_slug.md`.
 
 Before writing or modifying any code, read the relevant sections of both documents. If a user request conflicts with or deviates from the documented design, flag the conflict explicitly and ask the user to confirm the direction before proceeding. Do not silently implement something that contradicts a documented decision.
 
@@ -103,26 +103,31 @@ Conversely, assume the reader understands basic energy concepts: kW vs kWh, stat
 
 ### Comment every non-trivial constraint and variable
 
-For every MIP variable declared and every constraint added, include a comment that explains:
+For every MIP variable declared and every constraint added, the inline comment must
+state:
 
 1. What physical quantity the variable represents and its units
-2. Why the bound or constraint exists (what physical or operational rule it encodes)
-3. What would go wrong if the constraint were removed
+2. A terse (1-2 line) statement of why the bound or constraint exists
+
+If explaining why the constraint exists — including edge cases and what would go wrong
+if it were removed — needs more than about three lines, do not write that explanation
+inline. Add it as a subsection in the relevant `IMPLEMENTATION_DETAILS/NN_slug.md` file
+instead, and end the inline comment with a pointer, e.g. `See IMPLEMENTATION_DETAILS.md
+§8, subsection "Anti-roundtrip direction binary".` If the full explanation already fits
+in about three lines, keep it fully inline; there is nothing to gain from promoting
+something already short.
+
+This keeps the code readable without repeating design rationale at every call site,
+while guaranteeing the rationale is documented exactly once, in the project's
+authoritative internal-architecture reference, not lost.
 
 Example of the required comment depth:
 
 ```python
-# charge_seg[t, i] represents the power delivered to the battery in kilowatts
-# during time step t via efficiency segment i.
-#
-# Decision variable: the solver chooses how much power flows through each segment
-# to maximise the objective. A "segment" is a power range with a fixed efficiency;
-# using multiple segments approximates the real curve where efficiency varies with
-# power level.
-#
-# Upper bound: segment i can deliver at most segment.power_max_kw kilowatts.
-# The total across all segments is the maximum charge power for this time step.
-# There is no separate max_charge_kw field; the segment bounds define it implicitly.
+# charge_seg[t, i]: power delivered to the battery in kilowatts during time step t
+# via efficiency segment i. Upper bound is segment.power_max_kw; there is no
+# separate max_charge_kw field, the segment bounds define it implicitly. See
+# IMPLEMENTATION_DETAILS.md §8, subsection "Piecewise efficiency (battery and EV)".
 charge_seg[t, i] = ctx.solver.add_var(lb=0.0, ub=segment.power_max_kw)
 ```
 

@@ -152,45 +152,18 @@ class CombiHeatPumpDevice:
     ) -> None:
         """Add all MILP constraints for this combined heat pump.
 
-        **Mutual exclusion**: At each step, the HP can operate in at most one
-        mode. This reflects the physical limitation of a single refrigerant
-        circuit:
-
-            dhw_mode[t] + sh_mode[t] <= 1
-
-        **On-indicator linkage**: ``hp_on[t]`` equals the sum of both mode
-        binaries. Because the mutual exclusion constraint limits the sum to at
-        most 1, ``hp_on[t]`` remains binary:
-
-            hp_on[t] == dhw_mode[t] + sh_mode[t]
-
-        **DHW tank dynamics**: At each step, the tank temperature evolves by
-        passive cooling plus active heating in DHW mode. The same linear model
-        as ``ThermalBoilerDevice``:
-
-            T_tank[t] = T_tank[t−1] − cool_per_step + dhw_heat_rise × dhw_mode[t]
-
-        At t=0, ``T_tank[−1]`` is replaced by ``inputs.current_temp_c``.
-
-        **DHW hard bounds**:
-
-            T_tank[t] >= min_temp_c
-            T_tank[t] <= setpoint_c
-
-        **SH total heat constraint** (only when ``heat_needed_kwh > 0``):
-
-            Σ_t (elec_power_kw × cop_sh × dt × sh_mode[t]) >= heat_needed_kwh
-
-        **Minimum run length** (only when ``min_run_steps > 1``): Applied to
-        ``hp_on[t]``. Includes prevention of starts too close to the horizon end
-        (same approach as ``SpaceHeatingDevice``):
-
-            For t where t + min_run_steps > T:
-                hp_on[t] <= hp_on[t−1]   (cannot start a new run near the end)
-                hp_on[0] == 0             (special case for t=0)
-            start[t] >= hp_on[t] - hp_on[t−1]
-            start[t] <= hp_on[t]
-            hp_on[t+τ] >= start[t]   for τ in 1 .. min_run_steps−1
+        Adds, per step: mutual exclusion (``dhw_mode[t] + sh_mode[t] <= 1`` —
+        one refrigerant circuit cannot serve both at once), the on-indicator
+        linkage (``hp_on[t] == dhw_mode[t] + sh_mode[t]``, which stays binary
+        because mutual exclusion caps the sum at 1), DHW tank dynamics
+        (identical model to ``ThermalBoilerDevice`` — see
+        IMPLEMENTATION_DETAILS.md §8, subsection "Thermal boiler and DHW tank
+        dynamics" — driven by ``dhw_mode[t]`` only, since the tank still cools
+        at the standard rate during SH-mode steps), and DHW hard bounds. Adds
+        the SH total heat constraint (degree-days, only when
+        ``heat_needed_kwh > 0`` and no BTM is configured) or delegates to
+        ``_add_btm_sh_constraints``. Adds the minimum run length constraint
+        via ``_add_min_run_constraints``, applied to ``hp_on[t]``.
 
         Args:
             ctx: The current solve context.
@@ -206,39 +179,26 @@ class CombiHeatPumpDevice:
         dhw_heat_rise = cfg.elec_power_kw * cfg.cop_dhw * ctx.dt / thermal_cap_kwh_per_k
 
         for t in ctx.T:
-            # --- Mutual exclusion ---
-            # The HP has one compressor. DHW and SH modes cannot run simultaneously.
             ctx.solver.add_constraint(
                 self._dhw_mode[t] + self._sh_mode[t] <= 1
             )
-
-            # --- On-indicator linkage ---
-            # hp_on[t] is the logical OR of both modes, encoded as their sum.
-            # The mutual exclusion constraint above keeps the sum <= 1, so
-            # hp_on[t] is always binary without needing a separate declaration.
             ctx.solver.add_constraint(
                 self._hp_on[t] == self._dhw_mode[t] + self._sh_mode[t]
             )
 
-            # --- DHW tank dynamics ---
-            # Only dhw_mode contributes heat to the tank. When the HP is in SH
-            # mode, the tank still cools at the standard rate — heat goes to the
-            # floor circuit, not the tank.
             prior_temp: Any = inputs.current_temp_c if t == 0 else self._T_tank[t - 1]
             ctx.solver.add_constraint(
                 self._T_tank[t]
                 == prior_temp - cool_per_step + dhw_heat_rise * self._dhw_mode[t]
             )
 
-            # --- DHW hard temperature bounds ---
             ctx.solver.add_constraint(self._T_tank[t] >= cfg.min_temp_c)
             ctx.solver.add_constraint(self._T_tank[t] <= cfg.setpoint_c)
 
-        # --- Space heating constraint (degree-days or BTM) ---
+        # BTM path replaces the degree-days lower bound with indoor
+        # temperature dynamics and comfort constraints; heat_needed_kwh is
+        # intentionally ignored, the comfort envelope drives SH scheduling.
         if cfg.building_thermal is not None:
-            # BTM path: replace degree-days lower bound with indoor temperature
-            # dynamics and comfort constraints. heat_needed_kwh is intentionally
-            # ignored here \u2014 the comfort envelope drives SH scheduling.
             self._add_btm_sh_constraints(ctx, inputs)
         elif inputs.heat_needed_kwh > 0.0:
             sh_thermal_per_step = cfg.elec_power_kw * cfg.cop_sh * ctx.dt
@@ -247,7 +207,6 @@ class CombiHeatPumpDevice:
                 >= inputs.heat_needed_kwh
             )
 
-        # --- Minimum run length ---
         self._add_min_run_constraints(ctx)
 
     def _add_btm_sh_constraints(
@@ -307,11 +266,11 @@ class CombiHeatPumpDevice:
 
         Prevents the compressor from being cycled on for fewer than
         ``min_run_steps`` consecutive steps. A mode switch (DHW→SH or SH→DHW)
-        within a running block counts as continuous operation and does not
-        trigger a new minimum-run window.
-
-        The implementation mirrors ``SpaceHeatingDevice._add_min_run_constraints``
-        exactly, operating on ``_hp_on[t]`` instead of the mode-specific binaries.
+        within a running block counts as continuous operation. See
+        IMPLEMENTATION_DETAILS.md §8, subsection "Thermal boiler and DHW tank
+        dynamics" (the start-sentinel mechanism and this method's two
+        refinements over it), for the full reasoning; identical to
+        ``SpaceHeatingDevice._add_min_run_constraints``.
 
         Args:
             ctx: The current solve context.
@@ -322,10 +281,6 @@ class CombiHeatPumpDevice:
 
         n = len(ctx.T)
 
-        # Prevent fresh starts near the end of the horizon where the minimum
-        # run window would extend beyond T. Without this, the solver can start
-        # a single-step run at the last step and satisfy the sentinel constraints
-        # trivially (there are no future steps to constrain).
         for t in range(n):
             if t + cfg.min_run_steps > n:
                 if t == 0:
@@ -335,14 +290,10 @@ class CombiHeatPumpDevice:
                         self._hp_on[t] <= self._hp_on[t - 1]
                     )
 
-        # Step 0: if the HP is on at step 0, it must stay on for the following
-        # min_run_steps − 1 steps (step 0 itself is already constrained above
-        # when near the horizon end).
         for tau in range(1, cfg.min_run_steps):
             if tau < n:
                 ctx.solver.add_constraint(self._hp_on[tau] >= self._hp_on[0])
 
-        # Steps 1 … T−1: sentinel-based minimum run.
         for t in range(1, n):
             ctx.solver.add_constraint(
                 self._start[t] >= self._hp_on[t] - self._hp_on[t - 1]

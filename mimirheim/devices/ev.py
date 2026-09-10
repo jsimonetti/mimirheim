@@ -211,18 +211,9 @@ class EvDevice:
                 ub=self.config.capacity_kwh,
             )
 
-        # active[t]: binary "the charger is running this step" flag, declared
-        # only when a minimum power floor needs an explicit idle state.
-        #
-        # mode[t] encodes direction, not activity. On a V2H charger with both
-        # floors set, gating the charge floor on mode[t] and the discharge floor
-        # on (1 - mode[t]) leaves no value of mode[t] under which the charger can
-        # sit still, so idling becomes infeasible. On a charge-only charger there
-        # is no mode[t] at all, so a floor has nothing to switch it off.
-        #
-        # Both cases need the same third state. When only one floor is set on a
-        # V2H charger the unfloored direction can always be driven to zero, so
-        # idling is already reachable and no extra binary is created.
+        # active[t]: idle-state binary, declared only when a minimum power
+        # floor needs an explicit rest state. See IMPLEMENTATION_DETAILS.md
+        # §8, subsection "Idle-state binary (active[t])".
         if self._needs_active_binary():
             for t in ctx.T:
                 self._active[t] = ctx.solver.add_var(lb=0.0, ub=1.0, integer=True)
@@ -309,21 +300,9 @@ class EvDevice:
         self._available = inputs.available
 
         if not inputs.available:
-            # ----------------------------------------------------------------
-            # Availability gate: vehicle is not plugged in.
-            #
-            # Force all charge (and discharge if configured) variables to zero.
-            # This is the most operationally important constraint in this
-            # device: without it, the solver would schedule charge power
-            # thinking the car is present. The resulting setpoint would be
-            # sent to the charger hardware and either be ignored (if the
-            # charger detects no vehicle) or cause a fault.
-            #
-            # Note: we do NOT add SOC update constraints when unavailable.
-            # The SOC is not meaningful while the car is away, and adding
-            # SOC equality constraints without a valid energy balance would
-            # make the model infeasible.
-            # ----------------------------------------------------------------
+            # Availability gate: vehicle not plugged in. Force all power to
+            # zero; no SOC update constraint is added. See
+            # IMPLEMENTATION_DETAILS.md §8, subsection "EV availability gate".
             for t in ctx.T:
                 for i in range(len(self.config.charge_segments)):
                     ctx.solver.add_constraint(self.charge_seg[t, i] == 0.0)
@@ -332,21 +311,13 @@ class EvDevice:
                         ctx.solver.add_constraint(self.discharge_seg[t, i] == 0.0)
             return
 
-        # Compute the window_latest step index if a departure window is set.
-        # The deadline anchors to the last step that ENDS at or before it.
-        #
-        # window_step is that step, or None when the deadline anchors no
-        # step in this horizon. departs_in_horizon says whether the vehicle
-        # leaves during the solved window at all, which is what gates the
-        # post-departure zero constraints below:
-        #
-        #   deadline in the past      -> expired retained value, not a
-        #                                departure: no gating (see below).
-        #   deadline inside step 0    -> the vehicle leaves before any step
-        #                                completes: no step can be anchored,
-        #                                but every step is post-departure.
-        #   deadline inside horizon   -> anchor at window_step, gate after it.
-        #   deadline beyond horizon   -> nothing to enforce this solve.
+        # window_step: last step ending at or before window_latest (None if it
+        # anchors no step in this horizon). departs_in_horizon gates the
+        # post-departure zero constraints below; it is False for a deadline
+        # already in the past (window_latest is retained, so a stale value
+        # must not zero every step) and True even when the deadline falls
+        # inside step 0 (window_step stays None, but every step is
+        # post-departure — see last_dispatch_step below).
         window_step: int | None = None
         departs_in_horizon = False
         if inputs.window_latest is not None and inputs.window_latest > solve_time_utc:
@@ -369,15 +340,9 @@ class EvDevice:
                 for i in range(len(self.config.charge_segments)):
                     ctx.solver.add_constraint(self.charge_seg[t, i] == 0.0)
 
-        # The vehicle leaves at window_latest: no charge and no V2H discharge
-        # may be scheduled after it, or the schedule would contain setpoints
-        # for a car that is gone and the power balance would be wrong.
-        #
-        # A deadline already in the past does NOT gate anything: window_latest
-        # is published retained, so a stale value would otherwise zero every
-        # step and disable the charger permanently. A future deadline inside
-        # step 0 gates every step (last_dispatch_step is -1), since the
-        # vehicle leaves before any step completes.
+        # The vehicle leaves at window_latest: no charge or V2H discharge may
+        # be scheduled after it. last_dispatch_step is -1 (gating every step)
+        # when the deadline falls inside step 0.
         if departs_in_horizon:
             last_dispatch_step = window_step if window_step is not None else -1
             for t in ctx.T:
@@ -423,35 +388,13 @@ class EvDevice:
                     total_discharge <= max_discharge_kw * (1 - self.mode[t])
                 )
 
-            # --- Minimum operating power floors ---
-            #
-            # Some hardware cannot operate below a power threshold — for example,
-            # a CHAdeMO gateway or an EVSE with a minimum current setpoint. The
-            # floors express "run at or above this power, or do not run at all",
-            # so each one needs a way to say "not running".
-            #
-            # Three shapes, depending on what is configured:
+            # Minimum operating power floors (min_charge_kw / min_discharge_kw).
+            # See IMPLEMENTATION_DETAILS.md §8, subsection "Idle-state binary
+            # (active[t])" for why mode[t] alone cannot express these and for
+            # the constraint shapes below (V2H-with-both-floors,
+            # charge-only-with-a-floor, and at-most-one-floor-on-V2H).
             if t in self._active:
                 if has_v2h:
-                    # V2H charger with both floors. mode[t] selects direction and
-                    # active[t] selects whether the charger runs at all.
-                    #
-                    #   total_charge    <= max_charge_kw    * active[t]
-                    #   total_discharge <= max_discharge_kw * active[t]
-                    #     Force both directions to zero when idle. Without these
-                    #     the solver could set active[t] = 0 and still charge,
-                    #     escaping the floor entirely.
-                    #
-                    #   total_charge    >= min_charge_kw * (mode[t] + active[t] - 1)
-                    #     Binding only when mode[t] = 1 and active[t] = 1. The
-                    #     right-hand side is 0 or negative otherwise.
-                    #
-                    #   total_discharge >= min_discharge_kw * (active[t] - mode[t])
-                    #     Mirror image: binding only when active[t] = 1 and
-                    #     mode[t] = 0.
-                    #
-                    # Reachable states: idle, charge at or above min_charge_kw,
-                    # discharge at or above min_discharge_kw.
                     ctx.solver.add_constraint(
                         total_charge <= max_charge_kw * self._active[t]
                     )
@@ -469,14 +412,6 @@ class EvDevice:
                         * (self._active[t] - self.mode[t])
                     )
                 else:
-                    # Charge-only charger with a charge floor. There is no
-                    # direction binary, so active[t] alone gates the floor:
-                    #
-                    #   total_charge <= max_charge_kw * active[t]
-                    #   total_charge >= min_charge_kw * active[t]
-                    #
-                    # Reachable states: idle, or charge in
-                    # [min_charge_kw, max_charge_kw].
                     ctx.solver.add_constraint(
                         total_charge <= max_charge_kw * self._active[t]
                     )
@@ -484,9 +419,6 @@ class EvDevice:
                         total_charge >= self.config.min_charge_kw * self._active[t]
                     )
             elif has_v2h:
-                # At most one floor is configured on a V2H charger. mode[t] is
-                # sufficient: the unfloored direction can always be driven to
-                # zero, so idling stays reachable without an extra binary.
                 if self.config.min_charge_kw is not None:
                     ctx.solver.add_constraint(
                         total_charge >= self.config.min_charge_kw * self.mode[t]
@@ -497,24 +429,12 @@ class EvDevice:
                         >= self.config.min_discharge_kw * (1 - self.mode[t])
                     )
 
-        # ----------------------------------------------------------------
-        # Target SOC window constraint.
-        #
-        # The user expects the vehicle to be charged to at least
-        # inputs.target_soc_kwh by window_latest. This is enforced as a
-        # hard lower bound on the SOC variable at the relevant step.
-        #
-        # Both fields must be present for the constraint to apply. If either
-        # is absent the departure target is treated as unset: the solver
-        # charges opportunistically based on prices and the terminal SoC value.
-        #
-        # Why a hard constraint and not a penalty? Because a partially-charged
-        # vehicle that cannot complete a journey is a safety and usability
-        # failure, not merely a cost inefficiency. The solver must guarantee
-        # the target is met; if it cannot (e.g. grid import capacity is
-        # insufficient), the solve will be infeasible and the IO layer will
-        # retain the previous schedule and raise an alert.
-        # ----------------------------------------------------------------
+        # Target SOC window constraint: a hard lower bound on soc[window_step],
+        # not a penalty, because a partially-charged vehicle that cannot
+        # complete a journey is a safety failure, not a cost inefficiency. If
+        # unreachable the solve goes infeasible rather than silently falling
+        # short. Only applied when both fields are present; otherwise the
+        # solver charges opportunistically based on price and terminal value.
         if window_step is not None and inputs.target_soc_kwh is not None:
             ctx.solver.add_constraint(
                 self.soc[window_step] >= inputs.target_soc_kwh
@@ -550,28 +470,13 @@ class EvDevice:
         """Replace per-step mode variables with externally-supplied shared ones.
 
         Called by ``build_and_solve`` when two or more EV chargers are present,
-        to enforce a shared system charge/discharge direction across all EVs.
-        This prevents energy from circulating between EVs (one V2H-discharging
-        while another charges) with no net gain to the system.
+        to prevent an anti-roundtrip loss by forcing all EVs to share one
+        charge/discharge direction binary. See IMPLEMENTATION_DETAILS.md §8,
+        subsection "Anti-roundtrip direction binary" — including why this is
+        also called, harmlessly, for charge-only EVs.
 
-        The shared binary ``ev_system_mode[t]`` has the same semantics as the
-        per-device mode:
-
-        - 1 = all EVs are in the charging direction this step.
-        - 0 = all EVs are in the discharging direction this step.
-
-        For charge-only EVs (no ``discharge_segments``), ``mode[t]`` is never
-        created by ``add_variables`` and is never read by ``add_constraints``
-        (the Big-M discharge guard is skipped when ``has_v2h=False``). Calling
-        this method on a charge-only EV injects the shared variable into
-        ``self.mode`` but has no effect on the solver model. This is intentional:
-        the activation logic is uniform across all EV chargers regardless of
-        V2H capability.
-
-        Must be called before ``add_variables``. ``add_variables`` skips
-        creating a per-device binary for any step already present in
-        ``self.mode``, so calling in that order leaves no orphaned variables
-        behind.
+        Must be called before ``add_variables``, which skips creating a
+        per-device binary for any step already present in ``self.mode``.
 
         Args:
             mode_vars: Dict mapping step index ``t`` to the shared binary
