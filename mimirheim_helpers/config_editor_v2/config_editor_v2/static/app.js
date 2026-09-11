@@ -117,7 +117,7 @@
       return Promise.resolve();
     }
     return fetchJson("/api/entries/" + encodeURIComponent(name) + "/data").then(function (result) {
-      renderForm(name, result.body || {});
+      return renderForm(name, result.body || {});
     });
   }
 
@@ -127,37 +127,25 @@
     var container = document
       .getElementById(id + "-panel")
       .querySelector(".jedison-form-container");
-    state.jedison = new window.Jedison.Create({
-      container: container,
-      // Required by Jedison itself, not optional configuration -- with no
-      // theme, Jedison's internals hit `this.theme` as null the first time
-      // they need to build a control (e.g. getObjectControl) and throw. A
-      // fresh Theme instance per form, matching one Create() call each,
-      // mirrors Jedison's own documented usage exactly. ThemeBootstrap5,
-      // not the bare Theme base class, is what actually gives full
-      // Bootstrap 5 form-control styling -- Theme alone renders plain,
-      // unstyled markup even with bootstrap.min.css loaded. There is no
-      // separate theme package to vendor; both classes ship in the same
-      // UMD bundle, per IMPLEMENTATION_DETAILS.md.
-      theme: new window.Jedison.ThemeBootstrap5(),
-      // Do NOT set a global `objectAdd: false` here. Every registered
-      // model uses extra="forbid" (AGENTS.md), so its closed objects
-      // should never show an "Add property" button -- but a dict-typed
-      // field (e.g. `batteries: dict[str, BatteryConfig]`) has no
-      // `properties` of its own, only `additionalProperties` as a schema,
-      // and genuinely needs its "add a new named entry" control to keep
-      // working. jedison_mapping.py already sets the schema-level
-      // `x-objectAdd: false` override on every closed object (root and
-      // every `$defs` entry) and deliberately leaves open-map fields
-      // without it, so they keep Jedison's own default. Setting a global
-      // `objectAdd: false` here would apply to those open-map fields too,
-      // since they carry no per-schema override to fall back from, and
-      // would remove the only way to add a new battery/array/etc. through
-      // the form.
-      schema: state.schema,
-      data: data,
+    // Jedison never dereferences $ref/$defs on its own, so every nested
+    // sub-model field needs an explicit RefParser or it renders as a bare
+    // type-switcher instead of its real fields. See
+    // IMPLEMENTATION_DETAILS.md, "Rendering library".
+    var refParser = new window.Jedison.RefParser();
+    return refParser.dereference(state.schema).then(function () {
+      state.jedison = new window.Jedison.Create({
+        container: container,
+        refParser: refParser,
+        // ThemeBootstrap5 is required for both function and styling: the
+        // bare Theme base class throws on first use (this.theme is null
+        // internally) and, separately, is not what applies Bootstrap 5's
+        // form-control classes. See IMPLEMENTATION_DETAILS.md.
+        theme: new window.Jedison.ThemeBootstrap5(),
+        schema: state.schema,
+        data: data,
+      });
+      state.loaded = true;
     });
-    state.loaded = true;
   }
 
   function loadEntries() {

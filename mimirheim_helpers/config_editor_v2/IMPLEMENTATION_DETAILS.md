@@ -260,6 +260,28 @@ this helper. It is not a requirement placed on any other component in this
 project, and no other component is expected to take on a client-side
 dependency as a result of this decision.
 
+Three points confirmed against the vendored bundle and Jedison's own docs,
+not assumed from documentation alone, because each one broke real rendering
+in browser testing before being fixed:
+
+- Jedison never dereferences `$ref`/`$defs` on its own. Every registered
+  model's schema is built almost entirely of `$ref`s to `$defs` (any nested
+  Pydantic sub-model), so a `Jedison.RefParser` must be created and awaited
+  (`refParser.dereference(schema)`) before `Jedison.Create()`, or every
+  nested field renders as a meaningless generic type-switcher instead of
+  its real fields.
+- `Jedison.Theme()` is a bare base class; `Jedison.ThemeBootstrap5()` is
+  what actually applies Bootstrap 5's form-control styling. Both ship in
+  the same vendored UMD bundle.
+- Jedison's "Add property" button is unconditionally suppressed whenever a
+  schema's `additionalProperties` is exactly `false` (every `extra="forbid"`
+  model in this project), independent of the `objectAdd` option. No
+  `x-objectAdd` hint or global `objectAdd` override is needed or set
+  anywhere in this editor: the former would be a no-op, and the latter
+  would also suppress the "add a new named entry" control a dict-typed
+  field (e.g. `batteries: dict[str, BatteryConfig]`) needs, since
+  `additionalProperties` there is a schema, not `false`.
+
 ### Jedison hint mapping
 
 The Jedison-specific half of the adapter (`jedison_mapping.py`) maps this

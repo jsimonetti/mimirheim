@@ -34,16 +34,6 @@ literal names for these two source hints):
   object schema, set once, to `"categories-vertical"` -- see
   `_DEFAULT_CATEGORIES_FORMAT` below for why this default was chosen).
 
-`to_jedison_object_schema` also sets Jedison's own native `x-objectAdd` key
-to `False` on this schema and every entry in its `$defs` that describes a
-closed object (`additionalProperties: false`, which Pydantic emits for
-every `extra="forbid"` model in this project). Unlike the hints above, this
-is not a translation of one of this editor's `x-mimir-` hints -- there is
-no source hint involved, it is derived directly from a plain JSON Schema
-fact already present in Pydantic's own output. See
-`_mark_closed_object_no_add` for why a genuine open map (a field whose
-`additionalProperties` is itself a schema, not `False`) is left alone.
-
 A field with none of the `x-mimir-` keys this module recognises (`x-mimir-label`,
 `x-mimir-group`, and the `nullable-list` transform's `x-mimir-min-length-hint`)
 is passed through unchanged. An `x-mimir-` key this module does not recognise
@@ -83,17 +73,6 @@ _GROUP_HINT_KEY = "x-mimir-group"
 # produced it -- the coupling is to the hint's name, not to transforms.py's
 # implementation.
 _MIN_LENGTH_HINT_KEY = "x-mimir-min-length-hint"
-
-# Jedison's own native config key (not one of this editor's x-mimir- hints)
-# for whether an object editor shows an "Add property" button. Set to False
-# on a closed object schema (additionalProperties: false, which Pydantic
-# emits for every extra="forbid" model in this project -- see AGENTS.md's
-# extra="forbid" rule) so the button never appears where there is nothing
-# valid to add. Left unset on a schema whose additionalProperties is itself
-# a schema, not False -- a genuine open map (for example a
-# dict[str, BatteryConfig] field) -- since removing the button there would
-# remove the only way to add a new named entry.
-_OBJECT_ADD_KEY = "x-objectAdd"
 
 # Jedison supports two layouts for a categorized object schema:
 # "categories-horizontal" (tabs across the top) and "categories-vertical"
@@ -160,31 +139,18 @@ def to_jedison_object_schema(model_schema: dict[str, Any]) -> dict[str, Any]:
       top-level object schema gets `x-format` set once, to
       `_DEFAULT_CATEGORIES_FORMAT`, so Jedison renders a categorized layout
       instead of a single flat list of fields.
-    - Whether an object's "Add property" button should appear at all. This
-      schema's own top level and every entry in `$defs` (every nested
-      model Pydantic pulled out as a separate definition) get Jedison's
-      `x-objectAdd` set to `False` wherever `additionalProperties: false`
-      is present -- see `_mark_closed_object_no_add`. This is not an
-      `x-mimir-` hint translation like the others in this module: it is
-      derived directly from a plain JSON Schema fact every extra="forbid"
-      model already carries, with no source hint of this editor's own
-      involved.
-
     Args:
         model_schema: The full JSON Schema produced by a Pydantic model's
             `model_json_schema()`, with fields not yet run through
             `to_jedison_schema`.
 
     Returns:
-        A new schema dict (the input, its `properties` sub-dicts, and its
-        `$defs` sub-dicts are not mutated). `properties` is replaced with
-        the per-field mapped versions. `x-format` is added only when at
-        least one field carries the grouping hint; a model with no grouped
-        fields is returned with no `x-format` key at all, matching
-        Jedison's own fallback behaviour for an ungrouped object schema.
-        `x-objectAdd: False` is added to this schema and to any `$defs`
-        entry that is a closed object; a `$defs` entry describing a
-        genuine open map is returned without it.
+        A new schema dict (the input and its `properties` sub-dicts are not
+        mutated). `properties` is replaced with the per-field mapped
+        versions. `x-format` is added only when at least one field carries
+        the grouping hint; a model with no grouped fields is returned with
+        no `x-format` key at all, matching Jedison's own fallback
+        behaviour for an ungrouped object schema.
     """
     rewritten = dict(model_schema)
     properties = {
@@ -203,31 +169,4 @@ def to_jedison_object_schema(model_schema: dict[str, Any]) -> dict[str, Any]:
     if has_grouped_field:
         rewritten["x-format"] = _DEFAULT_CATEGORIES_FORMAT
 
-    rewritten = _mark_closed_object_no_add(rewritten)
-    rewritten["$defs"] = {
-        name: _mark_closed_object_no_add(def_schema)
-        for name, def_schema in rewritten.get("$defs", {}).items()
-    }
-
-    return rewritten
-
-
-def _mark_closed_object_no_add(schema_node: dict[str, Any]) -> dict[str, Any]:
-    """Sets Jedison's `x-objectAdd` to False on a closed object schema.
-
-    Args:
-        schema_node: A JSON Schema fragment for an object -- either a full
-            model schema or one entry from its `$defs`.
-
-    Returns:
-        A copy of `schema_node` (the input is not mutated). If the node
-        describes an object with `additionalProperties: false`, the
-        returned copy also carries `x-objectAdd: False`. Any other node,
-        including one whose `additionalProperties` is itself a schema
-        (an open map, not a closed record), is returned with only its
-        top-level dict copied, otherwise unchanged.
-    """
-    rewritten = dict(schema_node)
-    if rewritten.get("type") == "object" and rewritten.get("additionalProperties") is False:
-        rewritten[_OBJECT_ADD_KEY] = False
     return rewritten

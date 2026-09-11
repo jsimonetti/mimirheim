@@ -142,41 +142,6 @@ class GroupHintModel(BaseModel):
     ungrouped: str = "default"
 
 
-class NestedClosedModel(BaseModel):
-    """A small closed (extra="forbid") model, nested by `ObjectAddModel`.
-
-    Used by `test_jedison_mapping.py` to verify that `to_jedison_object_schema`
-    marks a `$defs` entry with `x-objectAdd: False` when it is closed, not
-    just the root schema.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    value: str = "default"
-
-
-class ObjectAddModel(BaseModel):
-    """A fixture model exercising Jedison's "Add property" button hint.
-
-    `nested` is a closed sub-model (`additionalProperties: false` once
-    rendered to `$defs`), matching every real production model in this
-    project. `mapping` is a genuine open map (`dict[str, NestedClosedModel]`,
-    matching real fields such as `MimirheimConfig.batteries`): its own
-    schema has `additionalProperties` set to a *schema*, not `False`, since
-    each dynamically-named entry must still validate as a `NestedClosedModel`.
-    Used by `test_jedison_mapping.py` to verify `to_jedison_object_schema`
-    sets `x-objectAdd: False` on closed objects (this model's own root
-    schema and `$defs["NestedClosedModel"]`) while leaving `mapping`'s own
-    field schema untouched, since removing its add button would remove the
-    only way to add a new named entry.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    nested: NestedClosedModel = Field(default_factory=NestedClosedModel)
-    mapping: dict[str, NestedClosedModel] = Field(default_factory=dict)
-
-
 class UnrecognisedMimirHintModel(BaseModel):
     """A fixture model with an invented, unmapped `x-mimir-` hint.
 
