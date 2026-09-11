@@ -231,6 +231,53 @@ this helper. It is not a requirement placed on any other component in this
 project, and no other component is expected to take on a client-side
 dependency as a result of this decision.
 
+### Jedison hint mapping
+
+The Jedison-specific half of the adapter (`jedison_mapping.py`) maps this
+editor's `x-mimir-` hints to the concrete schema attributes Jedison's
+schema-driven form renderer reads. It runs after `adapter.transform_schema`
+and any field-specific transform (such as `nullable-list`) have already
+applied to a field's schema.
+
+Two source hint names are introduced for this mapping, following the
+`x-mimir-` namespace convention already established by `x-mimir-adapter` and
+`x-mimir-min-length-hint`:
+
+- `x-mimir-label`: this field's display label.
+- `x-mimir-group`: the name of the section this field belongs to.
+
+The mapping:
+
+| Source | Destination |
+|---|---|
+| `x-mimir-label` on a field | Jedison's native `title` key on that field |
+| `x-mimir-group` on a field | Jedison's `x-category` key on that field |
+| Any field in a model carrying `x-mimir-group` | Jedison's `x-format` key, set once on the model's top-level object schema, to `"categories-vertical"` |
+| `x-mimir-min-length-hint` on a field (written by the `nullable-list` transform) | Appended to Jedison's native `description` key on that field, rather than overwriting any existing description |
+
+`"categories-vertical"` is this mapping's chosen default for `x-format`
+(Jedison also supports `"categories-horizontal"`). Vertical category lists
+degrade better on narrow viewports than a horizontal tab strip, which has to
+scroll or wrap once there are more than a few sections; nothing in the
+current design requires the horizontal layout instead.
+
+Because grouping requires seeing every field in a model at once (to decide
+the parent object schema's `x-format`), it cannot be resolved by a function
+that only sees one field's schema in isolation. The label and advisory-hint
+concerns, which are per-field, are handled by `to_jedison_schema(field_schema)`.
+Grouping, which requires the whole model schema, is handled by a second
+function, `to_jedison_object_schema(model_schema)`, which applies
+`to_jedison_schema` to every field under `properties` and then resolves
+grouping across all of them.
+
+A field with none of these three hints is passed through unchanged. An
+`x-mimir-` key this mapping does not recognise (including `x-mimir-adapter`,
+which belongs to the rendering-library-agnostic half of the adapter, not to
+this mapping) is left in place rather than dropped, so a future mapping
+addition is additive. A hint outside the `x-mimir-` namespace is assumed to
+already be in Jedison's own vocabulary and is left untouched, per the
+"Namespace convention" section above.
+
 ## Deployment
 
 This editor runs as its own process, independent of any other configuration
@@ -268,8 +315,3 @@ here so they are not lost, not because they block current work.
   caught only at save time, is a possible future enhancement to the
   `nullable-list` transform. It is not implemented by the version described
   above.
-- The specific mapping from this editor's `x-mimir-` hints to the concrete
-  attributes Jedison expects (for example, which hint becomes a field's
-  title, and which becomes its category grouping) is implementation detail of
-  the Jedison-specific half of the adapter, and is defined when that half is
-  built rather than in this document.

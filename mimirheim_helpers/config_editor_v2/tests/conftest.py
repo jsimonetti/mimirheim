@@ -74,3 +74,68 @@ class NullableListModel(BaseModel):
         min_length=2,
         json_schema_extra={"x-mimir-adapter": "nullable-list"},
     )
+
+
+class NullableListWithDescriptionModel(BaseModel):
+    """A nullable-list field that also carries a user-authored description.
+
+    Used by `test_jedison_mapping.py` to verify that
+    `jedison_mapping.to_jedison_schema` appends the `nullable-list`
+    transform's advisory minimum-length hint to an existing description
+    rather than overwriting it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    entries: list[str] | None = Field(
+        default=None,
+        min_length=2,
+        description="User-provided list of entries.",
+        json_schema_extra={"x-mimir-adapter": "nullable-list"},
+    )
+
+
+class LabelHintModel(BaseModel):
+    """A fixture model with a field carrying this editor's label hint.
+
+    Used by `test_jedison_mapping.py` to verify `x-mimir-label` becomes
+    Jedison's native `title` key.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    named: str = Field(
+        default="default",
+        json_schema_extra={"x-mimir-label": "Display Name"},
+    )
+
+
+class GroupHintModel(BaseModel):
+    """A fixture model with two fields sharing this editor's grouping hint.
+
+    `ungrouped` carries no grouping hint at all, so tests can confirm it is
+    left without an `x-category` key. Used by `test_jedison_mapping.py` to
+    verify `x-mimir-group` becomes `x-category` on each field and
+    `x-format` on the parent object schema.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    first: str = Field(default="default", json_schema_extra={"x-mimir-group": "Network"})
+    second: str = Field(default="default", json_schema_extra={"x-mimir-group": "Network"})
+    ungrouped: str = "default"
+
+
+class UnrecognisedMimirHintModel(BaseModel):
+    """A fixture model with an invented, unmapped `x-mimir-` hint.
+
+    Used by `test_jedison_mapping.py` to verify that an `x-mimir-` key this
+    step's mapping does not recognise is left in place, not dropped.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    weird: str = Field(
+        default="default",
+        json_schema_extra={"x-mimir-totally-invented-hint": "unchanged"},
+    )

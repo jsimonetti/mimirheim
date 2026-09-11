@@ -1,0 +1,9 @@
+1.21.1
+
+Vendored from https://registry.npmjs.org/jedison/-/jedison-1.21.1.tgz
+File extracted: package/dist/umd/jedison.umd.js (dependency-free UMD build)
+License file extracted: package/LICENSE
+
+Jedison ships no CSS of its own; it emits Bootstrap-classed markup directly.
+See mimirheim_helpers/config_editor_v2/static/vendor/bootstrap/VERSION for
+the paired Bootstrap version.

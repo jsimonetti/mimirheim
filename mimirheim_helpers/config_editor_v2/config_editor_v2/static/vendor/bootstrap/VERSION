@@ -1,0 +1,16 @@
+5.3.8
+
+Vendored from https://registry.npmjs.org/bootstrap/-/bootstrap-5.3.8.tgz
+Files extracted:
+  package/dist/css/bootstrap.min.css
+  package/dist/css/bootstrap.min.css.map
+  package/dist/js/bootstrap.bundle.min.js
+  package/dist/js/bootstrap.bundle.min.js.map
+License file extracted: package/LICENSE
+
+This version was resolved from Jedison 1.21.1's own "bootstrap: ^5.3.0"
+devDependency, not from an explicit Jedison runtime requirement (Jedison has
+no runtime dependency on Bootstrap). Treat this pairing as confirmed-working,
+not a documented contract; re-verify if Jedison is ever upgraded. See
+mimirheim_helpers/config_editor_v2/IMPLEMENTATION_DETAILS.md, section
+"Rendering library".
