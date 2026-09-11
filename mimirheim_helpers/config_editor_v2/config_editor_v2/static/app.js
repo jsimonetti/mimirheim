@@ -129,6 +129,13 @@
       .querySelector(".jedison-form-container");
     state.jedison = new window.Jedison.Create({
       container: container,
+      // Required by Jedison itself, not optional configuration -- with no
+      // theme, Jedison's internals hit `this.theme` as null the first time
+      // they need to build a control (e.g. getObjectControl) and throw. A
+      // fresh Theme instance per form, matching one Create() call each,
+      // mirrors Jedison's own documented usage exactly; there is no
+      // separate theme package to vendor, per IMPLEMENTATION_DETAILS.md.
+      theme: new window.Jedison.Theme(),
       schema: state.schema,
       data: data,
     });

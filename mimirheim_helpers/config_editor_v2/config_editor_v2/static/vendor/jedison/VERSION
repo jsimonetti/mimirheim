@@ -1,7 +1,10 @@
 1.21.1
 
 Vendored from https://registry.npmjs.org/jedison/-/jedison-1.21.1.tgz
-File extracted: package/dist/umd/jedison.umd.js (dependency-free UMD build)
+Files extracted:
+  package/dist/umd/jedison.umd.js (dependency-free UMD build)
+  package/dist/umd/jedison.umd.js.map (added after initial vendoring, to
+  stop the browser's devtools requesting a source map that 404s)
 License file extracted: package/LICENSE
 
 Jedison ships no CSS of its own; it emits Bootstrap-classed markup directly.
