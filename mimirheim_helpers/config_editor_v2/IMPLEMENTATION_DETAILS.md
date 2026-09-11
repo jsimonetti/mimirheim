@@ -105,10 +105,39 @@ This means the editor must:
 - Attribute every validation failure clearly to the specific registered entry
   and field it came from, so a user can navigate directly to the problem
   without guessing which section is at fault.
-- Ensure that a registered configuration which has never been touched by a
-  user still validates successfully against its own default values. A helper
-  that has not yet been configured must not permanently block saving other,
-  unrelated configurations.
+- Never let a registered configuration that has never been touched by a user
+  in a given save permanently block saving other, unrelated configurations.
+
+An entry the user did not submit in a given save (its name is absent from
+the save's submitted data entirely, not merely submitted as an empty object)
+is handled as follows:
+
+- If its model happens to validate with no data at all -- every field has a
+  default -- it is included in the save and (re)written with those defaults.
+- If it does not, the entry is silently excluded from that save: it is
+  neither validated as a failure nor written. It simply is not part of this
+  save.
+
+This distinction matters because every real configuration model currently
+registered in this editor requires at least an `mqtt` block, and most also
+require a `trigger_topic`, neither of which has -- or should have -- a
+universal default: an MQTT broker address and a trigger topic are
+inherently site-specific. Treating an untouched entry's inevitable
+`ValidationError` against `{}` as a blocking failure, as an earlier version
+of this logic did, meant a user could never save anything at all unless
+every registered helper's every required field was filled in simultaneously
+in the same save, even a user who only wants to configure `mimirheim.yaml`
+and does not use any of the other registered helpers. Excluding a
+genuinely untouched entry from the save entirely, rather than trying and
+failing to default it, is therefore not an arbitrary leniency: it is the
+only way an editor covering several independently optional helpers can let
+a user save the subset of configurations they actually use.
+
+The "all files validated together before any is written" guarantee is
+unaffected by this: it still holds for every entry that is either submitted
+in the save or capable of validating against its own defaults. An entry
+excluded as untouched-with-no-defaults never reaches that guarantee at all,
+because it was never part of the save to begin with.
 
 ## The adapter
 

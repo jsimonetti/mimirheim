@@ -45,6 +45,22 @@ class UnregisteredAdapterModel(BaseModel):
     )
 
 
+class RequiredFieldModel(BaseModel):
+    """A fixture model with a genuinely required field and no default.
+
+    Exists specifically to exercise `save.validate_all`'s "untouched entry
+    whose defaults don't validate is silently excluded" path: `name` has no
+    default, so `RequiredFieldModel.model_validate({})` raises
+    `ValidationError`, mirroring every real production model registered in
+    config_editor_v2.registry (all of which require at least an `mqtt`
+    block).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+
+
 class ListFieldModel(BaseModel):
     """A fixture model with a plain (non-nullable) list-of-int field.
 

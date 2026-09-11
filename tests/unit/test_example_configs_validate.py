@@ -43,6 +43,7 @@ _CASES = [
     ("reporter.yaml", "reporter.config", "ReporterConfig"),
     ("scheduler.yaml", "scheduler.config", "SchedulerConfig"),
     ("config-editor.yaml", "config_editor.config", "ConfigEditorConfig"),
+    ("config-editor-v2.yaml", "config_editor_v2.config", "ConfigEditorV2Config"),
 ]
 
 

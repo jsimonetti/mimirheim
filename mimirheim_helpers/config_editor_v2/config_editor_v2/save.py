@@ -3,11 +3,14 @@
 This module implements the save path's core guarantee, described in
 mimirheim_helpers/config_editor_v2/IMPLEMENTATION_DETAILS.md under "Why
 validation always goes through the real Pydantic model" and "Save
-semantics": every registered configuration is validated against its real
-Pydantic model before any file is written, validation failures are
-attributed to the specific registry entry and field they came from, and
-each file that does get written is written atomically with any existing
-comments on disk preserved.
+semantics": every registered configuration submitted in a save -- plus any
+untouched configuration whose model happens to validate against its own
+defaults -- is validated against its real Pydantic model before any file is
+written, validation failures are attributed to the specific registry entry
+and field they came from, and each file that does get written is written
+atomically with any existing comments on disk preserved. An untouched
+entry whose defaults do not validate is excluded from the save rather than
+treated as a failure; see `validate_all`'s docstring for the exact rule.
 
 This module does not decide *when* to write. `validate_all` and `write_all`
 are two independent steps; the caller (the HTTP server built in step 71_5)
@@ -53,27 +56,50 @@ def validate_all(
     entries: list[RegistryEntry],
     submitted: dict[str, dict[str, Any]],
 ) -> tuple[dict[str, BaseModel], list[FieldError]]:
-    """Validates every registered entry's submitted data against its model.
+    """Validates every submitted registry entry's data against its model.
 
     `submitted` maps a RegistryEntry.name to that entry's data dict, already
-    run through the adapter's incoming-data transform. An entry with no key
-    in `submitted` is validated against its model's own defaults, per
-    IMPLEMENTATION_DETAILS.md's requirement that an untouched configuration
-    must still validate successfully.
+    run through the adapter's incoming-data transform. Whether an entry's
+    name is a key in `submitted` -- not merely whether its data is valid --
+    determines how it is treated:
 
-    Every entry is validated independently, regardless of whether an
-    earlier entry failed: this is what lets errors be reported for all
+    - If `entry.name in submitted`, the user (or the frontend on their
+      behalf) explicitly included this entry in this save, including an
+      explicit empty dict (which means "set this entry to its defaults" or
+      "I cleared this entry's fields"). The submitted data is validated
+      against the entry's model, and any `ValidationError` becomes one or
+      more blocking `FieldError`s.
+    - If `entry.name` is absent from `submitted`, the entry was never
+      touched in this save at all. It is validated against its own model's
+      defaults on a best-effort basis: if the model happens to validate
+      with no data (every field has a default), it is included in the
+      returned `validated` dict so it still gets (re)written with those
+      defaults. If it does not -- true of every real production model
+      registered so far, since fields such as `mqtt` and `trigger_topic`
+      have no sensible universal default -- the entry is silently excluded
+      from this save: not present in `validated`, not written, and
+      deliberately **not** a blocking error. See
+      IMPLEMENTATION_DETAILS.md, "Save semantics", for why an untouched
+      entry must never block saving the entries a user is actually editing.
+
+    Every submitted entry is validated independently, regardless of whether
+    an earlier entry failed: this is what lets errors be reported for all
     invalid entries at once, rather than only the first one encountered.
 
     Args:
         entries: The registry entries to validate, in registration order.
-        submitted: Submitted data dicts, keyed by RegistryEntry.name.
+        submitted: Submitted data dicts, keyed by RegistryEntry.name. An
+            entry name absent from this dict is treated as untouched, not
+            as an empty submission.
 
     Returns:
         A tuple of (validated models keyed by entry name, accumulated field
         errors). If the error list is non-empty, the validated-models dict
-        must be treated as unusable for writing -- every entry is validated,
-        but nothing is written, even the entries that individually passed.
+        must be treated as unusable for writing -- every submitted entry is
+        validated, but nothing is written, even the entries that
+        individually passed. An untouched entry whose defaults do not
+        validate is simply absent from `validated`, which is not an error
+        condition.
 
     Raises:
         ImportError: Propagated from `resolve_model` if a registry entry's
@@ -93,18 +119,29 @@ def validate_all(
         # Not caught here: a broken registry entry is this editor's own
         # configuration bug, not something a user's submission can cause.
         model_cls = resolve_model(entry)
-        data = submitted.get(entry.name, {})
-        try:
-            validated[entry.name] = model_cls.model_validate(data)
-        except ValidationError as exc:
-            for error in exc.errors():
-                errors.append(
-                    FieldError(
-                        entry_name=entry.name,
-                        loc=[str(part) for part in error["loc"]],
-                        message=error["msg"],
+
+        if entry.name in submitted:
+            try:
+                validated[entry.name] = model_cls.model_validate(submitted[entry.name])
+            except ValidationError as exc:
+                for error in exc.errors():
+                    errors.append(
+                        FieldError(
+                            entry_name=entry.name,
+                            loc=[str(part) for part in error["loc"]],
+                            message=error["msg"],
+                        )
                     )
-                )
+        else:
+            # Untouched entry: best-effort default validation. If the
+            # model has no valid all-defaults state -- true of every real
+            # production model registered so far, since mqtt/trigger_topic
+            # have no sensible universal default -- exclude it from this
+            # save entirely rather than blocking on it.
+            try:
+                validated[entry.name] = model_cls.model_validate({})
+            except ValidationError:
+                pass
 
     return validated, errors
 

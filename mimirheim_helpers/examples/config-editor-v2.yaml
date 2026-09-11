@@ -1,0 +1,31 @@
+# Enable the config-editor-v2 web UI.
+# Access at: http://<host>:8099
+#
+# config-editor-v2 is an independent, schema-driven configuration editor,
+# separate from v1's config-editor (mimirheim_helpers/config_editor/). It
+# renders one form per registered configuration file directly from that
+# file's Pydantic model. See wiki/Helpers/Config-Editor-V2.md.
+#
+# The service is activated by the existence of this file. An empty file
+# (or a file containing only comments and whitespace) enables it on the
+# default port with all settings at their defaults.
+#
+# config-editor-v2 defaults to the SAME port as v1 (8099). This is
+# deliberate: the port is already a configurable field, exactly like v1's
+# own 'port' field, so if you want to run both editors at once, change one
+# of the two ports yourself. Running both enabled with unmodified defaults
+# will fail: the second service to start cannot bind the port.
+#
+# In host networking mode, change the port if 8099 conflicts with another service:
+# port: 8321
+#
+# All fields are optional. A 'touch config-editor-v2.yaml' is sufficient to
+# enable the service on the default port.
+
+# port: 8099
+# config_dir: /config
+# log_level: INFO
+#
+# Set disabled: true (or include a bare 'disabled' key) to stop config-editor-v2
+# from starting without removing this file. The container service will exit cleanly.
+# disabled: true

@@ -17,3 +17,8 @@ from __future__ import annotations
 # side effect, so any code that imports this package has it available
 # without a separate explicit import. See transforms.py.
 from . import transforms as transforms
+
+# Re-exported so `config_editor_v2.registry` is reachable as an attribute
+# right after `import config_editor_v2`, with no separate explicit
+# `import config_editor_v2.registry` needed. See registry.py.
+from . import registry as registry

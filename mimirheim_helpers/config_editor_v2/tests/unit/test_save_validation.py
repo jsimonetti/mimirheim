@@ -24,7 +24,7 @@ import pytest
 from config_editor_v2.registry import RegistryEntry
 from config_editor_v2.save import validate_all, write_all
 
-from ..conftest import ListFieldModel, PlainFieldModel
+from ..conftest import ListFieldModel, PlainFieldModel, RequiredFieldModel
 
 
 def _entry(name: str, filename: str, model: type) -> RegistryEntry:
@@ -97,6 +97,22 @@ def test_untouched_entry_validates_against_defaults() -> None:
 
     assert errors == []
     assert validated["plain"].plain == "default"
+
+
+def test_untouched_entry_whose_defaults_dont_validate_is_silently_excluded() -> None:
+    """An untouched entry with no valid all-defaults state is excluded, not blocking.
+
+    `RequiredFieldModel.name` has no default, so `model_validate({})` raises.
+    Since the entry is absent from `submitted` entirely (never touched by
+    the user in this save), that failure must not surface as a FieldError --
+    it must simply be excluded from `validated`.
+    """
+    required_entry = _entry("required", "required.yaml", RequiredFieldModel)
+
+    validated, errors = validate_all([required_entry], {})
+
+    assert errors == []
+    assert "required" not in validated
 
 
 def test_registry_import_error_propagates_not_swallowed() -> None:

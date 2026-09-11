@@ -20,6 +20,9 @@
 #   /config/baseload-static.yaml — static baseload profile publisher
 #   /config/reporter.yaml        — mimirheim-reporter HTML report generator
 #   /config/config-editor.yaml   — config editor web UI (port 8099)
+#   /config/config-editor-v2.yaml — config-editor-v2 web UI (also port 8099 by
+#                                   default -- change one of the two ports if
+#                                   both editors are enabled at once)
 #
 # Example configs are baked into the image at /app/examples/:
 #   /app/examples/mimirheim.yaml
@@ -34,6 +37,7 @@
 #   /app/examples/baseload-static.yaml
 #   /app/examples/reporter.yaml
 #   /app/examples/config-editor.yaml
+#   /app/examples/config-editor-v2.yaml
 #
 # Build:
 #   docker build -t mimirheim -f container/Dockerfile .
@@ -195,6 +199,9 @@ RUN --mount=from=uvbin,source=/uv,target=/usr/local/bin/uv \
 VOLUME ["/config"]
 
 # Expose the config editor port. Map it with -p 8099:8099 when not using host networking.
+# config-editor-v2 defaults to the same port (8099); if both editors are enabled at
+# once, configure a different port for one of them. EXPOSE is documentation metadata
+# only, so no second EXPOSE line is needed for the second, same-numbered default.
 EXPOSE 8099
 
 # s6-overlay init is the entrypoint; CMD is unused.

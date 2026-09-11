@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>config-editor-v2</title>
+  <!-- Load order matters (see IMPLEMENTATION_DETAILS.md, step 71_4's note):
+       Bootstrap CSS first, then jedison.umd.js, then Bootstrap's JS bundle. -->
+  <link rel="stylesheet" href="/static/vendor/bootstrap/bootstrap.min.css" />
+</head>
+<body>
+  <div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h1 class="h4 mb-0">config-editor-v2</h1>
+      <div>
+        <span id="save-status" class="me-2 text-muted"></span>
+        <button id="save-button" type="button" class="btn btn-primary">Save all</button>
+      </div>
+    </div>
+
+    <ul id="entry-tabs" class="nav nav-tabs" role="tablist"></ul>
+    <div id="entry-panels" class="tab-content border border-top-0 p-3"></div>
+  </div>
+
+  <script src="/static/vendor/jedison/jedison.umd.js"></script>
+  <script src="/static/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
