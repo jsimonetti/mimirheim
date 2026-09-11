@@ -45,6 +45,19 @@ class UnregisteredAdapterModel(BaseModel):
     )
 
 
+class ListFieldModel(BaseModel):
+    """A fixture model with a plain (non-nullable) list-of-int field.
+
+    Used by save.py's tests to exercise a validation error whose Pydantic
+    `loc` tuple contains an integer list index (e.g. `("counts", 0)`), since
+    `FieldError.loc` must stringify every element of that tuple.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    counts: list[int] = Field(default_factory=list)
+
+
 class NullableListModel(BaseModel):
     """A fixture model with a None-or-non-empty-list field.
 

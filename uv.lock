@@ -656,6 +656,7 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-benchmark" },
     { name = "respx" },
+    { name = "ruamel-yaml" },
     { name = "ruff" },
 ]
 
@@ -712,6 +713,7 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=1.4.0" },
     { name = "pytest-benchmark", specifier = ">=5.3.0" },
     { name = "respx", specifier = ">=0.23.1" },
+    { name = "ruamel-yaml", specifier = ">=0.18" },
     { name = "ruff", specifier = ">=0.16.6" },
 ]
 

@@ -127,6 +127,11 @@ dev = [
     # The floor stays at the version core pinned so the lock does not regress.
     "respx>=0.23.1",
     "jinja2>=3.0",
+    # config-editor-v2's save path (step 71_3) needs this to write and test
+    # comment-preserving YAML. The config-editor-v2 extra itself does not
+    # exist yet (deferred to step 71_5), so it is declared here rather than
+    # left undeclared for the dev environment.
+    "ruamel.yaml>=0.18",
 ]
 
 [tool.ruff]
