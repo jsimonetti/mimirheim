@@ -43,3 +43,21 @@ class UnregisteredAdapterModel(BaseModel):
         default="default",
         json_schema_extra={"x-mimir-adapter": "does-not-exist"},
     )
+
+
+class NullableListModel(BaseModel):
+    """A fixture model with a None-or-non-empty-list field.
+
+    `entries` is typed `list[str] | None` with `min_length=2` on the array
+    branch, which Pydantic renders as an `anyOf` between an array schema
+    (with `minItems: 2`) and a null schema. This is the exact shape the
+    `nullable-list` transform (step 71_2) is designed to rewrite.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    entries: list[str] | None = Field(
+        default=None,
+        min_length=2,
+        json_schema_extra={"x-mimir-adapter": "nullable-list"},
+    )
