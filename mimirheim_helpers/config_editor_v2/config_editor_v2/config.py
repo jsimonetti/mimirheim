@@ -27,9 +27,12 @@ from pydantic import ValidationError as PydanticValidationError
 class ConfigEditorV2Config(BaseModel):
     """Configuration for the config-editor-v2 web service.
 
-    The service is activated by the existence of config-editor-v2.yaml. An
-    empty file enables it on the default port with all other settings at
-    their defaults.
+    Mirroring v1's config-editor exactly (including its known quirk): the s6
+    service starts unconditionally, whether or not config-editor-v2.yaml
+    exists, unless disabled via the ENABLE_CONFIG_EDITOR_V2 environment
+    variable or a `disabled: true` line in the file. An absent file behaves
+    identically to an empty one -- the service starts on the default port
+    with all other settings at their defaults.
 
     Attributes:
         port: TCP port the service listens on. Defaults to 8099, the same
@@ -105,10 +108,9 @@ def load_config(path: str) -> ConfigEditorV2Config:
             raw = yaml.safe_load(fh) or {}
     except FileNotFoundError:
         # No config file is not an error: the service starts with all
-        # defaults, which means it starts enabled. See the module docstring
-        # and IMPLEMENTATION_DETAILS.md's "Deployment" section: gating is
-        # by file *presence*, but the same defaults apply whether the file
-        # exists-and-is-empty or is absent entirely.
+        # defaults, which means it starts enabled -- mirroring v1's
+        # config-editor exactly, including its quirk of starting regardless
+        # of the file's presence. See ConfigEditorV2Config's docstring.
         return ConfigEditorV2Config()
     except OSError as exc:
         print(f"ERROR: Cannot read config file {path!r}: {exc}", file=sys.stderr)
