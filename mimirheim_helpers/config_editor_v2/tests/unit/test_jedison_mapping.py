@@ -27,6 +27,7 @@ from ..conftest import (
     IdentityAdapterModel,
     LabelHintModel,
     NullableListWithDescriptionModel,
+    ObjectAddModel,
     UnrecognisedMimirHintModel,
 )
 
@@ -107,6 +108,38 @@ def test_non_x_mimir_hint_untouched() -> None:
     mapped = to_jedison_schema(schema)
 
     assert mapped["someLibraryOption"] is True
+
+
+def test_closed_root_object_gets_no_add_hint() -> None:
+    """A closed (extra="forbid") root schema gets `x-objectAdd: False`."""
+    model_schema = ObjectAddModel.model_json_schema()
+
+    mapped = to_jedison_object_schema(model_schema)
+
+    assert mapped["x-objectAdd"] is False
+
+
+def test_closed_nested_def_gets_no_add_hint() -> None:
+    """A closed nested model under `$defs` also gets `x-objectAdd: False`."""
+    model_schema = ObjectAddModel.model_json_schema()
+
+    mapped = to_jedison_object_schema(model_schema)
+
+    assert mapped["$defs"]["NestedClosedModel"]["x-objectAdd"] is False
+
+
+def test_open_map_field_keeps_its_add_button() -> None:
+    """A genuine open map field (additionalProperties is a schema) is
+    left without `x-objectAdd`, since it needs its own "add a new named
+    entry" control to keep working."""
+    model_schema = ObjectAddModel.model_json_schema()
+    # Sanity check on the fixture: additionalProperties is a $ref schema,
+    # not False, so this field is a real map, not a closed record.
+    assert model_schema["properties"]["mapping"]["additionalProperties"] is not False
+
+    mapped = to_jedison_object_schema(model_schema)
+
+    assert "x-objectAdd" not in mapped["properties"]["mapping"]
 
 
 def test_vendored_jedison_license_file_present() -> None:

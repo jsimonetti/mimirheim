@@ -133,9 +133,27 @@
       // theme, Jedison's internals hit `this.theme` as null the first time
       // they need to build a control (e.g. getObjectControl) and throw. A
       // fresh Theme instance per form, matching one Create() call each,
-      // mirrors Jedison's own documented usage exactly; there is no
-      // separate theme package to vendor, per IMPLEMENTATION_DETAILS.md.
-      theme: new window.Jedison.Theme(),
+      // mirrors Jedison's own documented usage exactly. ThemeBootstrap5,
+      // not the bare Theme base class, is what actually gives full
+      // Bootstrap 5 form-control styling -- Theme alone renders plain,
+      // unstyled markup even with bootstrap.min.css loaded. There is no
+      // separate theme package to vendor; both classes ship in the same
+      // UMD bundle, per IMPLEMENTATION_DETAILS.md.
+      theme: new window.Jedison.ThemeBootstrap5(),
+      // Do NOT set a global `objectAdd: false` here. Every registered
+      // model uses extra="forbid" (AGENTS.md), so its closed objects
+      // should never show an "Add property" button -- but a dict-typed
+      // field (e.g. `batteries: dict[str, BatteryConfig]`) has no
+      // `properties` of its own, only `additionalProperties` as a schema,
+      // and genuinely needs its "add a new named entry" control to keep
+      // working. jedison_mapping.py already sets the schema-level
+      // `x-objectAdd: false` override on every closed object (root and
+      // every `$defs` entry) and deliberately leaves open-map fields
+      // without it, so they keep Jedison's own default. Setting a global
+      // `objectAdd: false` here would apply to those open-map fields too,
+      // since they carry no per-schema override to fall back from, and
+      // would remove the only way to add a new battery/array/etc. through
+      // the form.
       schema: state.schema,
       data: data,
     });
