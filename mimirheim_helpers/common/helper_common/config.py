@@ -43,22 +43,30 @@ class MqttConfig(BaseModel):
             against a broker reachable from an untrusted network.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "title": "MQTT Broker Configuration",
+            "description": "Configuration for the MQTT Broker connection. "
+            "When running as a Home Assistant add-on, the Supervisor injects broker configuration.",
+            "x-category": "MQTT",
+        }
+    )
 
-    host: str = Field(description="Broker hostname or IP address.", json_schema_extra={"ui_label": "Broker host", "ui_group": "basic"})
-    port: int = Field(default=1883, ge=1, le=65535, description="Broker TCP port.", json_schema_extra={"ui_label": "Broker port", "ui_group": "advanced"})
-    client_id: str | None = Field(default=None, description="MQTT client identifier. Defaults to a tool-specific value when not set.", json_schema_extra={"ui_label": "Client ID", "ui_group": "basic"})
-    username: str | None = Field(default=None, description="Broker username.", json_schema_extra={"ui_label": "Username", "ui_group": "advanced"})
-    password: str | None = Field(default=None, description="Broker password.", json_schema_extra={"ui_label": "Password", "ui_group": "advanced"})
+    host: str = Field(description="Broker hostname or IP address.", title="Broker host")
+    port: int = Field(default=1883, ge=1, le=65535, description="Broker TCP port.", title="Broker port")
+    client_id: str | None = Field(default=None, description="MQTT client identifier. Defaults to a tool-specific value when not set.", title="Client ID")
+    username: str | None = Field(default=None, description="Broker username.", title="Username")
+    password: str | None = Field(default=None, description="Broker password.", title="Password", json_schema_extra={"x-format": "password"})
     tls: bool = Field(
         default=False,
         description="Enable TLS for the broker connection. Set to true when the broker listens on an encrypted port (typically 8883).",
-        json_schema_extra={"ui_label": "Enable TLS", "ui_group": "advanced"},
+        title="Enable TLS",
     )
     tls_allow_insecure: bool = Field(
         default=False,
         description="Skip broker certificate verification when TLS is enabled. Has no effect when tls is false.",
-        json_schema_extra={"ui_label": "Allow insecure TLS", "ui_group": "advanced"},
+        title="Allow insecure TLS",
     )
 
 
@@ -81,21 +89,21 @@ class HomeAssistantConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    enabled: bool = Field(default=False, description="Enable HA MQTT discovery.", json_schema_extra={"ui_label": "Enable HA discovery", "ui_group": "advanced"})
+    enabled: bool = Field(default=False, description="Enable HA MQTT discovery.", title="Enable HA discovery")
     discovery_prefix: str = Field(
         default="homeassistant",
         description="HA MQTT discovery topic prefix.",
-        json_schema_extra={"ui_label": "Discovery prefix", "ui_group": "advanced"},
+        title="Discovery prefix",
     )
     device_name: str = Field(
         default="",
         description="Display name for the HA device. Defaults to tool name.",
-        json_schema_extra={"ui_label": "HA device name", "ui_group": "advanced"},
+        title="HA device name",
     )
     forecast_sensor: bool = Field(
         default=True,
         description="Publish an additional HA sensor entity for the helper's forecast output topic.",
-        json_schema_extra={"ui_label": "Enable forecast sensor", "ui_group": "advanced"},
+        title="Enable forecast sensor",
     )
 
 

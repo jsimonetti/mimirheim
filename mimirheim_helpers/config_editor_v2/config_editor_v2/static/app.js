@@ -117,8 +117,31 @@
       return Promise.resolve();
     }
     return fetchJson("/api/entries/" + encodeURIComponent(name) + "/data").then(function (result) {
+      if (result.status !== 200) {
+        // A non-200 body (for example, a 422 from an on-disk file that no
+        // longer validates against its model) is an error payload, not
+        // form data -- rendering it as `data` would silently hand Jedison
+        // something like {"errors": {...}} with none of the keys its
+        // schema expects. state.loaded is deliberately left false so
+        // reactivating this tab (after the on-disk file is fixed) retries
+        // the fetch instead of being treated as already loaded.
+        showLoadErrorForEntry(name, result);
+        return;
+      }
       return renderForm(name, result.body || {});
     });
+  }
+
+  function showLoadErrorForEntry(name, result) {
+    var grouped = result.body && result.body.errors;
+    var errors = grouped && grouped[name];
+    if (errors) {
+      showErrorsForEntry(name, errors);
+      return;
+    }
+    var message =
+      (result.body && result.body.error) || "Failed to load (HTTP " + result.status + ").";
+    showErrorsForEntry(name, [{ loc: [], message: message }]);
   }
 
   function renderForm(name, data) {
@@ -143,6 +166,9 @@
         theme: new window.Jedison.ThemeBootstrap5(),
         schema: state.schema,
         data: data,
+        embedSwitcher: true,
+        arrayMove: false,
+        objectAdd: false,
       });
       state.loaded = true;
     });
@@ -175,7 +201,7 @@
     list.className = "mb-0";
     errors.forEach(function (error) {
       var item = document.createElement("li");
-      item.textContent = error.loc.join(".") + ": " + error.message;
+      item.textContent = error.loc.length ? error.loc.join(".") + ": " + error.message : error.message;
       list.appendChild(item);
     });
     errorBox.appendChild(list);

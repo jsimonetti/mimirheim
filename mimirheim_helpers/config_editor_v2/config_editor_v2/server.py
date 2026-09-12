@@ -1,27 +1,36 @@
 """HTTP server for config-editor-v2.
 
 This module provides `ConfigEditorV2Server`, a stdlib-only HTTP server that
-wires together every rendering-library-agnostic piece built in steps 71_1
-through 71_4 -- `registry.py`, `adapter.py`, `transforms.py`,
-`jedison_mapping.py`, and `save.py` -- behind a small JSON API, and serves
-the vendored Jedison/Bootstrap frontend from `static/`:
+wires together `registry.py`, `adapter.py`, and `save.py` behind a small
+JSON API, and serves the vendored Jedison/Bootstrap frontend from `static/`:
 
     GET  /                          -- serve static/index.html
     GET  /static/<path>             -- serve a vendored or first-party static asset
-    GET  /api/entries               -- every registered entry's Jedison-shaped schema
-    GET  /api/entries/<name>/data   -- one entry's current on-disk data, its model
-                                       defaults, or an empty dict if neither is
-                                       available (see _api_get_entry_data)
+    GET  /api/entries               -- every registered entry's adapted schema
+    GET  /api/entries/<name>/data   -- one entry's current on-disk data, validated
+                                       and defaulted against its model, its model
+                                       defaults if no file exists yet, or an empty
+                                       dict if neither is available (see
+                                       _api_get_entry_data)
     POST /api/save                  -- validate every entry together, write all or nothing
 
 No external web framework is required; only `http.server`, `json`, and the
 already-built config-editor-v2 modules.
 
+No transform is currently registered with `adapter.py` (see its own module
+docstring): a field only ever changes shape by naming a transform explicitly
+via `x-mimir-adapter`, and no field in any registered model does that today.
+Until one is registered and opted into, `adapter.transform_schema_document`
+and `adapter.transform_value_document` are pass-throughs. A field that needs
+rendering-library-specific treatment with no shape change (a category, a
+masked password input, and so on) carries that hint directly in its own
+`json_schema_extra`, using Jedison's native vocabulary.
+
 What this module does not do:
 - It does not authenticate users. Like v1's config-editor, this service is
   designed for trusted private networks only.
 - It does not serve files outside the `static/` directory.
-- It does not know what any specific registered field means. Schema
+- It does not know what any specific registered field means. Schema and data
   transforms are entirely delegated to `adapter.py` and `jedison_mapping.py`.
 - It does not decide whether a save is safe to perform; `save.validate_all`
   is the sole authority on that, per IMPLEMENTATION_DETAILS.md's "Why
@@ -44,7 +53,7 @@ from pydantic import ValidationError
 
 from . import adapter, jedison_mapping
 from .registry import REGISTRY, RegistryEntry, resolve_model
-from .save import FieldError, validate_all, write_all
+from .save import FieldError, field_errors_from_validation_error, validate_all, write_all
 
 logger = logging.getLogger(__name__)
 
@@ -100,15 +109,15 @@ class ConfigEditorV2Server:
     used so that concurrent browser requests do not block each other.
 
     Each registered entry's raw JSON Schema (`model_json_schema()`, before
-    any adapter or Jedison transform) is computed once at construction and
-    cached. It is used on both directions of the API: `GET /api/entries`
-    runs it through `adapter.transform_schema` and
-    `jedison_mapping.to_jedison_object_schema` to build the outgoing,
-    rendering-shaped schema, and `POST /api/save` reads it back to look up
-    each submitted field's `x-mimir-adapter` hint before calling
-    `adapter.transform_incoming_data`. Both directions need the same raw
-    schema because `to_jedison_object_schema` renames or removes some
-    `x-mimir-` keys on its way out.
+    any adapter transform) is computed once at construction and cached. It
+    is used on both directions of the API: `GET /api/entries` runs it
+    through `adapter.transform_schema_document` to build the outgoing
+    schema, and `POST /api/save` reads it back, resolving each submitted
+    field's transform (only ever an explicit `x-mimir-adapter` hint, at
+    every level of `$defs`) via `adapter.transform_value_document`. Both
+    directions need the same raw schema for this resolution. No transform is
+    currently registered, so both calls are pass-throughs today; see
+    `adapter.py`'s own module docstring.
 
     Args:
         config_dir: Directory where registered YAML files are read from and
@@ -305,48 +314,67 @@ class ConfigEditorV2Server:
     # ------------------------------------------------------------------
 
     def _api_get_entries(self) -> tuple[int, dict[str, str], bytes]:
-        """Returns every registered entry's name, filename, and rendered schema.
+        """Returns every registered entry's name, filename, and adapted schema.
 
         For each entry, the cached raw `model_json_schema()` is run through
-        `adapter.transform_schema` field by field (dispatching, for
-        example, into the `nullable-list` transform), then the whole
-        resulting schema is run through
-        `jedison_mapping.to_jedison_object_schema`, which applies per-field
-        label/description hints and resolves cross-field grouping.
+        `adapter.transform_schema_document` (dispatching every field, at
+        every level of `$defs`, into whichever transform it explicitly
+        names via `x-mimir-adapter`), then through
+        `jedison_mapping.to_jedison_object_schema` (setting Jedison's native
+        `x-objectAdd: True` on every field that names an add-button label
+        via `x-addPropertyContent` -- see that module's own docstring for
+        why this one derivation is not gated behind `x-mimir-adapter`).
 
         Returns:
             HTTP 200 with a JSON list of
-            `{"name": str, "filename": str, "schema": <jedison-shaped schema>}`,
+            `{"name": str, "filename": str, "schema": <adapted schema>}`,
             one per registered entry, in registration order.
         """
-        result = []
-        for entry in self._entries:
-            raw_schema = self._raw_schemas[entry.name]
-            adapted_schema = dict(raw_schema)
-            adapted_schema["properties"] = {
-                field_name: adapter.transform_schema(field_schema)
-                for field_name, field_schema in raw_schema.get("properties", {}).items()
+        result = [
+            {
+                "name": entry.name,
+                "filename": entry.filename,
+                "schema": jedison_mapping.to_jedison_object_schema(
+                    adapter.transform_schema_document(self._raw_schemas[entry.name])
+                ),
             }
-            jedison_schema = jedison_mapping.to_jedison_object_schema(adapted_schema)
-            result.append(
-                {"name": entry.name, "filename": entry.filename, "schema": jedison_schema}
-            )
+            for entry in self._entries
+        ]
         return self._json_response(200, result)
 
     def _api_get_entry_data(self, name: str) -> tuple[int, dict[str, str], bytes]:
-        """Returns one entry's current on-disk data, or its model's defaults.
+        """Returns one entry's current on-disk data, validated and defaulted.
+
+        The raw on-disk YAML is validated against the entry's own model and
+        the *validated* model is dumped back out, not the raw dict. This
+        matters for any field using `default_factory` (every device-map and
+        config-section field in MimirheimConfig, for example): Pydantic
+        never emits a literal `default` for such a field in its JSON Schema,
+        so a partial file that omits the key would otherwise reach the
+        frontend with that key simply absent -- Jedison has no schema
+        default and no data to build that section from, and silently fails
+        to render it. Validating and re-dumping fills every such field in
+        with its real default before the response is sent.
+
+        A file that fails validation is a data problem this editor does not
+        try to paper over: it is rejected outright rather than passed
+        through as-is or silently emptied. Whether the failure is a
+        hand-edited mistake or a config that predates a model change, fixing
+        it is the user's job (for a hand edit) or the owning helper's/
+        mimirheim's job (to migrate the file first), not this editor's.
 
         Args:
             name: The `RegistryEntry.name` to fetch data for, already
                 URL-decoded by the caller.
 
         Returns:
-            HTTP 200 with the parsed or defaulted data dict as JSON. If the
-            file is absent and the model cannot be instantiated with no
-            arguments -- because it has at least one required field with no
-            default, which is true of every registered production model as
-            of this step (see this step's final report) -- an empty dict is
-            returned instead of raising, so a never-configured entry can
+            HTTP 200 with the validated, defaulted data dict as JSON.
+            HTTP 422 with `{"errors": {<entry_name>: [<FieldError dict>,
+            ...]}}` if an on-disk file exists but fails validation.
+            HTTP 200 with an empty dict if no file exists yet and the model
+            cannot be instantiated with no arguments -- because it has at
+            least one required field with no default, true of every
+            registered production model -- so a never-configured entry can
             still be opened and edited in the frontend rather than crashing
             the request handler.
             HTTP 404 if `name` does not match any registered entry.
@@ -355,12 +383,19 @@ class ConfigEditorV2Server:
         if entry is None:
             return self._json_response(404, {"error": "unknown entry"})
 
+        model_cls = resolve_model(entry)
         file_path = self._config_dir / entry.filename
         if file_path.exists():
             raw = yaml.safe_load(file_path.read_text()) or {}
-            return self._json_response(200, raw)
+            try:
+                validated = model_cls.model_validate(raw)
+            except ValidationError as exc:
+                errors = field_errors_from_validation_error(entry.name, exc)
+                return self._json_response(
+                    422, {"errors": self._group_errors_by_entry(errors)}
+                )
+            return self._json_response(200, validated.model_dump(mode="json"))
 
-        model_cls = resolve_model(entry)
         try:
             defaults = model_cls().model_dump(mode="json")
         except ValidationError:
@@ -377,10 +412,13 @@ class ConfigEditorV2Server:
 
         The request body is a JSON object mapping `RegistryEntry.name` to
         that entry's submitted field values, in the same shape
-        `GET /api/entries/{name}/data` returns. Every field is run through
-        `adapter.transform_incoming_data`, using that field's raw (untransformed)
-        schema fragment to find its `x-mimir-adapter` hint, before the merged
-        per-entry dicts are handed to `save.validate_all`.
+        `GET /api/entries/{name}/data` returns. Every top-level field's
+        value, and everything nested inside it, is run through
+        `adapter.transform_value_document`, using that entry's raw
+        (untransformed) schema to resolve which transform (if any) applies
+        at every level, before the merged per-entry dicts are handed to
+        `save.validate_all`. No transform is currently registered, so this
+        is a pass-through today.
 
         An entry the frontend has not loaded (and therefore did not include
         in the body) is handled per `save.validate_all`'s contract: it is
@@ -414,10 +452,12 @@ class ConfigEditorV2Server:
             entry_data = submitted_raw.get(entry.name)
             if entry_data is None:
                 continue
-            properties = self._raw_schemas[entry.name].get("properties", {})
+            raw_schema = self._raw_schemas[entry.name]
+            properties = raw_schema.get("properties", {})
+            defs = raw_schema.get("$defs", {})
             transformed_submitted[entry.name] = {
-                field_name: adapter.transform_incoming_data(
-                    properties.get(field_name, {}), value
+                field_name: adapter.transform_value_document(
+                    properties.get(field_name, {}), value, defs
                 )
                 for field_name, value in entry_data.items()
             }

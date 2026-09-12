@@ -48,12 +48,17 @@ def _dispatch_post(server: ConfigEditorServer, path: str, body: Any) -> tuple[in
 # ---------------------------------------------------------------------------
 
 def test_get_schema_returns_mimirheim_schema(tmp_path: Path) -> None:
-    """GET /api/schema returns a JSON schema with title == 'MimirheimConfig'."""
+    """GET /api/schema returns MimirheimConfig's schema.
+
+    `title` is the human-readable display title set directly in
+    `MimirheimConfig.model_config`'s `json_schema_extra`, not the bare
+    Python class name.
+    """
     server = _make_server(tmp_path)
     status, headers, body = _dispatch_get(server, "/api/schema")
     assert status == 200
     data = json.loads(body)
-    assert data.get("title") == "MimirheimConfig"
+    assert data.get("title") == "Mimirheim Configuration"
 
 
 # ---------------------------------------------------------------------------

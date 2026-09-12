@@ -1,5 +1,9 @@
 """Unit tests for config_editor_v2.adapter's transform dispatch.
 
+No transform is registered in production code; every test that needs one
+registers it itself via `monkeypatch.setitem(_TRANSFORMS, ...)` and lets
+pytest undo the registration on teardown.
+
 Tests verify:
 - A field without an x-mimir-adapter hint passes through unchanged, for both
   schema and data.
@@ -32,7 +36,7 @@ def test_field_without_hint_passes_through_unchanged() -> None:
     """A hint-free field's schema and data are returned identical to input."""
     schema = _field_schema(PlainFieldModel, "plain")
 
-    assert transform_schema(schema) == schema
+    assert transform_schema(schema, {}) == schema
     assert transform_incoming_data(schema, "some value") == "some value"
 
 
@@ -46,13 +50,13 @@ def test_field_with_identity_transform_dispatches(monkeypatch: pytest.MonkeyPatc
     look identical for a true no-op transform.
     """
     tagging_transform = Transform(
-        schema=lambda field_schema: {**field_schema, "x-mimir-test-tag": "dispatched"},
+        schema=lambda field_schema, defs: {**field_schema, "x-mimir-test-tag": "dispatched"},
         incoming_data=lambda value: value,
     )
     monkeypatch.setitem(_TRANSFORMS, "identity", tagging_transform)
 
     schema = _field_schema(IdentityAdapterModel, "tagged")
-    transformed = transform_schema(schema)
+    transformed = transform_schema(schema, {})
 
     assert transformed["x-mimir-test-tag"] == "dispatched"
 
@@ -62,16 +66,21 @@ def test_unregistered_transform_name_raises_key_error() -> None:
     schema = _field_schema(UnregisteredAdapterModel, "broken")
 
     with pytest.raises(KeyError):
-        transform_schema(schema)
+        transform_schema(schema, {})
 
     with pytest.raises(KeyError):
         transform_incoming_data(schema, "some value")
 
 
-def test_non_mimir_hints_pass_through_untouched() -> None:
+def test_non_mimir_hints_pass_through_untouched(monkeypatch: pytest.MonkeyPatch) -> None:
     """An unrelated rendering-library hint survives dispatch untouched."""
+    monkeypatch.setitem(
+        _TRANSFORMS,
+        "identity",
+        Transform(schema=lambda field_schema, defs: field_schema, incoming_data=lambda value: value),
+    )
     schema = _field_schema(IdentityAdapterModel, "tagged")
 
-    transformed = transform_schema(schema)
+    transformed = transform_schema(schema, {})
 
     assert transformed["someLibraryOption"] is True

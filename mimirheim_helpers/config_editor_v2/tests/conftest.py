@@ -2,8 +2,9 @@
 
 These models are deliberately small and unrelated to any real mimirheim or
 helper configuration. They exist only to exercise the registry's model
-resolution and the adapter's transform dispatch in isolation, and are reused
-by later steps (71_2, 71_3) that build on the same mechanisms.
+resolution and the adapter's transform dispatch in isolation. Every field
+that exercises a transform opts in explicitly via `x-mimir-adapter`; this
+project has no shape-based auto-detection (see `adapter.py`).
 """
 
 from __future__ import annotations
@@ -80,7 +81,9 @@ class NullableListModel(BaseModel):
     `entries` is typed `list[str] | None` with `min_length=2` on the array
     branch, which Pydantic renders as an `anyOf` between an array schema
     (with `minItems: 2`) and a null schema. This is the exact shape the
-    `nullable-list` transform (step 71_2) is designed to rewrite.
+    `nullable-list` transform is designed to rewrite; the field opts in
+    explicitly via `x-mimir-adapter`, since this project has no shape-based
+    auto-detection.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -92,66 +95,98 @@ class NullableListModel(BaseModel):
     )
 
 
-class NullableListWithDescriptionModel(BaseModel):
-    """A nullable-list field that also carries a user-authored description.
+class NullableScalarModel(BaseModel):
+    """A fixture model with a None-or-plain-string field.
 
-    Used by `test_jedison_mapping.py` to verify that
-    `jedison_mapping.to_jedison_schema` appends the `nullable-list`
-    transform's advisory minimum-length hint to an existing description
-    rather than overwriting it.
+    `note` is typed `str | None`, which Pydantic renders as an `anyOf`
+    between a string schema and a null schema. This is the exact shape the
+    `nullable-scalar` transform is designed to rewrite; the field opts in
+    explicitly via `x-mimir-adapter`.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    entries: list[str] | None = Field(
+    note: str | None = Field(
         default=None,
-        min_length=2,
-        description="User-provided list of entries.",
-        json_schema_extra={"x-mimir-adapter": "nullable-list"},
+        description="A note.",
+        json_schema_extra={"x-mimir-adapter": "nullable-scalar"},
     )
 
 
-class LabelHintModel(BaseModel):
-    """A fixture model with a field carrying this editor's label hint.
+class NullableScalarNumberModel(BaseModel):
+    """A fixture model with a None-or-plain-number field, ge-constrained.
 
-    Used by `test_jedison_mapping.py` to verify `x-mimir-label` becomes
-    Jedison's native `title` key.
+    Used to verify a constrained number branch's own keys (e.g. `minimum`)
+    survive the `nullable-scalar` collapse.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    named: str = Field(
-        default="default",
-        json_schema_extra={"x-mimir-label": "Display Name"},
+    amount: float | None = Field(
+        default=None,
+        ge=0.0,
+        json_schema_extra={"x-mimir-adapter": "nullable-scalar"},
     )
 
 
-class GroupHintModel(BaseModel):
-    """A fixture model with two fields sharing this editor's grouping hint.
+class NamedMapItemModel(BaseModel):
+    """A fixture item model referenced only via a named-map field's `$ref`.
 
-    `ungrouped` carries no grouping hint at all, so tests can confirm it is
-    left without an `x-category` key. Used by `test_jedison_mapping.py` to
-    verify `x-mimir-group` becomes `x-category` on each field and
-    `x-format` on the parent object schema.
+    `model_json_schema()` gives this class's `$defs` entry a `title` of
+    `"NamedMapItemModel"` by default (the class name), the exact shape the
+    `dict-key-as-title` transform is designed to strip.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    first: str = Field(default="default", json_schema_extra={"x-mimir-group": "Network"})
-    second: str = Field(default="default", json_schema_extra={"x-mimir-group": "Network"})
-    ungrouped: str = "default"
+    label: str = "default"
 
 
-class UnrecognisedMimirHintModel(BaseModel):
-    """A fixture model with an invented, unmapped `x-mimir-` hint.
+class DictKeyAsTitleModel(BaseModel):
+    """A fixture model with a named-map field opting into `dict-key-as-title`."""
 
-    Used by `test_jedison_mapping.py` to verify that an `x-mimir-` key this
-    step's mapping does not recognise is left in place, not dropped.
+    model_config = ConfigDict(extra="forbid")
+
+    entries: dict[str, NamedMapItemModel] = Field(
+        default_factory=dict,
+        json_schema_extra={"x-mimir-adapter": "dict-key-as-title"},
+    )
+
+
+class AddPropertyContentNestedModel(BaseModel):
+    """A fixture item model referenced only via a named-map field's `$ref`.
+
+    Carries its own `x-addPropertyContent`-bearing field, so a test can
+    confirm `jedison_mapping.to_jedison_object_schema` reaches a field
+    nested inside a `$defs` entry, not only a top-level field.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    weird: str = Field(
-        default="default",
-        json_schema_extra={"x-mimir-totally-invented-hint": "unchanged"},
+    tags: dict[str, str] = Field(
+        default_factory=dict,
+        json_schema_extra={"x-addPropertyContent": "Add tag"},
     )
+
+
+class AddPropertyContentModel(BaseModel):
+    """A fixture model exercising `x-addPropertyContent` -> `x-objectAdd`.
+
+    `labelled` carries Jedison's native `x-addPropertyContent` hint (not an
+    `x-mimir-adapter` hint -- this is Jedison's own vocabulary, per the
+    "Namespace convention" section, and the one case where this editor
+    derives a Jedison-native key automatically rather than requiring an
+    explicit hint; see `jedison_mapping.py`'s module docstring for why).
+    `unlabelled` carries neither hint, to verify a field that does not ask
+    for an add-button label is left alone. `nested` exercises the same
+    derivation on a field inside a `$defs` entry.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    labelled: dict[str, str] = Field(
+        default_factory=dict,
+        json_schema_extra={"x-addPropertyContent": "Add labelled entry"},
+    )
+    unlabelled: dict[str, str] = Field(default_factory=dict)
+    nested: dict[str, AddPropertyContentNestedModel] = Field(default_factory=dict)

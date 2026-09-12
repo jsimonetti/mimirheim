@@ -82,6 +82,35 @@ class _RequiredConfig(BaseModel):
     name: str
 
 
+class _ExtraSectionConfig(BaseModel):
+    """A nested object-typed section, used only via `_SectionedConfig.extra`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: str = "default-label"
+
+
+class _SectionedConfig(BaseModel):
+    """A fixture model with a `default_factory` nested object field.
+
+    `extra` mirrors the shape of real, unconfigured MimirheimConfig sections
+    such as `objectives` or `constraints`: `model_json_schema()` never emits
+    a literal `default` for a `default_factory` field, so a partial on-disk
+    YAML that omits the key must be filled in from the model's actual
+    default by GET /api/entries/{name}/data, not left absent -- Jedison
+    cannot construct a value for an object-typed field with no default and
+    no data. See tests below for the two cases this must handle: a valid
+    partial file (filled in) and an invalid one (rejected, not passed
+    through).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = "sectioned"
+    extra: _ExtraSectionConfig = Field(default_factory=_ExtraSectionConfig)
+    power_kw: float = Field(default=1.0, ge=0.0)
+
+
 def _widget_entry() -> RegistryEntry:
     return RegistryEntry(
         name="Widget",
@@ -103,6 +132,14 @@ def _required_entry() -> RegistryEntry:
         name="Required",
         filename="required.yaml",
         model_path=f"{_RequiredConfig.__module__}.{_RequiredConfig.__qualname__}",
+    )
+
+
+def _sectioned_entry() -> RegistryEntry:
+    return RegistryEntry(
+        name="Sectioned",
+        filename="sectioned.yaml",
+        model_path=f"{_SectionedConfig.__module__}.{_SectionedConfig.__qualname__}",
     )
 
 
@@ -144,10 +181,11 @@ def test_get_entries_returns_registered_schemas(tmp_path: Path) -> None:
     assert status == 200
     data = json.loads(body)
 
-    mimirheim_entries = [item for item in data if item["schema"].get("title") == "MimirheimConfig"]
+    mimirheim_entries = [item for item in data if item["name"] == "Mimirheim"]
     assert len(mimirheim_entries) == 1
     entry = mimirheim_entries[0]
     assert entry["filename"] == "mimirheim.yaml"
+    assert entry["schema"]["title"] == "Mimirheim Configuration"
     assert "properties" in entry["schema"]
 
 
@@ -166,10 +204,7 @@ def test_get_entries_applies_nullable_list_transform(tmp_path: Path) -> None:
     tags_schema = widget["schema"]["properties"]["tags"]
     assert tags_schema["type"] == "array"
     assert "anyOf" not in tags_schema
-    # jedison_mapping.to_jedison_schema folds the nullable-list transform's
-    # advisory x-mimir-min-length-hint into Jedison's native `description`
-    # key rather than leaving the hint key itself in the outgoing schema.
-    assert "1 entries" in tags_schema["description"]
+    assert tags_schema["x-mimir-min-length-hint"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -193,6 +228,48 @@ def test_get_entry_data_when_file_present_returns_file_contents(tmp_path: Path) 
     assert status == 200
     data = json.loads(body)
     assert data == {"name": "from-disk", "tags": ["a"]}
+
+
+def test_get_entry_data_fills_in_missing_defaulted_sections(tmp_path: Path) -> None:
+    """A partial on-disk file gets its default_factory sections filled in.
+
+    Before this fix, GET /api/entries/{name}/data returned the raw on-disk
+    dict unchanged, so `extra` was simply absent from the response. Jedison
+    has no schema-level default to fall back on for a `default_factory`
+    field (Pydantic never emits one), so the section silently failed to
+    render in the browser. See mimirheim's config_editor_v2 investigation.
+    """
+    (tmp_path / "sectioned.yaml").write_text(yaml.safe_dump({"name": "from-disk"}))
+    server = _make_server(tmp_path, entries=[_sectioned_entry()])
+    status, _headers, body = _get(server, "/api/entries/Sectioned/data")
+    assert status == 200
+    data = json.loads(body)
+    assert data == {
+        "name": "from-disk",
+        "extra": {"label": "default-label"},
+        "power_kw": 1.0,
+    }
+
+
+def test_get_entry_data_invalid_on_disk_file_returns_422(tmp_path: Path) -> None:
+    """An on-disk file that fails validation is rejected, not passed through.
+
+    Fixing a hand-edited or stale config file is the user's job, not this
+    editor's: a config that fails validation because it predates a model
+    change is a migration the owning helper or mimirheim must perform, not
+    something GET /api/entries/{name}/data papers over.
+    """
+    (tmp_path / "sectioned.yaml").write_text(
+        yaml.safe_dump({"name": "from-disk", "power_kw": -5.0})
+    )
+    server = _make_server(tmp_path, entries=[_sectioned_entry()])
+    status, _headers, body = _get(server, "/api/entries/Sectioned/data")
+    assert status == 422
+    data = json.loads(body)
+    sectioned_errors = data["errors"]["Sectioned"]
+    assert len(sectioned_errors) == 1
+    assert sectioned_errors[0]["entry_name"] == "Sectioned"
+    assert sectioned_errors[0]["loc"] == ["power_kw"]
 
 
 def test_get_entry_data_unknown_name_returns_404(tmp_path: Path) -> None:

@@ -4,7 +4,10 @@ This package holds the parts of config-editor-v2 that carry no knowledge of
 any specific configuration's shape or of the concrete UI rendering library:
 the registry of editable configuration files (`registry.py`), the adapter's
 transform dispatch mechanism (`adapter.py`), and the concrete transforms
-built on that mechanism (`transforms.py`).
+built on that mechanism (`transforms.py`). No field in any currently
+registered model opts into a transform, so both are dormant in practice
+today -- they exist so a field that genuinely needs one has somewhere to
+opt in, per `adapter.py`'s own module docstring.
 
 It does not run a server, serve static assets, or depend on any rendering
 library. See mimirheim_helpers/config_editor_v2/IMPLEMENTATION_DETAILS.md for
@@ -13,9 +16,10 @@ the full design.
 
 from __future__ import annotations
 
-# Importing this submodule registers the "nullable-list" transform as a
-# side effect, so any code that imports this package has it available
-# without a separate explicit import. See transforms.py.
+# Importing this submodule registers the "nullable-list" and
+# "nullable-scalar" transforms as a side effect, so any code that imports
+# this package has them available without a separate explicit import. See
+# transforms.py.
 from . import transforms as transforms
 
 # Re-exported so `config_editor_v2.registry` is reachable as an attribute

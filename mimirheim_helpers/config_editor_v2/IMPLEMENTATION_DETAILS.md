@@ -139,6 +139,38 @@ in the save or capable of validating against its own defaults. An entry
 excluded as untouched-with-no-defaults never reaches that guarantee at all,
 because it was never part of the save to begin with.
 
+## Load semantics
+
+`GET /api/entries/{name}/data` validates an existing on-disk file against
+the entry's own model before returning it, and returns the *validated*
+model's own dump, not the raw YAML dict. This is deliberate, for two
+reasons:
+
+- Pydantic never emits a literal `default` in JSON Schema for a field using
+  `default_factory` (every device-map field and most config-section fields
+  in `MimirheimConfig` use one). A partial on-disk file that omits such a
+  field would otherwise reach the rendering library with that key simply
+  absent, and the rendering library has no schema-level default to fall
+  back on -- it silently fails to render that section at all rather than
+  showing it with its real default values. Validating and re-dumping fills
+  every such field in before the response is sent, so every field the model
+  defines always has a concrete value in the response.
+- An on-disk file that fails validation is rejected outright (HTTP 422, in
+  the same `{entry_name, loc, message}` shape `POST /api/save` uses for its
+  own errors), not passed through as-is or silently emptied. Fixing a file
+  that fails validation is not this editor's job: if it was hand-edited
+  into a broken state, that is the operator's mistake to fix; if it fails
+  because it predates a Pydantic model change, migrating it forward is the
+  responsibility of the owning helper or of mimirheim itself, not something
+  this editor should paper over by serving stale or partial data.
+
+This does not weaken "validation always goes through the real Pydantic
+model" (see that section above): it extends the same principle to reads,
+not only writes. A file that exists on disk but no longer validates is
+already broken before this editor ever touches it; refusing to load it is
+the same posture `POST /api/save` already takes toward a submission that
+fails validation.
+
 ## The adapter
 
 The adapter is the only part of this editor that has any knowledge of the
@@ -164,6 +196,13 @@ The adapter performs two operations on each registered model:
    back through the data transform, is acceptable input to the real Pydantic
    model's validation.
 
+No transform is currently registered. The adapter is opt-in infrastructure:
+it exists so that a field which genuinely needs schema- or data-level
+rewriting has somewhere to register that behavior, not so that behavior
+exists ahead of a real need. Do not add a transform speculatively; add one
+when a specific field's rendering is actually broken, name it in that
+field's own `x-mimir-adapter` hint, and document why in this section.
+
 ### Transform dispatch
 
 A field opts into a specific adapter behavior by setting
@@ -171,80 +210,71 @@ A field opts into a specific adapter behavior by setting
 maintains an internal mapping from transform names to transform
 implementations. Adding a new transform means registering a new name in this
 mapping; it does not require changing how any existing transform is selected
-or applied. A field with no `x-mimir-adapter` hint is passed through with only
-namespace-independent hints (such as a label or grouping key) applied, with no
-structural change to its schema or data.
+or applied. A field with no `x-mimir-adapter` hint is passed through with
+only namespace-independent hints (such as a label or grouping key) applied,
+with no structural change to its schema or data.
 
-### The `nullable-list` transform
+Dispatch is selection by explicit hint only. There is deliberately no
+shape-based auto-detection: a transform never fires just because a field
+happens to match some structural pattern (for example, every `X | None`
+field). An earlier version of this adapter added exactly that -- two
+transforms, `nullable-list` and `nullable-scalar`, that fired automatically
+on every nullable scalar or array field with no hint required -- and it was
+removed. The problem was not the transforms' own behavior; it was that nobody
+reviewing a schema change could tell, from the model alone, which fields were
+being silently rewritten and why. Every transform that applies today does so
+because some field's own `json_schema_extra` says so, visibly, at the point
+where a reviewer is already looking.
 
-This transform handles a field typed such that its value is either `None` or a
-non-empty list — that is, a JSON Schema shaped as an `anyOf` between an array
-with a minimum item count and a null type. Without this transform, a
-schema-driven rendering library sees an `anyOf` and is expected to ask the user
-to choose which of the two alternatives ("array" or "null") they are filling
-in, which is not a meaningful choice to present: the user is simply choosing
-whether to provide any entries at all.
+### Reaching every field in a model's schema, not only its own top-level fields
 
-The transform's outgoing schema change:
+`adapter.transform_schema` and `adapter.transform_incoming_data` each
+operate on one field at a time. Two further entry points reach every field
+anywhere in a registered model's schema, including fields nested inside
+sub-models:
 
-- The `anyOf` between an array-with-minimum and null is replaced with a plain
-  array schema, with no enforced minimum item count. The rendering library
-  therefore presents an ordinary list editor that starts empty and accepts
-  zero or more entries, with no special-cased "null" state visible to the
-  user.
-- If the original field declared a real minimum length greater than zero, that
-  number is preserved in the rewritten schema as a separate, non-enforcing
-  hint, intended only for optional in-form messaging (for example, a note that
-  reads "at least two entries required if any are provided"). This hint is
-  never expressed as the rewritten schema's own minimum item count, since doing
-  so would reintroduce enforcement the transform is specifically designed to
-  remove at this layer.
+- `transform_schema_document(model_schema)` runs `transform_schema` over
+  the model's own top-level `properties` and, separately, over every entry
+  in `$defs` -- every sub-model the model uses, however deeply nested in
+  the original Python type graph. This is not an open-ended recursive walk:
+  `model_json_schema()` always hoists every referenced sub-model into one
+  flat `$defs` map, so "top-level properties, plus each `$defs` entry's own
+  properties" already reaches every field in the document, in exactly two
+  passes.
+- `transform_value_document(field_schema, value, defs)` applies
+  `transform_incoming_data` to a submitted value and everything nested
+  inside it. Submitted data carries no `$ref` pointers of its own, so this
+  function resolves `$ref` and a null-pair `anyOf` against `defs` as it
+  descends into an object's `properties`, a named-map field's
+  `additionalProperties`, or an array's `items`. Every level's own
+  transform is applied last, against that level's original, unresolved
+  schema fragment, after its children have already been transformed.
 
-The transform's incoming (submitted) data change:
-
-- If the submitted value for this field is an empty list, it is converted to
-  `None` before the data is handed to the real Pydantic model for validation.
-- Any non-empty submitted list is passed through unchanged.
-
-This incoming-data conversion is required for correctness, not only for
-appearance. Some models pair two nullable-list fields as alternatives to each
-other, where providing one and leaving the other absent is required, and
-providing both, or neither, is rejected. That check is written against
-Python's `is not None`, which treats an empty list as "provided." Left
-unconverted, a user who fills in one of the two alternative fields and leaves
-the other's list editor empty would submit an empty list for the untouched
-field, which reads as "both fields provided" to that check and produces an
-incorrect validation error. Converting an empty submitted list back to `None`
-before validation is what makes leaving a list editor empty equivalent, from
-the real model's point of view, to never having set that field at all.
-
-Because this transform intentionally does not enforce the field's true
-minimum on the client side, a user can submit a list that is non-empty but
-still shorter than the real required minimum. This is only caught when the
-real Pydantic model validates the save, per the save semantics described
-above. This is an accepted trade-off: the alternative is reintroducing an
-enforced structural constraint the transform exists specifically to remove
-from the client-facing schema.
-
-This transform does not attempt to present two related nullable-list fields
-(an alternative pair, where exactly one of the pair should be populated) as a
-single grouped choice control. Both fields are rendered independently, and a
-conflict between them is caught only by the real model's own validation at
-save time, surfaced as a save-time error rather than prevented in the form.
+Both whole-document functions are exercised today with no transform
+registered, which is why they matter even though nothing currently changes
+shape: a field nested inside a sub-model (`mqtt.client_id`,
+`BatteryConfig.charge_segments`, and so on) needs `transform_schema_document`/
+`transform_value_document` to be reached at all once a transform does exist
+for it, not only a top-level field of the registered model itself.
 
 ## Namespace convention
 
 Every hint this editor's adapter interprets is placed in a field's
 `json_schema_extra` under a key beginning with `x-mimir-`. This includes, at
 minimum, the transform-selection hint (`x-mimir-adapter`) and any advisory
-hints a transform produces or consumes (such as the non-enforcing minimum
-length hint described above). A hint under any other name is assumed to belong
-to the rendering library itself and is left untouched by the adapter.
+hints a transform produces or consumes. A hint under any other name is
+assumed to belong to the rendering library itself and is left untouched by
+the adapter.
 
 This project's configuration models are not required to use this namespace
-today. Adopting this convention for a given model's existing hints, where that
-model has any, is migration work performed when that model is first registered
-with this editor, not a precondition for this editor's own implementation.
+today. A field that needs rendering-library-specific treatment with no
+shape change (a category, a masked password input, and so on) is authored
+using Jedison's own native vocabulary directly in that field's
+`json_schema_extra` -- there is currently no translation layer between this
+editor's own hints and Jedison's. Introducing one, and migrating existing
+native hints into the `x-mimir-` namespace behind it, is deferred until a
+second rendering library is actually in scope and the indirection earns its
+keep.
 
 ## Rendering library
 
@@ -275,59 +305,136 @@ in browser testing before being fixed:
   the same vendored UMD bundle.
 - Jedison's "Add property" button is unconditionally suppressed whenever a
   schema's `additionalProperties` is exactly `false` (every `extra="forbid"`
-  model in this project), independent of the `objectAdd` option. No
-  `x-objectAdd` hint or global `objectAdd` override is needed or set
-  anywhere in this editor: the former would be a no-op, and the latter
-  would also suppress the "add a new named entry" control a dict-typed
-  field (e.g. `batteries: dict[str, BatteryConfig]`) needs, since
-  `additionalProperties` there is a schema, not `false`.
+  model in this project), independent of the `objectAdd` option -- so no
+  per-field override is needed to hide it on a plain closed object.
+  `static/app.js` additionally sets a global `objectAdd: false` at the
+  `Create()` level, which also suppresses the "add a new named entry"
+  control a dict-typed field (e.g. `batteries: dict[str, BatteryConfig]`)
+  needs, since `additionalProperties` there is a schema, not `false`, and
+  is therefore not covered by the automatic suppression above. A dict-typed
+  field that wants that control back sets `x-addPropertyContent` (its
+  custom add-button label); `jedison_mapping.to_jedison_object_schema`
+  derives the matching `x-objectAdd: True` override for that same field
+  automatically from `x-addPropertyContent`'s presence, so the two hints
+  never need to be set by hand together. See `jedison_mapping.py`'s own
+  module docstring for why this one derivation is not gated behind
+  `x-mimir-adapter` like every other transform in this editor.
 
-### Jedison hint mapping
+### Editor and option selection reference
 
-The Jedison-specific half of the adapter (`jedison_mapping.py`) maps this
-editor's `x-mimir-` hints to the concrete schema attributes Jedison's
-schema-driven form renderer reads. It runs after `adapter.transform_schema`
-and any field-specific transform (such as `nullable-list`) have already
-applied to a field's schema.
+This section records, for every JSON Schema shape this project's real
+models actually contain, what Jedison's own default editor does, what (if
+anything) this project overrides, and why -- including shapes deliberately
+left at Jedison's default. It is the durable record step 71_7's
+investigation produced; a future change to a specific field's rendering
+should consult this before re-researching Jedison from scratch. Every claim
+below was either confirmed against Jedison's own documentation
+(`https://germanbisurgi.github.io/jedison-docs/`), the vendored bundle's
+own source (`static/vendor/jedison/jedison.umd.js`, minified but not
+obfuscated beyond variable renaming -- string literals survive and are
+greppable), or a real, running instance of this editor inspected in a
+browser.
 
-Two source hint names are introduced for this mapping, following the
-`x-mimir-` namespace convention already established by `x-mimir-adapter` and
-`x-mimir-min-length-hint`:
+**Plain, closed object (an `extra="forbid"` record with no dict-typed
+field).** Jedison's default object editor renders a fieldset containing one
+editor per property, with no override needed: no `x-objectAdd` hint is ever
+set, because Jedison already suppresses its "Add property" button whenever a
+schema's `additionalProperties` is exactly `false` -- true for every
+`extra="forbid"` model in this project -- independent of any `objectAdd`
+option (confirmed against the vendored bundle during earlier hand-testing;
+see "Rendering library" above).
 
-- `x-mimir-label`: this field's display label.
-- `x-mimir-group`: the name of the section this field belongs to.
+**Named-map (dict-typed) fields -- the priority investigation target.**
+`MimirheimConfig.batteries` and its siblings (`pv_arrays`, `ev_chargers`,
+`deferrable_loads`, `static_loads`, `hybrid_inverters`, `thermal_boilers`,
+`space_heating_hps`, `combi_heat_pumps`) are Pydantic's `dict[str,
+SomeConfig]`, rendered as `{"type": "object", "additionalProperties":
+{"$ref": ...}}` with no fixed `properties` at all -- a different shape from
+a closed record, and one `x-objectAdd` deliberately does not target (see
+above). Confirmed empirically (bundle source, then a real browser session
+against a running instance of this editor):
 
-The mapping:
+- Jedison's default object editor handles this shape correctly out of the
+  box, with no hint needed: its "add a new named entry" flow is the same
+  "Add property" button as a closed record's, but the key it resolves a new
+  entry's schema against comes from `additionalProperties` (a schema, not
+  `false`) whenever no fixed `properties` entry matches the typed key —
+  this is exactly what lets `additionalProperties` remain a schema (not
+  `false`) that a dict-typed field needs, and what makes the "Add property"
+  button appear at all for these fields.
+- Clicking "Add property" reveals an inline text input (labelled "Add
+  property" by default, customisable via `x-addPropertyContent`) where the
+  user types the new key. Confirmed in a real browser: typing a name and
+  submitting creates a full child form for that entry, correctly built from
+  the item model's own schema.
+- Jedison has no hook that customises this quick-add input's own
+  placeholder or help text (only its short label, via
+  `x-addPropertyContent`); Jedison's `x-info` option, rendered next to a
+  field's own heading with `variant: "modal"` (the only variant actually
+  wired to display anything, confirmed against the vendored bundle), is the
+  closest real equivalent for guidance on a new entry's naming convention.
+  No field currently sets it.
 
-| Source | Destination |
-|---|---|
-| `x-mimir-label` on a field | Jedison's native `title` key on that field |
-| `x-mimir-group` on a field | Jedison's `x-category` key on that field |
-| Any field in a model carrying `x-mimir-group` | Jedison's `x-format` key, set once on the model's top-level object schema, to `"categories-vertical"` |
-| `x-mimir-min-length-hint` on a field (written by the `nullable-list` transform) | Appended to Jedison's native `description` key on that field, rather than overwriting any existing description |
+**Plain string.** Jedison's default string editor (a single-line text
+input) is adequate for every plain string field in this project's real
+models except one: `mqtt.password` (and its `helper_common.MqttConfig`
+counterpart), which carries `"x-format": "password"` directly in
+`json_schema_extra` (a Jedison-native key, not `x-mimir-` namespaced --
+see "Namespace convention"). Confirmed against the vendored bundle: the
+default string editor reads a
+field's `x-format` (not the JSON-Schema-standard `format` keyword) and, if
+it matches one of a fixed list of HTML input types that includes
+`"password"`, renders `<input type="password">`. No other string field in
+this project's real models (grepped for a plausible secret-like name --
+`api_key`, `token`, `secret`, `passwd`) needs the same treatment, and no
+field is long enough to justify a `textarea` variant.
 
-`"categories-vertical"` is this mapping's chosen default for `x-format`
-(Jedison also supports `"categories-horizontal"`). Vertical category lists
-degrade better on narrow viewports than a horizontal tab strip, which has to
-scroll or wrap once there are more than a few sections; nothing in the
-current design requires the horizontal layout instead.
+**Plain number/integer.** Jedison's default number editor already reflects
+JSON Schema `minimum`/`maximum` (Pydantic's mapping of a field's `ge`/`le`)
+as native HTML `min`/`max` attributes, because `useConstraintAttributes`
+defaults to `true` in Jedison's own `Create()` defaults (confirmed against
+the vendored bundle) -- no override, global or per-field, is needed. A
+`gt`/`lt`-constrained field (JSON Schema `exclusiveMinimum`/
+`exclusiveMaximum`) is *not* reflected as a native constraint attribute: the
+default number editor's constraint-attribute code only reads
+`minimum`/`maximum`. This is a real, confirmed gap (`SpaceHeatingConfig`'s
+`elec_power_kw` and `cop` are the two affected real fields), left
+unaddressed: the field still validates correctly server-side regardless
+(per "Why validation always goes through the real Pydantic model"), the
+only loss is a client-side HTML constraint hint, and fixing it would need a
+new hint translation for two fields, which is not a high-confidence,
+broadly-applicable improvement in the sense step 71_7 was scoped for.
 
-Because grouping requires seeing every field in a model at once (to decide
-the parent object schema's `x-format`), it cannot be resolved by a function
-that only sees one field's schema in isolation. The label and advisory-hint
-concerns, which are per-field, are handled by `to_jedison_schema(field_schema)`.
-Grouping, which requires the whole model schema, is handled by a second
-function, `to_jedison_object_schema(model_schema)`, which applies
-`to_jedison_schema` to every field under `properties` and then resolves
-grouping across all of them.
+**Plain boolean.** No real field in any currently registered model is typed
+`bool | None`; every boolean field is a plain, required `bool` with a
+default. Jedison's default boolean editor is adequate; nothing about a
+plain `bool` field's rendering was found to need an override.
 
-A field with none of these three hints is passed through unchanged. An
-`x-mimir-` key this mapping does not recognise (including `x-mimir-adapter`,
-which belongs to the rendering-library-agnostic half of the adapter, not to
-this mapping) is left in place rather than dropped, so a future mapping
-addition is additive. A hint outside the `x-mimir-` namespace is assumed to
-already be in Jedison's own vocabulary and is left untouched, per the
-"Namespace convention" section above.
+**`enum` / `Literal`-typed fields.** `SocTopicConfig.unit: Literal["kwh",
+"percent"]` is the only real `Literal` field in scope (grepped across every
+file step 71_6 already covered). Confirmed against the vendored bundle:
+Jedison's string-editor-with-options resolves automatically whenever a
+string schema carries a non-empty `enum`, with no `x-format` or other hint
+required, and renders it as a native `<select>`. No override needed.
+
+**Plain `X | None` (a nullable scalar or array with no other alternative).**
+Confirmed against the vendored bundle and in a real browser session: Jedison
+renders an untransformed `anyOf` between a concrete branch and a null branch
+as a generic switcher control with one option per branch, and because
+neither branch in this shape carries its own title, Jedison's own
+switcher-building code merges the *field's* title into every branch that
+lacks one -- so the switcher's two options end up carrying the literal same
+label, with nothing to indicate what either one does. This is a real,
+currently unaddressed defect, left at Jedison's default: `X | None` is one
+of the most common field shapes in this project's real models (dozens of
+fields per model), and collapsing it away for every such field
+automatically, with no explicit hint, is exactly the "transform fires
+without a reviewer being able to see why from the model alone" problem
+"Transform dispatch" above describes -- see that section for why this
+project no longer does that. Fixing a specific field that is actually
+causing a usability problem, by registering a transform and naming it in
+that field's own `x-mimir-adapter` hint, is the way to address this; doing
+so for every nullable field pre-emptively is not.
 
 ## Deployment
 
@@ -357,12 +464,25 @@ here so they are not lost, not because they block current work.
   underlying domain model, not in this editor, and correcting it is out of
   scope for this document. This editor's registry and adapter design do not
   assume, and are not blocked by, any particular resolution of that mismatch.
-- Presenting an alternative-pair of nullable-list fields as a single grouped
-  toggle, rather than two independently rendered fields, is a possible future
-  enhancement to the adapter's hint vocabulary. It is not implemented by the
-  `nullable-list` transform described above.
-- Enforcing a "zero, or at least N" constraint for a nullable-list field at the
-  adapter layer, rather than leaving a too-short non-empty submission to be
-  caught only at save time, is a possible future enhancement to the
-  `nullable-list` transform. It is not implemented by the version described
-  above.
+- Every `X | None` field (a nullable scalar or array with no other
+  alternative, including a None-or-submodel field such as
+  `BatteryConfig.inputs`) renders as Jedison's default, unhelpful anyOf
+  switcher -- see "Editor and option selection reference" above. This is a
+  real, confirmed usability defect, deliberately left unaddressed until a
+  specific field's rendering is a genuine problem worth registering a
+  transform for; see "The adapter" above for why this project no longer
+  fixes this class of shape pre-emptively across every field at once. A
+  None-or-submodel field in particular would need its own investigation
+  into how (or whether) Jedison can render an object editor with an
+  explicit "unset this section" affordance, since `null` there is a real,
+  reachable, meaningful state ("opt out entirely") that a naive
+  collapse-to-non-null-branch would make impossible to express again in the
+  form, unlike an empty list or an empty string.
+- A pre-existing, unrelated browser console error
+  (`TypeError: Cannot convert undefined or null to object` inside Jedison's
+  own `removeNotListedPropertiesFromValue`, triggered while building the
+  default value for a None-or-submodel field such as `BatteryConfig.inputs`
+  that has no explicit `default` key of its own) was observed during manual
+  verification. It does not visibly break rendering or data submission for
+  any field tested. Recorded here so a future investigation into the
+  None-or-submodel gap does not have to rediscover it from scratch.

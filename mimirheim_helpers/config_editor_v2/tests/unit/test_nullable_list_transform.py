@@ -28,7 +28,7 @@ def test_schema_anyof_replaced_with_plain_array() -> None:
     """The rewritten schema has no `anyOf` key and `type == "array"`."""
     schema = _field_schema(NullableListModel, "entries")
 
-    transformed = transform_schema(schema)
+    transformed = transform_schema(schema, {})
 
     assert "anyOf" not in transformed
     assert transformed["type"] == "array"
@@ -39,7 +39,7 @@ def test_schema_min_items_not_enforced_after_transform() -> None:
     schema = _field_schema(NullableListModel, "entries")
     assert schema["anyOf"][0]["minItems"] == 2  # sanity check on the fixture
 
-    transformed = transform_schema(schema)
+    transformed = transform_schema(schema, {})
 
     assert "minItems" not in transformed
 
@@ -48,7 +48,7 @@ def test_schema_min_length_hint_preserved_as_advisory() -> None:
     """The rewritten schema carries the original minimum as an advisory hint."""
     schema = _field_schema(NullableListModel, "entries")
 
-    transformed = transform_schema(schema)
+    transformed = transform_schema(schema, {})
 
     assert transformed["x-mimir-min-length-hint"] == 2
 
@@ -67,7 +67,7 @@ def test_schema_no_hint_when_source_has_no_minimum() -> None:
     schema = _field_schema(NoMinimumModel, "entries")
     assert "minItems" not in schema["anyOf"][0]  # sanity check on the fixture
 
-    transformed = transform_schema(schema)
+    transformed = transform_schema(schema, {})
 
     assert "x-mimir-min-length-hint" not in transformed
 

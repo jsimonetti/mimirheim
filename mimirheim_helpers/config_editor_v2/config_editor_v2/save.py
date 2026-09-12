@@ -52,6 +52,31 @@ class FieldError(BaseModel):
     message: str
 
 
+def field_errors_from_validation_error(entry_name: str, exc: ValidationError) -> list[FieldError]:
+    """Converts a Pydantic ValidationError into FieldErrors attributed to entry_name.
+
+    Shared by `validate_all` (for submitted save data) and the HTTP server's
+    `GET /api/entries/{name}/data` (for on-disk data), so both attribute a
+    validation failure to entry name, field location, and message
+    identically.
+
+    Args:
+        entry_name: The RegistryEntry.name the failure came from.
+        exc: The ValidationError raised by that entry's model.
+
+    Returns:
+        One FieldError per error in `exc.errors()`.
+    """
+    return [
+        FieldError(
+            entry_name=entry_name,
+            loc=[str(part) for part in error["loc"]],
+            message=error["msg"],
+        )
+        for error in exc.errors()
+    ]
+
+
 def validate_all(
     entries: list[RegistryEntry],
     submitted: dict[str, dict[str, Any]],
@@ -124,14 +149,7 @@ def validate_all(
             try:
                 validated[entry.name] = model_cls.model_validate(submitted[entry.name])
             except ValidationError as exc:
-                for error in exc.errors():
-                    errors.append(
-                        FieldError(
-                            entry_name=entry.name,
-                            loc=[str(part) for part in error["loc"]],
-                            message=error["msg"],
-                        )
-                    )
+                errors.extend(field_errors_from_validation_error(entry.name, exc))
         else:
             # Untouched entry: best-effort default validation. If the
             # model has no valid all-defaults state -- true of every real
