@@ -73,7 +73,7 @@ EpexPredictor supports a fixed set of bidding zones: `DE`, `AT`, `BE`, `NL`, `SE
 
 ## 3. Configuration
 
-Create a `config.yaml` alongside the tool (or pass any path with `--config`):
+Create an `epexpredictor.yaml` alongside the tool (or pass any path with `--config`):
 
 ```yaml
 mqtt:

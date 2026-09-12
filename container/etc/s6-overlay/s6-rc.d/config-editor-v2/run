@@ -1,0 +1,15 @@
+#!/command/with-contenv sh
+exec 2>&1
+if [ "${ENABLE_CONFIG_EDITOR_V2:-true}" != "true" ]; then
+    echo "config-editor-v2: disabled via add-on options"
+    /command/s6-svc -d /run/service/config-editor-v2
+    exit 0
+fi
+CONFIG=/config/config-editor-v2.yaml
+DISABLED=$(grep -E '^[[:space:]]*disabled:[[:space:]]*true[[:space:]]*$' "$CONFIG" 2>/dev/null || true)
+if [ -n "$DISABLED" ]; then
+    echo "config-editor-v2: disabled via $CONFIG"
+    /command/s6-svc -d /run/service/config-editor-v2
+    exit 0
+fi
+exec /app/.venv/bin/python -m config_editor_v2 --config "$CONFIG"

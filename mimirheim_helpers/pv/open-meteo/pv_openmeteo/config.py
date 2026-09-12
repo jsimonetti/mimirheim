@@ -59,31 +59,31 @@ class OpenMeteoApiConfig(BaseModel):
     api_key: str | None = Field(
         default=None,
         description="Open-Meteo API key. Null = the free public endpoint.",
-        json_schema_extra={"ui_label": "API key", "ui_group": "advanced"},
+        title="API key",
     )
     base_url: str = Field(
         default="https://api.open-meteo.com",
         description="API base URL. Change for a commercial or self-hosted endpoint.",
-        json_schema_extra={"ui_label": "API base URL", "ui_group": "advanced"},
+        title="API base URL",
     )
     weather_model: str | None = Field(
         default=None,
         description="Open-Meteo weather model name. Null lets Open-Meteo choose per location.",
-        json_schema_extra={"ui_label": "Weather model", "ui_group": "advanced"},
+        title="Weather model",
     )
     forecast_days: int = Field(
         default=3,
         ge=1,
         le=16,
         description="Days of forecast to request, including today.",
-        json_schema_extra={"ui_label": "Forecast days", "ui_group": "advanced"},
+        title="Forecast days",
     )
     past_hours: float = Field(
         default=1.0,
         ge=0.0,
         le=48.0,
         description="Hours of already-elapsed forecast to keep in the payload.",
-        json_schema_extra={"ui_label": "Past hours retained", "ui_group": "advanced"},
+        title="Past hours retained",
     )
 
 
@@ -106,13 +106,13 @@ class SiteConfig(BaseModel):
         ge=-90.0,
         le=90.0,
         description="Site latitude in decimal degrees.",
-        json_schema_extra={"ui_label": "Latitude", "ui_group": "basic"},
+        title="Latitude",
     )
     longitude: float = Field(
         ge=-180.0,
         le=180.0,
         description="Site longitude in decimal degrees.",
-        json_schema_extra={"ui_label": "Longitude", "ui_group": "basic"},
+        title="Longitude",
     )
 
 
@@ -139,13 +139,13 @@ class HorizonPoint(BaseModel):
         ge=0.0,
         le=360.0,
         description="Compass bearing in degrees: 0 = north, 90 = east, 180 = south.",
-        json_schema_extra={"ui_label": "Bearing", "ui_group": "advanced"},
+        title="Bearing",
     )
     elevation: float = Field(
         ge=0.0,
         le=90.0,
         description="Obstacle elevation above the horizontal in degrees.",
-        json_schema_extra={"ui_label": "Elevation", "ui_group": "advanced"},
+        title="Elevation",
     )
 
 
@@ -206,86 +206,86 @@ class PlaneConfig(BaseModel):
     label: str | None = Field(
         default=None,
         description="Optional plane name, used in log messages only.",
-        json_schema_extra={"ui_label": "Label", "ui_group": "basic"},
+        title="Label",
     )
     latitude: float | None = Field(
         default=None,
         ge=-90.0,
         le=90.0,
         description="Plane latitude. Defaults to the site latitude.",
-        json_schema_extra={"ui_label": "Latitude override", "ui_group": "advanced"},
+        title="Latitude override",
     )
     longitude: float | None = Field(
         default=None,
         ge=-180.0,
         le=180.0,
         description="Plane longitude. Defaults to the site longitude.",
-        json_schema_extra={"ui_label": "Longitude override", "ui_group": "advanced"},
+        title="Longitude override",
     )
     declination: float = Field(
         ge=0.0,
         le=90.0,
         description="Panel tilt in degrees from horizontal. 0 = flat, 90 = vertical.",
-        json_schema_extra={"ui_label": "Panel tilt", "ui_group": "basic"},
+        title="Panel tilt",
     )
     azimuth: float = Field(
         ge=-180.0,
         le=180.0,
         description="Panel orientation in degrees from south: 0 = south, -90 = east, 90 = west.",
-        json_schema_extra={"ui_label": "Panel azimuth", "ui_group": "basic"},
+        title="Panel azimuth",
     )
     peak_power_kwp: float = Field(
         gt=0.0,
         description="Nameplate DC power of this plane in kWp.",
-        json_schema_extra={"ui_label": "Peak power (kWp)", "ui_group": "basic"},
+        title="Peak power (kWp)",
     )
     inverter_kwp: float | None = Field(
         default=None,
         gt=0.0,
         description="AC limit of this plane's own inverter in kW. Null = no per-plane limit.",
-        json_schema_extra={"ui_label": "Plane inverter (kW)", "ui_group": "basic"},
+        title="Plane inverter (kW)",
     )
     efficiency_factor: float = Field(
         default=1.0,
         gt=0.0,
         le=1.0,
         description="Linear system efficiency: inverter, cabling, soiling, degradation.",
-        json_schema_extra={"ui_label": "Efficiency factor", "ui_group": "basic"},
+        title="Efficiency factor",
     )
     tracking: Literal["none", "azimuth", "tilt", "dual"] = Field(
         default="none",
         description="Axis tracking mode: none, azimuth, tilt, or dual.",
-        json_schema_extra={"ui_label": "Tracking", "ui_group": "advanced"},
+        title="Tracking",
     )
     damping_morning: float = Field(
         default=0.0,
         ge=0.0,
         le=1.0,
         description="Fraction of production removed at sunrise, tapering to none at solar noon.",
-        json_schema_extra={"ui_label": "Morning damping", "ui_group": "advanced"},
+        title="Morning damping",
     )
     damping_evening: float = Field(
         default=0.0,
         ge=0.0,
         le=1.0,
         description="Fraction of production removed at sunset, tapering from none at solar noon.",
-        json_schema_extra={"ui_label": "Evening damping", "ui_group": "advanced"},
+        title="Evening damping",
     )
     max_snowcover_depth_cm: float = Field(
         default=0.0,
         ge=0.0,
         description="Snow depth at which the plane produces nothing. 0 disables the correction.",
-        json_schema_extra={"ui_label": "Snow cover depth (cm)", "ui_group": "advanced"},
+        title="Snow cover depth (cm)",
     )
     horizon: list[HorizonPoint] | None = Field(
         default=None,
         description="Skyline profile in ascending compass bearing. Null disables horizon shading.",
-        json_schema_extra={"ui_label": "Horizon profile", "ui_group": "advanced"},
+        title="Horizon profile",
     )
     partial_shading: bool = Field(
         default=False,
         description="Credit diffuse light while the horizon blocks the direct beam.",
-        json_schema_extra={"ui_label": "Partial shading", "ui_group": "advanced"},
+        title="Partial shading",
     )
 
     @property
@@ -355,23 +355,18 @@ class ArrayConfig(BaseModel):
             "MQTT topic for the forecast payload. Retained. "
             "Defaults to '{mimir_topic_prefix}/input/pv/{array_key}/forecast' when not set."
         ),
-        json_schema_extra={
-            "ui_label": "Output topic",
-            "ui_group": "advanced",
-            "ui_placeholder": "{mimir_topic_prefix}/input/pv/{array_key}/forecast",
-            "ui_source": "pv_arrays",
-        },
+        title="Output topic", json_schema_extra={"ui_placeholder": "{mimir_topic_prefix}/input/pv/{array_key}/forecast", "ui_source": "pv_arrays"},
     )
     inverter_kwp: float | None = Field(
         default=None,
         gt=0.0,
         description="AC limit of the inverter shared by all planes in this array, in kW.",
-        json_schema_extra={"ui_label": "Shared inverter (kW)", "ui_group": "basic"},
+        title="Shared inverter (kW)",
     )
     planes: list[PlaneConfig] = Field(
         min_length=1,
         description="Coplanar module groups making up this array.",
-        json_schema_extra={"ui_label": "Planes", "ui_group": "basic"},
+        title="Planes",
     )
 
     @model_validator(mode="after")
@@ -423,28 +418,28 @@ class ConfidenceDecayConfig(BaseModel):
         ge=0.0,
         le=1.0,
         description="Confidence for steps 0-6 h ahead.",
-        json_schema_extra={"ui_label": "Confidence 0-6 h", "ui_group": "advanced"},
+        title="Confidence 0-6 h",
     )
     hours_6_to_24: float = Field(
         default=0.75,
         ge=0.0,
         le=1.0,
         description="Confidence for steps 6-24 h ahead.",
-        json_schema_extra={"ui_label": "Confidence 6-24 h", "ui_group": "advanced"},
+        title="Confidence 6-24 h",
     )
     hours_24_to_48: float = Field(
         default=0.55,
         ge=0.0,
         le=1.0,
         description="Confidence for steps 24-48 h ahead.",
-        json_schema_extra={"ui_label": "Confidence 24-48 h", "ui_group": "advanced"},
+        title="Confidence 24-48 h",
     )
     hours_48_plus: float = Field(
         default=0.35,
         ge=0.0,
         le=1.0,
         description="Confidence for steps 48+ h ahead.",
-        json_schema_extra={"ui_label": "Confidence 48+ h", "ui_group": "advanced"},
+        title="Confidence 48+ h",
     )
 
 
@@ -476,59 +471,55 @@ class PvOpenMeteoConfig(BaseModel):
 
     mqtt: MqttConfig = Field(
         description="MQTT broker connection settings.",
-        json_schema_extra={"ui_label": "MQTT", "ui_group": "basic"},
+        title="MQTT",
     )
     mimir_topic_prefix: str = Field(
         default="mimir",
         description="mimirheim mqtt.topic_prefix. Used to derive default array and trigger topics.",
-        json_schema_extra={"ui_label": "mimirheim topic prefix", "ui_group": "advanced"},
+        title="mimirheim topic prefix",
     )
     trigger_topic: str = Field(
         description="MQTT topic that triggers a fetch cycle.",
-        json_schema_extra={"ui_label": "Trigger topic", "ui_group": "advanced"},
+        title="Trigger topic",
     )
     open_meteo: OpenMeteoApiConfig = Field(
         default_factory=OpenMeteoApiConfig,
         description="Open-Meteo API configuration.",
-        json_schema_extra={"ui_label": "Open-Meteo API", "ui_group": "basic"},
+        title="Open-Meteo API",
     )
     site: SiteConfig = Field(
         description="Geographic location of the installation.",
-        json_schema_extra={"ui_label": "Site", "ui_group": "basic"},
+        title="Site",
     )
     arrays: dict[str, ArrayConfig] = Field(
         min_length=1,
         description="Named map of PV arrays, one per mimirheim pv_arrays device.",
-        json_schema_extra={"ui_label": "PV arrays", "ui_group": "basic"},
+        title="PV arrays",
     )
     confidence_decay: ConfidenceDecayConfig = Field(
         default_factory=ConfidenceDecayConfig,
         description="Per-band confidence values. Optional; defaults apply.",
-        json_schema_extra={"ui_label": "Confidence decay", "ui_group": "advanced"},
+        title="Confidence decay",
     )
     signal_mimir: bool = Field(
         default=False,
         description="Publish to mimir_trigger_topic once per cycle in which an array was published.",
-        json_schema_extra={"ui_label": "Signal mimirheim", "ui_group": "advanced"},
+        title="Signal mimirheim",
     )
     mimir_trigger_topic: str | None = Field(
         default=None,
         description="mimirheim trigger topic. Defaults to '{mimir_topic_prefix}/input/trigger'.",
-        json_schema_extra={
-            "ui_label": "mimirheim trigger topic",
-            "ui_group": "advanced",
-            "ui_placeholder": "{mimir_topic_prefix}/input/trigger",
-        },
+        title="mimirheim trigger topic", json_schema_extra={"ui_placeholder": "{mimir_topic_prefix}/input/trigger"},
     )
     ha_discovery: HomeAssistantConfig | None = Field(
         default=None,
         description="HA MQTT discovery configuration.",
-        json_schema_extra={"ui_label": "HA discovery", "ui_group": "advanced"},
+        title="HA discovery",
     )
     stats_topic: str | None = Field(
         default=None,
         description="MQTT topic where per-cycle run statistics are published.",
-        json_schema_extra={"ui_label": "Stats topic", "ui_group": "advanced"},
+        title="Stats topic",
     )
 
     @model_validator(mode="after")

@@ -8,19 +8,15 @@
           "default": 1.0,
           "description": "Weight on cost/revenue terms.",
           "minimum": 0,
-          "title": "Cost Weight",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "Cost weight"
+          "title": "Cost weight",
+          "type": "number"
         },
         "self_sufficiency_weight": {
           "default": 1.0,
           "description": "Weight on grid import penalty terms.",
           "minimum": 0,
-          "title": "Self Sufficiency Weight",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "Self-sufficiency weight"
+          "title": "Self-sufficiency weight",
+          "type": "number"
         }
       },
       "title": "BalancedWeightsConfig",
@@ -33,18 +29,14 @@
         "staged_power": {
           "default": false,
           "description": "Hardware accepts only discrete power stages, not continuous values.",
-          "title": "Staged Power",
-          "type": "boolean",
-          "ui_group": "advanced",
-          "ui_label": "Staged power control"
+          "title": "Staged power control",
+          "type": "boolean"
         },
         "zero_exchange": {
           "default": false,
           "description": "Battery inverter supports a closed-loop zero-exchange firmware mode. When True, the inverter autonomously holds grid exchange near zero using local CT measurements.",
-          "title": "Zero Exchange",
-          "type": "boolean",
-          "ui_group": "advanced",
-          "ui_label": "Zero-exchange mode"
+          "title": "Zero-exchange mode",
+          "type": "boolean"
         }
       },
       "title": "BatteryCapabilitiesConfig",
@@ -52,24 +44,20 @@
     },
     "BatteryConfig": {
       "additionalProperties": false,
-      "description": "Configuration for a DC-coupled residential battery.\n\nTwo efficiency models are supported:\n\n**Stacked-segment model** (``charge_segments``): Each segment is an independent LP\nvariable bounded by a flat efficiency. Use this when the efficiency curve is\napproximated by a small number of steps. This was the original model.\n\n**SOS2 piecewise-linear model** (``charge_efficiency_curve``): Uses a SOS2\nconstraint to interpolate efficiency linearly between breakpoints. Use this when\nyou have manufacturer-measured efficiency at several power levels and need accurate\ncontinuous interpolation.\n\nExactly one of ``charge_segments`` or ``charge_efficiency_curve`` must be\nprovided for each direction. Providing both, or neither, raises a\n``ValidationError``.\n\nAttributes:\n    capacity_kwh: Usable battery capacity in kWh.\n    min_soc_kwh: Minimum state of charge to maintain, in kWh.\n    charge_segments: Stacked-segment efficiency model for charging. At least\n        one segment required. Mutually exclusive with charge_efficiency_curve.\n    discharge_segments: Stacked-segment efficiency model for discharging.\n    charge_efficiency_curve: SOS2 piecewise-linear efficiency curve for charging.\n        At least two breakpoints required. First breakpoint must be at 0 kW.\n        Mutually exclusive with charge_segments.\n    discharge_efficiency_curve: SOS2 piecewise-linear efficiency curve for\n        discharging. Same constraints as charge_efficiency_curve.\n    wear_cost_eur_per_kwh: Cost per kWh of energy throughput in EUR.\n    optimal_lower_soc_kwh: Preferred minimum SOC in kWh. A soft lower\n        bound: dropping below it costs\n        ``soc_low_penalty_eur_per_kwh_h`` per kWh of deficit per hour\n        rather than being forbidden, so the solver still discharges past it\n        when the price spread pays for the penalty.\n    soc_low_penalty_eur_per_kwh_h: Penalty rate for negative SOC deviation.\n    reduce_charge_above_soc_kwh: SOC threshold above which charge is derated.\n    reduce_charge_min_kw: Minimum charge power at capacity_kwh when derated.\n    reduce_discharge_below_soc_kwh: SOC threshold below which discharge is derated.\n    reduce_discharge_min_kw: Minimum discharge power at min_soc_kwh when derated.\n    soc_ratchet: Periodic full-charge policy for cell balancing. Disabled\n        by default, in which case nothing about the solve changes.\n    capabilities: Hardware capability flags.\n    inputs: MQTT input topics for live battery state readings.\n    outputs: MQTT output topics for battery control signals (e.g. zero-export\n        mode flag). All fields default to None (no publishing).",
+      "description": "Configuration for a DC-coupled residential battery.",
       "properties": {
         "capacity_kwh": {
           "description": "Usable capacity in kWh.",
           "exclusiveMinimum": 0,
-          "title": "Capacity Kwh",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Capacity (kWh)"
+          "title": "Capacity (kWh)",
+          "type": "number"
         },
         "min_soc_kwh": {
           "default": 0.0,
           "description": "Minimum SOC in kWh.",
           "minimum": 0,
-          "title": "Min Soc Kwh",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Minimum SOC (kWh)"
+          "title": "Minimum SOC (kWh)",
+          "type": "number"
         },
         "charge_segments": {
           "anyOf": [
@@ -86,9 +74,7 @@
           ],
           "default": null,
           "description": "Stacked-segment efficiency model for charging. Mutually exclusive with charge_efficiency_curve. Exactly one must be provided.",
-          "title": "Charge Segments",
-          "ui_group": "basic",
-          "ui_label": "Charge segments"
+          "title": "Charge segments"
         },
         "discharge_segments": {
           "anyOf": [
@@ -105,9 +91,7 @@
           ],
           "default": null,
           "description": "Stacked-segment efficiency model for discharging. Mutually exclusive with discharge_efficiency_curve. Exactly one must be provided.",
-          "title": "Discharge Segments",
-          "ui_group": "basic",
-          "ui_label": "Discharge segments"
+          "title": "Discharge segments"
         },
         "charge_efficiency_curve": {
           "anyOf": [
@@ -124,9 +108,7 @@
           ],
           "default": null,
           "description": "SOS2 piecewise-linear efficiency curve for charging. First breakpoint must be at power_kw=0.0. Mutually exclusive with charge_segments.",
-          "title": "Charge Efficiency Curve",
-          "ui_group": "advanced",
-          "ui_label": "Charge efficiency curve"
+          "title": "Charge efficiency curve"
         },
         "discharge_efficiency_curve": {
           "anyOf": [
@@ -143,36 +125,28 @@
           ],
           "default": null,
           "description": "SOS2 piecewise-linear efficiency curve for discharging. First breakpoint must be at power_kw=0.0. Mutually exclusive with discharge_segments.",
-          "title": "Discharge Efficiency Curve",
-          "ui_group": "advanced",
-          "ui_label": "Discharge efficiency curve"
+          "title": "Discharge efficiency curve"
         },
         "wear_cost_eur_per_kwh": {
           "default": 0.0,
           "description": "Battery degradation cost per kWh of energy throughput (charge + discharge), in EUR. The solver subtracts this cost from every kWh cycled, so it will not dispatch the battery for a price spread smaller than this value. Set to 0.0 (default) to optimise purely on energy prices without modelling wear. To estimate a representative value: divide the battery replacement cost by the expected lifetime throughput. Example: a 10 kWh battery costing \u20ac3,000 with 3,000 expected full cycles has \u20ac3,000 / (3,000 \u00d7 10 kWh) = \u20ac0.10/kWh of throughput. Typical residential LFP values fall in the \u20ac0.03\u2013\u20ac0.12/kWh range.",
           "minimum": 0,
-          "title": "Wear Cost Eur Per Kwh",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Wear cost (\u20ac/kWh)"
+          "title": "Wear cost (\u20ac/kWh)",
+          "type": "number"
         },
         "optimal_lower_soc_kwh": {
           "default": 0.0,
           "description": "Preferred minimum state of charge in kWh. When the SOC falls below this level, the solver accrues a penalty proportional to the deficit. Acts as a soft lower bound: the solver may still dispatch below this level when the price spread justifies it. Must be >= min_soc_kwh and <= capacity_kwh.",
           "minimum": 0.0,
-          "title": "Optimal Lower Soc Kwh",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "Preferred minimum SOC (kWh)"
+          "title": "Preferred minimum SOC (kWh)",
+          "type": "number"
         },
         "soc_low_penalty_eur_per_kwh_h": {
           "default": 0.0,
           "description": "Penalty rate for SOC below optimal_lower_soc_kwh, in EUR per kWh of deficit per hour. Set to 0.0 (default) to disable. A value of 0.10 adds a 0.10 EUR \u00d7 kWh-deficit \u00d7 hours cost per step, discouraging dispatch below the optimal level for any price spread smaller than this rate.",
           "minimum": 0.0,
-          "title": "Soc Low Penalty Eur Per Kwh H",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "Low SOC penalty (\u20ac/kWh\u00b7h)"
+          "title": "Low SOC penalty (\u20ac/kWh\u00b7h)",
+          "type": "number"
         },
         "reduce_charge_above_soc_kwh": {
           "anyOf": [
@@ -185,9 +159,7 @@
           ],
           "default": null,
           "description": "SOC level in kWh above which max charge power begins to decrease linearly to reduce_charge_min_kw at capacity_kwh. Must be strictly between min_soc_kwh and capacity_kwh. Must be set together with reduce_charge_min_kw.",
-          "title": "Reduce Charge Above Soc Kwh",
-          "ui_group": "advanced",
-          "ui_label": "Derate charge above SOC (kWh)"
+          "title": "Derate charge above SOC (kWh)"
         },
         "reduce_charge_min_kw": {
           "anyOf": [
@@ -201,9 +173,7 @@
           ],
           "default": null,
           "description": "Max charge power in kW at full capacity (capacity_kwh). The charge power limit decreases linearly from max_charge_kw at reduce_charge_above_soc_kwh to this value at capacity_kwh. Must be strictly greater than 0 and strictly less than the sum of charge segment power_max_kw values. Must be set together with reduce_charge_above_soc_kwh.",
-          "title": "Reduce Charge Min Kw",
-          "ui_group": "advanced",
-          "ui_label": "Derated charge minimum (kW)"
+          "title": "Derated charge minimum (kW)"
         },
         "reduce_discharge_below_soc_kwh": {
           "anyOf": [
@@ -216,9 +186,7 @@
           ],
           "default": null,
           "description": "SOC level in kWh below which max discharge power begins to decrease linearly to reduce_discharge_min_kw at min_soc_kwh. Must be strictly between min_soc_kwh and capacity_kwh. Must be set together with reduce_discharge_min_kw.",
-          "title": "Reduce Discharge Below Soc Kwh",
-          "ui_group": "advanced",
-          "ui_label": "Derate discharge below SOC (kWh)"
+          "title": "Derate discharge below SOC (kWh)"
         },
         "reduce_discharge_min_kw": {
           "anyOf": [
@@ -232,15 +200,12 @@
           ],
           "default": null,
           "description": "Max discharge power in kW at minimum SOC (min_soc_kwh). The discharge power limit decreases linearly from max_discharge_kw at reduce_discharge_below_soc_kwh to this value at min_soc_kwh. Must be strictly greater than 0 and strictly less than the sum of discharge segment power_max_kw values. Must be set together with reduce_discharge_below_soc_kwh.",
-          "title": "Reduce Discharge Min Kw",
-          "ui_group": "advanced",
-          "ui_label": "Derated discharge minimum (kW)"
+          "title": "Derated discharge minimum (kW)"
         },
         "capabilities": {
           "$ref": "#/$defs/BatteryCapabilitiesConfig",
           "description": "Hardware capability flags.",
-          "ui_group": "advanced",
-          "ui_label": "Hardware capabilities"
+          "title": "Hardware capabilities"
         },
         "inputs": {
           "anyOf": [
@@ -252,20 +217,17 @@
             }
           ],
           "description": "MQTT input topic configuration for battery state readings. Defaults to an empty model so topics are derived with percent unit. Set to null to opt out of MQTT inputs entirely.",
-          "ui_group": "advanced",
-          "ui_label": "Input topics"
+          "title": "Input topics"
         },
         "outputs": {
           "$ref": "#/$defs/BatteryOutputsConfig",
           "description": "MQTT output topic configuration for battery control signals.",
-          "ui_group": "advanced",
-          "ui_label": "Output topics"
+          "title": "Output topics"
         },
         "soc_ratchet": {
           "$ref": "#/$defs/SocRatchetConfig",
           "description": "Periodic full-charge policy. Disabled by default.",
-          "ui_group": "advanced",
-          "ui_label": "SOC ratchet"
+          "title": "SOC ratchet"
         },
         "min_charge_kw": {
           "anyOf": [
@@ -279,9 +241,7 @@
           ],
           "default": null,
           "description": "Minimum charge power in kW when the battery is actively charging. The battery either charges at this power or above, or stays idle (0 kW); intermediate charge powers are excluded from the solution space. Safe to combine with min_discharge_kw: the solver models idle as a distinct state, so setting both floors does not force the battery to cycle. Default None = no floor applied.",
-          "title": "Min Charge Kw",
-          "ui_group": "advanced",
-          "ui_label": "Minimum charge power (kW)"
+          "title": "Minimum charge power (kW)"
         },
         "min_discharge_kw": {
           "anyOf": [
@@ -295,17 +255,14 @@
           ],
           "default": null,
           "description": "Minimum discharge power in kW when the battery is actively discharging. The battery either discharges at this power or above, or stays idle (0 kW); intermediate discharge powers are excluded from the solution space. Safe to combine with min_charge_kw. Default None = no floor applied.",
-          "title": "Min Discharge Kw",
-          "ui_group": "advanced",
-          "ui_label": "Minimum discharge power (kW)"
+          "title": "Minimum discharge power (kW)"
         }
       },
       "required": [
         "capacity_kwh"
       ],
       "title": "BatteryConfig",
-      "type": "object",
-      "ui_instance_name_description": "A short identifier for this battery used in MQTT topics and automations. For example: 'home_battery' or 'garage_battery'."
+      "type": "object"
     },
     "BatteryInputsConfig": {
       "additionalProperties": false,
@@ -314,8 +271,7 @@
         "soc": {
           "$ref": "#/$defs/SocTopicConfig",
           "description": "Battery state-of-charge MQTT topic configuration. Defaults to derived topic with percent unit.",
-          "ui_group": "advanced",
-          "ui_label": "SOC topic config"
+          "title": "SOC topic config"
         }
       },
       "title": "BatteryInputsConfig",
@@ -336,9 +292,7 @@
           ],
           "default": null,
           "description": "MQTT topic for the closed-loop zero-exchange mode boolean flag. Defaults to '{mqtt.topic_prefix}/output/battery/{name}/exchange_mode' when not set.",
-          "title": "Exchange Mode",
-          "ui_group": "advanced",
-          "ui_label": "Exchange mode topic",
+          "title": "Exchange mode topic",
           "ui_placeholder": "{mqtt.topic_prefix}/output/battery/{name}/exchange_mode"
         },
         "soc_ratchet": {
@@ -352,9 +306,7 @@
           ],
           "default": null,
           "description": "MQTT topic for the full-charge policy status, published retained and read back on startup. Defaults to '{mqtt.topic_prefix}/status/battery/{name}/soc_ratchet' when not set.",
-          "title": "Soc Ratchet",
-          "ui_group": "advanced",
-          "ui_label": "SOC ratchet status topic",
+          "title": "SOC ratchet status topic",
           "ui_placeholder": "{mqtt.topic_prefix}/status/battery/{name}/soc_ratchet"
         }
       },
@@ -368,34 +320,26 @@
         "thermal_capacity_kwh_per_k": {
           "description": "Building thermal mass in kWh/K.",
           "exclusiveMinimum": 0,
-          "title": "Thermal Capacity Kwh Per K",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Thermal capacity (kWh/K)"
+          "title": "Thermal capacity (kWh/K)",
+          "type": "number"
         },
         "heat_loss_coeff_kw_per_k": {
           "description": "Building heat loss coefficient in kW/K.",
           "exclusiveMinimum": 0,
-          "title": "Heat Loss Coeff Kw Per K",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Heat loss coefficient (kW/K)"
+          "title": "Heat loss coefficient (kW/K)",
+          "type": "number"
         },
         "comfort_min_c": {
           "default": 19.0,
           "description": "Minimum acceptable indoor temperature in \u00b0C.",
-          "title": "Comfort Min C",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "Minimum comfort (\u00b0C)"
+          "title": "Minimum comfort (\u00b0C)",
+          "type": "number"
         },
         "comfort_max_c": {
           "default": 24.0,
           "description": "Maximum acceptable indoor temperature in \u00b0C.",
-          "title": "Comfort Max C",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "Maximum comfort (\u00b0C)"
+          "title": "Maximum comfort (\u00b0C)",
+          "type": "number"
         },
         "inputs": {
           "anyOf": [
@@ -407,8 +351,7 @@
             }
           ],
           "description": "MQTT input topics. Defaults to an empty model so topics are derived. Set to null to opt out of MQTT inputs entirely.",
-          "ui_group": "advanced",
-          "ui_label": "Input topics"
+          "title": "Input topics"
         }
       },
       "required": [
@@ -433,9 +376,7 @@
           ],
           "default": null,
           "description": "MQTT topic for current indoor temperature in \u00b0C, retained. Defaults to a path derived from mqtt.topic_prefix and device name.",
-          "title": "Topic Current Indoor Temp C",
-          "ui_group": "advanced",
-          "ui_label": "Indoor temperature topic"
+          "title": "Indoor temperature topic"
         },
         "topic_outdoor_temp_forecast_c": {
           "anyOf": [
@@ -448,9 +389,7 @@
           ],
           "default": null,
           "description": "MQTT topic for per-step outdoor temperature forecast, JSON array of floats, retained. Defaults to a path derived from mqtt.topic_prefix and device name.",
-          "title": "Topic Outdoor Temp Forecast C",
-          "ui_group": "advanced",
-          "ui_label": "Outdoor temperature forecast topic"
+          "title": "Outdoor temperature forecast topic"
         }
       },
       "title": "BuildingThermalInputsConfig",
@@ -463,75 +402,57 @@
         "elec_power_kw": {
           "description": "Rated electrical power in kW.",
           "exclusiveMinimum": 0,
-          "title": "Elec Power Kw",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Electrical power (kW)"
+          "title": "Electrical power (kW)",
+          "type": "number"
         },
         "cop_dhw": {
           "description": "COP in DHW mode.",
           "exclusiveMinimum": 0,
-          "title": "Cop Dhw",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "COP (DHW mode)"
+          "title": "COP (DHW mode)",
+          "type": "number"
         },
         "cop_sh": {
           "description": "COP in space heating mode.",
           "exclusiveMinimum": 0,
-          "title": "Cop Sh",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "COP (space heating mode)"
+          "title": "COP (space heating mode)",
+          "type": "number"
         },
         "volume_liters": {
           "description": "DHW tank volume in litres.",
           "exclusiveMinimum": 0,
-          "title": "Volume Liters",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "DHW tank volume (L)"
+          "title": "DHW tank volume (L)",
+          "type": "number"
         },
         "setpoint_c": {
           "description": "DHW target temperature in \u00b0C.",
-          "title": "Setpoint C",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "DHW target temperature (\u00b0C)"
+          "title": "DHW target temperature (\u00b0C)",
+          "type": "number"
         },
         "min_temp_c": {
           "default": 40.0,
           "description": "DHW minimum temperature in \u00b0C.",
-          "title": "Min Temp C",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "DHW minimum temperature (\u00b0C)"
+          "title": "DHW minimum temperature (\u00b0C)",
+          "type": "number"
         },
         "cooling_rate_k_per_hour": {
           "description": "Tank cooling rate in K/h.",
           "minimum": 0,
-          "title": "Cooling Rate K Per Hour",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Cooling rate (K/h)"
+          "title": "Cooling rate (K/h)",
+          "type": "number"
         },
         "min_run_steps": {
           "default": 4,
           "description": "Minimum consecutive active steps.",
           "minimum": 0,
-          "title": "Min Run Steps",
-          "type": "integer",
-          "ui_group": "advanced",
-          "ui_label": "Minimum run steps"
+          "title": "Minimum run steps",
+          "type": "integer"
         },
         "wear_cost_eur_per_kwh": {
           "default": 0.0,
           "description": "Cycling cost per kWh of electrical consumption, in EUR. Adds a small penalty to each kWh consumed, discouraging unnecessary cycling beyond what the minimum run constraint already enforces. Set to 0.0 (default) for minimal cycling cost modelling.",
           "minimum": 0,
-          "title": "Wear Cost Eur Per Kwh",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Wear cost (\u20ac/kWh)"
+          "title": "Wear cost (\u20ac/kWh)",
+          "type": "number"
         },
         "inputs": {
           "anyOf": [
@@ -543,8 +464,7 @@
             }
           ],
           "description": "MQTT input topic configuration. Defaults to an empty model so topics are derived. Set to null to opt out of MQTT inputs entirely.",
-          "ui_group": "advanced",
-          "ui_label": "Input topics"
+          "title": "Input topics"
         },
         "building_thermal": {
           "anyOf": [
@@ -557,8 +477,7 @@
           ],
           "default": null,
           "description": "Optional building thermal model for the SH mode. When set, the solver tracks indoor temperature as a per-step state variable and enforces a comfort band instead of the degree-days total-heat lower bound for SH. DHW mode is unaffected.",
-          "ui_group": "advanced",
-          "ui_label": "Building thermal model"
+          "title": "Building thermal model"
         }
       },
       "required": [
@@ -570,8 +489,7 @@
         "cooling_rate_k_per_hour"
       ],
       "title": "CombiHeatPumpConfig",
-      "type": "object",
-      "ui_instance_name_description": "A short identifier for this combi heat pump used in MQTT topics and automations. For example: 'combi_hp' or 'main_hp'."
+      "type": "object"
     },
     "CombiHeatPumpInputsConfig": {
       "additionalProperties": false,
@@ -588,9 +506,7 @@
           ],
           "default": null,
           "description": "MQTT topic for DHW water temperature in \u00b0C, retained. Defaults to a path derived from mqtt.topic_prefix and device name.",
-          "title": "Topic Current Temp",
-          "ui_group": "advanced",
-          "ui_label": "DHW temperature topic"
+          "title": "DHW temperature topic"
         },
         "topic_heat_needed_kwh": {
           "anyOf": [
@@ -603,9 +519,7 @@
           ],
           "default": null,
           "description": "MQTT topic for space heating demand in kWh this horizon, retained. Defaults to a path derived from mqtt.topic_prefix and device name.",
-          "title": "Topic Heat Needed Kwh",
-          "ui_group": "advanced",
-          "ui_label": "Heat needed topic"
+          "title": "Heat needed topic"
         }
       },
       "title": "CombiHeatPumpInputsConfig",
@@ -626,9 +540,7 @@
           ],
           "default": null,
           "description": "Hard cap on grid import in kW.",
-          "title": "Max Import Kw",
-          "ui_group": "advanced",
-          "ui_label": "Max import cap (kW)"
+          "title": "Max import cap (kW)"
         },
         "max_export_kw": {
           "anyOf": [
@@ -641,9 +553,7 @@
           ],
           "default": null,
           "description": "Hard cap on grid export in kW.",
-          "title": "Max Export Kw",
-          "ui_group": "advanced",
-          "ui_label": "Max export cap (kW)"
+          "title": "Max export cap (kW)"
         }
       },
       "title": "ConstraintsConfig",
@@ -657,37 +567,29 @@
           "default": 0.05,
           "description": "Grid exchange below this value in kW is treated as near-zero. Enforcer activation applies only to steps below this threshold.",
           "minimum": 0.0,
-          "title": "Exchange Epsilon Kw",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "Exchange epsilon (kW)"
+          "title": "Exchange epsilon (kW)",
+          "type": "number"
         },
         "headroom_margin_kw": {
           "default": 0.1,
           "description": "Minimum absorption headroom in kW for a device to be eligible as enforcer. Devices below this threshold at their current operating point are excluded.",
           "minimum": 0.0,
-          "title": "Headroom Margin Kw",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "Headroom margin (kW)"
+          "title": "Headroom margin (kW)",
+          "type": "number"
         },
         "switch_delta": {
           "default": 0.05,
           "description": "Challenger must exceed current enforcer score by this amount to trigger a switch. Prevents oscillation when two devices score similarly.",
           "minimum": 0.0,
-          "title": "Switch Delta",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "Switch delta"
+          "title": "Switch delta",
+          "type": "number"
         },
         "min_enforcer_dwell_steps": {
           "default": 2,
           "description": "Minimum consecutive steps a device remains enforcer once selected. Device becomes ineligible immediately if it loses availability or headroom.",
           "minimum": 1,
-          "title": "Min Enforcer Dwell Steps",
-          "type": "integer",
-          "ui_group": "advanced",
-          "ui_label": "Min enforcer dwell steps"
+          "title": "Min enforcer dwell steps",
+          "type": "integer"
         }
       },
       "title": "ControlConfig",
@@ -700,10 +602,8 @@
         "enabled": {
           "default": false,
           "description": "Enable DEBUG logging and solve dumps.",
-          "title": "Enabled",
-          "type": "boolean",
-          "ui_group": "advanced",
-          "ui_label": "Enable debug dumps"
+          "title": "Enable debug dumps",
+          "type": "boolean"
         },
         "dump_dir": {
           "anyOf": [
@@ -717,18 +617,14 @@
           ],
           "default": null,
           "description": "Directory for solve dumps. Null = disabled.",
-          "title": "Dump Dir",
-          "ui_group": "advanced",
-          "ui_label": "Dump directory"
+          "title": "Dump directory"
         },
         "max_dumps": {
           "default": 50,
           "description": "Maximum retained dump pairs.",
           "minimum": 0,
-          "title": "Max Dumps",
-          "type": "integer",
-          "ui_group": "advanced",
-          "ui_label": "Max debug dumps"
+          "title": "Max debug dumps",
+          "type": "integer"
         }
       },
       "title": "DebugConfig",
@@ -744,10 +640,8 @@
             "type": "number"
           },
           "minItems": 1,
-          "title": "Power Profile",
-          "type": "array",
-          "ui_group": "basic",
-          "ui_label": "Power profile (kW per step)"
+          "title": "Power profile (kW per step)",
+          "type": "array"
         },
         "topic_window_earliest": {
           "anyOf": [
@@ -760,9 +654,7 @@
           ],
           "default": null,
           "description": "MQTT topic for earliest start datetime. Defaults to '{mqtt.topic_prefix}/input/deferrable/{name}/window_earliest' when not set.",
-          "title": "Topic Window Earliest",
-          "ui_group": "advanced",
-          "ui_label": "Earliest start topic",
+          "title": "Earliest start topic",
           "ui_placeholder": "{mqtt.topic_prefix}/input/deferrable/{name}/window_earliest"
         },
         "topic_window_latest": {
@@ -776,9 +668,7 @@
           ],
           "default": null,
           "description": "MQTT topic for latest end datetime. Defaults to '{mqtt.topic_prefix}/input/deferrable/{name}/window_latest' when not set.",
-          "title": "Topic Window Latest",
-          "ui_group": "advanced",
-          "ui_label": "Latest end topic",
+          "title": "Latest end topic",
           "ui_placeholder": "{mqtt.topic_prefix}/input/deferrable/{name}/window_latest"
         },
         "topic_committed_start_time": {
@@ -792,9 +682,7 @@
           ],
           "default": null,
           "description": "Optional MQTT topic for the actual start datetime published by the automation when the load physically begins. Retained. When present and current, mimirheim treats the load as a fixed draw for the remaining profile steps.",
-          "title": "Topic Committed Start Time",
-          "ui_group": "advanced",
-          "ui_label": "Committed start time topic"
+          "title": "Committed start time topic"
         },
         "topic_recommended_start_time": {
           "anyOf": [
@@ -807,17 +695,14 @@
           ],
           "default": null,
           "description": "Optional MQTT topic to which mimirheim publishes the solver-recommended start datetime (ISO 8601 UTC, retained) after each solve. The value is the UTC datetime of the first nonzero-setpoint step for this load. Only published when the load is in binary scheduling state (not running/committed).",
-          "title": "Topic Recommended Start Time",
-          "ui_group": "advanced",
-          "ui_label": "Recommended start time topic"
+          "title": "Recommended start time topic"
         }
       },
       "required": [
         "power_profile"
       ],
       "title": "DeferrableLoadConfig",
-      "type": "object",
-      "ui_instance_name_description": "A short identifier for this deferrable load used in MQTT topics and automations. For example: 'washing_machine' or 'dishwasher'."
+      "type": "object"
     },
     "EfficiencyBreakpoint": {
       "additionalProperties": false,
@@ -826,19 +711,15 @@
         "power_kw": {
           "description": "AC power in kW at this breakpoint.",
           "minimum": 0.0,
-          "title": "Power Kw",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Power (kW)"
+          "title": "Power (kW)",
+          "type": "number"
         },
         "efficiency": {
           "description": "Round-trip efficiency fraction.",
           "exclusiveMinimum": 0.0,
           "maximum": 1.0,
           "title": "Efficiency",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Efficiency"
+          "type": "number"
         }
       },
       "required": [
@@ -855,19 +736,15 @@
         "power_max_kw": {
           "description": "Maximum power through this segment in kW.",
           "exclusiveMinimum": 0,
-          "title": "Power Max Kw",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Max power (kW)"
+          "title": "Max power (kW)",
+          "type": "number"
         },
         "efficiency": {
           "description": "Round-trip efficiency fraction [0, 1].",
           "exclusiveMinimum": 0,
           "maximum": 1.0,
           "title": "Efficiency",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Efficiency"
+          "type": "number"
         }
       },
       "required": [
@@ -884,34 +761,26 @@
         "staged_power": {
           "default": false,
           "description": "Hardware accepts only discrete power stages, not continuous values.",
-          "title": "Staged Power",
-          "type": "boolean",
-          "ui_group": "advanced",
-          "ui_label": "Staged power control"
+          "title": "Staged power control",
+          "type": "boolean"
         },
         "zero_exchange": {
           "default": false,
           "description": "EVSE supports a closed-loop zero-exchange firmware mode. Requires v2h=True. The charger autonomously holds grid exchange near zero using local CT measurements.",
-          "title": "Zero Exchange",
-          "type": "boolean",
-          "ui_group": "advanced",
-          "ui_label": "Zero-exchange mode"
+          "title": "Zero-exchange mode",
+          "type": "boolean"
         },
         "v2h": {
           "default": false,
           "description": "Hardware supports vehicle-to-home discharge (bidirectional power flow). Required when zero_exchange=True.",
-          "title": "V2H",
-          "type": "boolean",
-          "ui_group": "advanced",
-          "ui_label": "Vehicle-to-home (V2H)"
+          "title": "Vehicle-to-home (V2H)",
+          "type": "boolean"
         },
         "loadbalance": {
           "default": false,
           "description": "EVSE firmware supports autonomous charge-only excess-PV following mode. When asserted, the EVSE self-regulates to available PV surplus.",
-          "title": "Loadbalance",
-          "type": "boolean",
-          "ui_group": "advanced",
-          "ui_label": "Load balance mode"
+          "title": "Load balance mode",
+          "type": "boolean"
         }
       },
       "title": "EvCapabilitiesConfig",
@@ -924,19 +793,15 @@
         "capacity_kwh": {
           "description": "Vehicle battery capacity in kWh.",
           "exclusiveMinimum": 0,
-          "title": "Capacity Kwh",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Vehicle capacity (kWh)"
+          "title": "Vehicle capacity (kWh)",
+          "type": "number"
         },
         "min_soc_kwh": {
           "default": 0.0,
           "description": "Minimum SOC in kWh.",
           "minimum": 0,
-          "title": "Min Soc Kwh",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Minimum SOC (kWh)"
+          "title": "Minimum SOC (kWh)",
+          "type": "number"
         },
         "charge_segments": {
           "description": "Piecewise efficiency segments for charging.",
@@ -944,35 +809,28 @@
             "$ref": "#/$defs/EfficiencySegment"
           },
           "minItems": 1,
-          "title": "Charge Segments",
-          "type": "array",
-          "ui_group": "basic",
-          "ui_label": "Charge segments"
+          "title": "Charge segments",
+          "type": "array"
         },
         "discharge_segments": {
           "description": "Piecewise efficiency segments for V2H discharge. Empty = no V2H.",
           "items": {
             "$ref": "#/$defs/EfficiencySegment"
           },
-          "title": "Discharge Segments",
-          "type": "array",
-          "ui_group": "basic",
-          "ui_label": "Discharge segments (V2H)"
+          "title": "Discharge segments (V2H)",
+          "type": "array"
         },
         "wear_cost_eur_per_kwh": {
           "default": 0.0,
           "description": "Vehicle battery degradation cost per kWh of energy throughput, in EUR. The solver subtracts this cost from every kWh charged or discharged (V2H), so it will not cycle the vehicle battery for a price spread smaller than this value. Set to 0.0 (default) to optimise purely on energy prices. To estimate: divide the expected battery replacement cost by the expected lifetime throughput. Example: a 60 kWh vehicle battery with a \u20ac8,000 pack and 1,500 full cycles gives \u20ac8,000 / (1,500 \u00d7 60 kWh) = \u20ac0.089/kWh.",
           "minimum": 0,
-          "title": "Wear Cost Eur Per Kwh",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Wear cost (\u20ac/kWh)"
+          "title": "Wear cost (\u20ac/kWh)",
+          "type": "number"
         },
         "capabilities": {
           "$ref": "#/$defs/EvCapabilitiesConfig",
           "description": "Hardware capability flags.",
-          "ui_group": "advanced",
-          "ui_label": "Hardware capabilities"
+          "title": "Hardware capabilities"
         },
         "min_charge_kw": {
           "anyOf": [
@@ -986,9 +844,7 @@
           ],
           "default": null,
           "description": "Minimum charge power in kW when the EVSE is actively charging. IEC 61851 mandates \u2265 6 A per phase; single-phase 230 V = 1.38 kW, three-phase = 4.14 kW. The charger either charges at this power or above, or draws nothing; intermediate charge powers are excluded from the solution space. Applies to both V2H and charge-only chargers. Default None = no floor applied.",
-          "title": "Min Charge Kw",
-          "ui_group": "advanced",
-          "ui_label": "Minimum EVSE charge power (kW)"
+          "title": "Minimum EVSE charge power (kW)"
         },
         "min_discharge_kw": {
           "anyOf": [
@@ -1002,15 +858,12 @@
           ],
           "default": null,
           "description": "Minimum V2H discharge power in kW when the EVSE is actively discharging. The charger either discharges at this power or above, or stays idle; intermediate discharge powers are excluded from the solution space. Safe to combine with min_charge_kw. Has no effect when discharge_segments is empty, because a charge-only charger cannot discharge at all. Default None = no floor applied.",
-          "title": "Min Discharge Kw",
-          "ui_group": "advanced",
-          "ui_label": "Minimum V2H discharge power (kW)"
+          "title": "Minimum V2H discharge power (kW)"
         },
         "outputs": {
           "$ref": "#/$defs/EvOutputsConfig",
           "description": "MQTT output topic configuration.",
-          "ui_group": "advanced",
-          "ui_label": "Output topics"
+          "title": "Output topics"
         },
         "inputs": {
           "anyOf": [
@@ -1022,8 +875,7 @@
             }
           ],
           "description": "MQTT input topic configuration for EV state readings. Defaults to an empty model so topics are derived with percent unit. Set to null to opt out of MQTT inputs entirely.",
-          "ui_group": "advanced",
-          "ui_label": "Input topics"
+          "title": "Input topics"
         }
       },
       "required": [
@@ -1031,8 +883,7 @@
         "charge_segments"
       ],
       "title": "EvConfig",
-      "type": "object",
-      "ui_instance_name_description": "A short identifier for this EV charger used in MQTT topics and automations. For example: 'ev_charger' or 'garage_evse'."
+      "type": "object"
     },
     "EvInputsConfig": {
       "additionalProperties": false,
@@ -1041,8 +892,7 @@
         "soc": {
           "$ref": "#/$defs/SocTopicConfig",
           "description": "Vehicle SOC MQTT topic configuration. Defaults to derived topic with percent unit.",
-          "ui_group": "advanced",
-          "ui_label": "SOC topic config"
+          "title": "SOC topic config"
         },
         "plugged_in_topic": {
           "anyOf": [
@@ -1055,9 +905,7 @@
           ],
           "default": null,
           "description": "MQTT topic for the EV plug state. Defaults to '{mqtt.topic_prefix}/input/ev/{name}/plugged_in' when not set.",
-          "title": "Plugged In Topic",
-          "ui_group": "advanced",
-          "ui_label": "Plug state topic",
+          "title": "Plug state topic",
           "ui_placeholder": "{mqtt.topic_prefix}/input/ev/{name}/plugged_in"
         }
       },
@@ -1079,9 +927,7 @@
           ],
           "default": null,
           "description": "MQTT topic for the closed-loop zero-exchange mode boolean flag. Defaults to '{mqtt.topic_prefix}/output/ev/{name}/exchange_mode' when not set.",
-          "title": "Exchange Mode",
-          "ui_group": "advanced",
-          "ui_label": "Exchange mode topic",
+          "title": "Exchange mode topic",
           "ui_placeholder": "{mqtt.topic_prefix}/output/ev/{name}/exchange_mode"
         },
         "loadbalance_cmd": {
@@ -1095,9 +941,7 @@
           ],
           "default": null,
           "description": "MQTT topic for the load-balance mode enable boolean flag. Defaults to '{mqtt.topic_prefix}/output/ev/{name}/loadbalance' when not set.",
-          "title": "Loadbalance Cmd",
-          "ui_group": "advanced",
-          "ui_label": "Load balance topic",
+          "title": "Load balance topic",
           "ui_placeholder": "{mqtt.topic_prefix}/output/ev/{name}/loadbalance"
         }
       },
@@ -1111,18 +955,14 @@
         "import_limit_kw": {
           "description": "Maximum grid import power in kW.",
           "minimum": 0,
-          "title": "Import Limit Kw",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Import limit (kW)"
+          "title": "Import limit (kW)",
+          "type": "number"
         },
         "export_limit_kw": {
           "description": "Maximum grid export power in kW.",
           "minimum": 0,
-          "title": "Export Limit Kw",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Export limit (kW)"
+          "title": "Export limit (kW)",
+          "type": "number"
         }
       },
       "required": [
@@ -1139,18 +979,14 @@
         "elec_kw": {
           "description": "Electrical power at this stage in kW.",
           "minimum": 0.0,
-          "title": "Elec Kw",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Electrical power (kW)"
+          "title": "Electrical power (kW)",
+          "type": "number"
         },
         "cop": {
           "description": "COP at this stage.",
           "minimum": 0.0,
-          "title": "Cop",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "COP"
+          "title": "COP",
+          "type": "number"
         }
       },
       "required": [
@@ -1167,26 +1003,20 @@
         "enabled": {
           "default": false,
           "description": "Enable HA MQTT discovery. Default: false.",
-          "title": "Enabled",
-          "type": "boolean",
-          "ui_group": "advanced",
-          "ui_label": "Enable HA discovery"
+          "title": "Enable HA discovery",
+          "type": "boolean"
         },
         "discovery_prefix": {
           "default": "homeassistant",
           "description": "Topic prefix used by HA for discovery. Default: 'homeassistant'.",
-          "title": "Discovery Prefix",
-          "type": "string",
-          "ui_group": "advanced",
-          "ui_label": "Discovery prefix"
+          "title": "Discovery prefix",
+          "type": "string"
         },
         "device_name": {
           "default": "mimir",
           "description": "Human-readable device name shown in HA.",
-          "title": "Device Name",
-          "type": "string",
-          "ui_group": "advanced",
-          "ui_label": "HA device name"
+          "title": "HA device name",
+          "type": "string"
         },
         "device_id": {
           "anyOf": [
@@ -1199,9 +1029,7 @@
           ],
           "default": null,
           "description": "Stable device identifier for the HA device registry. Defaults to mqtt.client_id.",
-          "title": "Device Id",
-          "ui_group": "advanced",
-          "ui_label": "HA device ID"
+          "title": "HA device ID"
         }
       },
       "title": "HomeAssistantConfig",
@@ -1214,10 +1042,8 @@
         "zero_exchange": {
           "default": false,
           "description": "Inverter supports a closed-loop zero-exchange firmware mode. When True, the inverter autonomously holds grid exchange near zero using local CT measurements.",
-          "title": "Zero Exchange",
-          "type": "boolean",
-          "ui_group": "advanced",
-          "ui_label": "Zero-exchange mode"
+          "title": "Zero-exchange mode",
+          "type": "boolean"
         }
       },
       "title": "HybridInverterCapabilitiesConfig",
@@ -1230,82 +1056,64 @@
         "capacity_kwh": {
           "description": "Usable battery capacity in kWh.",
           "exclusiveMinimum": 0,
-          "title": "Capacity Kwh",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Battery capacity (kWh)"
+          "title": "Battery capacity (kWh)",
+          "type": "number"
         },
         "min_soc_kwh": {
           "default": 0.0,
           "description": "Minimum SOC in kWh.",
           "minimum": 0,
-          "title": "Min Soc Kwh",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Minimum SOC (kWh)"
+          "title": "Minimum SOC (kWh)",
+          "type": "number"
         },
         "max_charge_kw": {
           "description": "Maximum DC charge power to battery cells in kW.",
           "exclusiveMinimum": 0,
-          "title": "Max Charge Kw",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Max charge power (kW)"
+          "title": "Max charge power (kW)",
+          "type": "number"
         },
         "max_discharge_kw": {
           "description": "Maximum DC discharge power from battery cells in kW.",
           "exclusiveMinimum": 0,
-          "title": "Max Discharge Kw",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Max discharge power (kW)"
+          "title": "Max discharge power (kW)",
+          "type": "number"
         },
         "battery_charge_efficiency": {
           "default": 0.95,
           "description": "Efficiency of battery charge process (DC bus to cell storage).",
           "exclusiveMinimum": 0,
           "maximum": 1.0,
-          "title": "Battery Charge Efficiency",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "Battery charge efficiency"
+          "title": "Battery charge efficiency",
+          "type": "number"
         },
         "battery_discharge_efficiency": {
           "default": 0.95,
           "description": "Efficiency of battery discharge process (cell to DC bus).",
           "exclusiveMinimum": 0,
           "maximum": 1.0,
-          "title": "Battery Discharge Efficiency",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "Battery discharge efficiency"
+          "title": "Battery discharge efficiency",
+          "type": "number"
         },
         "inverter_efficiency": {
           "default": 0.97,
           "description": "AC-to-DC and DC-to-AC inverter conversion efficiency.",
           "exclusiveMinimum": 0,
           "maximum": 1.0,
-          "title": "Inverter Efficiency",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "Inverter efficiency"
+          "title": "Inverter efficiency",
+          "type": "number"
         },
         "max_pv_kw": {
           "description": "Peak PV power at MPPT input in kW. Used to clip forecasts.",
           "exclusiveMinimum": 0,
-          "title": "Max Pv Kw",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "PV peak power (kW)"
+          "title": "PV peak power (kW)",
+          "type": "number"
         },
         "wear_cost_eur_per_kwh": {
           "default": 0.0,
           "description": "Battery degradation cost per kWh of DC throughput (charge + discharge), in EUR. Applied to the DC-side energy flow, before inverter conversion losses. Set to 0.0 (default) to optimise purely on energy prices. To estimate: divide the battery replacement cost by the expected lifetime DC throughput. Example: a 10 kWh battery costing \u20ac3,000 with 3,000 full cycles gives \u20ac3,000 / (3,000 \u00d7 10 kWh) = \u20ac0.10/kWh.",
           "minimum": 0,
-          "title": "Wear Cost Eur Per Kwh",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Wear cost (\u20ac/kWh)"
+          "title": "Wear cost (\u20ac/kWh)",
+          "type": "number"
         },
         "topic_pv_forecast": {
           "anyOf": [
@@ -1318,9 +1126,7 @@
           ],
           "default": null,
           "description": "MQTT topic for per-step PV DC power forecast in kW. Defaults to '{mqtt.topic_prefix}/input/hybrid/{name}/pv_forecast' when not set.",
-          "title": "Topic Pv Forecast",
-          "ui_group": "advanced",
-          "ui_label": "PV forecast topic",
+          "title": "PV forecast topic",
           "ui_placeholder": "{mqtt.topic_prefix}/input/hybrid/{name}/pv_forecast"
         },
         "inputs": {
@@ -1333,26 +1139,21 @@
             }
           ],
           "description": "MQTT input topic configuration for live battery SOC readings. Defaults to an empty model so topics are derived with percent unit. Set to null to opt out of MQTT inputs entirely.",
-          "ui_group": "advanced",
-          "ui_label": "Input topics"
+          "title": "Input topics"
         },
         "optimal_lower_soc_kwh": {
           "default": 0.0,
           "description": "Preferred minimum state of charge in kWh. When the SOC falls below this level, the solver accrues a penalty proportional to the deficit. Acts as a soft lower bound: the solver may still dispatch below this level when the price spread justifies it. Must be >= min_soc_kwh and <= capacity_kwh.",
           "minimum": 0.0,
-          "title": "Optimal Lower Soc Kwh",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "Preferred minimum SOC (kWh)"
+          "title": "Preferred minimum SOC (kWh)",
+          "type": "number"
         },
         "soc_low_penalty_eur_per_kwh_h": {
           "default": 0.0,
           "description": "Penalty rate for SOC below optimal_lower_soc_kwh, in EUR per kWh of deficit per hour. Set to 0.0 (default) to disable.",
           "minimum": 0.0,
-          "title": "Soc Low Penalty Eur Per Kwh H",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "Low SOC penalty (\u20ac/kWh\u00b7h)"
+          "title": "Low SOC penalty (\u20ac/kWh\u00b7h)",
+          "type": "number"
         },
         "reduce_charge_above_soc_kwh": {
           "anyOf": [
@@ -1365,9 +1166,7 @@
           ],
           "default": null,
           "description": "SOC level in kWh above which max charge power begins to decrease linearly to reduce_charge_min_kw at capacity_kwh. Must be strictly between min_soc_kwh and capacity_kwh. Must be set together with reduce_charge_min_kw.",
-          "title": "Reduce Charge Above Soc Kwh",
-          "ui_group": "advanced",
-          "ui_label": "Derate charge above SOC (kWh)"
+          "title": "Derate charge above SOC (kWh)"
         },
         "reduce_charge_min_kw": {
           "anyOf": [
@@ -1381,9 +1180,7 @@
           ],
           "default": null,
           "description": "Max charge power in kW at full capacity (capacity_kwh). The charge power limit decreases linearly from max_charge_kw at reduce_charge_above_soc_kwh to this value at capacity_kwh. Must be set together with reduce_charge_above_soc_kwh.",
-          "title": "Reduce Charge Min Kw",
-          "ui_group": "advanced",
-          "ui_label": "Derated charge minimum (kW)"
+          "title": "Derated charge minimum (kW)"
         },
         "reduce_discharge_below_soc_kwh": {
           "anyOf": [
@@ -1396,9 +1193,7 @@
           ],
           "default": null,
           "description": "SOC level in kWh below which max discharge power begins to decrease linearly to reduce_discharge_min_kw at min_soc_kwh. Must be strictly between min_soc_kwh and capacity_kwh. Must be set together with reduce_discharge_min_kw.",
-          "title": "Reduce Discharge Below Soc Kwh",
-          "ui_group": "advanced",
-          "ui_label": "Derate discharge below SOC (kWh)"
+          "title": "Derate discharge below SOC (kWh)"
         },
         "reduce_discharge_min_kw": {
           "anyOf": [
@@ -1412,9 +1207,7 @@
           ],
           "default": null,
           "description": "Max discharge power in kW at minimum SOC (min_soc_kwh). The discharge power limit decreases linearly from max_discharge_kw at reduce_discharge_below_soc_kwh to this value at min_soc_kwh. Must be set together with reduce_discharge_below_soc_kwh.",
-          "title": "Reduce Discharge Min Kw",
-          "ui_group": "advanced",
-          "ui_label": "Derated discharge minimum (kW)"
+          "title": "Derated discharge minimum (kW)"
         },
         "min_charge_kw": {
           "anyOf": [
@@ -1428,9 +1221,7 @@
           ],
           "default": null,
           "description": "Minimum DC charge power in kW when the inverter is actively charging. The inverter either charges at this power or above, or stays idle; intermediate charge powers are excluded from the solution space. Safe to combine with min_discharge_kw: the solver models idle as a distinct state, so setting both floors does not force the battery to cycle. Default None = no floor applied.",
-          "title": "Min Charge Kw",
-          "ui_group": "advanced",
-          "ui_label": "Minimum charge power (kW)"
+          "title": "Minimum charge power (kW)"
         },
         "min_discharge_kw": {
           "anyOf": [
@@ -1444,21 +1235,17 @@
           ],
           "default": null,
           "description": "Minimum DC discharge power in kW when the inverter is actively discharging. The inverter either discharges at this power or above, or stays idle; intermediate discharge powers are excluded from the solution space. Safe to combine with min_charge_kw. Default None = no floor applied.",
-          "title": "Min Discharge Kw",
-          "ui_group": "advanced",
-          "ui_label": "Minimum discharge power (kW)"
+          "title": "Minimum discharge power (kW)"
         },
         "capabilities": {
           "$ref": "#/$defs/HybridInverterCapabilitiesConfig",
           "description": "Hardware capability flags.",
-          "ui_group": "advanced",
-          "ui_label": "Hardware capabilities"
+          "title": "Hardware capabilities"
         },
         "outputs": {
           "$ref": "#/$defs/HybridInverterOutputsConfig",
           "description": "MQTT output topic configuration for hybrid inverter control signals.",
-          "ui_group": "advanced",
-          "ui_label": "Output topics"
+          "title": "Output topics"
         }
       },
       "required": [
@@ -1468,8 +1255,7 @@
         "max_pv_kw"
       ],
       "title": "HybridInverterConfig",
-      "type": "object",
-      "ui_instance_name_description": "A short identifier for this hybrid inverter used in MQTT topics and automations. For example: 'hybrid_inv' or 'solis_hybrid'."
+      "type": "object"
     },
     "HybridInverterOutputsConfig": {
       "additionalProperties": false,
@@ -1486,9 +1272,7 @@
           ],
           "default": null,
           "description": "MQTT topic for the closed-loop zero-exchange mode boolean flag. Defaults to '{mqtt.topic_prefix}/output/hybrid/{name}/exchange_mode' when not set.",
-          "title": "Exchange Mode",
-          "ui_group": "advanced",
-          "ui_label": "Exchange mode topic",
+          "title": "Exchange mode topic",
           "ui_placeholder": "{mqtt.topic_prefix}/output/hybrid/{name}/exchange_mode"
         }
       },
@@ -1504,10 +1288,8 @@
           "items": {
             "type": "string"
           },
-          "title": "Prices",
+          "title": "Prices topics",
           "type": "array",
-          "ui_group": "advanced",
-          "ui_label": "Prices topics",
           "ui_placeholder": "{mqtt.topic_prefix}/input/prices"
         }
       },
@@ -1520,18 +1302,14 @@
       "properties": {
         "host": {
           "description": "MQTT broker hostname or IP address.",
-          "title": "Host",
-          "type": "string",
-          "ui_group": "basic",
-          "ui_label": "Broker host"
+          "title": "Broker host",
+          "type": "string"
         },
         "port": {
           "default": 1883,
           "description": "MQTT broker port.",
-          "title": "Port",
-          "type": "integer",
-          "ui_group": "advanced",
-          "ui_label": "Broker port"
+          "title": "Broker port",
+          "type": "integer"
         },
         "client_id": {
           "anyOf": [
@@ -1544,17 +1322,13 @@
           ],
           "default": null,
           "description": "MQTT client identifier. Defaults to 'mimir' when not set.",
-          "title": "Client Id",
-          "ui_group": "basic",
-          "ui_label": "Client ID"
+          "title": "Client ID"
         },
         "topic_prefix": {
           "default": "mimir",
           "description": "Topic prefix for all mimirheim topics.",
-          "title": "Topic Prefix",
-          "type": "string",
-          "ui_group": "advanced",
-          "ui_label": "Topic prefix"
+          "title": "Topic prefix",
+          "type": "string"
         },
         "username": {
           "anyOf": [
@@ -1567,9 +1341,7 @@
           ],
           "default": null,
           "description": "Broker username. Omit for anonymous access.",
-          "title": "Username",
-          "ui_group": "advanced",
-          "ui_label": "Username"
+          "title": "Username"
         },
         "password": {
           "anyOf": [
@@ -1583,24 +1355,19 @@
           "default": null,
           "description": "Broker password.",
           "title": "Password",
-          "ui_group": "advanced",
-          "ui_label": "Password"
+          "x-format": "password"
         },
         "tls": {
           "default": false,
           "description": "Enable TLS for the broker connection. Set to true when the broker listens on an encrypted port (typically 8883).",
-          "title": "Tls",
-          "type": "boolean",
-          "ui_group": "advanced",
-          "ui_label": "Enable TLS"
+          "title": "Enable TLS",
+          "type": "boolean"
         },
         "tls_allow_insecure": {
           "default": false,
           "description": "Skip broker certificate verification when TLS is enabled. Useful for self-signed certificates on private networks. Has no effect when tls is false.",
-          "title": "Tls Allow Insecure",
-          "type": "boolean",
-          "ui_group": "advanced",
-          "ui_label": "Allow insecure TLS"
+          "title": "Allow insecure TLS",
+          "type": "boolean"
         }
       },
       "required": [
@@ -1624,26 +1391,21 @@
           ],
           "default": null,
           "description": "Objective weights for the balanced strategy. Null = equal weighting.",
-          "ui_group": "advanced",
-          "ui_label": "Balanced strategy weights"
+          "title": "Balanced strategy weights"
         },
         "min_dispatch_gain_eur": {
           "default": 0.0,
           "description": "Minimum benefit in EUR over the naive baseline required for mimirheim to dispatch storage. Below this threshold an idle schedule is published instead. 0.0 (default) disables the check. Applies to minimize_cost and balanced only.",
           "minimum": 0.0,
-          "title": "Min Dispatch Gain Eur",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "Minimum dispatch gain (\u20ac)"
+          "title": "Minimum dispatch gain (\u20ac)",
+          "type": "number"
         },
         "exchange_shaping_weight": {
           "default": 0.0,
           "description": "Weight for the optional secondary exchange-minimisation term lambda * sum_t(import_t + export_t). 0.0 (default) disables the term. Use a value orders of magnitude smaller than typical energy prices (e.g. 1e-4) to break solver indifference without distorting the primary economic objective.",
           "minimum": 0.0,
-          "title": "Exchange Shaping Weight",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "Exchange shaping weight"
+          "title": "Exchange shaping weight",
+          "type": "number"
         }
       },
       "title": "ObjectivesConfig",
@@ -1664,9 +1426,7 @@
           ],
           "default": null,
           "description": "Topic for the full horizon schedule. Defaults to '{mqtt.topic_prefix}/strategy/schedule'.",
-          "title": "Schedule",
-          "ui_group": "advanced",
-          "ui_label": "Schedule topic",
+          "title": "Schedule topic",
           "ui_placeholder": "{mqtt.topic_prefix}/strategy/schedule"
         },
         "current": {
@@ -1680,9 +1440,7 @@
           ],
           "default": null,
           "description": "Topic for the current-step strategy summary. Defaults to '{mqtt.topic_prefix}/strategy/current'.",
-          "title": "Current",
-          "ui_group": "advanced",
-          "ui_label": "Current topic",
+          "title": "Current topic",
           "ui_placeholder": "{mqtt.topic_prefix}/strategy/current"
         },
         "last_solve": {
@@ -1696,9 +1454,7 @@
           ],
           "default": null,
           "description": "Topic for the retained solve-status message. Defaults to '{mqtt.topic_prefix}/status/last_solve'.",
-          "title": "Last Solve",
-          "ui_group": "advanced",
-          "ui_label": "Last solve topic",
+          "title": "Last solve topic",
           "ui_placeholder": "{mqtt.topic_prefix}/status/last_solve"
         },
         "availability": {
@@ -1712,9 +1468,7 @@
           ],
           "default": null,
           "description": "Topic for birth ('online') and last-will ('offline') messages. Defaults to '{mqtt.topic_prefix}/status/availability'.",
-          "title": "Availability",
-          "ui_group": "advanced",
-          "ui_label": "Availability topic",
+          "title": "Availability topic",
           "ui_placeholder": "{mqtt.topic_prefix}/status/availability"
         }
       },
@@ -1728,26 +1482,20 @@
         "power_limit": {
           "default": false,
           "description": "Inverter accepts a continuous production limit setpoint in kW.",
-          "title": "Power Limit",
-          "type": "boolean",
-          "ui_group": "advanced",
-          "ui_label": "Power limit control"
+          "title": "Power limit control",
+          "type": "boolean"
         },
         "zero_export": {
           "default": false,
           "description": "Inverter has a boolean zero-export mode register. When True, the inverter autonomously prevents grid export using local CT measurements.",
-          "title": "Zero Export",
-          "type": "boolean",
-          "ui_group": "advanced",
-          "ui_label": "Zero-export mode"
+          "title": "Zero-export mode",
+          "type": "boolean"
         },
         "on_off": {
           "default": false,
           "description": "Inverter supports discrete on/off control. When True, mimirheim treats PV as a binary decision variable: the array either produces the full forecast or is switched off. Mutually exclusive with power_limit.",
-          "title": "On Off",
-          "type": "boolean",
-          "ui_group": "advanced",
-          "ui_label": "On/off control"
+          "title": "On/off control",
+          "type": "boolean"
         }
       },
       "title": "PvCapabilitiesConfig",
@@ -1760,10 +1508,8 @@
         "max_power_kw": {
           "description": "Array peak output in kW.",
           "exclusiveMinimum": 0,
-          "title": "Max Power Kw",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Peak power (kW)"
+          "title": "Peak power (kW)",
+          "type": "number"
         },
         "topic_forecast": {
           "anyOf": [
@@ -1776,9 +1522,7 @@
           ],
           "default": null,
           "description": "MQTT topic for the per-step PV power forecast in kW. Defaults to '{mqtt.topic_prefix}/input/pv/{name}/forecast' when not set.",
-          "title": "Topic Forecast",
-          "ui_group": "advanced",
-          "ui_label": "Forecast topic",
+          "title": "Forecast topic",
           "ui_placeholder": "{mqtt.topic_prefix}/input/pv/{name}/forecast"
         },
         "production_stages": {
@@ -1796,29 +1540,24 @@
           ],
           "default": null,
           "description": "Discrete power levels the inverter accepts, in ascending order, starting with 0.0. When set, the solver selects exactly one stage per step. Mutually exclusive with capabilities.power_limit and capabilities.on_off.",
-          "title": "Production Stages",
-          "ui_group": "advanced",
-          "ui_label": "Production stages (kW)"
+          "title": "Production stages (kW)"
         },
         "capabilities": {
           "$ref": "#/$defs/PvCapabilitiesConfig",
           "description": "Hardware capability flags.",
-          "ui_group": "advanced",
-          "ui_label": "Hardware capabilities"
+          "title": "Hardware capabilities"
         },
         "outputs": {
           "$ref": "#/$defs/PvOutputsConfig",
           "description": "MQTT output topic names for PV control commands.",
-          "ui_group": "advanced",
-          "ui_label": "Output topics"
+          "title": "Output topics"
         }
       },
       "required": [
         "max_power_kw"
       ],
       "title": "PvConfig",
-      "type": "object",
-      "ui_instance_name_description": "A short identifier for this PV array used in MQTT topics and automations. For example: 'roof_pv' or 'south_array'."
+      "type": "object"
     },
     "PvOutputsConfig": {
       "additionalProperties": false,
@@ -1835,9 +1574,7 @@
           ],
           "default": null,
           "description": "MQTT topic for the production limit setpoint in kW. Defaults to '{mqtt.topic_prefix}/output/pv/{name}/power_limit_kw' when not set.",
-          "title": "Power Limit Kw",
-          "ui_group": "advanced",
-          "ui_label": "Power limit topic",
+          "title": "Power limit topic",
           "ui_placeholder": "{mqtt.topic_prefix}/output/pv/{name}/power_limit_kw"
         },
         "zero_export_mode": {
@@ -1851,9 +1588,7 @@
           ],
           "default": null,
           "description": "MQTT topic for the zero-export mode boolean command. Defaults to '{mqtt.topic_prefix}/output/pv/{name}/zero_export_mode' when not set.",
-          "title": "Zero Export Mode",
-          "ui_group": "advanced",
-          "ui_label": "Zero-export mode topic",
+          "title": "Zero-export mode topic",
           "ui_placeholder": "{mqtt.topic_prefix}/output/pv/{name}/zero_export_mode"
         },
         "on_off_mode": {
@@ -1867,9 +1602,7 @@
           ],
           "default": null,
           "description": "MQTT topic for the on/off command. Published once per solve cycle. Payload \"true\" means the inverter should be ON (producing); payload \"false\" means the inverter should be OFF (curtailed by mimirheim). Only relevant when capabilities.on_off is True. Defaults to '{mqtt.topic_prefix}/output/pv/{name}/on_off_mode' when not set.",
-          "title": "On Off Mode",
-          "ui_group": "advanced",
-          "ui_label": "On/off mode topic",
+          "title": "On/off mode topic",
           "ui_placeholder": "{mqtt.topic_prefix}/output/pv/{name}/on_off_mode"
         },
         "is_curtailed": {
@@ -1883,9 +1616,7 @@
           ],
           "default": null,
           "description": "MQTT topic for the curtailment status boolean. Published once per solve cycle. Payload \"true\" means mimirheim is actively limiting PV output below the forecast; \"false\" means the inverter is free to produce at full capacity. Valid for staged, power_limit, and on_off modes. None for fixed-mode arrays. Defaults to '{mqtt.topic_prefix}/output/pv/{name}/is_curtailed' when not set.",
-          "title": "Is Curtailed",
-          "ui_group": "advanced",
-          "ui_label": "Is curtailed topic",
+          "title": "Is curtailed topic",
           "ui_placeholder": "{mqtt.topic_prefix}/output/pv/{name}/is_curtailed"
         }
       },
@@ -1900,28 +1631,22 @@
           "default": 1.0,
           "description": "Minimum forecast coverage in hours to attempt a solve.",
           "minimum": 0,
-          "title": "Min Horizon Hours",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "Minimum horizon (h)"
+          "title": "Minimum horizon (h)",
+          "type": "number"
         },
         "warn_below_hours": {
           "default": 8.0,
           "description": "Log a warning when available horizon is below this value in hours.",
           "minimum": 0,
-          "title": "Warn Below Hours",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "Warn below (h)"
+          "title": "Warn below (h)",
+          "type": "number"
         },
         "max_gap_hours": {
           "default": 2.0,
           "description": "Log a warning when any gap between consecutive forecast points exceeds this value in hours. The solve proceeds regardless: resampling holds the last known value across the gap.",
           "minimum": 0,
-          "title": "Max Gap Hours",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "Max gap (h)"
+          "title": "Max gap (h)",
+          "type": "number"
         }
       },
       "title": "ReadinessConfig",
@@ -1934,10 +1659,8 @@
         "enabled": {
           "default": false,
           "description": "Enable production dump writing and MQTT notification.",
-          "title": "Enabled",
-          "type": "boolean",
-          "ui_group": "advanced",
-          "ui_label": "Enable reporting"
+          "title": "Enable reporting",
+          "type": "boolean"
         },
         "dump_dir": {
           "anyOf": [
@@ -1951,18 +1674,14 @@
           ],
           "default": null,
           "description": "Directory for solve dumps shared with mimirheim-reporter. Null = disabled.",
-          "title": "Dump Dir",
-          "ui_group": "advanced",
-          "ui_label": "Report dump directory"
+          "title": "Report dump directory"
         },
         "max_dumps": {
           "default": 200,
           "description": "Maximum retained dump pairs. 0 = unlimited.",
           "minimum": 0,
-          "title": "Max Dumps",
-          "type": "integer",
-          "ui_group": "advanced",
-          "ui_label": "Max reports"
+          "title": "Max reports",
+          "type": "integer"
         },
         "notify_topic": {
           "anyOf": [
@@ -1975,9 +1694,7 @@
           ],
           "default": null,
           "description": "MQTT topic for dump-available notifications. Defaults to '{mqtt.topic_prefix}/status/dump_available' when not set.",
-          "title": "Notify Topic",
-          "ui_group": "advanced",
-          "ui_label": "Notify topic",
+          "title": "Notify topic",
           "ui_placeholder": "{mqtt.topic_prefix}/status/dump_available"
         }
       },
@@ -1991,70 +1708,56 @@
         "enabled": {
           "default": false,
           "description": "Enable the periodic full-charge policy. Off by default.",
-          "title": "Enabled",
-          "type": "boolean",
-          "ui_group": "basic",
-          "ui_label": "Enable SOC ratchet"
+          "title": "Enable SOC ratchet",
+          "type": "boolean"
         },
         "target_interval_days": {
           "default": 7.0,
           "description": "Days the battery may go without a full charge before the floor climbs.",
           "exclusiveMinimum": 0.0,
           "maximum": 365.0,
-          "title": "Target Interval Days",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Target interval (days)"
+          "title": "Target interval (days)",
+          "type": "number"
         },
         "full_threshold_pct": {
           "default": 97.0,
           "description": "Observed SOC, in percent of capacity, that counts as a full charge.",
           "exclusiveMinimum": 0.0,
           "maximum": 100.0,
-          "title": "Full Threshold Pct",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Full threshold (%)"
+          "title": "Full threshold (%)",
+          "type": "number"
         },
         "step_pct": {
           "default": 5.0,
           "description": "Percentage points of capacity added to the floor per missed interval.",
           "exclusiveMinimum": 0.0,
           "maximum": 100.0,
-          "title": "Step Pct",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "Ratchet step (%)"
+          "title": "Ratchet step (%)",
+          "type": "number"
         },
         "cap_pct": {
           "default": 80.0,
           "description": "Ceiling on the dynamic floor, in percent of capacity.",
           "exclusiveMinimum": 0.0,
           "maximum": 100.0,
-          "title": "Cap Pct",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "Ratchet cap (%)"
+          "title": "Ratchet cap (%)",
+          "type": "number"
         },
         "target_pct": {
           "default": 100.0,
           "description": "SOC, in percent of capacity, the plan is asked to reach and hold.",
           "exclusiveMinimum": 0.0,
           "maximum": 100.0,
-          "title": "Target Pct",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "Charge target (%)"
+          "title": "Charge target (%)",
+          "type": "number"
         },
         "hold_hours": {
           "default": 2.0,
           "description": "Hours the SOC must stay at or above the target once reached. 0 = a single touch.",
           "maximum": 24.0,
           "minimum": 0.0,
-          "title": "Hold Hours",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "Hold at target (hours)"
+          "title": "Hold at target (hours)",
+          "type": "number"
         }
       },
       "title": "SocRatchetConfig",
@@ -2075,9 +1778,7 @@
           ],
           "default": null,
           "description": "MQTT topic publishing the SOC value. Defaults to the device-specific path derived from mqtt.topic_prefix when not set.",
-          "title": "Topic",
-          "ui_group": "advanced",
-          "ui_label": "SOC MQTT topic"
+          "title": "SOC MQTT topic"
         },
         "unit": {
           "default": "percent",
@@ -2086,10 +1787,8 @@
             "kwh",
             "percent"
           ],
-          "title": "Unit",
-          "type": "string",
-          "ui_group": "advanced",
-          "ui_label": "SOC unit"
+          "title": "SOC unit",
+          "type": "string"
         }
       },
       "title": "SocTopicConfig",
@@ -2103,28 +1802,22 @@
           "default": 288,
           "description": "Hard cap on the solve horizon in 15-minute steps. 96 = 24 h, 192 = 48 h, 288 = 72 h. Bundles longer than this are trimmed before building the model. Minimum 96 (24 h) to ensure the schedule covers at least one full day.",
           "minimum": 96,
-          "title": "Max Horizon Steps",
-          "type": "integer",
-          "ui_group": "advanced",
-          "ui_label": "Max horizon steps"
+          "title": "Max horizon steps",
+          "type": "integer"
         },
         "threads": {
           "default": -1,
           "description": "CBC solver threads. -1 = use all available CPU cores. 1 = single-threaded.",
           "minimum": -1,
-          "title": "Threads",
-          "type": "integer",
-          "ui_group": "advanced",
-          "ui_label": "Solver threads"
+          "title": "Solver threads",
+          "type": "integer"
         },
         "time_limit_seconds": {
           "default": 59.0,
           "description": "Wall-clock budget for one solve cycle, in seconds. On expiry the solver returns its best incumbent instead of a proven optimum. Also the longest a solve can block the next trigger, because the solve loop is single-threaded. The minimize_consumption strategy splits this budget across its two phases. Default 59 s, which fits inside a 60-second cycle.",
           "exclusiveMinimum": 0.0,
-          "title": "Time Limit Seconds",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "Solver time limit (s)"
+          "title": "Solver time limit (s)",
+          "type": "number"
         }
       },
       "title": "SolverConfig",
@@ -2146,9 +1839,7 @@
           ],
           "default": null,
           "description": "Rated electrical power for on/off mode in kW.",
-          "title": "Elec Power Kw",
-          "ui_group": "basic",
-          "ui_label": "Electrical power (kW)"
+          "title": "Electrical power (kW)"
         },
         "cop": {
           "anyOf": [
@@ -2162,9 +1853,7 @@
           ],
           "default": null,
           "description": "COP for on/off mode.",
-          "title": "Cop",
-          "ui_group": "basic",
-          "ui_label": "COP (on/off mode)"
+          "title": "COP (on/off mode)"
         },
         "stages": {
           "anyOf": [
@@ -2181,27 +1870,21 @@
           ],
           "default": null,
           "description": "Operating points for SOS2 power-stage mode.",
-          "title": "Stages",
-          "ui_group": "basic",
-          "ui_label": "Operating stages"
+          "title": "Operating stages"
         },
         "min_run_steps": {
           "default": 4,
           "description": "Minimum consecutive active steps once started.",
           "minimum": 0,
-          "title": "Min Run Steps",
-          "type": "integer",
-          "ui_group": "advanced",
-          "ui_label": "Minimum run steps"
+          "title": "Minimum run steps",
+          "type": "integer"
         },
         "wear_cost_eur_per_kwh": {
           "default": 0.0,
           "description": "Cycling cost per kWh of electrical consumption, in EUR. Adds a small penalty to each kWh consumed, discouraging unnecessary cycling beyond what the minimum run constraint already enforces. Set to 0.0 (default) for minimal cycling cost modelling.",
           "minimum": 0,
-          "title": "Wear Cost Eur Per Kwh",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Wear cost (\u20ac/kWh)"
+          "title": "Wear cost (\u20ac/kWh)",
+          "type": "number"
         },
         "inputs": {
           "anyOf": [
@@ -2213,8 +1896,7 @@
             }
           ],
           "description": "MQTT input topic configuration. Defaults to an empty model so topics are derived. Set to null to opt out of MQTT inputs entirely.",
-          "ui_group": "advanced",
-          "ui_label": "Input topics"
+          "title": "Input topics"
         },
         "building_thermal": {
           "anyOf": [
@@ -2227,13 +1909,11 @@
           ],
           "default": null,
           "description": "Optional building thermal model. When set, the solver tracks indoor temperature as a per-step state variable and enforces a comfort band instead of the degree-days total-heat lower bound.",
-          "ui_group": "advanced",
-          "ui_label": "Building thermal model"
+          "title": "Building thermal model"
         }
       },
       "title": "SpaceHeatingConfig",
-      "type": "object",
-      "ui_instance_name_description": "A short identifier for this space heating heat pump used in MQTT topics and automations. For example: 'space_hp' or 'underfloor_hp'."
+      "type": "object"
     },
     "SpaceHeatingInputsConfig": {
       "additionalProperties": false,
@@ -2250,9 +1930,7 @@
           ],
           "default": null,
           "description": "MQTT topic publishing remaining heat needed this horizon in kWh, retained. Defaults to a path derived from mqtt.topic_prefix and device name.",
-          "title": "Topic Heat Needed Kwh",
-          "ui_group": "advanced",
-          "ui_label": "Heat needed topic"
+          "title": "Heat needed topic"
         },
         "topic_heat_produced_today_kwh": {
           "anyOf": [
@@ -2265,9 +1943,7 @@
           ],
           "default": null,
           "description": "Optional informational topic for accumulated heat produced today in kWh.",
-          "title": "Topic Heat Produced Today Kwh",
-          "ui_group": "advanced",
-          "ui_label": "Heat produced today topic"
+          "title": "Heat produced today topic"
         }
       },
       "title": "SpaceHeatingInputsConfig",
@@ -2288,15 +1964,12 @@
           ],
           "default": null,
           "description": "MQTT topic for the per-step base load forecast in kW. Defaults to '{mqtt.topic_prefix}/input/baseload/{name}/forecast' when not set.",
-          "title": "Topic Forecast",
-          "ui_group": "advanced",
-          "ui_label": "Forecast topic",
+          "title": "Forecast topic",
           "ui_placeholder": "{mqtt.topic_prefix}/input/baseload/{name}/forecast"
         }
       },
       "title": "StaticLoadConfig",
-      "type": "object",
-      "ui_instance_name_description": "A short identifier for this static load used in MQTT topics and automations. For example: 'base_load' or 'house_loads'."
+      "type": "object"
     },
     "ThermalBoilerConfig": {
       "additionalProperties": false,
@@ -2305,68 +1978,52 @@
         "volume_liters": {
           "description": "Water volume of the tank in litres.",
           "exclusiveMinimum": 0,
-          "title": "Volume Liters",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Tank volume (L)"
+          "title": "Tank volume (L)",
+          "type": "number"
         },
         "elec_power_kw": {
           "description": "Rated electrical power of the heating element in kW.",
           "exclusiveMinimum": 0,
-          "title": "Elec Power Kw",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Electrical power (kW)"
+          "title": "Electrical power (kW)",
+          "type": "number"
         },
         "cop": {
           "default": 1.0,
           "description": "Coefficient of performance. 1.0 = resistive; 2+ = heat pump.",
           "exclusiveMinimum": 0,
-          "title": "Cop",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "Coefficient of performance (COP)"
+          "title": "Coefficient of performance (COP)",
+          "type": "number"
         },
         "setpoint_c": {
           "description": "Target hot water temperature in \u00b0C.",
-          "title": "Setpoint C",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Target temperature (\u00b0C)"
+          "title": "Target temperature (\u00b0C)",
+          "type": "number"
         },
         "min_temp_c": {
           "default": 40.0,
           "description": "Minimum allowable water temperature in \u00b0C.",
-          "title": "Min Temp C",
-          "type": "number",
-          "ui_group": "advanced",
-          "ui_label": "Minimum temperature (\u00b0C)"
+          "title": "Minimum temperature (\u00b0C)",
+          "type": "number"
         },
         "cooling_rate_k_per_hour": {
           "description": "Tank temperature decay rate in K/hour when the heater is off.",
           "minimum": 0,
-          "title": "Cooling Rate K Per Hour",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Cooling rate (K/h)"
+          "title": "Cooling rate (K/h)",
+          "type": "number"
         },
         "min_run_steps": {
           "default": 0,
           "description": "Minimum consecutive active steps once started. 0 = free cycling.",
           "minimum": 0,
-          "title": "Min Run Steps",
-          "type": "integer",
-          "ui_group": "advanced",
-          "ui_label": "Minimum run steps"
+          "title": "Minimum run steps",
+          "type": "integer"
         },
         "wear_cost_eur_per_kwh": {
           "default": 0.0,
           "description": "Cycling cost per kWh of electrical consumption, in EUR. Adds a small penalty to each kWh consumed, discouraging unnecessary cycling beyond what the minimum run constraint already enforces. Meaningful only for heat pump compressors where short-cycling causes wear; set to 0.0 (default) for resistive immersion elements.",
           "minimum": 0,
-          "title": "Wear Cost Eur Per Kwh",
-          "type": "number",
-          "ui_group": "basic",
-          "ui_label": "Wear cost (\u20ac/kWh)"
+          "title": "Wear cost (\u20ac/kWh)",
+          "type": "number"
         },
         "inputs": {
           "anyOf": [
@@ -2378,8 +2035,7 @@
             }
           ],
           "description": "MQTT input topic configuration for live water temperature readings. Defaults to an empty model so topics are derived. Set to null to opt out of MQTT temperature input entirely.",
-          "ui_group": "advanced",
-          "ui_label": "Input topics"
+          "title": "Input topics"
         }
       },
       "required": [
@@ -2389,8 +2045,7 @@
         "cooling_rate_k_per_hour"
       ],
       "title": "ThermalBoilerConfig",
-      "type": "object",
-      "ui_instance_name_description": "A short identifier for this thermal boiler used in MQTT topics and automations. For example: 'hot_water' or 'dhw_tank'."
+      "type": "object"
     },
     "ThermalBoilerInputsConfig": {
       "additionalProperties": false,
@@ -2407,9 +2062,7 @@
           ],
           "default": null,
           "description": "MQTT topic publishing the current water temperature in \u00b0C, retained. Defaults to '{mqtt.topic_prefix}/input/thermal_boiler/{name}/temp_c' when not set.",
-          "title": "Topic Current Temp",
-          "ui_group": "advanced",
-          "ui_label": "Current temperature topic",
+          "title": "Current temperature topic",
           "ui_placeholder": "{mqtt.topic_prefix}/input/thermal_boiler/{name}/temp_c"
         }
       },
@@ -2418,7 +2071,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "Root configuration model for mimirheim.\n\nAll named device sections (batteries, pv_arrays, ev_chargers,\ndeferrable_loads, static_loads) are keyed by a user-chosen device name.\nThat name becomes the key in MQTT output payloads and must be unique\nacross all device sections \u2014 enforced by the device_names_unique validator.\n\nAttributes:\n    batteries: Named battery devices.\n    pv_arrays: Named PV array devices.\n    ev_chargers: Named EV charger devices.\n    deferrable_loads: Named deferrable load devices.\n    static_loads: Named static load devices.\n    grid: Grid connection parameters. Exactly one per mimirheim instance.\n    objectives: Objective function parameters.\n    constraints: Hard constraints on grid power.\n    solver: Solver tuning parameters (horizon cap, thread count).\n    readiness: Forecast coverage thresholds. Controls when mimirheim is willing\n        to solve and when it emits warnings about short horizons or gaps.\n    mqtt: MQTT broker connection parameters.\n    outputs: MQTT output topic names.\n    inputs: MQTT input topic overrides. All fields default to the standard\n        derived topic when not set.\n    debug: Debug and diagnostic settings.\n    reporting: Reporting daemon settings. Independent of ``debug``; controls\n        production dump writing and MQTT notification for mimirheim-reporter.",
+  "description": "Configuration for the Mimirheim Daemon.",
   "properties": {
     "batteries": {
       "additionalProperties": {
@@ -2426,146 +2079,137 @@
       },
       "title": "Batteries",
       "type": "object",
-      "ui_group": "basic",
-      "ui_label": "Batteries"
+      "x-addPropertyContent": "Add battery",
+      "x-format": "nav-horizontal",
+      "x-mimir-adapter": "dict-key-as-title"
     },
     "pv_arrays": {
       "additionalProperties": {
         "$ref": "#/$defs/PvConfig"
       },
-      "title": "Pv Arrays",
+      "title": "PV arrays",
       "type": "object",
-      "ui_group": "basic",
-      "ui_label": "PV arrays"
+      "x-addPropertyContent": "Add PV array",
+      "x-mimir-adapter": "dict-key-as-title"
     },
     "ev_chargers": {
       "additionalProperties": {
         "$ref": "#/$defs/EvConfig"
       },
-      "title": "Ev Chargers",
+      "title": "EV chargers",
       "type": "object",
-      "ui_group": "basic",
-      "ui_label": "EV chargers"
+      "x-addPropertyContent": "Add EV charger",
+      "x-mimir-adapter": "dict-key-as-title"
     },
     "deferrable_loads": {
       "additionalProperties": {
         "$ref": "#/$defs/DeferrableLoadConfig"
       },
-      "title": "Deferrable Loads",
+      "title": "Deferrable loads",
       "type": "object",
-      "ui_group": "advanced",
-      "ui_label": "Deferrable loads"
+      "x-addPropertyContent": "Add deferrable load",
+      "x-mimir-adapter": "dict-key-as-title"
     },
     "static_loads": {
       "additionalProperties": {
         "$ref": "#/$defs/StaticLoadConfig"
       },
-      "title": "Static Loads",
+      "title": "Static loads",
       "type": "object",
-      "ui_group": "basic",
-      "ui_label": "Static loads"
+      "x-addPropertyContent": "Add static load",
+      "x-mimir-adapter": "dict-key-as-title"
     },
     "hybrid_inverters": {
       "additionalProperties": {
         "$ref": "#/$defs/HybridInverterConfig"
       },
-      "title": "Hybrid Inverters",
+      "title": "Hybrid inverters",
       "type": "object",
-      "ui_group": "basic",
-      "ui_label": "Hybrid inverters"
+      "x-addPropertyContent": "Add hybrid inverter",
+      "x-mimir-adapter": "dict-key-as-title"
     },
     "thermal_boilers": {
       "additionalProperties": {
         "$ref": "#/$defs/ThermalBoilerConfig"
       },
-      "title": "Thermal Boilers",
+      "title": "Thermal boilers",
       "type": "object",
-      "ui_group": "advanced",
-      "ui_label": "Thermal boilers"
+      "x-addPropertyContent": "Add thermal boiler",
+      "x-mimir-adapter": "dict-key-as-title"
     },
     "space_heating_hps": {
       "additionalProperties": {
         "$ref": "#/$defs/SpaceHeatingConfig"
       },
-      "title": "Space Heating Hps",
+      "title": "Space heating heat pumps",
       "type": "object",
-      "ui_group": "advanced",
-      "ui_label": "Space heating heat pumps"
+      "x-addPropertyContent": "Add space heating heat pump",
+      "x-mimir-adapter": "dict-key-as-title"
     },
     "combi_heat_pumps": {
       "additionalProperties": {
         "$ref": "#/$defs/CombiHeatPumpConfig"
       },
-      "title": "Combi Heat Pumps",
+      "title": "Combi heat pumps",
       "type": "object",
-      "ui_group": "advanced",
-      "ui_label": "Combi heat pumps"
+      "x-addPropertyContent": "Add combi heat pump",
+      "x-mimir-adapter": "dict-key-as-title"
     },
     "grid": {
       "$ref": "#/$defs/GridConfig",
-      "ui_group": "basic",
-      "ui_label": "Grid connection"
+      "title": "Grid connection"
     },
     "objectives": {
       "$ref": "#/$defs/ObjectivesConfig",
-      "ui_group": "advanced",
-      "ui_label": "Objectives"
+      "title": "Objectives"
     },
     "constraints": {
       "$ref": "#/$defs/ConstraintsConfig",
-      "ui_group": "advanced",
-      "ui_label": "Constraints"
+      "title": "Constraints"
     },
     "solver": {
       "$ref": "#/$defs/SolverConfig",
-      "ui_group": "advanced",
-      "ui_label": "Solver"
+      "title": "Solver"
     },
     "readiness": {
       "$ref": "#/$defs/ReadinessConfig",
-      "ui_group": "advanced",
-      "ui_label": "Readiness"
+      "title": "Readiness"
     },
     "mqtt": {
       "$ref": "#/$defs/MqttConfig",
-      "ui_group": "basic",
-      "ui_label": "MQTT"
+      "title": "MQTT"
     },
     "outputs": {
       "$ref": "#/$defs/OutputsConfig",
-      "ui_group": "advanced",
-      "ui_label": "Output topics"
+      "title": "Output topics"
     },
     "inputs": {
       "$ref": "#/$defs/InputsConfig",
-      "ui_group": "advanced",
-      "ui_label": "Input topics"
+      "title": "Input topics"
     },
     "homeassistant": {
       "$ref": "#/$defs/HomeAssistantConfig",
-      "ui_group": "advanced",
-      "ui_label": "Home Assistant"
+      "title": "Home Assistant"
     },
     "debug": {
       "$ref": "#/$defs/DebugConfig",
-      "ui_group": "advanced",
-      "ui_label": "Debug"
+      "title": "Debug"
     },
     "control": {
       "$ref": "#/$defs/ControlConfig",
-      "ui_group": "advanced",
-      "ui_label": "Control"
+      "title": "Control"
     },
     "reporting": {
       "$ref": "#/$defs/ReportingConfig",
-      "ui_group": "advanced",
-      "ui_label": "Reporting"
+      "title": "Reporting"
     }
   },
   "required": [
     "grid",
     "mqtt"
   ],
-  "title": "MimirheimConfig",
-  "type": "object"
+  "title": "Mimirheim Configuration",
+  "type": "object",
+  "x-enableCollapseToggle": false,
+  "x-format": "nav-vertical"
 }

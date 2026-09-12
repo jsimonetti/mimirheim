@@ -95,24 +95,34 @@ class EpexPredictorApiConfig(BaseModel):
             bills a single dynamic price per whole hour.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "title": "API specific configuration",
+            "description": "Configuration for the EpexPredictor API.",
+            "x-category": "API",
+            "x-titleHidden": True,
+        }
+    )
 
-    area: _AREA_CODES = Field(..., json_schema_extra={"ui_label": "EPEX area", "ui_group": "basic"})
+    area: _AREA_CODES = Field(
+        title="EPEX area",
+    )
     base_url: str = Field(
         default="https://epexpredictor.batzill.com",
+        title="API base URL",
         description="API base URL. Change for a self-hosted EpexPredictor instance.",
-        json_schema_extra={"ui_label": "API base URL", "ui_group": "advanced"},
     )
     horizon_hours: int = Field(
         default=_DEFAULT_HORIZON_HOURS,
         ge=1,
-        json_schema_extra={"ui_label": "Horizon (hours)", "ui_group": "basic"},
+        title="Horizon (hours)",
     )
-    import_formula: str = Field(default=_DEFAULT_IMPORT_FORMULA, json_schema_extra={"ui_label": "Import price formula", "ui_group": "basic"})
-    export_formula: str = Field(default=_DEFAULT_EXPORT_FORMULA, json_schema_extra={"ui_label": "Export price formula", "ui_group": "basic"})
+    import_formula: str = Field(default=_DEFAULT_IMPORT_FORMULA, title="Import price formula")
+    export_formula: str = Field(default=_DEFAULT_EXPORT_FORMULA, title="Export price formula")
     price_interval: Literal["hourly", "quarter_hourly"] = Field(
         default=_DEFAULT_PRICE_INTERVAL,
-        json_schema_extra={"ui_label": "Price interval", "ui_group": "basic"},
+        title="Price interval",
     )
 
     @field_validator("import_formula", "export_formula", mode="after")
@@ -153,10 +163,10 @@ class ConfidenceDecayConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    hours_0_to_6: float = Field(default=0.90, ge=0.0, le=1.0, json_schema_extra={"ui_label": "Confidence 0-6 h", "ui_group": "advanced"})
-    hours_6_to_24: float = Field(default=0.75, ge=0.0, le=1.0, json_schema_extra={"ui_label": "Confidence 6-24 h", "ui_group": "advanced"})
-    hours_24_to_48: float = Field(default=0.55, ge=0.0, le=1.0, json_schema_extra={"ui_label": "Confidence 24-48 h", "ui_group": "advanced"})
-    hours_48_plus: float = Field(default=0.35, ge=0.0, le=1.0, json_schema_extra={"ui_label": "Confidence 48+ h", "ui_group": "advanced"})
+    hours_0_to_6: float = Field(default=0.90, ge=0.0, le=1.0, title="Confidence 0-6 h")
+    hours_6_to_24: float = Field(default=0.75, ge=0.0, le=1.0, title="Confidence 6-24 h")
+    hours_24_to_48: float = Field(default=0.55, ge=0.0, le=1.0, title="Confidence 24-48 h")
+    hours_48_plus: float = Field(default=0.35, ge=0.0, le=1.0, title="Confidence 48+ h")
     known_until_confidence: float | None = Field(
         default=None,
         ge=0.0,
@@ -166,7 +176,7 @@ class ConfidenceDecayConfig(BaseModel):
             "knownUntil timestamp with this fixed value. Null (default) "
             "applies the decay bands uniformly, including to real data."
         ),
-        json_schema_extra={"ui_label": "Known-until confidence override", "ui_group": "advanced"},
+        title="Known-until confidence override",
     )
 
 
@@ -177,18 +187,58 @@ class EpexPredictorPricesConfig(BaseModel):
     autodiscovery and stats machinery works unchanged.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "title": "EpexPredictor Prices Helper Configuration",
+            "description": "Configuration for the EpexPredictor Prices Helper Daemon.",
+        }
+    )
 
     mqtt: MqttConfig
-    mimir_topic_prefix: str = "mimir"
-    trigger_topic: str
-    output_topic: str | None = None
+    mimir_topic_prefix: str = Field(
+        default="mimir",
+        title="Topic prefix",
+        description="mimirheim mqtt.topic_prefix. Used to derive default output and trigger topics.",
+        json_schema_extra={"x-category": "Topics"},
+    )
+    trigger_topic: str = Field(
+        title="Trigger topic",
+        description="MQTT topic that triggers a fetch cycle.",
+        json_schema_extra={"x-category": "Topics"},
+    )
+    output_topic: str | None = Field(
+        default=None,
+        title="Output topic",
+        description=(
+            "MQTT topic for the retained price payload. "
+            "Defaults to '{mimir_topic_prefix}/input/prices' when not set."
+        ),
+        json_schema_extra={"x-category": "Topics"},
+    )
     epexpredictor: EpexPredictorApiConfig
     confidence_decay: ConfidenceDecayConfig = Field(default_factory=ConfidenceDecayConfig)
-    ha_discovery: HomeAssistantConfig | None = None
-    stats_topic: str | None = None
-    signal_mimir: bool = False
-    mimir_trigger_topic: str | None = None
+    ha_discovery: HomeAssistantConfig | None = Field(
+        default=None,
+        title="HA discovery",
+        description="Optional Home Assistant MQTT discovery settings.",
+    )
+    stats_topic: str | None = Field(
+        default=None,
+        title="Stats topic",
+        description="MQTT topic where per-cycle run statistics are published.",
+    )
+    signal_mimir: bool = Field(
+        default=False,
+        title="Signal mimirheim",
+        description="Publish to 'Mimirheim trigger topic' after publishing prices.",
+    )
+    mimir_trigger_topic: str | None = Field(
+        default=None,
+        title="Mimirheim trigger topic",
+        description="Topic to trigger 'Mimirheim'. Derived from 'Topic prefix' when not set.",
+    )
+
 
     @model_validator(mode="after")
     def _derive_mimir_topics(self) -> "EpexPredictorPricesConfig":

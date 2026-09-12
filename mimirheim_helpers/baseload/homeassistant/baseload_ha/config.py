@@ -25,8 +25,8 @@ class EntityConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    entity_id: str = Field(description="Home Assistant entity ID.", json_schema_extra={"ui_label": "Entity ID", "ui_group": "basic"})
-    unit: Literal["W", "kW"] = Field(description="Power unit reported by this entity.", json_schema_extra={"ui_label": "Unit", "ui_group": "basic"})
+    entity_id: str = Field(description="Home Assistant entity ID.", title="Entity ID")
+    unit: Literal["W", "kW"] = Field(description="Power unit reported by this entity.", title="Unit")
 
 
 class HaConfig(BaseModel):
@@ -58,13 +58,13 @@ class HaConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    url: str = Field(description="Base URL of the HA instance including scheme and port.", json_schema_extra={"ui_label": "HA URL", "ui_group": "basic"})
-    token: str = Field(description="Long-Lived Access Token generated in HA.", json_schema_extra={"ui_label": "HA token", "ui_group": "basic"})
-    sum_entities: list[EntityConfig] = Field(min_length=1, json_schema_extra={"ui_label": "Sum entities", "ui_group": "basic"})
-    subtract_entities: list[EntityConfig] = Field(default_factory=list, json_schema_extra={"ui_label": "Subtract entities", "ui_group": "advanced"})
-    lookback_days: int = Field(default=7, ge=1, le=112, json_schema_extra={"ui_label": "Lookback days", "ui_group": "advanced"})
-    lookback_decay: float = Field(default=1.0, ge=1.0, json_schema_extra={"ui_label": "Lookback decay", "ui_group": "advanced"})
-    horizon_hours: int = Field(default=48, ge=1, le=168, json_schema_extra={"ui_label": "Horizon (hours)", "ui_group": "advanced"})
+    url: str = Field(description="Base URL of the HA instance including scheme and port.", title="HA URL")
+    token: str = Field(description="Long-Lived Access Token generated in HA.", title="HA token")
+    sum_entities: list[EntityConfig] = Field(min_length=1, title="Sum entities")
+    subtract_entities: list[EntityConfig] = Field(default_factory=list, title="Subtract entities")
+    lookback_days: int = Field(default=7, ge=1, le=112, title="Lookback days")
+    lookback_decay: float = Field(default=1.0, ge=1.0, title="Lookback decay")
+    horizon_hours: int = Field(default=48, ge=1, le=168, title="Horizon (hours)")
 
 
 class BaseloadConfig(BaseModel):
@@ -91,31 +91,31 @@ class BaseloadConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    mqtt: MqttConfig = Field(description="MQTT broker connection settings.", json_schema_extra={"ui_label": "MQTT", "ui_group": "basic"})
+    mqtt: MqttConfig = Field(description="MQTT broker connection settings.", title="MQTT")
     mimir_topic_prefix: str = Field(
         default="mimir",
         description="mimirheim mqtt.topic_prefix. Used to derive default output and trigger topics.",
-        json_schema_extra={"ui_label": "mimirheim topic prefix", "ui_group": "advanced"},
+        title="mimirheim topic prefix",
     )
     mimir_static_load_name: str = Field(
         default="base_load",
         description="mimirheim static_loads device name. Used to derive the default output_topic.",
-        json_schema_extra={"ui_label": "mimirheim static load name", "ui_group": "advanced", "ui_source": "static_loads"},
+        title="mimirheim static load name", json_schema_extra={"ui_source": "static_loads"},
     )
-    trigger_topic: str = Field(description="MQTT topic that triggers a fetch cycle.", json_schema_extra={"ui_label": "Trigger topic", "ui_group": "advanced"})
+    trigger_topic: str = Field(description="MQTT topic that triggers a fetch cycle.", title="Trigger topic")
     output_topic: str | None = Field(
         default=None,
         description=(
             "MQTT topic for the retained baseload forecast payload. "
             "Defaults to '{mimir_topic_prefix}/input/baseload/{mimir_static_load_name}/forecast'."
         ),
-        json_schema_extra={"ui_label": "Output topic", "ui_group": "advanced", "ui_placeholder": "{mimir_topic_prefix}/input/baseload/{mimir_static_load_name}/forecast"},
+        title="Output topic", json_schema_extra={"ui_placeholder": "{mimir_topic_prefix}/input/baseload/{mimir_static_load_name}/forecast"},
     )
-    homeassistant: HaConfig = Field(description="HA connection and entity configuration.", json_schema_extra={"ui_label": "Home Assistant", "ui_group": "basic"})
-    signal_mimir: bool = Field(default=False, description="Publish to mimir_trigger_topic after publishing the forecast.", json_schema_extra={"ui_label": "Signal mimirheim", "ui_group": "advanced"})
-    mimir_trigger_topic: str | None = Field(default=None, description="mimirheim trigger topic. Derives from mimir_topic_prefix when not set.", json_schema_extra={"ui_label": "mimirheim trigger topic", "ui_group": "advanced"})
-    ha_discovery: HomeAssistantConfig | None = Field(default=None, description="Optional Home Assistant MQTT discovery settings.", json_schema_extra={"ui_label": "HA discovery", "ui_group": "advanced"})
-    stats_topic: str | None = Field(default=None, description="MQTT topic where per-cycle run statistics are published.", json_schema_extra={"ui_label": "Stats topic", "ui_group": "advanced"})
+    homeassistant: HaConfig = Field(description="HA connection and entity configuration.", title="Home Assistant")
+    signal_mimir: bool = Field(default=False, description="Publish to mimir_trigger_topic after publishing the forecast.", title="Signal mimirheim")
+    mimir_trigger_topic: str | None = Field(default=None, description="mimirheim trigger topic. Derives from mimir_topic_prefix when not set.", title="mimirheim trigger topic")
+    ha_discovery: HomeAssistantConfig | None = Field(default=None, description="Optional Home Assistant MQTT discovery settings.", title="HA discovery")
+    stats_topic: str | None = Field(default=None, description="MQTT topic where per-cycle run statistics are published.", title="Stats topic")
 
     @model_validator(mode="after")
     def _derive_hioo_topics(self) -> "BaseloadConfig":

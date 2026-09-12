@@ -43,18 +43,18 @@ class ReporterReportingSection(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    dump_dir: Path = Field(description="Shared dump directory (read by reporter).", json_schema_extra={"ui_label": "Dump directory", "ui_group": "basic"})
-    output_dir: Path = Field(description="Directory to write HTML reports into.", json_schema_extra={"ui_label": "Output directory", "ui_group": "basic"})
+    dump_dir: Path = Field(description="Shared dump directory (read by reporter).", title="Dump directory")
+    output_dir: Path = Field(description="Directory to write HTML reports into.", title="Output directory")
     max_reports: int = Field(
         default=100,
         ge=0,
         description="Maximum retained HTML reports. 0 = unlimited.",
-        json_schema_extra={"ui_label": "Max reports", "ui_group": "advanced"},
+        title="Max reports",
     )
     notify_topic: str | None = Field(
         default=None,
         description="MQTT topic to subscribe to for dump-available notifications.",
-        json_schema_extra={"ui_label": "Notify topic", "ui_group": "advanced"},
+        title="Notify topic",
     )
 
 
@@ -68,15 +68,15 @@ class ReporterConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    mqtt: MqttConfig = Field(description="MQTT broker connection parameters.", json_schema_extra={"ui_label": "MQTT", "ui_group": "basic"})
+    mqtt: MqttConfig = Field(description="MQTT broker connection parameters.", title="MQTT")
     mimir_topic_prefix: str = Field(
         default="mimir",
         description="mimirheim mqtt.topic_prefix. Used to derive the default notify_topic.",
-        json_schema_extra={"ui_label": "mimirheim topic prefix", "ui_group": "advanced"},
+        title="mimirheim topic prefix",
     )
     reporting: ReporterReportingSection = Field(
         description="Reporting paths and retention settings.",
-        json_schema_extra={"ui_label": "Reporting", "ui_group": "basic"},
+        title="Reporting",
     )
 
     @model_validator(mode="after")
