@@ -5,16 +5,22 @@ This module is the application's main entry point. It is responsible for:
 1. Parsing the ``--config`` command-line argument.
 2. Loading and validating the YAML configuration file.
 3. Constructing all application components (ReadinessState, MqttClient,
-   MqttPublisher) and wiring them together.
-4. Starting the MQTT network loop.
+   MqttPublisher, ConfigServiceClient) and wiring them together.
+4. Starting the MQTT network loop(s).
 5. Running the solve loop on the main thread until SIGTERM or SIGINT.
 6. Exiting cleanly.
+
+Two MQTT connections are opened: the primary one (input/output topics,
+availability last-will) and a second, dedicated one for the Config Service
+protocol's Descriptor last-will, since MQTT permits only one last-will per
+connection. See ``io.config_service.ConfigServiceClient``.
 
 What this module does not do:
 - Solving: delegated to ``model_builder.build_and_solve``.
 - Parsing MQTT payloads: delegated to ``io.input_parser``.
 - Publishing results: delegated to ``io.mqtt_publisher``.
 - Tracking readiness: delegated to ``core.readiness``.
+- Building the Config Service Descriptor: delegated to ``io.config_service``.
 """
 
 import argparse
@@ -36,6 +42,7 @@ from mimirheim.core.model_builder import debug_dump, build_and_solve
 from mimirheim.core.post_process import apply_gain_threshold
 from mimirheim.core.control_arbitration import assign_control_authority
 from mimirheim.core.readiness import ReadinessState
+from mimirheim.io.config_service import ConfigServiceClient
 from mimirheim.io.mqtt_client import MqttClient
 from mimirheim.io.mqtt_publisher import MqttPublisher
 
@@ -209,6 +216,38 @@ def _apply_mqtt_env_overrides(raw: dict) -> None:
         raw["mqtt"].update(overrides)
 
 
+def _new_paho_client(config: MimirheimConfig, client_id: str | None) -> paho.Client:
+    """Construct a paho client configured with this instance's TLS and credentials.
+
+    Shared by the primary MqttClient connection and the dedicated Config
+    Service connection (see ConfigServiceClient's module docstring for why
+    the Config Service protocol needs its own connection rather than reusing
+    the primary one): both need identical TLS and broker-credential setup,
+    just a distinct client_id.
+
+    Args:
+        config: Static system configuration.
+        client_id: MQTT client identifier for this connection. Must be unique
+            per connection on the broker.
+
+    Returns:
+        A configured, not-yet-connected paho client.
+    """
+    paho_client = paho.Client(
+        paho.CallbackAPIVersion.VERSION2,
+        client_id=client_id,
+    )
+    if config.mqtt.tls:
+        import ssl
+        cert_reqs = ssl.CERT_NONE if config.mqtt.tls_allow_insecure else ssl.CERT_REQUIRED
+        paho_client.tls_set(cert_reqs=cert_reqs)
+        if config.mqtt.tls_allow_insecure:
+            paho_client.tls_insecure_set(True)
+    if config.mqtt.username is not None:
+        paho_client.username_pw_set(config.mqtt.username, config.mqtt.password)
+    return paho_client
+
+
 def _load_config(path: str) -> MimirheimConfig:
     """Load and validate the YAML configuration file.
 
@@ -288,18 +327,7 @@ def main() -> None:
     solve_queue: queue.Queue = queue.Queue(maxsize=1)
 
     readiness = ReadinessState(config)
-    paho_client = paho.Client(
-        paho.CallbackAPIVersion.VERSION2,
-        client_id=config.mqtt.client_id,
-    )
-    if config.mqtt.tls:
-        import ssl
-        cert_reqs = ssl.CERT_NONE if config.mqtt.tls_allow_insecure else ssl.CERT_REQUIRED
-        paho_client.tls_set(cert_reqs=cert_reqs)
-        if config.mqtt.tls_allow_insecure:
-            paho_client.tls_insecure_set(True)
-    if config.mqtt.username is not None:
-        paho_client.username_pw_set(config.mqtt.username, config.mqtt.password)
+    paho_client = _new_paho_client(config, config.mqtt.client_id)
     publisher = MqttPublisher(client=paho_client, config=config)
     mqtt_client = MqttClient(
         config=config,
@@ -308,6 +336,17 @@ def main() -> None:
         paho_client=paho_client,
         solve_queue=solve_queue,
     )
+
+    # The Config Service protocol's Descriptor is cleared via its own
+    # last-will (see ConfigServiceClient's module docstring). MQTT allows
+    # exactly one last-will per connection, and paho_client above already
+    # registers one for config.outputs.availability, so ConfigServiceClient
+    # runs on a second, dedicated connection instead of sharing paho_client.
+    config_service_client_id = (
+        f"{config.mqtt.client_id}-config-service" if config.mqtt.client_id else None
+    )
+    config_service_paho_client = _new_paho_client(config, config_service_client_id)
+    config_service_client = ConfigServiceClient(config, config_service_paho_client)
 
     # Register SIGTERM and SIGINT handlers. Both set `running` to False, which
     # causes the solve loop to exit cleanly after the current solve completes.
@@ -322,6 +361,7 @@ def main() -> None:
     signal.signal(signal.SIGINT, _request_shutdown)
 
     mqtt_client.start()
+    config_service_client.start()
     logger.info(
         "mimirheim started. Connecting to broker %s:%d.",
         config.mqtt.host,
@@ -401,6 +441,7 @@ def main() -> None:
             _publish_reporting_notification(bundle, result, config, paho_client)
 
     mqtt_client.stop()
+    config_service_client.stop()
     logger.info("mimirheim stopped.")
 
 

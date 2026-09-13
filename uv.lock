@@ -578,6 +578,7 @@ name = "mimirheim"
 version = "0.1.10"
 source = { editable = "." }
 dependencies = [
+    { name = "mimirheim-shared" },
     { name = "mip" },
     { name = "paho-mqtt" },
     { name = "pydantic" },
@@ -657,7 +658,6 @@ dev = [
     { name = "amqtt" },
     { name = "freezegun" },
     { name = "jinja2" },
-    { name = "mimirheim-shared" },
     { name = "plotly" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -679,6 +679,7 @@ requires-dist = [
     { name = "joblib", marker = "extra == 'pv-ml-learner'", specifier = ">=1.6.0" },
     { name = "knmi-py", marker = "extra == 'helpers'", specifier = ">=0.2" },
     { name = "knmi-py", marker = "extra == 'pv-ml-learner'", specifier = ">=0.2" },
+    { name = "mimirheim-shared", editable = "mimirheim_shared" },
     { name = "mip", specifier = ">=1.14" },
     { name = "open-meteo-solar-forecast", marker = "extra == 'helpers'", specifier = ">=0.1.32" },
     { name = "open-meteo-solar-forecast", marker = "extra == 'pv-openmeteo'", specifier = ">=0.1.32" },
@@ -714,7 +715,6 @@ dev = [
     { name = "amqtt", specifier = ">=0.11" },
     { name = "freezegun", specifier = ">=1.4" },
     { name = "jinja2", specifier = ">=3.0" },
-    { name = "mimirheim-shared", editable = "mimirheim_shared" },
     { name = "plotly", specifier = ">=7.0.0" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-asyncio", specifier = ">=1.4.0" },

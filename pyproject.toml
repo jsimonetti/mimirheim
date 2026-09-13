@@ -7,6 +7,10 @@ dependencies = [
     "pydantic>=2.13.5",
     "paho-mqtt>=2.0",
     "pyyaml>=6.0.3",
+    # Config Service protocol (describe()/Descriptor, FormSpec types). See
+    # mimirheim_shared/docs/adr/0004: a genuinely separate distribution, not
+    # part of the mimirheim wheel, pulled in via [tool.uv.sources] below.
+    "mimirheim-shared",
 ]
 
 # ---------------------------------------------------------------------------
@@ -126,12 +130,6 @@ dev = [
     # The floor stays at the version core pinned so the lock does not regress.
     "respx>=0.23.1",
     "jinja2>=3.0",
-    # mimirheim-shared is a genuinely separate distribution (own pyproject.toml,
-    # own version), not part of the mimirheim wheel. It is pulled in here only
-    # so its own test suite runs from the same `uv run pytest` invocation as
-    # everything else; mimirheim core does not declare it as a runtime
-    # dependency.
-    "mimirheim-shared",
 ]
 
 [tool.uv.workspace]
