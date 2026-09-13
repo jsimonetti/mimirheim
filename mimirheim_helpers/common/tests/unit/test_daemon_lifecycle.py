@@ -143,6 +143,28 @@ class TestRun:
         client.loop_stop.assert_called_once()
         client.disconnect.assert_called_once()
 
+    def test_on_shutdown_hook_is_called_before_the_loop_stops(self) -> None:
+        """A subclass overriding _on_shutdown (e.g. to clear a retained
+        Descriptor) needs the network thread still running to have any
+        chance of the publish reaching the broker."""
+        with patch("helper_common.daemon.mqtt.Client") as client_cls:
+            daemon = MqttDaemon(_config())
+        client = client_cls.return_value
+        calls: list[str] = []
+        client.loop_stop.side_effect = lambda: calls.append("loop_stop")
+        daemon._on_shutdown = lambda: calls.append("on_shutdown")
+
+        with patch("helper_common.daemon.threading.Event", _set_event):
+            daemon.run()
+
+        assert calls == ["on_shutdown", "loop_stop"]
+
+    def test_on_shutdown_default_is_a_no_op(self) -> None:
+        with patch("helper_common.daemon.mqtt.Client"):
+            daemon = MqttDaemon(_config())
+
+        daemon._on_shutdown()
+
     def test_installs_handlers_for_sigterm_and_sigint(self) -> None:
         with patch("helper_common.daemon.mqtt.Client"):
             daemon = MqttDaemon(_config())

@@ -128,6 +128,7 @@ class MqttDaemon:
 
         stop_event.wait()
 
+        self._on_shutdown()
         self._client.loop_stop()
         self._client.disconnect()
         self._logger.info("%s shut down cleanly.", self.__class__.__name__)
@@ -226,6 +227,17 @@ class MqttDaemon:
             client: The paho client that received the message.
             userdata: Unused; part of the paho callback signature.
             message: The paho ``MQTTMessage``.
+        """
+
+    def _on_shutdown(self) -> None:
+        """Hook called once, after the stop signal but before the network loop stops.
+
+        No-op by default. A subclass that needs to publish something before
+        the connection closes (e.g. a Config Owner clearing its retained
+        Descriptor; see ``helper_common.config_owner.ConfigOwnerSupport``)
+        overrides this. It runs before ``loop_stop()``/``disconnect()``,
+        while the network thread is still running, so a publish issued here
+        has a chance of reaching the broker.
         """
 
     def _publish_stats(

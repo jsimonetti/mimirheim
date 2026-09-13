@@ -30,10 +30,13 @@ request/response feature: mimirheim core's connection negotiates MQTT
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+import yaml
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from mimirheim_shared.atomic_write import overlay_values, write_yaml_preserving_comments
 from mimirheim_shared.formspec import FormSpec
 
 # Fixed regardless of any Config Owner's own business MQTT topic prefix (e.g.
@@ -191,3 +194,84 @@ def validate_and_write_result_payload(result: ValidateAndWriteResult) -> bytes:
         UTF-8 encoded JSON bytes.
     """
     return result.model_dump_json().encode("utf-8")
+
+
+def _format_validation_error(error: dict[str, Any]) -> str:
+    """Render one pydantic error dict as a single human-readable line.
+
+    Args:
+        error: One entry of ``ValidationError.errors()``.
+
+    Returns:
+        ``"<dotted.field.path>: <message>"``, or just the message when the
+        error is not attached to a specific field (an empty ``loc``).
+    """
+    loc = ".".join(str(part) for part in error["loc"])
+    return f"{loc}: {error['msg']}" if loc else error["msg"]
+
+
+def handle_validate_and_write(
+    payload: bytes, config_path: Path, model: type[BaseModel]
+) -> bytes:
+    """Validate submitted Candidate Values against ``model`` and, only on success, write them.
+
+    This is the generic form of a Config Owner's ``validate_and_write`` step:
+    it is the same sequence mimirheim core's own
+    ``mimirheim.io.config_service.handle_validate_and_write`` performs for
+    ``MimirheimConfig``, parameterised so any Config Owner's validation model
+    can reuse it rather than reimplementing the sequence. It never touches an
+    MQTT client (see this module's own docstring); the caller publishes the
+    returned bytes to its ``validate_and_write`` response topic.
+
+    Parses ``payload`` as a ``ValidateAndWriteRequest``. Candidate Values may
+    be a partial update (e.g. just one changed section), matching
+    ``write_yaml_preserving_comments``'s own overlay semantics, so they are
+    validated against the *merged* result of overlaying them onto the current
+    on-disk configuration, not in isolation: validating a partial submission
+    by itself would reject an update to one field of an otherwise-required
+    nested section. On failure, returns a result carrying the validation
+    errors and performs no write. On success, calls
+    ``write_yaml_preserving_comments`` to atomically overlay ``values`` onto
+    ``config_path`` and returns a success result.
+
+    Args:
+        payload: The raw MQTT message payload received on the Config Owner's
+            ``validate_and_write`` request topic.
+        config_path: The path to the Config Owner's own YAML configuration
+            file, the one it was started with.
+        model: The Config Owner's validation model. ``model.model_validate``
+            is called on the merged Candidate Values.
+
+    Returns:
+        UTF-8 encoded JSON bytes to publish to the Config Owner's
+        ``validate_and_write`` response topic.
+
+    Raises:
+        ValidationError: If ``payload`` is not a well-formed
+            ``ValidateAndWriteRequest`` envelope (as opposed to a
+            well-formed envelope carrying invalid Candidate Values, which is
+            reported in the returned result instead). The caller cannot
+            correlate a response to a request it could not parse, so this is
+            left to propagate rather than published.
+    """
+    request = ValidateAndWriteRequest.model_validate_json(payload)
+
+    current: dict[str, Any] = {}
+    if config_path.exists():
+        current = yaml.safe_load(config_path.read_text()) or {}
+    merged = dict(current)
+    overlay_values(merged, request.values)
+
+    try:
+        model.model_validate(merged)
+    except ValidationError as exc:
+        result = ValidateAndWriteResult(
+            request_id=request.request_id,
+            success=False,
+            errors=[_format_validation_error(error) for error in exc.errors()],
+        )
+        return validate_and_write_result_payload(result)
+
+    write_yaml_preserving_comments(config_path, request.values)
+    result = ValidateAndWriteResult(request_id=request.request_id, success=True)
+    return validate_and_write_result_payload(result)

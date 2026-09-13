@@ -6,6 +6,7 @@ description = "Config Service protocol, FormSpec presentation types, and the ato
 dependencies = [
     "pydantic>=2.13.5",
     "ruamel.yaml>=0.18",
+    "pyyaml>=6.0.3",
 ]
 
 [dependency-groups]
