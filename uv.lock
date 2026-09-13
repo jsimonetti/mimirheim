@@ -599,9 +599,6 @@ baseload-ha-db-postgres = [
     { name = "psycopg2-binary" },
 ]
 config-editor = [
-    { name = "ruamel-yaml" },
-]
-config-editor-v3 = [
     { name = "jinja2" },
 ]
 epexpredictor = [
@@ -678,7 +675,7 @@ requires-dist = [
     { name = "httpx", marker = "extra == 'baseload-ha'", specifier = ">=0.27" },
     { name = "httpx", marker = "extra == 'helpers'", specifier = ">=0.27" },
     { name = "httpx", marker = "extra == 'pv-ml-learner'", specifier = ">=0.27" },
-    { name = "jinja2", marker = "extra == 'config-editor-v3'", specifier = ">=3.0" },
+    { name = "jinja2", marker = "extra == 'config-editor'", specifier = ">=3.0" },
     { name = "joblib", marker = "extra == 'helpers'", specifier = ">=1.6.0" },
     { name = "joblib", marker = "extra == 'pv-ml-learner'", specifier = ">=1.6.0" },
     { name = "knmi-py", marker = "extra == 'helpers'", specifier = ">=0.2" },
@@ -703,7 +700,6 @@ requires-dist = [
     { name = "requests", marker = "extra == 'epexpredictor'", specifier = ">=2.34.2" },
     { name = "requests", marker = "extra == 'helpers'", specifier = ">=2.34.2" },
     { name = "requests", marker = "extra == 'zonneplan'", specifier = ">=2.34.2" },
-    { name = "ruamel-yaml", marker = "extra == 'config-editor'", specifier = ">=0.18" },
     { name = "scikit-learn", marker = "extra == 'helpers'", specifier = ">=1.9.0" },
     { name = "scikit-learn", marker = "extra == 'pv-ml-learner'", specifier = ">=1.9.0" },
     { name = "sqlalchemy", marker = "extra == 'baseload-ha-db'", specifier = ">=2.0.52" },
@@ -712,7 +708,7 @@ requires-dist = [
     { name = "xgboost", marker = "extra == 'helpers'", specifier = ">=3.4.1" },
     { name = "xgboost", marker = "extra == 'pv-ml-learner'", specifier = ">=3.4.1" },
 ]
-provides-extras = ["scheduler", "nordpool", "zonneplan", "epexpredictor", "pv-fetcher", "pv-openmeteo", "pv-ml-learner", "pv-ml-learner-postgres", "pv-ml-learner-mysql", "baseload-ha", "baseload-ha-db", "baseload-ha-db-postgres", "baseload-ha-db-mysql", "reporter", "config-editor", "config-editor-v3", "helpers"]
+provides-extras = ["scheduler", "nordpool", "zonneplan", "epexpredictor", "pv-fetcher", "pv-openmeteo", "pv-ml-learner", "pv-ml-learner-postgres", "pv-ml-learner-mysql", "baseload-ha", "baseload-ha-db", "baseload-ha-db-postgres", "baseload-ha-db-mysql", "reporter", "config-editor", "helpers"]
 
 [package.metadata.requires-dev]
 dev = [

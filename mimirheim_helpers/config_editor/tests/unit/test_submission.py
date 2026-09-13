@@ -1,11 +1,11 @@
-"""Unit tests for config_editor_v3.submission.parse_submission."""
+"""Unit tests for config_editor.submission.parse_submission."""
 
 from __future__ import annotations
 
 from mimirheim_shared.field_shape import FieldShape
 from mimirheim_shared.formspec import FieldSpec, FormSpec
 
-from config_editor_v3.submission import parse_submission
+from config_editor.submission import parse_submission
 
 
 def test_scalar_field_present_in_the_submission_is_included() -> None:

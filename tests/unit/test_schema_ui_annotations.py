@@ -1,36 +1,30 @@
-"""Tests for UI annotation coverage on all mimirheim Pydantic config models.
+"""Tests for UI annotation coverage on helper Pydantic config models.
 
-Verifies that every field in every config model (main and helper) has the
-required ui_label and ui_group annotations, that named-map device models
-carry ui_instance_name_description, and that the committed schema.json file
-stays in sync with the live Pydantic output.
+Verifies that every field in each helper's config model has the required
+ui_label and ui_group annotations, plus a couple of MimirheimConfig
+round-trip sanity checks unrelated to UI annotations.
+
+mimirheim core's own schema (`mimirheim.config.schema`) no longer carries
+ui_label/ui_group/ui_instance_name_description json_schema_extra hints:
+config-editor-v3 ticket 10 removed them, since `mimirheim/config/formspec.py`
+now gives core's Config Editor presentation layer full FormSpec coverage
+instead. Helpers have not made that same move yet, so their coverage tests
+remain here until they do.
 
 What this module does not do:
 - It does not test the correctness of annotation values (e.g. whether a
   ui_label is grammatically sound). That is a human review concern.
-- It does not test the config editor UI itself (that is test_config_editor_*.py).
+- It does not test the Config Editor UI itself (that is
+  mimirheim_helpers/config_editor/tests/unit/test_server.py).
 """
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import Any
 
 import pytest
 from pydantic import ValidationError
 
-from mimirheim.config.schema import (
-    BatteryConfig,
-    CombiHeatPumpConfig,
-    DeferrableLoadConfig,
-    EvConfig,
-    HybridInverterConfig,
-    MimirheimConfig,
-    PvConfig,
-    SpaceHeatingConfig,
-    StaticLoadConfig,
-    ThermalBoilerConfig,
-)
+from mimirheim.config.schema import MimirheimConfig
 
 
 # ---------------------------------------------------------------------------
@@ -142,75 +136,6 @@ def _collect_missing_ui_group(
         if def_name not in _visited:
             _visited.add(def_name)
             _walk(def_schema, def_name)
-
-
-# ---------------------------------------------------------------------------
-# MimirheimConfig coverage tests
-# ---------------------------------------------------------------------------
-
-def test_all_fields_have_ui_label() -> None:
-    """Every field in MimirheimConfig and all sub-models must have a ui_label."""
-    schema = MimirheimConfig.model_json_schema()
-    violations: list[str] = []
-    _collect_missing_ui_labels(schema, path="MimirheimConfig", violations=violations)
-    assert not violations, (
-        "The following fields are missing ui_label annotations:\n"
-        + "\n".join(f"  {v}" for v in violations)
-    )
-
-
-def test_all_fields_have_ui_group() -> None:
-    """Every field in MimirheimConfig and all sub-models must have a valid ui_group."""
-    schema = MimirheimConfig.model_json_schema()
-    violations: list[str] = []
-    _collect_missing_ui_group(schema, path="MimirheimConfig", violations=violations)
-    assert not violations, (
-        "The following fields are missing ui_group annotations:\n"
-        + "\n".join(f"  {v}" for v in violations)
-    )
-
-
-@pytest.mark.parametrize("model_cls", [
-    BatteryConfig,
-    PvConfig,
-    EvConfig,
-    HybridInverterConfig,
-    DeferrableLoadConfig,
-    StaticLoadConfig,
-    ThermalBoilerConfig,
-    SpaceHeatingConfig,
-    CombiHeatPumpConfig,
-])
-def test_named_map_model_has_instance_name_description(model_cls: type) -> None:
-    """Named-map device models must carry ui_instance_name_description in their schema."""
-    schema = model_cls.model_json_schema()
-    assert "ui_instance_name_description" in schema, (
-        f"{model_cls.__name__} is missing ui_instance_name_description in model_config. "
-        "Add it via json_schema_extra in ConfigDict."
-    )
-
-
-# ---------------------------------------------------------------------------
-# schema.json freshness test
-# ---------------------------------------------------------------------------
-
-def test_schema_json_is_up_to_date() -> None:
-    """The committed schema.json must match the live MimirheimConfig.model_json_schema() output.
-
-    If this test fails, regenerate the file:
-        python scripts/generate_schema_json.py
-    """
-    schema_path = Path(__file__).parents[2] / "mimirheim" / "config" / "schema.json"
-    assert schema_path.exists(), (
-        f"schema.json not found at {schema_path}. "
-        "Run: python scripts/generate_schema_json.py"
-    )
-    live = MimirheimConfig.model_json_schema()
-    committed = json.loads(schema_path.read_text())
-    assert live == committed, (
-        "mimirheim/config/schema.json is out of date. "
-        "Run: python scripts/generate_schema_json.py"
-    )
 
 
 # ---------------------------------------------------------------------------

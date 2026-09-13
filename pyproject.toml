@@ -75,9 +75,6 @@ reporter = [
     "plotly>=7.0.0",
 ]
 config-editor = [
-    "ruamel.yaml>=0.18",
-]
-config-editor-v3 = [
     "jinja2>=3.0",
 ]
 # Meta-extra: installs every helper's runtime dependencies in one shot.
@@ -118,7 +115,6 @@ packages = [
     "mimirheim_helpers/baseload/static/baseload_static",
     "mimirheim_helpers/reporter/reporter",
     "mimirheim_helpers/config_editor/config_editor",
-    "mimirheim_helpers/config_editor_v3/config_editor_v3",
 ]
 
 [dependency-groups]
@@ -186,7 +182,6 @@ testpaths = [
     "mimirheim_helpers/baseload/static/tests",
     "mimirheim_helpers/reporter/tests",
     "mimirheim_helpers/config_editor/tests",
-    "mimirheim_helpers/config_editor_v3/tests",
     "mimirheim_shared/tests",
 ]
 markers = [

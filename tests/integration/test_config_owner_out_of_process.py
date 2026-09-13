@@ -1,5 +1,5 @@
 """Integration test proving the Config Service protocol works with a
-genuinely out-of-process Config Owner (config-editor-v3 ticket 09).
+genuinely out-of-process Config Owner (config-editor ticket 09).
 
 Runs nordpool (ticket 06's first helper Config Owner) as a real OS
 subprocess, reachable only via the shared in-process amqtt broker -- there is
@@ -17,10 +17,10 @@ What this module does not test:
   discovery/render/edit).
 - The Config Editor's real HTTP transport (`ConfigEditorServer.serve_forever`
   and its socket handling) -- `handle_request` is called directly, matching
-  every other test of this server; see `config_editor_v3/server.py`'s own
+  every other test of this server; see `config_editor/server.py`'s own
   docstring for why that call is equivalent to a live request.
 - FormSpec rendering details (Tier collapse, Conditional Visibility, nested
-  shapes) -- covered by `mimirheim_helpers/config_editor_v3/tests/unit/test_render.py`.
+  shapes) -- covered by `mimirheim_helpers/config_editor/tests/unit/test_render.py`.
 
 See tests/integration/test_config_service_roundtrip.py and
 test_validate_and_write_roundtrip.py for the faked-in-process-owner variant
@@ -54,10 +54,10 @@ from mimirheim.io.mqtt_publisher import MqttPublisher
 from helper_common.config import MqttConfig as HelperMqttConfig
 from helper_common.config_owner import ConfigOwnerSupport
 
-from config_editor_v3.mqtt_client import ConfigEditorMqttClient
-from config_editor_v3.registry import ConfigOwnerRegistry
-from config_editor_v3.render import RenderedGroup, build_groups
-from config_editor_v3.server import ConfigEditorServer
+from config_editor.mqtt_client import ConfigEditorMqttClient
+from config_editor.registry import ConfigOwnerRegistry
+from config_editor.render import RenderedGroup, build_groups
+from config_editor.server import ConfigEditorServer
 from mimirheim_shared.formspec import FieldSpec, FormSpec
 
 _NORDPOOL_OWNER_ID = "nordpool"
@@ -85,7 +85,7 @@ _THIRD_OWNER_FORM_SPEC = FormSpec(fields={"enabled": FieldSpec(label="Enabled", 
 
 
 class _EditorConfig:
-    """Minimal stand-in for `ConfigEditorV3Config`; `ConfigEditorMqttClient` only reads `.mqtt`."""
+    """Minimal stand-in for `ConfigEditorConfig`; `ConfigEditorMqttClient` only reads `.mqtt`."""
 
     def __init__(self, port: int) -> None:
         self.mqtt = HelperMqttConfig(host="127.0.0.1", port=port, client_id=f"editor-{uuid.uuid4().hex[:8]}")
@@ -119,7 +119,7 @@ def _flatten_leaf_values(groups: list[RenderedGroup]) -> dict[str, str]:
     """Collects every leaf field's dotted name/value from a rendered tree.
 
     Mirrors what a real browser submits for the same rendered page. Copied
-    from tests/unit/test_server.py's own e2e helper (config_editor_v3),
+    from tests/unit/test_server.py's own e2e helper (config_editor),
     which cannot be imported directly since it lives in another package's
     test tree.
     """

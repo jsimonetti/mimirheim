@@ -1,4 +1,4 @@
-"""Unit tests for config_editor_v3.render: grouping, Tier collapse, Conditional Visibility,
+"""Unit tests for config_editor.render: grouping, Tier collapse, Conditional Visibility,
 and (ticket 08) recursive rendering of every Field Shape."""
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from mimirheim_shared.field_shape import FieldShape
 from mimirheim_shared.formspec import FieldSpec, FormSpec, Tier
 from mimirheim_shared.visibility import Comparison, ComparisonOperator
 
-from config_editor_v3.render import RenderedField, RenderedGroup, UNGROUPED_LABEL, build_groups, schema_default_values
+from config_editor.render import RenderedField, RenderedGroup, UNGROUPED_LABEL, build_groups, schema_default_values
 
 
 def _find_field(groups: list[RenderedGroup], name: str) -> RenderedField:

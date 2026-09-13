@@ -36,7 +36,7 @@ from mimirheim_shared.config_service import (
 )
 from pydantic import ValidationError
 
-from config_editor_v3.registry import ConfigOwnerRegistry
+from config_editor.registry import ConfigOwnerRegistry
 
 logger = logging.getLogger(__name__)
 

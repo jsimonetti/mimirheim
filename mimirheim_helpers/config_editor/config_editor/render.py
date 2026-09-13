@@ -87,7 +87,7 @@ class RenderedField:
             `"batteries.battery_main.capacity_kwh"`), used directly as the
             rendered `<input>`/`<select>`/checkbox `name=` and `id=`
             attribute so a submission can be parsed back into the same
-            nested structure (see `config_editor_v3.submission`).
+            nested structure (see `config_editor.submission`).
         spec: This field's FieldSpec, as resolved by
             `mimirheim_shared.formspec.resolve_field_shapes` when the Config
             Owner built its Descriptor.

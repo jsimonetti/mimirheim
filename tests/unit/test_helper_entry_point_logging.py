@@ -43,7 +43,7 @@ _LOGGING_ENTRY_POINTS = [
     ("baseload_ha", "baseload_ha"),
     ("baseload_ha_db", "baseload_ha_db"),
     ("baseload_static", "baseload_static"),
-    ("config_editor_v3", "config_editor_v3"),
+    ("config_editor", "config_editor"),
 ]
 
 # Every helper entry point, for the source-level rule.
@@ -60,7 +60,6 @@ _ENTRY_POINT_SOURCES = [
     "mimirheim_helpers/reporter/reporter/__main__.py",
     "mimirheim_helpers/scheduler/scheduler/__main__.py",
     "mimirheim_helpers/config_editor/config_editor/__main__.py",
-    "mimirheim_helpers/config_editor_v3/config_editor_v3/__main__.py",
 ]
 
 

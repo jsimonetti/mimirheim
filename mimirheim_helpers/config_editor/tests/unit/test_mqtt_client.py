@@ -1,4 +1,4 @@
-"""Unit tests for config_editor_v3.mqtt_client.ConfigEditorMqttClient.
+"""Unit tests for config_editor.mqtt_client.ConfigEditorMqttClient.
 
 Fakes the paho message per the pattern in `tests/unit/test_mqtt_client.py`
 (mimirheim core): constructs `MagicMock` messages directly and asserts on the
@@ -28,8 +28,8 @@ from mimirheim_shared.config_service import (
 from mimirheim_shared.formspec import FieldSpec, FormSpec
 from pydantic import BaseModel, ConfigDict
 
-from config_editor_v3.mqtt_client import ConfigEditorMqttClient
-from config_editor_v3.registry import ConfigOwnerRegistry
+from config_editor.mqtt_client import ConfigEditorMqttClient
+from config_editor.registry import ConfigOwnerRegistry
 
 
 class _FakeOwnerConfig(BaseModel):
@@ -43,7 +43,7 @@ _FAKE_FORM_SPEC = FormSpec(fields={"enabled": FieldSpec(label="Enabled", descrip
 
 def _make_config() -> object:
     class _Config:
-        mqtt = MqttConfig(host="localhost", client_id="test-config-editor-v3")
+        mqtt = MqttConfig(host="localhost", client_id="test-config-editor")
 
     return _Config()
 

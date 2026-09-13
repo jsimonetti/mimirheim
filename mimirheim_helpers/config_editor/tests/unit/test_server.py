@@ -1,4 +1,4 @@
-"""Unit tests for config_editor_v3.server.ConfigEditorServer.
+"""Unit tests for config_editor.server.ConfigEditorServer.
 
 Tests call `handle_request` directly for every assertion, never issuing a
 real HTTP request: discovery (listing registered Config Owners, including a
@@ -10,11 +10,16 @@ pattern the ticket's prior prototype, config_editor_v2, used (see git history
 on branch `feat/config-editor-v2`; that prototype is not part of this
 working tree).
 
-`ConfigEditorServer.__init__` still binds a real listening socket (matching
-`config_editor`/`config_editor_v2`'s own constructor, which only ever
-`serve_forever()`s it once): the `server` fixture below closes that socket on
-teardown so no test leaks a file descriptor, even though no test here ever
-accepts a connection on it.
+`ConfigEditorServer.__init__` still binds a real listening socket (it only
+ever `serve_forever()`s it once): the `server` fixture below closes that
+socket on teardown so no test leaks a file descriptor, even though no test
+here ever accepts a connection on it.
+
+The `allowed_ip` restriction (do_GET/do_POST rejecting a source IP that does
+not match) is exercised through `handle_request`'s own `client_ip` parameter,
+not a live socket connection, keeping it on the same no-live-socket seam as
+every other test here: `do_GET`/`do_POST` just forward `self.client_address[0]`
+into that parameter.
 """
 
 from __future__ import annotations
@@ -37,9 +42,9 @@ from mimirheim_shared.field_shape import FieldShape
 from mimirheim_shared.formspec import FieldSpec, FormSpec, Tier
 from mimirheim_shared.visibility import Comparison, ComparisonOperator
 
-from config_editor_v3.registry import ConfigOwnerRegistry
-from config_editor_v3.render import RenderedGroup, build_groups
-from config_editor_v3.server import ConfigEditorServer
+from config_editor.registry import ConfigOwnerRegistry
+from config_editor.render import RenderedGroup, build_groups
+from config_editor.server import ConfigEditorServer
 
 _BATTERIES_FIXTURE_PATH = (
     Path(__file__).parent / "fixtures" / "sample_mimirheim_config_with_batteries.yaml"
@@ -450,3 +455,52 @@ def test_e2e_editing_a_nested_named_collection_field_round_trips(
         assert "# usable capacity" in raw
     finally:
         server._httpd.server_close()
+
+
+# ---------------------------------------------------------------------------
+# allowed_ip restriction
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def server_with_allowed_ip(
+    registry: ConfigOwnerRegistry, config_service_client: MagicMock
+) -> Iterator[ConfigEditorServer]:
+    instance = ConfigEditorServer(registry, config_service_client, allowed_ip="172.30.32.1")
+    yield instance
+    instance._httpd.server_close()
+
+
+def test_get_from_disallowed_ip_is_rejected(server_with_allowed_ip: ConfigEditorServer) -> None:
+    status, _headers, _body = server_with_allowed_ip.handle_request(
+        "GET", "/", body=b"", client_ip="10.0.0.5"
+    )
+    assert status == 403
+
+
+def test_get_from_allowed_ip_is_served(server_with_allowed_ip: ConfigEditorServer) -> None:
+    status, _headers, body = server_with_allowed_ip.handle_request(
+        "GET", "/", body=b"", client_ip="172.30.32.1"
+    )
+    assert status == 200
+    assert "No Config Owners discovered yet." in body.decode("utf-8")
+
+
+def test_post_from_disallowed_ip_is_rejected(server_with_allowed_ip: ConfigEditorServer) -> None:
+    status, _headers, _body = server_with_allowed_ip.handle_request(
+        "POST", "/owners/mimirheim-core", body=b"", client_ip="10.0.0.5"
+    )
+    assert status == 403
+
+
+def test_no_allowed_ip_configured_accepts_any_client_ip(server: ConfigEditorServer) -> None:
+    """When allowed_ip is unset (the default), the client_ip parameter is ignored."""
+    status, _headers, _body = server.handle_request("GET", "/", body=b"", client_ip="10.0.0.5")
+    assert status == 200
+
+
+def test_client_ip_omitted_is_not_restricted(server_with_allowed_ip: ConfigEditorServer) -> None:
+    """Existing callers that never pass client_ip (e.g. every other test in this
+    module) must keep working unrestricted, even when allowed_ip is configured:
+    the restriction only applies once the real HTTP layer supplies a client_ip."""
+    status, _headers, _body = server_with_allowed_ip.handle_request("GET", "/", body=b"")
+    assert status == 200

@@ -1,11 +1,11 @@
-"""Unit tests for config_editor_v3.registry.ConfigOwnerRegistry."""
+"""Unit tests for config_editor.registry.ConfigOwnerRegistry."""
 
 from __future__ import annotations
 
 from mimirheim_shared.config_service import Descriptor
 from mimirheim_shared.formspec import FieldSpec, FormSpec
 
-from config_editor_v3.registry import ConfigOwnerRegistry
+from config_editor.registry import ConfigOwnerRegistry
 
 
 def _descriptor(owner_id: str, display_name: str) -> Descriptor:
