@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Mimirheim Config Editor</title>
+</head>
+<body>
+  <h1>Config Owners</h1>
+  {% if owners %}
+  <ul id="owner-list">
+    {% for owner in owners %}
+    <li><a href="/owners/{{ owner.owner_id }}">{{ owner.display_name }}</a></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>No Config Owners discovered yet.</p>
+  {% endif %}
+</body>
+</html>

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ descriptor.display_name }} configuration</title>
+</head>
+<body>
+  <p><a href="/">Back to Config Owners</a></p>
+  <h1>{{ descriptor.display_name }}</h1>
+
+  {% macro render_field(field) %}
+  <div class="field" data-field="{{ field.name }}">
+    <label for="field-{{ field.name }}">{{ field.spec.label }}</label>
+    <p class="description">{{ field.spec.description }}</p>
+    {% if field.spec.help_text %}<p class="help-text">{{ field.spec.help_text }}</p>{% endif %}
+    {% if field.spec.doc_link %}<a class="doc-link" href="{{ field.spec.doc_link }}">Learn more</a>{% endif %}
+    <input id="field-{{ field.name }}" type="text" value="{{ field.value if field.value is not none else '' }}" readonly>
+  </div>
+  {% endmacro %}
+
+  {% for group in groups %}
+  <section data-group="{{ group.label }}">
+    <h2>{{ group.label }}</h2>
+    {% for f in group.basic_fields %}
+      {{ render_field(f) }}
+    {% endfor %}
+    {% if group.has_expert_fields %}
+    <details class="advanced">
+      <summary>Advanced</summary>
+      {% for f in group.expert_fields %}
+        {{ render_field(f) }}
+      {% endfor %}
+    </details>
+    {% endif %}
+  </section>
+  {% endfor %}
+</body>
+</html>
