@@ -71,7 +71,7 @@ class RenderedGroup:
         return bool(self.expert_fields)
 
 
-def build_groups(descriptor: Descriptor) -> list[RenderedGroup]:
+def build_groups(descriptor: Descriptor, values: dict[str, Any] | None = None) -> list[RenderedGroup]:
     """Groups a Descriptor's FormSpec fields by section, tier, and visibility.
 
     Fields are grouped by `FieldSpec.group` (`UNGROUPED_LABEL` when unset), in
@@ -79,17 +79,23 @@ def build_groups(descriptor: Descriptor) -> list[RenderedGroup]:
     always shown; Expert fields are returned separately so the caller (the
     Jinja2 template) can render them behind an Advanced disclosure. A field
     marked `hidden` in its FieldSpec, or whose Conditional Visibility rule
-    evaluates to False against the Descriptor's schema defaults (see
-    `schema_default_values`), is left out of both lists entirely.
+    evaluates to False against `values`, is left out of both lists entirely.
 
     Args:
         descriptor: The Config Owner's Descriptor to render.
+        values: Field values to render and to evaluate Conditional Visibility
+            against. Defaults to the Descriptor's schema defaults (see
+            `schema_default_values`) when None; the Config Editor passes a
+            user's just-submitted Candidate Values instead when redisplaying
+            a failed `validate_and_write` submission, so in-progress edits
+            are not lost.
 
     Returns:
         Groups in first-seen order, each with its filtered Basic and Expert
         field lists.
     """
-    values = schema_default_values(descriptor.json_schema)
+    if values is None:
+        values = schema_default_values(descriptor.json_schema)
     groups: dict[str, RenderedGroup] = {}
     order: list[str] = []
 

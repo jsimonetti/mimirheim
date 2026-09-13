@@ -7,10 +7,20 @@ resulting `ConfigOwnerRegistry` state, with no real broker connection.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from unittest.mock import MagicMock
 
+import pytest
 from helper_common.config import MqttConfig
-from mimirheim_shared.config_service import CLEARING_PAYLOAD, build_descriptor, descriptor_payload
+from mimirheim_shared.config_service import (
+    CLEARING_PAYLOAD,
+    ValidateAndWriteRequest,
+    ValidateAndWriteResult,
+    build_descriptor,
+    descriptor_payload,
+    validate_and_write_response_topic,
+    validate_and_write_result_payload,
+)
 from mimirheim_shared.formspec import FieldSpec, FormSpec
 from pydantic import BaseModel, ConfigDict
 
@@ -74,3 +84,88 @@ def test_on_message_discards_malformed_payload_without_raising() -> None:
     )
 
     assert registry.get("nordpool") is None
+
+
+def _fake_publish_replying_with(
+    client: ConfigEditorMqttClient, success: bool, errors: list[str] | None = None
+) -> Callable[[str, bytes, int], None]:
+    """Builds a publish side_effect that immediately delivers a canned response.
+
+    Registering the pending request happens before `submit_validate_and_write`
+    calls `publish` (see its implementation), so by the time this side_effect
+    runs, `client._on_message` can already find and set it — no real thread or
+    broker required to exercise the full request/response round trip.
+    """
+
+    def _publish(topic: str, payload: bytes, qos: int = 0) -> None:
+        request = ValidateAndWriteRequest.model_validate_json(payload)
+        response = ValidateAndWriteResult(request_id=request.request_id, success=success, errors=errors or [])
+        client._on_message(
+            MagicMock(),
+            None,
+            _message(validate_and_write_response_topic("mimirheim-core"), validate_and_write_result_payload(response)),
+        )
+
+    return _publish
+
+
+def test_submit_validate_and_write_returns_the_owners_result() -> None:
+    registry = ConfigOwnerRegistry()
+    client = ConfigEditorMqttClient(_make_config(), registry)
+    client._client.publish = MagicMock(side_effect=_fake_publish_replying_with(client, success=True))
+
+    result = client.submit_validate_and_write("mimirheim-core", {"grid": {"import_limit_kw": 17}})
+
+    assert result.success is True
+    assert client._pending == {}
+
+
+def test_submit_validate_and_write_surfaces_validation_errors() -> None:
+    registry = ConfigOwnerRegistry()
+    client = ConfigEditorMqttClient(_make_config(), registry)
+    client._client.publish = MagicMock(
+        side_effect=_fake_publish_replying_with(client, success=False, errors=["grid: field required"])
+    )
+
+    result = client.submit_validate_and_write("mimirheim-core", {})
+
+    assert result.success is False
+    assert result.errors == ["grid: field required"]
+
+
+def test_submit_validate_and_write_times_out_when_no_response_arrives() -> None:
+    registry = ConfigOwnerRegistry()
+    client = ConfigEditorMqttClient(_make_config(), registry)
+    client._client.publish = MagicMock()
+
+    with pytest.raises(TimeoutError):
+        client.submit_validate_and_write("mimirheim-core", {}, timeout=0.05)
+
+    assert client._pending == {}
+
+
+def test_on_message_discards_malformed_validate_and_write_response_without_raising() -> None:
+    registry = ConfigOwnerRegistry()
+    client = ConfigEditorMqttClient(_make_config(), registry)
+
+    client._on_message(
+        MagicMock(),
+        None,
+        _message(validate_and_write_response_topic("mimirheim-core"), b"not json"),
+    )
+
+    assert client._pending == {}
+
+
+def test_on_message_ignores_response_for_unknown_request_id() -> None:
+    registry = ConfigOwnerRegistry()
+    client = ConfigEditorMqttClient(_make_config(), registry)
+    response = ValidateAndWriteResult(request_id="unknown-request-id", success=True)
+
+    client._on_message(
+        MagicMock(),
+        None,
+        _message(validate_and_write_response_topic("mimirheim-core"), validate_and_write_result_payload(response)),
+    )
+
+    assert client._pending == {}

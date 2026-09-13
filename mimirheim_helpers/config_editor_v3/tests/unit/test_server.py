@@ -19,11 +19,13 @@ accepts a connection on it.
 
 from __future__ import annotations
 
+import urllib.parse
 from collections.abc import Iterator
+from unittest.mock import MagicMock
 
 import pytest
 
-from mimirheim_shared.config_service import Descriptor
+from mimirheim_shared.config_service import Descriptor, ValidateAndWriteResult
 from mimirheim_shared.formspec import FieldSpec, FormSpec, Tier
 from mimirheim_shared.visibility import Comparison, ComparisonOperator
 
@@ -37,8 +39,16 @@ def registry() -> ConfigOwnerRegistry:
 
 
 @pytest.fixture
-def server(registry: ConfigOwnerRegistry) -> Iterator[ConfigEditorServer]:
-    instance = ConfigEditorServer(registry)
+def config_service_client() -> MagicMock:
+    """Fakes ConfigEditorMqttClient.submit_validate_and_write; defaults to success."""
+    client = MagicMock()
+    client.submit_validate_and_write.return_value = ValidateAndWriteResult(request_id="req-1", success=True)
+    return client
+
+
+@pytest.fixture
+def server(registry: ConfigOwnerRegistry, config_service_client: MagicMock) -> Iterator[ConfigEditorServer]:
+    instance = ConfigEditorServer(registry, config_service_client)
     yield instance
     instance._httpd.server_close()
 
@@ -46,6 +56,12 @@ def server(registry: ConfigOwnerRegistry) -> Iterator[ConfigEditorServer]:
 def _get(server: ConfigEditorServer, path: str) -> tuple[int, str]:
     status, _headers, body = server.handle_request("GET", path, body=b"")
     return status, body.decode("utf-8")
+
+
+def _post(server: ConfigEditorServer, path: str, form: dict[str, str]) -> tuple[int, str]:
+    body = urllib.parse.urlencode(form).encode("utf-8")
+    status, _headers, response_body = server.handle_request("POST", path, body=body)
+    return status, response_body.decode("utf-8")
 
 
 def test_index_lists_no_owners_when_registry_is_empty(server: ConfigEditorServer) -> None:
@@ -199,3 +215,49 @@ def test_owner_page_shows_conditionally_visible_field_when_condition_holds(
 
     assert status == 200
     assert "Discovery prefix" in body
+
+
+def _register_nordpool(registry: ConfigOwnerRegistry) -> None:
+    registry.update(
+        Descriptor(
+            owner_id="nordpool",
+            display_name="Nordpool prices",
+            json_schema={"properties": {"area": {"type": "string", "default": "SE1"}}},
+            form_spec=FormSpec(
+                fields={"area": FieldSpec(label="Price area", description="Nordpool bidding area.")}
+            ),
+        )
+    )
+
+
+def test_post_unknown_owner_returns_404(server: ConfigEditorServer) -> None:
+    status, _body = _post(server, "/owners/does-not-exist", {"area": "SE3"})
+
+    assert status == 404
+
+
+def test_post_success_shows_confirmation_and_forwards_values(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer, config_service_client: MagicMock
+) -> None:
+    _register_nordpool(registry)
+
+    status, body = _post(server, "/owners/nordpool", {"area": "SE3"})
+
+    assert status == 200
+    assert "Saved" in body
+    config_service_client.submit_validate_and_write.assert_called_once_with("nordpool", {"area": "SE3"})
+
+
+def test_post_validation_failure_shows_errors_and_keeps_submitted_values(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer, config_service_client: MagicMock
+) -> None:
+    _register_nordpool(registry)
+    config_service_client.submit_validate_and_write.return_value = ValidateAndWriteResult(
+        request_id="req-1", success=False, errors=["area: not a valid bidding area"]
+    )
+
+    status, body = _post(server, "/owners/nordpool", {"area": "NOT-AN-AREA"})
+
+    assert status == 200
+    assert "area: not a valid bidding area" in body
+    assert 'value="NOT-AN-AREA"' in body

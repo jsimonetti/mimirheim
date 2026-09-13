@@ -55,7 +55,7 @@ def main() -> None:
 
     registry = ConfigOwnerRegistry()
     mqtt_client = ConfigEditorMqttClient(cfg, registry)
-    server = ConfigEditorServer(registry, port=cfg.port)
+    server = ConfigEditorServer(registry, mqtt_client, port=cfg.port)
 
     # The stop event is set by the signal handler and waited on by the main
     # thread. The server runs in a daemon thread so that setting the event

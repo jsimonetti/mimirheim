@@ -132,6 +132,42 @@ def test_conditional_visibility_hides_field_when_condition_is_false() -> None:
     assert [f.name for f in group.basic_fields] == ["enabled"]
 
 
+def test_values_override_replaces_schema_defaults() -> None:
+    descriptor = _descriptor(
+        FormSpec(fields={"area": FieldSpec(label="Price area", description="Bidding area.")}),
+        json_schema={"properties": {"area": {"type": "string", "default": "SE1"}}},
+    )
+
+    (group,) = build_groups(descriptor, values={"area": "SE3"})
+
+    assert group.basic_fields[0].value == "SE3"
+
+
+def test_values_override_also_drives_conditional_visibility() -> None:
+    descriptor = _descriptor(
+        FormSpec(
+            fields={
+                "enabled": FieldSpec(label="Enabled", description="Enable autodiscovery."),
+                "prefix": FieldSpec(
+                    label="Prefix",
+                    description="Autodiscovery prefix.",
+                    visible_if=Comparison(field="enabled", operator=ComparisonOperator.EQ, value=True),
+                ),
+            }
+        ),
+        json_schema={
+            "properties": {
+                "enabled": {"type": "boolean", "default": False},
+                "prefix": {"type": "string", "default": "homeassistant"},
+            }
+        },
+    )
+
+    (group,) = build_groups(descriptor, values={"enabled": True, "prefix": "homeassistant"})
+
+    assert [f.name for f in group.basic_fields] == ["enabled", "prefix"]
+
+
 def test_conditional_visibility_shows_field_when_condition_is_true() -> None:
     descriptor = _descriptor(
         FormSpec(

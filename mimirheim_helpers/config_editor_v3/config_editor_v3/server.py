@@ -1,20 +1,19 @@
 """HTTP server for config-editor-v3.
 
 Provides `ConfigEditorServer`, a stdlib-only HTTP server that renders the
-Config Editor's discovery page and each Config Owner's read-only
-configuration page directly from FormSpec, via Jinja2 templates
-(`templates/index.html`, `templates/owner.html`), per ADR-0003 (no generic
-client-side schema-to-form library):
+Config Editor's discovery page and each Config Owner's configuration page
+directly from FormSpec, via Jinja2 templates (`templates/index.html`,
+`templates/owner.html`), per ADR-0003 (no generic client-side
+schema-to-form library):
 
-    GET  /                    -- list every currently discovered Config Owner
     GET  /owners/<owner_id>   -- render one Config Owner's configuration
+    POST /owners/<owner_id>   -- submit Candidate Values for validate_and_write
 
-Submitting edits (`validate_and_write`) is not implemented yet; every field
-is rendered as a read-only display of its FormSpec-described JSON Schema
-default. This module never imports a Config Owner's pydantic model, and
-never reads or writes any Config Owner's configuration file itself: it only
-ever consumes the generic `Descriptor` a Config Owner published, obtained
-from `registry.py`.
+This module never imports a Config Owner's pydantic model, and never reads
+or writes any Config Owner's configuration file itself: it only ever
+consumes the generic `Descriptor` a Config Owner published (obtained from
+`registry.py`), and forwards a POST's submitted values to the injected
+`ConfigServiceClient`, which is the only thing here that touches MQTT.
 """
 
 from __future__ import annotations
@@ -22,9 +21,11 @@ from __future__ import annotations
 import http.server
 import logging
 import urllib.parse
-from typing import Any
+from typing import Any, Protocol
 
 import jinja2
+
+from mimirheim_shared.config_service import Descriptor, ValidateAndWriteResult
 
 from config_editor_v3.registry import ConfigOwnerRegistry
 from config_editor_v3.render import build_groups
@@ -37,8 +38,36 @@ _TEMPLATES = jinja2.Environment(
 )
 
 
+class ConfigServiceClient(Protocol):
+    """The one piece of MQTT behaviour `ConfigEditorServer` depends on.
+
+    Implemented by `mqtt_client.ConfigEditorMqttClient`; declared here as a
+    narrow Protocol so this module keeps depending on a behaviour, not a
+    concrete MQTT implementation, and so tests can supply a fake with no
+    paho involvement at all.
+    """
+
+    def submit_validate_and_write(
+        self, owner_id: str, values: dict[str, Any], timeout: float = 10.0
+    ) -> ValidateAndWriteResult:
+        """Submits Candidate Values to a Config Owner and awaits its result.
+
+        Args:
+            owner_id: The Config Owner's stable identifier.
+            values: Candidate Values to validate and, on success, write.
+            timeout: Seconds to wait for a response before giving up.
+
+        Returns:
+            The Config Owner's `ValidateAndWriteResult`.
+
+        Raises:
+            TimeoutError: If no response arrives within `timeout` seconds.
+        """
+        ...
+
+
 class ConfigEditorServer:
-    """Stdlib HTTP server exposing the Config Editor's discovery and rendering pages.
+    """Stdlib HTTP server exposing the Config Editor's discovery, rendering, and submit pages.
 
     All request handling is synchronous; the stdlib `ThreadingHTTPServer` is
     used so that concurrent browser requests do not block each other.
@@ -47,18 +76,33 @@ class ConfigEditorServer:
         registry: The in-memory registry of discovered Config Owners this
             server renders from. Populated by `mqtt_client.py` in the running
             process; tests populate it directly.
+        config_service_client: Forwards a submitted Config Owner's Candidate
+            Values to `validate_and_write` and awaits the result. The running
+            process passes its `ConfigEditorMqttClient`; tests pass a fake.
         port: TCP port to listen on. Pass 0 to let the OS assign a free port
             (useful in tests).
     """
 
-    def __init__(self, registry: ConfigOwnerRegistry, port: int = 0) -> None:
+    def __init__(
+        self,
+        registry: ConfigOwnerRegistry,
+        config_service_client: ConfigServiceClient,
+        port: int = 0,
+    ) -> None:
         self._registry = registry
+        self._config_service_client = config_service_client
 
         server_self = self
 
         class _Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802
                 status, headers, body = server_self.handle_request("GET", self.path, body=b"")
+                self._send(status, headers, body)
+
+            def do_POST(self) -> None:  # noqa: N802
+                length = int(self.headers.get("Content-Length", 0))
+                request_body = self.rfile.read(length) if length else b""
+                status, headers, body = server_self.handle_request("POST", self.path, body=request_body)
                 self._send(status, headers, body)
 
             def _send(self, status: int, headers: dict[str, str], body: bytes) -> None:
@@ -98,9 +142,12 @@ class ConfigEditorServer:
         tests, which avoids the need for a live socket in unit tests.
 
         Args:
-            method: HTTP method. Only "GET" is currently supported.
+            method: HTTP method. "GET" and "POST" are supported.
             path: Request path, possibly with a query string (ignored).
-            body: Raw request body bytes. Unused; no route currently accepts one.
+            body: Raw request body bytes. Used only for POST, as a
+                `application/x-www-form-urlencoded` body (the `<form>` in
+                `templates/owner.html` submits with no explicit `enctype`,
+                which defaults to this).
 
         Returns:
             A three-tuple of (HTTP status code, response headers, body bytes).
@@ -112,6 +159,9 @@ class ConfigEditorServer:
         if method == "GET" and path.startswith("/owners/"):
             owner_id = urllib.parse.unquote(path[len("/owners/") :])
             return self._render_owner(owner_id)
+        if method == "POST" and path.startswith("/owners/"):
+            owner_id = urllib.parse.unquote(path[len("/owners/") :])
+            return self._submit_owner(owner_id, body)
 
         return self._html_response(404, "<h1>Not found</h1>")
 
@@ -128,12 +178,60 @@ class ConfigEditorServer:
         descriptor = self._registry.get(owner_id)
         if descriptor is None:
             return self._html_response(404, "<h1>Unknown Config Owner</h1>")
+        return self._render_owner_page(descriptor)
 
+    def _submit_owner(self, owner_id: str, body: bytes) -> tuple[int, dict[str, str], bytes]:
+        descriptor = self._registry.get(owner_id)
+        if descriptor is None:
+            return self._html_response(404, "<h1>Unknown Config Owner</h1>")
+
+        values = _parse_form_body(body)
+
+        try:
+            result = self._config_service_client.submit_validate_and_write(owner_id, values)
+        except TimeoutError:
+            logger.warning("Timed out awaiting validate_and_write response from %r.", owner_id)
+            errors = ["Timed out waiting for a response from this Config Owner."]
+            return self._render_owner_page(descriptor, values=values, errors=errors)
+
+        if result.success:
+            return self._render_owner_page(descriptor, success=True)
+        return self._render_owner_page(descriptor, values=values, errors=result.errors)
+
+    def _render_owner_page(
+        self,
+        descriptor: Descriptor,
+        *,
+        values: dict[str, Any] | None = None,
+        errors: list[str] | None = None,
+        success: bool = False,
+    ) -> tuple[int, dict[str, str], bytes]:
         template = _TEMPLATES.get_template("owner.html")
-        html = template.render(descriptor=descriptor, groups=build_groups(descriptor))
+        html = template.render(
+            descriptor=descriptor,
+            groups=build_groups(descriptor, values=values),
+            errors=errors or [],
+            success=success,
+        )
         return self._html_response(200, html)
 
     @staticmethod
     def _html_response(status: int, html: str) -> tuple[int, dict[str, str], bytes]:
         body = html.encode("utf-8")
         return status, {"Content-Type": "text/html; charset=utf-8"}, body
+
+
+def _parse_form_body(body: bytes) -> dict[str, str]:
+    """Parses an `application/x-www-form-urlencoded` POST body into a flat dict.
+
+    Args:
+        body: The raw request body.
+
+    Returns:
+        Each field name mapped to its (first, if repeated) submitted value.
+        Every value is a string: the submitted form has no way to convey a
+        field's real JSON Schema type, so type coercion is left to the
+        Config Owner's own pydantic validation in `validate_and_write`.
+    """
+    parsed = urllib.parse.parse_qs(body.decode("utf-8"), keep_blank_values=True)
+    return {name: values[0] for name, values in parsed.items()}
