@@ -7,25 +7,58 @@ FormSpec-level presentation metadata. This module is what ``nordpool``'s
 in ``nordpool.__main__``) combines with ``NordpoolConfig`` to build its Config
 Service Descriptor.
 
-Only ``NordpoolConfig``'s own top-level fields are covered here, matching
-``mimirheim_shared.alignment.assert_form_spec_complete``'s own scope (a
-model's immediate fields, not nested models recursively).
+``NordpoolConfig``'s ``mqtt`` and ``ha_discovery`` fields nest
+``helper_common``'s shared ``MqttConfig`` and ``HomeAssistantConfig`` models;
+per ADR-0007, this FormSpec references ``helper_common.formspec``'s FormSpecs
+for those fields rather than re-authoring their labels. ``nordpool`` nests
+this module's own ``NordpoolApiConfig``, so its FormSpec is authored here.
+Per ADR-0006, ``mimirheim_shared.alignment.assert_form_spec_complete`` checks
+this FormSpec recursively, at every depth.
 """
 
 from __future__ import annotations
 
+from helper_common.formspec import HOME_ASSISTANT_CONFIG_FORM_SPEC, MQTT_CONFIG_FORM_SPEC
 from mimirheim_shared.formspec import FieldSpec, FormSpec, Tier
 from mimirheim_shared.visibility import Comparison, ComparisonOperator
+
+NORDPOOL_API_CONFIG_FORM_SPEC = FormSpec(
+    fields={
+        "area": FieldSpec(
+            label="Nordpool area", description="Nordpool price area code (e.g. 'NO2', 'NL', 'SE3').", tier=Tier.BASIC
+        ),
+        "import_formula": FieldSpec(
+            label="Import price formula",
+            description="Python expression for the all-in import price in EUR/kWh.",
+            tier=Tier.BASIC,
+        ),
+        "export_formula": FieldSpec(
+            label="Export price formula",
+            description="Python expression for the net export price in EUR/kWh.",
+            tier=Tier.BASIC,
+        ),
+        "price_interval": FieldSpec(
+            label="Price interval",
+            description="Length of one published price step.",
+            tier=Tier.BASIC,
+            option_labels={"hourly": "Hourly", "quarter_hourly": "Quarter-hourly"},
+        ),
+    }
+)
 
 NORDPOOL_CONFIG_FORM_SPEC = FormSpec(
     fields={
         "mqtt": FieldSpec(
-            label="MQTT", description="MQTT broker connection parameters.", tier=Tier.BASIC
+            label="MQTT",
+            description="MQTT broker connection parameters.",
+            tier=Tier.BASIC,
+            nested_form_spec=MQTT_CONFIG_FORM_SPEC,
         ),
         "nordpool": FieldSpec(
             label="Nordpool API",
             description="Nordpool area code and import/export pricing formulas.",
             tier=Tier.BASIC,
+            nested_form_spec=NORDPOOL_API_CONFIG_FORM_SPEC,
         ),
         "signal_mimir": FieldSpec(
             label="Signal mimirheim",
@@ -36,6 +69,7 @@ NORDPOOL_CONFIG_FORM_SPEC = FormSpec(
             label="Home Assistant discovery",
             description="Optional Home Assistant MQTT discovery settings for this tool.",
             tier=Tier.EXPERT,
+            nested_form_spec=HOME_ASSISTANT_CONFIG_FORM_SPEC,
         ),
         "mimir_topic_prefix": FieldSpec(
             label="mimirheim topic prefix",

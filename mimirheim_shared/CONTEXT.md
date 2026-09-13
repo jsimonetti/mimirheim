@@ -34,6 +34,32 @@ labels, help text, documentation links, Tier, grouping, and Conditional
 Visibility. Carries no validation rules of its own.
 _Avoid_: UI schema, schema extension, x- annotations
 
+**Field Shape**:
+A FormSpec field's structural kind — scalar, nested object, Named
+Collection, Ordered Collection, optional object, or enum select — derived
+automatically from the Config Owner's validation model. Distinct from
+Tier, which classifies a field's presentation priority, not its structure.
+_Avoid_: field type (ambiguous with the validation model's own type),
+widget
+
+**Shape Override**:
+An explicit FormSpec setting that renders a field with a simpler Field
+Shape than the one derived from its validation model, e.g. a nested object
+shown as opaque raw text instead of recursed into. Only ever simplifies;
+never gives a field structure its validation model doesn't have.
+_Avoid_: widget override, type coercion
+
+**Named Collection**:
+A Field Shape for a mapping of entries that all validate against the same
+nested model, each identified by a name (e.g. one battery per key).
+_Avoid_: dict field, map field
+
+**Ordered Collection**:
+A Field Shape for a sequence of entries that all validate against the same
+nested model, identified by position rather than name (e.g. a battery's
+efficiency segments).
+_Avoid_: list field, array field
+
 **Tier**:
 A FormSpec field's classification as Basic or Expert, controlling whether
 it is shown by default or hidden behind an Advanced disclosure.
@@ -46,6 +72,11 @@ against another field's value, optionally combined with AND/OR — that
 determines whether the field is shown given the current Candidate Values.
 Never expressed as executable code.
 _Avoid_: visibility logic, dynamic field
+
+**Presence Toggle**:
+The control that expresses whether an optional nested object field exists
+at all, independent of whatever values its own fields hold once present.
+_Avoid_: null checkbox, optional flag
 
 **Candidate Values**:
 The set of proposed field values a Config Editor submits to a Config Owner
