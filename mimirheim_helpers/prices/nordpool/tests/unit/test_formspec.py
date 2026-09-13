@@ -8,6 +8,7 @@ Conditional Visibility rule evaluates as expected.
 
 from mimirheim_shared.alignment import assert_form_spec_complete
 from mimirheim_shared.config_service import build_descriptor
+from mimirheim_shared.formspec import resolve_field_shapes
 from mimirheim_shared.visibility import evaluate_condition
 
 from nordpool.config import NordpoolConfig
@@ -24,7 +25,7 @@ def test_form_spec_builds_into_a_descriptor() -> None:
     )
 
     assert descriptor.owner_id == "nordpool"
-    assert descriptor.form_spec == NORDPOOL_CONFIG_FORM_SPEC
+    assert descriptor.form_spec == resolve_field_shapes(NordpoolConfig, NORDPOOL_CONFIG_FORM_SPEC)
     assert descriptor.json_schema == NordpoolConfig.model_json_schema()
 
 

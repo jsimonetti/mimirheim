@@ -70,7 +70,7 @@ from mimirheim.io.input_parser import (
 from mimirheim.io.mqtt_publisher import MqttPublisher
 from mimirheim.io.ha_discovery import publish_discovery
 from mimirheim.io import config_service
-from mimirheim_shared.config_service import CLEARING_PAYLOAD
+from mimirheim_shared.config_service import CLEARING_PAYLOAD, handle_get_current_values
 
 logger = logging.getLogger("mimirheim.mqtt")
 
@@ -152,6 +152,8 @@ class MqttClient:
         self._config_service_payload = config_service.payload_bytes()
         self._config_service_request_topic = config_service.REQUEST_TOPIC
         self._config_service_response_topic = config_service.RESPONSE_TOPIC
+        self._get_current_values_request_topic = config_service.GET_CURRENT_VALUES_REQUEST_TOPIC
+        self._get_current_values_response_topic = config_service.GET_CURRENT_VALUES_RESPONSE_TOPIC
 
         prefix = config.mqtt.topic_prefix
         self._trigger_topic = f"{prefix}/input/trigger"
@@ -253,9 +255,11 @@ class MqttClient:
         # discovery payloads after HA restarts or reloads its MQTT integration.
         client.subscribe(_HA_STATUS_TOPIC, qos=1)
 
-        # Subscribe to the Config Service validate_and_write request topic
-        # (see io.config_service). Requests are handled in _on_message.
+        # Subscribe to the Config Service validate_and_write and
+        # get_current_values request topics (see io.config_service).
+        # Requests are handled in _on_message.
         client.subscribe(self._config_service_request_topic, qos=1)
+        client.subscribe(self._get_current_values_request_topic, qos=1)
 
         # Publish the birth message retained so any subscriber that connects
         # later immediately sees the current online state without waiting for
@@ -292,6 +296,9 @@ class MqttClient:
           ``io.config_service.handle_validate_and_write`` and publish its
           result. A malformed request envelope cannot be correlated to a
           response, so it is logged and dropped rather than answered.
+        - **Config Service get_current_values request topic**: delegate to
+          ``mimirheim_shared.config_service.handle_get_current_values`` and
+          publish its result. Same malformed-envelope handling as above.
         - **Data topics**: route to the appropriate parser, call
           ``ReadinessState.update()``. Never queue a solve. Parse errors are
           logged and swallowed — the readiness state is simply not updated,
@@ -417,6 +424,25 @@ class MqttClient:
                 return
             client.publish(
                 self._config_service_response_topic,
+                payload=response_payload,
+                qos=1,
+                retain=False,
+            )
+            return
+
+        # --- Config Service: get_current_values request ---
+        if topic == self._get_current_values_request_topic:
+            try:
+                response_payload = handle_get_current_values(message.payload, self._config_path)
+            except Exception:
+                # Deliberately broad, same reason as the validate_and_write
+                # handler above.
+                logger.exception(
+                    "Failed to handle get_current_values request on %r.", topic
+                )
+                return
+            client.publish(
+                self._get_current_values_response_topic,
                 payload=response_payload,
                 qos=1,
                 retain=False,

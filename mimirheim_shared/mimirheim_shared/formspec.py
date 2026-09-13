@@ -9,10 +9,15 @@ its own; see ``mimirheim_shared.alignment`` for the utility that checks a
 
 A field's Field Shape (scalar, nested object, Named Collection, Ordered
 Collection, optional object, or enum select) is derived from the model, not
-carried on ``FieldSpec`` itself; see ``mimirheim_shared.field_shape``
+hand-authored on ``FieldSpec``; see ``mimirheim_shared.field_shape``
 (ADR-0006). ``FieldSpec.nested_form_spec`` is how a non-scalar field's own
 FormSpec is attached for recursion, and ``FieldSpec.shape_override`` is how a
 field is deliberately rendered simpler than its derived shape.
+``resolve_field_shapes`` (below) is how a Config Owner's ``build_descriptor``
+step attaches each field's already-derived, effective Field Shape onto
+``FieldSpec.shape`` before the FormSpec crosses the MQTT boundary: the Config
+Editor never imports a Config Owner's validation model (ADR-0001), so it has
+no other way to know a field's shape.
 """
 
 from __future__ import annotations
@@ -22,8 +27,25 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from mimirheim_shared.field_shape import FieldShape
+from mimirheim_shared.field_shape import (
+    FieldShape,
+    derive_field_shape,
+    effective_field_shape,
+    nested_model_of,
+)
 from mimirheim_shared.visibility import Condition
+
+# Field Shapes with a nested model to recurse into. A Shape Override can only
+# simplify a field down to SCALAR (see field_shape.effective_field_shape), so
+# an effective shape outside this set never has structure to resolve further.
+_STRUCTURAL_SHAPES = frozenset(
+    {
+        FieldShape.NESTED_OBJECT,
+        FieldShape.OPTIONAL_OBJECT,
+        FieldShape.NAMED_COLLECTION,
+        FieldShape.ORDERED_COLLECTION,
+    }
+)
 
 
 class Tier(str, Enum):
@@ -68,6 +90,13 @@ class FieldSpec(BaseModel):
     # that defines the nested model and referenced here, never duplicated
     # (ADR-0007).
     nested_form_spec: "FormSpec | None" = None
+    # The field's effective Field Shape (derived from the model, resolved
+    # through any Shape Override). Never hand-authored: left None on every
+    # FieldSpec an author writes, and filled in by resolve_field_shapes when
+    # a Config Owner's build_descriptor step assembles the Descriptor it
+    # publishes, since that is the one place both the model and the FormSpec
+    # are available together.
+    shape: FieldShape | None = None
 
 
 class FormSpec(BaseModel):
@@ -97,3 +126,52 @@ def option_label(field_spec: FieldSpec, value: Any) -> str:
         if label is not None:
             return label
     return str(value)
+
+
+def resolve_field_shapes(model: type[BaseModel], form_spec: FormSpec) -> FormSpec:
+    """Return a copy of ``form_spec`` with every field's effective Field Shape attached.
+
+    Walks ``form_spec`` alongside ``model``, recursing into a nested
+    FormSpec (and its own nested model) wherever a field's effective shape
+    is structural (nested object, optional object, Named Collection, or
+    Ordered Collection). Called once by ``build_descriptor`` when a Config
+    Owner assembles the Descriptor it publishes: the Config Owner is the
+    only place that has both the validation model and the FormSpec at hand,
+    since a Config Editor never imports a Config Owner's model (ADR-0001).
+
+    Args:
+        model: The pydantic model ``form_spec`` describes.
+        form_spec: The hand-authored FormSpec to resolve shapes onto. Not
+            mutated; a new FormSpec is returned.
+
+    Returns:
+        A FormSpec identical to ``form_spec`` except that every FieldSpec's
+        ``shape`` is set to its effective Field Shape, and every nested
+        FormSpec reachable through ``nested_form_spec`` has been resolved
+        the same way, at every depth.
+    """
+    resolved_fields: dict[str, FieldSpec] = {}
+
+    for name, field_spec in form_spec.fields.items():
+        model_field = model.model_fields.get(name)
+        if model_field is None:
+            # Not this function's job to enforce alignment (see
+            # mimirheim_shared.alignment); a field the model does not have
+            # is passed through unresolved rather than raised on here.
+            resolved_fields[name] = field_spec
+            continue
+
+        derived = derive_field_shape(model_field.annotation)
+        effective = effective_field_shape(derived, field_spec.shape_override)
+
+        nested_form_spec = field_spec.nested_form_spec
+        if effective in _STRUCTURAL_SHAPES and nested_form_spec is not None:
+            nested_model = nested_model_of(model_field.annotation)
+            if nested_model is not None:
+                nested_form_spec = resolve_field_shapes(nested_model, nested_form_spec)
+
+        resolved_fields[name] = field_spec.model_copy(
+            update={"shape": effective, "nested_form_spec": nested_form_spec}
+        )
+
+    return FormSpec(fields=resolved_fields)

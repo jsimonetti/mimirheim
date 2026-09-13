@@ -15,17 +15,7 @@
   </ul>
   {% endif %}
 
-  {% macro render_field(field) %}
-  <div class="field" data-field="{{ field.name }}">
-    <label for="field-{{ field.name }}">{{ field.spec.label }}</label>
-    <p class="description">{{ field.spec.description }}</p>
-    {% if field.spec.help_text %}<p class="help-text">{{ field.spec.help_text }}</p>{% endif %}
-    {% if field.spec.doc_link %}<a class="doc-link" href="{{ field.spec.doc_link }}">Learn more</a>{% endif %}
-    <input id="field-{{ field.name }}" name="{{ field.name }}" type="text" value="{{ field.value if field.value is not none else '' }}">
-  </div>
-  {% endmacro %}
-
-  <form method="post" action="/owners/{{ descriptor.owner_id }}">
+  {% macro render_groups(groups) %}
     {% for group in groups %}
     <section data-group="{{ group.label }}">
       <h2>{{ group.label }}</h2>
@@ -42,7 +32,86 @@
       {% endif %}
     </section>
     {% endfor %}
+  {% endmacro %}
+
+  {% macro render_field(field) %}
+  {% if field.entries is not none %}
+    {# Named Collection (keyed) or Ordered Collection (indexed): one fieldset
+       per existing entry, no control to add/remove/rename/reorder (ticket 08). #}
+    <div class="field field-collection" data-field="{{ field.name }}">
+      <p class="label">{{ field.spec.label }}</p>
+      <p class="description">{{ field.spec.description }}</p>
+      {% for entry in field.entries %}
+      <fieldset class="collection-entry" data-entry="{{ entry.key }}">
+        <legend>{{ entry.label }}</legend>
+        {{ render_groups(entry.groups) }}
+      </fieldset>
+      {% endfor %}
+    </div>
+  {% elif field.spec.shape == "optional_object" %}
+    {# Presence Toggle: nested fields always render, inside a <fieldset
+       disabled> when currently absent -- a disabled fieldset's controls are
+       never submitted (native HTML), so an unchecked toggle still keeps
+       them out of the submission. presence-toggle.js enables/hides that
+       fieldset live when the checkbox is (un)checked, so a user can
+       populate a currently-absent section, or clear an existing one,
+       without a page reload. #}
+    <div class="field field-optional-object" data-field="{{ field.name }}">
+      <label>
+        <input type="checkbox" name="{{ field.name }}" value="on" data-presence-toggle
+               {% if field.present %}checked{% endif %}>
+        {{ field.spec.label }}
+      </label>
+      <p class="description">{{ field.spec.description }}</p>
+      <fieldset {% if not field.present %}hidden disabled{% endif %}>
+        {{ render_groups(field.nested_groups) }}
+      </fieldset>
+    </div>
+  {% elif field.nested_groups is not none %}
+    <fieldset class="field-nested-object" data-field="{{ field.name }}">
+      <legend>{{ field.spec.label }}</legend>
+      <p class="description">{{ field.spec.description }}</p>
+      {{ render_groups(field.nested_groups) }}
+    </fieldset>
+  {% elif field.options is not none %}
+    <div class="field" data-field="{{ field.name }}">
+      <label for="field-{{ field.name }}">{{ field.spec.label }}</label>
+      <p class="description">{{ field.spec.description }}</p>
+      {% if field.spec.help_text %}<p class="help-text">{{ field.spec.help_text }}</p>{% endif %}
+      {% if field.spec.doc_link %}<a class="doc-link" href="{{ field.spec.doc_link }}">Learn more</a>{% endif %}
+      <select id="field-{{ field.name }}" name="{{ field.name }}">
+        {% for option in field.options %}
+        <option value="{{ option }}" {% if field.value == option %}selected{% endif %}>{{ option_label(field.spec, option) }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  {% else %}
+    <div class="field" data-field="{{ field.name }}">
+      <label for="field-{{ field.name }}">{{ field.spec.label }}</label>
+      <p class="description">{{ field.spec.description }}</p>
+      {% if field.spec.help_text %}<p class="help-text">{{ field.spec.help_text }}</p>{% endif %}
+      {% if field.spec.doc_link %}<a class="doc-link" href="{{ field.spec.doc_link }}">Learn more</a>{% endif %}
+      <input id="field-{{ field.name }}" name="{{ field.name }}" type="text" value="{{ field.value if field.value is not none else '' }}">
+    </div>
+  {% endif %}
+  {% endmacro %}
+
+  <form method="post" action="/owners/{{ descriptor.owner_id }}">
+    {{ render_groups(groups) }}
     <button type="submit">Save</button>
   </form>
+
+  {# Only interactivity in the whole editor (ADR-0003 allows "minimal
+     client-side JS for interactivity"): a Presence Toggle checkbox's own
+     .field-optional-object wrapper holds exactly one <fieldset>, so toggling
+     its hidden/disabled state needs no id or bookkeeping beyond that. #}
+  <script>
+    document.addEventListener("change", function (event) {
+      if (!event.target.matches("input[data-presence-toggle]")) return;
+      var fieldset = event.target.closest(".field-optional-object").querySelector("fieldset");
+      fieldset.hidden = !event.target.checked;
+      fieldset.disabled = !event.target.checked;
+    });
+  </script>
 </body>
 </html>

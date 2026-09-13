@@ -37,7 +37,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from mimirheim_shared.atomic_write import overlay_values, write_yaml_preserving_comments
-from mimirheim_shared.formspec import FormSpec
+from mimirheim_shared.formspec import FormSpec, resolve_field_shapes
 
 # Fixed regardless of any Config Owner's own business MQTT topic prefix (e.g.
 # mimirheim core's mqtt.topic_prefix): the Config Editor must be able to
@@ -100,13 +100,17 @@ def build_descriptor(
             ``mimirheim_shared.alignment.assert_form_spec_complete`` for that.
 
     Returns:
-        The assembled Descriptor.
+        The assembled Descriptor. ``form_spec`` is resolved through
+        ``resolve_field_shapes`` first, so every field (at every depth) that
+        crosses the wire carries its effective Field Shape: the Config
+        Editor never imports ``model`` itself, so this is its only way to
+        know it.
     """
     return Descriptor(
         owner_id=owner_id,
         display_name=display_name,
         json_schema=model.model_json_schema(),
-        form_spec=form_spec,
+        form_spec=resolve_field_shapes(model, form_spec),
     )
 
 
@@ -120,6 +124,113 @@ def descriptor_payload(descriptor: Descriptor) -> bytes:
         UTF-8 encoded JSON bytes.
     """
     return descriptor.model_dump_json().encode("utf-8")
+
+
+def get_current_values_request_topic(owner_id: str) -> str:
+    """Return the well-known topic a Config Owner accepts get_current_values requests on.
+
+    Args:
+        owner_id: The Config Owner's stable identifier.
+
+    Returns:
+        The topic string, e.g.
+        ``"mimirheim/config-service/mimirheim-core/get_current_values/request"``.
+    """
+    return f"{_TOPIC_ROOT}/{owner_id}/get_current_values/request"
+
+
+def get_current_values_response_topic(owner_id: str) -> str:
+    """Return the well-known topic a Config Owner publishes get_current_values results to.
+
+    Args:
+        owner_id: The Config Owner's stable identifier.
+
+    Returns:
+        The topic string, e.g.
+        ``"mimirheim/config-service/mimirheim-core/get_current_values/response"``.
+    """
+    return f"{_TOPIC_ROOT}/{owner_id}/get_current_values/response"
+
+
+class GetCurrentValuesRequest(BaseModel):
+    """A Config Editor's request for a Config Owner's current on-disk values.
+
+    Carries no field selection: a Config Owner always returns its full
+    current configuration, matching the shape ``validate_and_write`` accepts
+    Candidate Values in.
+
+    Attributes:
+        request_id: Opaque string chosen by the Config Editor (e.g. a UUID),
+            echoed back on the matching ``GetCurrentValuesResult`` so the
+            Editor can correlate a response to its request.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str
+
+
+class GetCurrentValuesResult(BaseModel):
+    """A Config Owner's current on-disk configuration values, as requested.
+
+    Attributes:
+        request_id: Echoed from the ``GetCurrentValuesRequest`` this result
+            answers.
+        values: The Config Owner's current configuration, as parsed from its
+            on-disk YAML file (``{}`` if the file does not exist yet).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str
+    values: dict[str, Any]
+
+
+def get_current_values_result_payload(result: GetCurrentValuesResult) -> bytes:
+    """Serialise a GetCurrentValuesResult to the bytes a Config Owner publishes.
+
+    Args:
+        result: The result to serialise.
+
+    Returns:
+        UTF-8 encoded JSON bytes.
+    """
+    return result.model_dump_json().encode("utf-8")
+
+
+def handle_get_current_values(payload: bytes, config_path: Path) -> bytes:
+    """Read a Config Owner's current on-disk values and build its response payload.
+
+    This is the generic form of a Config Owner's ``get_current_values`` step,
+    parameterised the same way ``handle_validate_and_write`` is so any Config
+    Owner can reuse it rather than reimplementing the read. It never touches
+    an MQTT client (see this module's own docstring); the caller publishes
+    the returned bytes to its ``get_current_values`` response topic.
+
+    Args:
+        payload: The raw MQTT message payload received on the Config Owner's
+            ``get_current_values`` request topic.
+        config_path: The path to the Config Owner's own YAML configuration
+            file.
+
+    Returns:
+        UTF-8 encoded JSON bytes to publish to the Config Owner's
+        ``get_current_values`` response topic.
+
+    Raises:
+        ValidationError: If ``payload`` is not a well-formed
+            ``GetCurrentValuesRequest`` envelope. The caller cannot
+            correlate a response to a request it could not parse, so this is
+            left to propagate rather than published.
+    """
+    request = GetCurrentValuesRequest.model_validate_json(payload)
+
+    current: dict[str, Any] = {}
+    if config_path.exists():
+        current = yaml.safe_load(config_path.read_text()) or {}
+
+    result = GetCurrentValuesResult(request_id=request.request_id, values=current)
+    return get_current_values_result_payload(result)
 
 
 def validate_and_write_request_topic(owner_id: str) -> str:

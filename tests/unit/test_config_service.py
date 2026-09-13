@@ -34,6 +34,7 @@ from mimirheim_shared.config_service import (
     validate_and_write_request_topic,
     validate_and_write_response_topic,
 )
+from mimirheim_shared.formspec import resolve_field_shapes
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "sample_mimirheim_config.yaml"
 
@@ -49,7 +50,7 @@ def test_payload_bytes_is_a_valid_descriptor_for_mimirheim_config() -> None:
     descriptor = Descriptor.model_validate_json(payload)
     assert descriptor.owner_id == OWNER_ID
     assert descriptor.display_name == DISPLAY_NAME
-    assert descriptor.form_spec == MIMIRHEIM_CONFIG_FORM_SPEC
+    assert descriptor.form_spec == resolve_field_shapes(MimirheimConfig, MIMIRHEIM_CONFIG_FORM_SPEC)
     assert descriptor.json_schema == MimirheimConfig.model_json_schema()
 
 

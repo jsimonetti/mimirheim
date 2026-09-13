@@ -12,8 +12,12 @@ schema-to-form library):
 This module never imports a Config Owner's pydantic model, and never reads
 or writes any Config Owner's configuration file itself: it only ever
 consumes the generic `Descriptor` a Config Owner published (obtained from
-`registry.py`), and forwards a POST's submitted values to the injected
-`ConfigServiceClient`, which is the only thing here that touches MQTT.
+`registry.py`), fetches that owner's current values via the injected
+`ConfigServiceClient`'s `get_current_values` for a GET, and forwards a POST's
+submitted values (parsed from their dotted/indexed form field names by
+`config_editor_v3.submission.parse_submission`) to the same client's
+`submit_validate_and_write`. `ConfigServiceClient` is the only thing here
+that touches MQTT.
 """
 
 from __future__ import annotations
@@ -26,9 +30,11 @@ from typing import Any, Protocol
 import jinja2
 
 from mimirheim_shared.config_service import Descriptor, ValidateAndWriteResult
+from mimirheim_shared.formspec import option_label
 
 from config_editor_v3.registry import ConfigOwnerRegistry
 from config_editor_v3.render import build_groups
+from config_editor_v3.submission import parse_submission
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +42,11 @@ _TEMPLATES = jinja2.Environment(
     loader=jinja2.PackageLoader("config_editor_v3", "templates"),
     autoescape=jinja2.select_autoescape(["html"]),
 )
+# ENUM_SELECT rendering (owner.html) resolves each <option>'s display label
+# via this, the same per-value-label lookup a FieldSpec's option_labels
+# describes; exposed as a Jinja global rather than duplicating the lookup in
+# the template itself.
+_TEMPLATES.globals["option_label"] = option_label
 
 
 class ConfigServiceClient(Protocol):
@@ -59,6 +70,21 @@ class ConfigServiceClient(Protocol):
 
         Returns:
             The Config Owner's `ValidateAndWriteResult`.
+
+        Raises:
+            TimeoutError: If no response arrives within `timeout` seconds.
+        """
+        ...
+
+    def get_current_values(self, owner_id: str, timeout: float = 10.0) -> dict[str, Any]:
+        """Fetches a Config Owner's current on-disk configuration values.
+
+        Args:
+            owner_id: The Config Owner's stable identifier.
+            timeout: Seconds to wait for a response before giving up.
+
+        Returns:
+            The Config Owner's current configuration values.
 
         Raises:
             TimeoutError: If no response arrives within `timeout` seconds.
@@ -178,14 +204,21 @@ class ConfigEditorServer:
         descriptor = self._registry.get(owner_id)
         if descriptor is None:
             return self._html_response(404, "<h1>Unknown Config Owner</h1>")
-        return self._render_owner_page(descriptor)
+
+        try:
+            current_values = self._config_service_client.get_current_values(owner_id)
+        except TimeoutError:
+            logger.warning("Timed out fetching current values from %r; showing schema defaults.", owner_id)
+            current_values = None
+        return self._render_owner_page(descriptor, values=current_values)
 
     def _submit_owner(self, owner_id: str, body: bytes) -> tuple[int, dict[str, str], bytes]:
         descriptor = self._registry.get(owner_id)
         if descriptor is None:
             return self._html_response(404, "<h1>Unknown Config Owner</h1>")
 
-        values = _parse_form_body(body)
+        raw = _parse_form_body(body)
+        values = parse_submission(descriptor.form_spec, raw)
 
         try:
             result = self._config_service_client.submit_validate_and_write(owner_id, values)
@@ -195,7 +228,7 @@ class ConfigEditorServer:
             return self._render_owner_page(descriptor, values=values, errors=errors)
 
         if result.success:
-            return self._render_owner_page(descriptor, success=True)
+            return self._render_owner_page(descriptor, values=values, success=True)
         return self._render_owner_page(descriptor, values=values, errors=result.errors)
 
     def _render_owner_page(

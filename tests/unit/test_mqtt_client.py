@@ -29,6 +29,8 @@ from mimirheim.io.input_parser import parse_price_steps
 from mimirheim.io.mqtt_client import MqttClient
 from mimirheim_shared.config_service import (
     CLEARING_PAYLOAD,
+    GetCurrentValuesRequest,
+    GetCurrentValuesResult,
     ValidateAndWriteRequest,
     ValidateAndWriteResult,
 )
@@ -358,3 +360,74 @@ class TestConfigServiceValidateAndWrite:
 
         assert self._response_publish_calls(client._client) == []
         assert "Traceback" in caplog.text
+
+
+class TestConfigServiceGetCurrentValues:
+    """get_current_values requests share this connection too; see
+    mqtt_client.py's module docstring and mimirheim_shared.config_service.handle_get_current_values.
+    """
+
+    def _make_request_msg(self, request: GetCurrentValuesRequest) -> MagicMock:
+        msg = MagicMock()
+        msg.topic = config_service.GET_CURRENT_VALUES_REQUEST_TOPIC
+        msg.payload = request.model_dump_json().encode("utf-8")
+        return msg
+
+    def _response_publish_calls(self, paho_mock: MagicMock) -> list:
+        return [
+            call
+            for call in paho_mock.publish.call_args_list
+            if call.args[0] == config_service.GET_CURRENT_VALUES_RESPONSE_TOPIC
+        ]
+
+    def test_request_topic_is_subscribed_on_connect(self) -> None:
+        client = _make_mqtt_client()
+        reason_code = MagicMock()
+        reason_code.is_failure = False
+
+        client._on_connect(client._client, None, None, reason_code, None)
+
+        subscribed_topics = {call.args[0] for call in client._client.subscribe.call_args_list}
+        assert config_service.GET_CURRENT_VALUES_REQUEST_TOPIC in subscribed_topics
+
+    def test_current_on_disk_values_are_published(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "mimirheim.yaml"
+        config_path.write_text(_FIXTURE_CONFIG_PATH.read_text())
+        config = _make_config()
+        readiness = MagicMock(spec=ReadinessState)
+        publisher = MagicMock()
+        paho_mock = MagicMock()
+        client = MqttClient(config, readiness, publisher, paho_mock, config_path)
+        request = GetCurrentValuesRequest(request_id="req-1")
+
+        client._on_message(paho_mock, None, self._make_request_msg(request))
+
+        calls = self._response_publish_calls(paho_mock)
+        assert len(calls) == 1
+        _, kwargs = calls[0]
+        result = GetCurrentValuesResult.model_validate_json(kwargs["payload"])
+        assert result.request_id == "req-1"
+        assert result.values["grid"]["import_limit_kw"] == _fixture_import_limit_kw(config_path)
+        assert kwargs["qos"] == 1
+        assert kwargs["retain"] is False
+
+    def test_malformed_request_envelope_is_logged_and_dropped(self, caplog) -> None:
+        import logging
+
+        client = _make_mqtt_client()
+        msg = MagicMock()
+        msg.topic = config_service.GET_CURRENT_VALUES_REQUEST_TOPIC
+        msg.payload = b"not json"
+
+        with caplog.at_level(logging.ERROR, logger="mimirheim.mqtt"):
+            client._on_message(client._client, None, msg)
+
+        assert self._response_publish_calls(client._client) == []
+        assert "Traceback" in caplog.text
+
+
+def _fixture_import_limit_kw(config_path: Path) -> float:
+    yaml = YAML()
+    with config_path.open() as fh:
+        document = yaml.load(fh)
+    return document["grid"]["import_limit_kw"]

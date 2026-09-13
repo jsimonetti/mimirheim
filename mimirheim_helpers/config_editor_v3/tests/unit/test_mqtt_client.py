@@ -14,10 +14,14 @@ import pytest
 from helper_common.config import MqttConfig
 from mimirheim_shared.config_service import (
     CLEARING_PAYLOAD,
+    GetCurrentValuesRequest,
+    GetCurrentValuesResult,
     ValidateAndWriteRequest,
     ValidateAndWriteResult,
     build_descriptor,
     descriptor_payload,
+    get_current_values_response_topic,
+    get_current_values_result_payload,
     validate_and_write_response_topic,
     validate_and_write_result_payload,
 )
@@ -166,6 +170,78 @@ def test_on_message_ignores_response_for_unknown_request_id() -> None:
         MagicMock(),
         None,
         _message(validate_and_write_response_topic("mimirheim-core"), validate_and_write_result_payload(response)),
+    )
+
+    assert client._pending == {}
+
+
+def _fake_publish_replying_with_current_values(
+    client: ConfigEditorMqttClient, values: dict
+) -> Callable[[str, bytes, int], None]:
+    def _publish(topic: str, payload: bytes, qos: int = 0) -> None:
+        request = GetCurrentValuesRequest.model_validate_json(payload)
+        response = GetCurrentValuesResult(request_id=request.request_id, values=values)
+        client._on_message(
+            MagicMock(),
+            None,
+            _message(
+                get_current_values_response_topic("mimirheim-core"),
+                get_current_values_result_payload(response),
+            ),
+        )
+
+    return _publish
+
+
+def test_get_current_values_returns_the_owners_current_values() -> None:
+    registry = ConfigOwnerRegistry()
+    client = ConfigEditorMqttClient(_make_config(), registry)
+    client._client.publish = MagicMock(
+        side_effect=_fake_publish_replying_with_current_values(client, {"grid": {"import_limit_kw": 17}})
+    )
+
+    values = client.get_current_values("mimirheim-core")
+
+    assert values == {"grid": {"import_limit_kw": 17}}
+    assert client._pending == {}
+
+
+def test_get_current_values_times_out_when_no_response_arrives() -> None:
+    registry = ConfigOwnerRegistry()
+    client = ConfigEditorMqttClient(_make_config(), registry)
+    client._client.publish = MagicMock()
+
+    with pytest.raises(TimeoutError):
+        client.get_current_values("mimirheim-core", timeout=0.05)
+
+    assert client._pending == {}
+
+
+def test_on_message_discards_malformed_get_current_values_response_without_raising() -> None:
+    registry = ConfigOwnerRegistry()
+    client = ConfigEditorMqttClient(_make_config(), registry)
+
+    client._on_message(
+        MagicMock(),
+        None,
+        _message(get_current_values_response_topic("mimirheim-core"), b"not json"),
+    )
+
+    assert client._pending == {}
+
+
+def test_on_message_ignores_get_current_values_response_for_unknown_request_id() -> None:
+    registry = ConfigOwnerRegistry()
+    client = ConfigEditorMqttClient(_make_config(), registry)
+    response = GetCurrentValuesResult(request_id="unknown-request-id", values={})
+
+    client._on_message(
+        MagicMock(),
+        None,
+        _message(
+            get_current_values_response_topic("mimirheim-core"),
+            get_current_values_result_payload(response),
+        ),
     )
 
     assert client._pending == {}

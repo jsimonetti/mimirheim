@@ -21,16 +21,29 @@ from __future__ import annotations
 
 import urllib.parse
 from collections.abc import Iterator
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+import yaml
 
-from mimirheim_shared.config_service import Descriptor, ValidateAndWriteResult
+from mimirheim_shared.config_service import (
+    Descriptor,
+    ValidateAndWriteRequest,
+    ValidateAndWriteResult,
+    handle_validate_and_write,
+)
+from mimirheim_shared.field_shape import FieldShape
 from mimirheim_shared.formspec import FieldSpec, FormSpec, Tier
 from mimirheim_shared.visibility import Comparison, ComparisonOperator
 
 from config_editor_v3.registry import ConfigOwnerRegistry
+from config_editor_v3.render import RenderedGroup, build_groups
 from config_editor_v3.server import ConfigEditorServer
+
+_BATTERIES_FIXTURE_PATH = (
+    Path(__file__).parent / "fixtures" / "sample_mimirheim_config_with_batteries.yaml"
+)
 
 
 @pytest.fixture
@@ -40,9 +53,11 @@ def registry() -> ConfigOwnerRegistry:
 
 @pytest.fixture
 def config_service_client() -> MagicMock:
-    """Fakes ConfigEditorMqttClient.submit_validate_and_write; defaults to success."""
+    """Fakes ConfigEditorMqttClient; submit_validate_and_write defaults to success,
+    get_current_values defaults to no current values (schema defaults alone)."""
     client = MagicMock()
     client.submit_validate_and_write.return_value = ValidateAndWriteResult(request_id="req-1", success=True)
+    client.get_current_values.return_value = {}
     return client
 
 
@@ -217,6 +232,73 @@ def test_owner_page_shows_conditionally_visible_field_when_condition_holds(
     assert "Discovery prefix" in body
 
 
+def _register_optional_object_owner(registry: ConfigOwnerRegistry) -> None:
+    registry.update(
+        Descriptor(
+            owner_id="owner-with-optional",
+            display_name="Owner with optional section",
+            json_schema={"properties": {}},
+            form_spec=FormSpec(
+                fields={
+                    "balanced_weights": FieldSpec(
+                        label="Balanced weights",
+                        description="Optional weighting.",
+                        shape=FieldShape.OPTIONAL_OBJECT,
+                        nested_form_spec=FormSpec(
+                            fields={
+                                "cost_weight": FieldSpec(label="Cost weight", description="Weight.")
+                            }
+                        ),
+                    )
+                }
+            ),
+        )
+    )
+
+
+def test_presence_toggle_renders_a_disabled_hidden_fieldset_when_currently_absent(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer, config_service_client: MagicMock
+) -> None:
+    _register_optional_object_owner(registry)
+    config_service_client.get_current_values.return_value = {"balanced_weights": None}
+
+    status, body = _get(server, "/owners/owner-with-optional")
+
+    assert status == 200
+    assert 'data-presence-toggle' in body
+    assert 'name="balanced_weights"' in body
+    assert "checked" not in body.split("data-presence-toggle", 1)[1].split(">", 1)[0]
+    assert "<fieldset hidden disabled>" in body
+
+
+def test_presence_toggle_renders_an_enabled_visible_fieldset_when_currently_present(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer, config_service_client: MagicMock
+) -> None:
+    _register_optional_object_owner(registry)
+    config_service_client.get_current_values.return_value = {
+        "balanced_weights": {"cost_weight": 0.5}
+    }
+
+    status, body = _get(server, "/owners/owner-with-optional")
+
+    assert status == 200
+    assert "<fieldset hidden disabled>" not in body
+    assert 'name="balanced_weights.cost_weight"' in body
+
+
+def test_presence_toggle_javascript_is_present_exactly_once(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer, config_service_client: MagicMock
+) -> None:
+    _register_optional_object_owner(registry)
+    config_service_client.get_current_values.return_value = {"balanced_weights": None}
+
+    status, body = _get(server, "/owners/owner-with-optional")
+
+    assert status == 200
+    assert body.count("data-presence-toggle") == 2  # the <input> attribute and the JS selector
+    assert "addEventListener(\"change\"" in body
+
+
 def _register_nordpool(registry: ConfigOwnerRegistry) -> None:
     registry.update(
         Descriptor(
@@ -261,3 +343,115 @@ def test_post_validation_failure_shows_errors_and_keeps_submitted_values(
     assert status == 200
     assert "area: not a valid bidding area" in body
     assert 'value="NOT-AN-AREA"' in body
+
+
+def test_get_fetches_and_renders_current_values(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer, config_service_client: MagicMock
+) -> None:
+    _register_nordpool(registry)
+    config_service_client.get_current_values.return_value = {"area": "SE1"}
+
+    status, body = _get(server, "/owners/nordpool")
+
+    assert status == 200
+    config_service_client.get_current_values.assert_called_once_with("nordpool")
+    assert 'value="SE1"' in body
+
+
+def test_get_falls_back_to_schema_defaults_when_get_current_values_times_out(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer, config_service_client: MagicMock
+) -> None:
+    _register_nordpool(registry)
+    config_service_client.get_current_values.side_effect = TimeoutError("no response")
+
+    status, body = _get(server, "/owners/nordpool")
+
+    assert status == 200
+    assert 'value="SE1"' in body  # the Descriptor's own schema default for "area"
+
+
+def _flatten_leaf_values(groups: list[RenderedGroup]) -> dict[str, str]:
+    """Collects every leaf field's dotted name/value from a rendered tree.
+
+    Mirrors exactly what a real browser submits for the same rendered page
+    (every `<input>`/`<select>`, at every nesting level), without scraping
+    the rendered HTML itself.
+    """
+    values: dict[str, str] = {}
+    for group in groups:
+        for rendered_field in (*group.basic_fields, *group.expert_fields):
+            if rendered_field.entries is not None:
+                for entry in rendered_field.entries:
+                    values.update(_flatten_leaf_values(entry.groups))
+            elif rendered_field.nested_groups is not None:
+                values.update(_flatten_leaf_values(rendered_field.nested_groups))
+            elif rendered_field.value is not None:
+                values[rendered_field.name] = str(rendered_field.value)
+    return values
+
+
+def test_e2e_editing_a_nested_named_collection_field_round_trips(
+    registry: ConfigOwnerRegistry, tmp_path: Path
+) -> None:
+    """Ticket 08's own end-to-end criterion: editing one battery's
+    capacity_kwh round-trips through discovery, render, submit, and
+    validate_and_write, leaving the sibling battery and unrelated fields
+    (mqtt.host, its comment) untouched."""
+    from mimirheim.config.schema import MimirheimConfig
+    from mimirheim.io import config_service as core_config_service
+
+    config_path = tmp_path / "mimirheim.yaml"
+    config_path.write_text(_BATTERIES_FIXTURE_PATH.read_text())
+
+    descriptor = Descriptor.model_validate_json(core_config_service.payload_bytes())
+    registry.update(descriptor)
+
+    config_service_client = MagicMock()
+    config_service_client.get_current_values.side_effect = lambda owner_id, timeout=10.0: (
+        yaml.safe_load(config_path.read_text()) or {}
+    )
+
+    def _submit(owner_id: str, values: dict, timeout: float = 10.0) -> ValidateAndWriteResult:
+        request = ValidateAndWriteRequest(request_id="req-1", values=values)
+        response = handle_validate_and_write(
+            request.model_dump_json().encode("utf-8"), config_path, MimirheimConfig
+        )
+        return ValidateAndWriteResult.model_validate_json(response)
+
+    config_service_client.submit_validate_and_write.side_effect = _submit
+
+    server = ConfigEditorServer(registry, config_service_client)
+    try:
+        # Discovery + render.
+        status, body = _get(server, "/owners/mimirheim-core")
+        assert status == 200
+        assert "battery_main" in body
+        assert "battery_sos2_example" in body
+        assert 'name="batteries.battery_main.capacity_kwh"' in body
+
+        # Build the full submission exactly as the rendered page would, then
+        # change only one nested field.
+        current_values = config_service_client.get_current_values("mimirheim-core")
+        form = _flatten_leaf_values(build_groups(descriptor, values=current_values))
+        form["batteries.battery_main.capacity_kwh"] = "6.0"
+
+        status, body = _post(server, "/owners/mimirheim-core", form)
+
+        assert status == 200
+        assert "Saved" in body
+        config_service_client.submit_validate_and_write.assert_called_once()
+
+        # handle_validate_and_write writes the raw submitted (string) values
+        # rather than the pydantic-coerced ones (see the follow-up note in
+        # this ticket's summary); float() here tolerates that, since this
+        # test's own concern is the nested edit/sibling-isolation mechanics,
+        # not that pre-existing write-path characteristic.
+        written = yaml.safe_load(config_path.read_text())
+        assert float(written["batteries"]["battery_main"]["capacity_kwh"]) == 6.0
+        # Sibling entry and unrelated top-level field survive untouched.
+        assert float(written["batteries"]["battery_sos2_example"]["capacity_kwh"]) == 10.0
+        assert written["mqtt"]["host"] == "localhost"
+        raw = config_path.read_text()
+        assert "# usable capacity" in raw
+    finally:
+        server._httpd.server_close()

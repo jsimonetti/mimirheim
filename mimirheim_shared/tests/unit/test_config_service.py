@@ -16,17 +16,24 @@ from ruamel.yaml import YAML
 from mimirheim_shared.config_service import (
     CLEARING_PAYLOAD,
     Descriptor,
+    GetCurrentValuesRequest,
+    GetCurrentValuesResult,
     ValidateAndWriteRequest,
     ValidateAndWriteResult,
     build_descriptor,
     descriptor_payload,
     descriptor_topic,
+    get_current_values_request_topic,
+    get_current_values_response_topic,
+    get_current_values_result_payload,
+    handle_get_current_values,
     handle_validate_and_write,
     validate_and_write_request_topic,
     validate_and_write_response_topic,
     validate_and_write_result_payload,
 )
-from mimirheim_shared.formspec import FieldSpec, FormSpec
+from mimirheim_shared.field_shape import FieldShape
+from mimirheim_shared.formspec import FieldSpec, FormSpec, resolve_field_shapes
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "sample_config.yaml"
 
@@ -80,7 +87,11 @@ def test_build_descriptor_carries_schema_and_form_spec() -> None:
     assert descriptor.owner_id == "toy-owner"
     assert descriptor.display_name == "Toy Owner"
     assert descriptor.json_schema == _ToyModel.model_json_schema()
-    assert descriptor.form_spec == _TOY_FORM_SPEC
+    # build_descriptor resolves each field's effective Field Shape onto the
+    # FormSpec it publishes (see resolve_field_shapes); the raw, unresolved
+    # _TOY_FORM_SPEC no longer compares equal to what crosses the wire.
+    assert descriptor.form_spec == resolve_field_shapes(_ToyModel, _TOY_FORM_SPEC)
+    assert descriptor.form_spec.fields["capacity_kwh"].shape is FieldShape.SCALAR
 
 
 def test_descriptor_payload_round_trips_as_json() -> None:
@@ -215,3 +226,72 @@ class TestHandleValidateAndWrite:
 
         with pytest.raises(ValidationError):
             handle_validate_and_write(b"not json", config_path, _ToyConfig)
+
+
+def test_get_current_values_request_topic_is_well_known_and_owner_scoped() -> None:
+    assert (
+        get_current_values_request_topic("mimirheim-core")
+        == "mimirheim/config-service/mimirheim-core/get_current_values/request"
+    )
+    assert (
+        get_current_values_request_topic("nordpool")
+        == "mimirheim/config-service/nordpool/get_current_values/request"
+    )
+
+
+def test_get_current_values_response_topic_is_well_known_and_owner_scoped() -> None:
+    assert (
+        get_current_values_response_topic("mimirheim-core")
+        == "mimirheim/config-service/mimirheim-core/get_current_values/response"
+    )
+    assert (
+        get_current_values_response_topic("nordpool")
+        == "mimirheim/config-service/nordpool/get_current_values/response"
+    )
+
+
+def test_get_current_values_request_round_trips_as_json() -> None:
+    request = GetCurrentValuesRequest(request_id="req-1")
+
+    payload = request.model_dump_json().encode("utf-8")
+
+    assert GetCurrentValuesRequest.model_validate_json(payload) == request
+
+
+def test_get_current_values_result_payload_round_trips_as_json() -> None:
+    result = GetCurrentValuesResult(request_id="req-1", values={"battery": {"capacity_kwh": 15.0}})
+
+    payload = get_current_values_result_payload(result)
+
+    assert isinstance(payload, bytes)
+    assert GetCurrentValuesResult.model_validate_json(payload) == result
+
+
+class TestHandleGetCurrentValues:
+    def test_returns_the_current_on_disk_values(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text(FIXTURE_PATH.read_text())
+        request = GetCurrentValuesRequest(request_id="req-1")
+
+        response = handle_get_current_values(request.model_dump_json().encode("utf-8"), config_path)
+
+        result = GetCurrentValuesResult.model_validate_json(response)
+        assert result.request_id == "req-1"
+        assert result.values["mqtt"]["host"] == "localhost"
+        assert result.values["battery"]["capacity_kwh"] == 10.0
+
+    def test_returns_empty_values_when_config_file_does_not_exist(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "does-not-exist.yaml"
+        request = GetCurrentValuesRequest(request_id="req-2")
+
+        response = handle_get_current_values(request.model_dump_json().encode("utf-8"), config_path)
+
+        result = GetCurrentValuesResult.model_validate_json(response)
+        assert result == GetCurrentValuesResult(request_id="req-2", values={})
+
+    def test_malformed_request_envelope_raises(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text(FIXTURE_PATH.read_text())
+
+        with pytest.raises(ValidationError):
+            handle_get_current_values(b"not json", config_path)

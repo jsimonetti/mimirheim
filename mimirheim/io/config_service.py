@@ -26,6 +26,8 @@ from mimirheim_shared.config_service import (
     build_descriptor,
     descriptor_payload,
     descriptor_topic,
+    get_current_values_request_topic,
+    get_current_values_response_topic,
     validate_and_write_request_topic,
     validate_and_write_response_topic,
     validate_and_write_result_payload,
@@ -48,6 +50,15 @@ TOPIC = descriptor_topic(OWNER_ID)
 # module docstring in mimirheim_shared).
 REQUEST_TOPIC = validate_and_write_request_topic(OWNER_ID)
 RESPONSE_TOPIC = validate_and_write_response_topic(OWNER_ID)
+
+# The well-known topics a Config Editor requests mimirheim core's current
+# on-disk configuration on, and reads the answer from. Neither is retained,
+# same reason as REQUEST_TOPIC/RESPONSE_TOPIC above. Handled directly via
+# mimirheim_shared.config_service.handle_get_current_values in mqtt_client.py
+# rather than a wrapper here: unlike handle_validate_and_write, it needs no
+# MimirheimConfig-specific parameterisation.
+GET_CURRENT_VALUES_REQUEST_TOPIC = get_current_values_request_topic(OWNER_ID)
+GET_CURRENT_VALUES_RESPONSE_TOPIC = get_current_values_response_topic(OWNER_ID)
 
 
 def payload_bytes() -> bytes:

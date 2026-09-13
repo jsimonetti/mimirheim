@@ -44,6 +44,9 @@ from mimirheim_shared.config_service import (
     build_descriptor,
     descriptor_payload,
     descriptor_topic,
+    get_current_values_request_topic,
+    get_current_values_response_topic,
+    handle_get_current_values,
     handle_validate_and_write,
     validate_and_write_request_topic,
     validate_and_write_response_topic,
@@ -90,6 +93,8 @@ class ConfigOwnerSupport:
         self._descriptor_topic = descriptor_topic(owner_id)
         self._request_topic = validate_and_write_request_topic(owner_id)
         self._response_topic = validate_and_write_response_topic(owner_id)
+        self._get_current_values_request_topic = get_current_values_request_topic(owner_id)
+        self._get_current_values_response_topic = get_current_values_response_topic(owner_id)
         self._descriptor_payload = descriptor_payload(
             build_descriptor(owner_id, display_name, model, form_spec)
         )
@@ -116,12 +121,13 @@ class ConfigOwnerSupport:
             client: The connected paho client.
         """
         client.subscribe(self._request_topic, qos=1)
+        client.subscribe(self._get_current_values_request_topic, qos=1)
         client.publish(
             self._descriptor_topic, payload=self._descriptor_payload, qos=1, retain=True
         )
 
     def handle_message(self, client: Any, message: Any) -> bool:
-        """Handle ``message`` if it is this Config Owner's validate_and_write request.
+        """Handle ``message`` if it is this Config Owner's validate_and_write or get_current_values request.
 
         Call from the helper's own ``_on_message`` before its own topic
         dispatch.
@@ -131,11 +137,28 @@ class ConfigOwnerSupport:
             message: The paho ``MQTTMessage`` under consideration.
 
         Returns:
-            True if ``message.topic`` was this Config Owner's
-            validate_and_write request topic (handled, regardless of
-            outcome), so the caller should not also try its own dispatch.
-            False otherwise.
+            True if ``message.topic`` was one of this Config Owner's request
+            topics (handled, regardless of outcome), so the caller should
+            not also try its own dispatch. False otherwise.
         """
+        if message.topic == self._get_current_values_request_topic:
+            try:
+                response_payload = handle_get_current_values(message.payload, self._config_path)
+            except Exception:
+                # Deliberately broad, same reason as the validate_and_write
+                # handler below: this runs on the paho network thread, and a
+                # malformed request envelope has no request_id to reply with.
+                logger.exception(
+                    "Failed to handle get_current_values request for %r on %r.",
+                    self.owner_id,
+                    message.topic,
+                )
+                return True
+            client.publish(
+                self._get_current_values_response_topic, payload=response_payload, qos=1, retain=False
+            )
+            return True
+
         if message.topic != self._request_topic:
             return False
         try:

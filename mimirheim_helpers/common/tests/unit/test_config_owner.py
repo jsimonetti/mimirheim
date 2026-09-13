@@ -17,13 +17,17 @@ from pydantic import BaseModel, ConfigDict
 from mimirheim_shared.config_service import (
     CLEARING_PAYLOAD,
     Descriptor,
+    GetCurrentValuesRequest,
+    GetCurrentValuesResult,
     ValidateAndWriteRequest,
     ValidateAndWriteResult,
     descriptor_topic,
+    get_current_values_request_topic,
+    get_current_values_response_topic,
     validate_and_write_request_topic,
     validate_and_write_response_topic,
 )
-from mimirheim_shared.formspec import FieldSpec, FormSpec
+from mimirheim_shared.formspec import FieldSpec, FormSpec, resolve_field_shapes
 
 from helper_common.config_owner import ConfigOwnerSupport
 
@@ -78,9 +82,8 @@ class TestOnConnect:
 
         support.on_connect(client)
 
-        client.subscribe.assert_called_once_with(
-            validate_and_write_request_topic("toy-helper"), qos=1
-        )
+        client.subscribe.assert_any_call(validate_and_write_request_topic("toy-helper"), qos=1)
+        client.subscribe.assert_any_call(get_current_values_request_topic("toy-helper"), qos=1)
         publish_call = client.publish.call_args
         assert publish_call.args[0] == descriptor_topic("toy-helper")
         assert publish_call.kwargs["retain"] is True
@@ -88,7 +91,7 @@ class TestOnConnect:
         assert descriptor.owner_id == "toy-helper"
         assert descriptor.display_name == "Toy Helper"
         assert descriptor.json_schema == _ToyHelperConfig.model_json_schema()
-        assert descriptor.form_spec == _TOY_FORM_SPEC
+        assert descriptor.form_spec == resolve_field_shapes(_ToyHelperConfig, _TOY_FORM_SPEC)
 
 
 class TestHandleMessage:
@@ -169,6 +172,48 @@ class TestHandleMessage:
         assert handled is True
         client.publish.assert_not_called()
         assert "Failed to handle validate_and_write request" in caplog.text
+
+    def test_get_current_values_request_is_answered_with_current_on_disk_values(
+        self, tmp_path: Path
+    ) -> None:
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text(FIXTURE_PATH.read_text())
+        support = _support(config_path)
+        client = MagicMock()
+        request = GetCurrentValuesRequest(request_id="req-3")
+
+        handled = support.handle_message(
+            client,
+            _message(
+                get_current_values_request_topic("toy-helper"),
+                request.model_dump_json().encode("utf-8"),
+            ),
+        )
+
+        assert handled is True
+        client.publish.assert_called_once()
+        publish_call = client.publish.call_args
+        assert publish_call.args[0] == get_current_values_response_topic("toy-helper")
+        assert publish_call.kwargs["retain"] is False
+        result = GetCurrentValuesResult.model_validate_json(publish_call.kwargs["payload"])
+        assert result.request_id == "req-3"
+        assert result.values["area"] == "NL"
+
+    def test_a_malformed_get_current_values_envelope_is_logged_and_dropped(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text(FIXTURE_PATH.read_text())
+        support = _support(config_path)
+        client = MagicMock()
+
+        handled = support.handle_message(
+            client, _message(get_current_values_request_topic("toy-helper"), b"not json")
+        )
+
+        assert handled is True
+        client.publish.assert_not_called()
+        assert "Failed to handle get_current_values request" in caplog.text
 
 
 class TestClearDescriptor:
