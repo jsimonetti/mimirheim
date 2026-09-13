@@ -11,9 +11,14 @@ from pydantic import BaseModel, ConfigDict
 from mimirheim_shared.config_service import (
     CLEARING_PAYLOAD,
     Descriptor,
+    ValidateAndWriteRequest,
+    ValidateAndWriteResult,
     build_descriptor,
     descriptor_payload,
     descriptor_topic,
+    validate_and_write_request_topic,
+    validate_and_write_response_topic,
+    validate_and_write_result_payload,
 )
 from mimirheim_shared.formspec import FieldSpec, FormSpec
 
@@ -55,3 +60,53 @@ def test_descriptor_payload_round_trips_as_json() -> None:
 
     assert isinstance(payload, bytes)
     assert Descriptor.model_validate_json(payload) == descriptor
+
+
+def test_validate_and_write_request_topic_is_well_known_and_owner_scoped() -> None:
+    assert (
+        validate_and_write_request_topic("mimirheim-core")
+        == "mimirheim/config-service/mimirheim-core/validate_and_write/request"
+    )
+    assert (
+        validate_and_write_request_topic("nordpool")
+        == "mimirheim/config-service/nordpool/validate_and_write/request"
+    )
+
+
+def test_validate_and_write_response_topic_is_well_known_and_owner_scoped() -> None:
+    assert (
+        validate_and_write_response_topic("mimirheim-core")
+        == "mimirheim/config-service/mimirheim-core/validate_and_write/response"
+    )
+    assert (
+        validate_and_write_response_topic("nordpool")
+        == "mimirheim/config-service/nordpool/validate_and_write/response"
+    )
+
+
+def test_validate_and_write_request_round_trips_as_json() -> None:
+    request = ValidateAndWriteRequest(request_id="req-1", values={"capacity_kwh": 12.0})
+
+    payload = request.model_dump_json().encode("utf-8")
+
+    assert ValidateAndWriteRequest.model_validate_json(payload) == request
+
+
+def test_validate_and_write_result_payload_round_trips_as_json_on_success() -> None:
+    result = ValidateAndWriteResult(request_id="req-1", success=True)
+
+    payload = validate_and_write_result_payload(result)
+
+    assert isinstance(payload, bytes)
+    assert ValidateAndWriteResult.model_validate_json(payload) == result
+    assert ValidateAndWriteResult.model_validate_json(payload).errors == []
+
+
+def test_validate_and_write_result_payload_round_trips_as_json_on_failure() -> None:
+    result = ValidateAndWriteResult(
+        request_id="req-1", success=False, errors=["capacity_kwh: field required"]
+    )
+
+    payload = validate_and_write_result_payload(result)
+
+    assert ValidateAndWriteResult.model_validate_json(payload) == result

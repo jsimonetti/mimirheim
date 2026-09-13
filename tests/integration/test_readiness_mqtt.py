@@ -19,6 +19,7 @@ import queue
 import threading
 import uuid
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import paho.mqtt.client as paho
 import pytest
@@ -142,7 +143,9 @@ def _run_solve_loop(
 # ---------------------------------------------------------------------------
 
 
-async def test_retained_messages_trigger_solve_on_connect(mqtt_broker: str) -> None:
+async def test_retained_messages_trigger_solve_on_connect(
+    mqtt_broker: str, tmp_path: Path
+) -> None:
     """Retained MQTT messages deliver inputs on connect and trigger a solve.
 
     The broker retains the last message for any topic published with
@@ -188,6 +191,7 @@ async def test_retained_messages_trigger_solve_on_connect(mqtt_broker: str) -> N
             readiness=readiness,
             publisher=publisher,
             paho_client=hioo_paho,
+            config_path=tmp_path / "mimirheim.yaml",
             solve_queue=solve_queue,
         )
 

@@ -7,7 +7,10 @@ window expires is allowed through.
 from __future__ import annotations
 
 import queue
+from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+from ruamel.yaml import YAML
 
 from mimirheim.config.schema import (
     BatteryConfig,
@@ -24,7 +27,11 @@ from mimirheim.core.readiness import ReadinessState
 from mimirheim.io import config_service
 from mimirheim.io.input_parser import parse_price_steps
 from mimirheim.io.mqtt_client import MqttClient
-from mimirheim_shared.config_service import CLEARING_PAYLOAD
+from mimirheim_shared.config_service import (
+    CLEARING_PAYLOAD,
+    ValidateAndWriteRequest,
+    ValidateAndWriteResult,
+)
 
 
 def _seg() -> EfficiencySegment:
@@ -57,6 +64,10 @@ def _make_config() -> MimirheimConfig:
     )
 
 
+_CONFIG_PATH = Path("unused-mimirheim-config.yaml")
+_FIXTURE_CONFIG_PATH = Path(__file__).parent / "fixtures" / "sample_mimirheim_config.yaml"
+
+
 def _make_trigger_msg(retain: bool = False) -> MagicMock:
     msg = MagicMock()
     msg.retain = retain
@@ -72,7 +83,9 @@ def _make_mqtt_client(solve_queue: queue.Queue | None = None) -> MqttClient:
     readiness.snapshot.return_value = MagicMock()
     publisher = MagicMock()
     paho_mock = MagicMock()
-    return MqttClient(config, readiness, publisher, paho_mock, solve_queue=solve_queue)
+    return MqttClient(
+        config, readiness, publisher, paho_mock, _CONFIG_PATH, solve_queue=solve_queue
+    )
 
 
 class TestTriggerDebounce:
@@ -127,7 +140,7 @@ class TestMultiTopicPrices:
         readiness = MagicMock(spec=ReadinessState)
         publisher = MagicMock()
         paho_mock = MagicMock()
-        client = MqttClient(config, readiness, publisher, paho_mock)
+        client = MqttClient(config, readiness, publisher, paho_mock, _CONFIG_PATH)
 
         assert client._topic_handlers["a/prices"] is parse_price_steps
         assert client._topic_handlers["b/prices"] is parse_price_steps
@@ -198,7 +211,7 @@ class TestConfigServiceDescriptor:
         publisher = MagicMock()
         paho_mock = MagicMock()
 
-        MqttClient(config, readiness, publisher, paho_mock)
+        MqttClient(config, readiness, publisher, paho_mock, _CONFIG_PATH)
 
         paho_mock.will_set.assert_called_once_with(
             config.outputs.availability, payload="offline", qos=1, retain=True
@@ -245,3 +258,103 @@ class TestConfigServiceDescriptor:
         assert kwargs["payload"] == CLEARING_PAYLOAD
         assert kwargs["qos"] == 1
         assert kwargs["retain"] is True
+
+
+class TestConfigServiceValidateAndWrite:
+    """validate_and_write requests share this connection too; see
+    mqtt_client.py's module docstring and io.config_service.handle_validate_and_write.
+    """
+
+    def _make_request_msg(self, request: ValidateAndWriteRequest) -> MagicMock:
+        msg = MagicMock()
+        msg.topic = config_service.REQUEST_TOPIC
+        msg.payload = request.model_dump_json().encode("utf-8")
+        return msg
+
+    def _response_publish_calls(self, paho_mock: MagicMock) -> list:
+        return [
+            call
+            for call in paho_mock.publish.call_args_list
+            if call.args[0] == config_service.RESPONSE_TOPIC
+        ]
+
+    def test_request_topic_is_subscribed_on_connect(self) -> None:
+        client = _make_mqtt_client()
+        reason_code = MagicMock()
+        reason_code.is_failure = False
+
+        client._on_connect(client._client, None, None, reason_code, None)
+
+        subscribed_topics = {call.args[0] for call in client._client.subscribe.call_args_list}
+        assert config_service.REQUEST_TOPIC in subscribed_topics
+
+    def test_valid_request_is_written_and_success_result_is_published(
+        self, tmp_path: Path
+    ) -> None:
+        config_path = tmp_path / "mimirheim.yaml"
+        config_path.write_text(_FIXTURE_CONFIG_PATH.read_text())
+        config = _make_config()
+        readiness = MagicMock(spec=ReadinessState)
+        publisher = MagicMock()
+        paho_mock = MagicMock()
+        client = MqttClient(config, readiness, publisher, paho_mock, config_path)
+        request = ValidateAndWriteRequest(
+            request_id="req-1",
+            values={"grid": {"import_limit_kw": 12.0, "export_limit_kw": 5.0}},
+        )
+
+        client._on_message(paho_mock, None, self._make_request_msg(request))
+
+        calls = self._response_publish_calls(paho_mock)
+        assert len(calls) == 1
+        _, kwargs = calls[0]
+        result = ValidateAndWriteResult.model_validate_json(kwargs["payload"])
+        assert result == ValidateAndWriteResult(request_id="req-1", success=True)
+        assert kwargs["qos"] == 1
+        assert kwargs["retain"] is False
+
+        yaml = YAML()
+        with config_path.open() as fh:
+            written = yaml.load(fh)
+        assert written["grid"]["import_limit_kw"] == 12.0
+
+    def test_invalid_request_publishes_failure_result_and_writes_nothing(
+        self, tmp_path: Path
+    ) -> None:
+        config_path = tmp_path / "mimirheim.yaml"
+        config_path.write_text(_FIXTURE_CONFIG_PATH.read_text())
+        original = config_path.read_text()
+        config = _make_config()
+        readiness = MagicMock(spec=ReadinessState)
+        publisher = MagicMock()
+        paho_mock = MagicMock()
+        client = MqttClient(config, readiness, publisher, paho_mock, config_path)
+        request = ValidateAndWriteRequest(
+            request_id="req-2",
+            values={"grid": {"import_limit_kw": -5.0, "export_limit_kw": 5.0}},
+        )
+
+        client._on_message(paho_mock, None, self._make_request_msg(request))
+
+        calls = self._response_publish_calls(paho_mock)
+        assert len(calls) == 1
+        _, kwargs = calls[0]
+        result = ValidateAndWriteResult.model_validate_json(kwargs["payload"])
+        assert result.request_id == "req-2"
+        assert result.success is False
+        assert result.errors
+        assert config_path.read_text() == original
+
+    def test_malformed_request_envelope_is_logged_and_dropped(self, caplog) -> None:
+        import logging
+
+        client = _make_mqtt_client()
+        msg = MagicMock()
+        msg.topic = config_service.REQUEST_TOPIC
+        msg.payload = b"not json"
+
+        with caplog.at_level(logging.ERROR, logger="mimirheim.mqtt"):
+            client._on_message(client._client, None, msg)
+
+        assert self._response_publish_calls(client._client) == []
+        assert "Traceback" in caplog.text

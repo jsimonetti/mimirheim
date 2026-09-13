@@ -51,7 +51,7 @@ def write_yaml_preserving_comments(file_path: Path, values: dict[str, Any]) -> N
     else:
         document = {}
 
-    _overlay(document, values)
+    overlay_values(document, values)
 
     fd, tmp_name = tempfile.mkstemp(dir=file_path.parent, suffix=".tmp")
     tmp_path = Path(tmp_name)
@@ -64,15 +64,27 @@ def write_yaml_preserving_comments(file_path: Path, values: dict[str, Any]) -> N
         raise
 
 
-def _overlay(document: Any, values: dict[str, Any]) -> None:
-    """Recursively write ``values`` into ``document``, preserving comments/order.
+def overlay_values(document: Any, values: dict[str, Any]) -> None:
+    """Recursively write ``values`` into ``document`` in place.
 
-    A key present as a dict in both ``document`` and ``values`` is merged
-    recursively rather than replaced outright, so unrelated sibling keys (and
-    their comments) under that key survive an update to one of its fields.
+    A key present as a dict (or ``dict``-like mapping, e.g. a ruamel
+    ``CommentedMap``) in both ``document`` and ``values`` is merged
+    recursively rather than replaced outright, so unrelated sibling keys (and,
+    for a ruamel document, their comments) under that key survive an update to
+    one of its fields. Public so a Config Owner's ``validate_and_write`` can
+    also merge Candidate Values onto its current on-disk configuration before
+    validating: Candidate Values may be a partial update (see ``values``
+    above), and validating them in isolation would reject an update to one
+    field of an otherwise-required nested section.
+
+    Args:
+        document: The mapping to update in place. Typically either a plain
+            ``dict`` (validation) or a ruamel round-trip-loaded document
+            (writing).
+        values: The values to overlay onto ``document``.
     """
     for key, value in values.items():
         if isinstance(document.get(key), dict) and isinstance(value, dict):
-            _overlay(document[key], value)
+            overlay_values(document[key], value)
         else:
             document[key] = value

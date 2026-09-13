@@ -309,6 +309,7 @@ def main() -> None:
         readiness=readiness,
         publisher=publisher,
         paho_client=paho_client,
+        config_path=Path(args.config),
         solve_queue=solve_queue,
     )
 

@@ -23,6 +23,7 @@ import queue
 import threading
 import uuid
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import paho.mqtt.client as paho
 import pytest
@@ -193,7 +194,7 @@ def _run_solve_loop(
 # ---------------------------------------------------------------------------
 
 
-async def test_full_stack_publishes_schedule(mqtt_broker: str) -> None:
+async def test_full_stack_publishes_schedule(mqtt_broker: str, tmp_path: Path) -> None:
     """Publishing valid inputs to the broker causes a schedule to be published.
 
     This test verifies the critical happy path: prices and battery SOC arrive
@@ -222,6 +223,7 @@ async def test_full_stack_publishes_schedule(mqtt_broker: str) -> None:
             readiness=readiness,
             publisher=publisher,
             paho_client=hioo_paho,
+            config_path=tmp_path / "mimirheim.yaml",
             solve_queue=solve_queue,
         )
 
@@ -297,7 +299,7 @@ async def test_full_stack_publishes_schedule(mqtt_broker: str) -> None:
     )
 
 
-async def test_infeasible_solve_publishes_error_status(mqtt_broker: str) -> None:
+async def test_infeasible_solve_publishes_error_status(mqtt_broker: str, tmp_path: Path) -> None:
     """An infeasible solve publishes status 'error' on the last_solve topic.
 
     Configures a system in which no solution can exist (zero grid import with
@@ -325,6 +327,7 @@ async def test_infeasible_solve_publishes_error_status(mqtt_broker: str) -> None
             readiness=readiness,
             publisher=publisher,
             paho_client=hioo_paho,
+            config_path=tmp_path / "mimirheim.yaml",
             solve_queue=solve_queue,
         )
 

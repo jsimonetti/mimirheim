@@ -9,6 +9,9 @@ This module is deliberately thin. Its only responsibilities are:
 5. Queuing a SolveBundle on ``solve_queue`` when a trigger message arrives.
 6. Publishing mimirheim core's Config Service Descriptor on connect, and
    clearing it on graceful shutdown.
+7. Handling validate_and_write requests: subscribing to the request topic,
+   delegating to ``io.config_service.handle_validate_and_write`` (validation
+   plus, on success, the atomic write), and publishing its result.
 
 Solves are only triggered by messages on ``{prefix}/input/trigger``.
 Regular data topic messages (prices, PV, battery SOC, etc.) only update
@@ -43,6 +46,7 @@ import queue
 import random
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 from mimirheim.config.schema import MimirheimConfig
@@ -97,6 +101,8 @@ class MqttClient:
     Attributes:
         _client: The underlying paho ``Client``.
         _config: Static system configuration.
+        _config_path: Path to the YAML file mimirheim core was started with;
+            the target of a successful validate_and_write.
         _readiness: The shared readiness state updated by each incoming message.
         _publisher: The MQTT publisher; called from ``on_connect`` to republish.
         _solve_queue: Optional queue that receives a SolveBundle on trigger.
@@ -110,6 +116,7 @@ class MqttClient:
         readiness: ReadinessState,
         publisher: MqttPublisher,
         paho_client: Any,
+        config_path: Path,
         solve_queue: queue.Queue | None = None,
     ) -> None:
         """Construct the client and register callbacks.
@@ -119,6 +126,8 @@ class MqttClient:
             readiness: The shared readiness state.
             publisher: The MQTT publisher (for republish on connect).
             paho_client: An already-constructed paho ``Client`` instance.
+            config_path: Path to mimirheim core's own YAML configuration
+                file, the target of a successful validate_and_write request.
             solve_queue: Optional queue that receives a ``SolveBundle`` each
                 time a trigger message arrives and ``is_ready()`` is True.
                 Uses ``put_nowait``; if the queue is full the bundle is
@@ -126,6 +135,7 @@ class MqttClient:
         """
         self._client = paho_client
         self._config = config
+        self._config_path = config_path
         self._readiness = readiness
         self._publisher = publisher
         self._solve_queue = solve_queue
@@ -140,6 +150,8 @@ class MqttClient:
         # lifetime.
         self._config_service_topic = config_service.TOPIC
         self._config_service_payload = config_service.payload_bytes()
+        self._config_service_request_topic = config_service.REQUEST_TOPIC
+        self._config_service_response_topic = config_service.RESPONSE_TOPIC
 
         prefix = config.mqtt.topic_prefix
         self._trigger_topic = f"{prefix}/input/trigger"
@@ -241,6 +253,10 @@ class MqttClient:
         # discovery payloads after HA restarts or reloads its MQTT integration.
         client.subscribe(_HA_STATUS_TOPIC, qos=1)
 
+        # Subscribe to the Config Service validate_and_write request topic
+        # (see io.config_service). Requests are handled in _on_message.
+        client.subscribe(self._config_service_request_topic, qos=1)
+
         # Publish the birth message retained so any subscriber that connects
         # later immediately sees the current online state without waiting for
         # the next message on this topic.
@@ -272,6 +288,10 @@ class MqttClient:
         - **Trigger topic** (``{prefix}/input/trigger``): attempt to queue a
           new solve if ``ReadinessState.is_ready()`` is True. The payload is
           ignored. If not ready, log the reason and take no action.
+        - **Config Service validate_and_write request topic**: delegate to
+          ``io.config_service.handle_validate_and_write`` and publish its
+          result. A malformed request envelope cannot be correlated to a
+          response, so it is logged and dropped rather than answered.
         - **Data topics**: route to the appropriate parser, call
           ``ReadinessState.update()``. Never queue a solve. Parse errors are
           logged and swallowed — the readiness state is simply not updated,
@@ -374,6 +394,33 @@ class MqttClient:
                         # escaping exception takes down message handling
                         # entirely. A missed policy publish is not worth that.
                         logger.exception("Could not publish battery care state.")
+            return
+
+        # --- Config Service: validate_and_write request ---
+        if topic == self._config_service_request_topic:
+            try:
+                response_payload = config_service.handle_validate_and_write(
+                    message.payload, self._config_path
+                )
+            except Exception:
+                # Deliberately broad, same reason as the trigger and data
+                # topic handlers: an escaping exception here would take down
+                # MQTT message handling entirely. A malformed request
+                # envelope has no request_id to reply with, so it is logged
+                # and dropped rather than answered; a well-formed envelope
+                # carrying invalid Candidate Values is not an exception here
+                # at all — handle_validate_and_write reports that as a
+                # published failure result instead.
+                logger.exception(
+                    "Failed to handle validate_and_write request on %r.", topic
+                )
+                return
+            client.publish(
+                self._config_service_response_topic,
+                payload=response_payload,
+                qos=1,
+                retain=False,
+            )
             return
 
         # --- Data topics: update readiness only, never queue a solve ---

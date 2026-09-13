@@ -10,6 +10,7 @@ faked-client unit coverage of the Descriptor publish/clear behaviour.
 
 import asyncio
 import uuid
+from pathlib import Path
 
 import paho.mqtt.client as paho
 import pytest
@@ -32,7 +33,9 @@ def _make_config(port: int) -> MimirheimConfig:
     )
 
 
-async def test_descriptor_is_retained_and_readable_by_a_second_client(mqtt_broker: str) -> None:
+async def test_descriptor_is_retained_and_readable_by_a_second_client(
+    mqtt_broker: str, tmp_path: Path
+) -> None:
     port = int(mqtt_broker.split(":")[-1])
     config = _make_config(port)
 
@@ -42,7 +45,9 @@ async def test_descriptor_is_retained_and_readable_by_a_second_client(mqtt_broke
     )
     readiness = ReadinessState(config)
     publisher = MqttPublisher(paho_client, config)
-    mqtt_client = MqttClient(config, readiness, publisher, paho_client)
+    mqtt_client = MqttClient(
+        config, readiness, publisher, paho_client, tmp_path / "mimirheim.yaml"
+    )
 
     probe = paho.Client(
         paho.CallbackAPIVersion.VERSION2,

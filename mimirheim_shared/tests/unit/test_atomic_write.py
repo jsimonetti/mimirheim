@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 from ruamel.yaml import YAML
 
-from mimirheim_shared.atomic_write import write_yaml_preserving_comments
+from mimirheim_shared.atomic_write import overlay_values, write_yaml_preserving_comments
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "sample_config.yaml"
 
@@ -66,6 +66,25 @@ def test_write_is_atomic_no_temp_file_left_on_success(tmp_path: Path) -> None:
 
     leftover_tmp_files = [p for p in tmp_path.iterdir() if p.name != "config.yaml"]
     assert leftover_tmp_files == []
+
+
+def test_overlay_values_merges_nested_dicts_in_place() -> None:
+    document = {"mqtt": {"host": "localhost", "port": 1883}, "battery": {"capacity_kwh": 10.0}}
+
+    overlay_values(document, {"battery": {"capacity_kwh": 15.0}})
+
+    assert document == {
+        "mqtt": {"host": "localhost", "port": 1883},
+        "battery": {"capacity_kwh": 15.0},
+    }
+
+
+def test_overlay_values_replaces_non_dict_values_outright() -> None:
+    document = {"deferrable_loads": {"a": {"x": 1}}}
+
+    overlay_values(document, {"deferrable_loads": ["not", "a", "dict", "anymore"]})
+
+    assert document == {"deferrable_loads": ["not", "a", "dict", "anymore"]}
 
 
 def test_original_file_untouched_if_dump_fails(tmp_path: Path) -> None:

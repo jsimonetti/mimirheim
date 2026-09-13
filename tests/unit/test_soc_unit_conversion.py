@@ -12,6 +12,7 @@ snapshot converts. Only running both together reveals a duplicate.
 """
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from unittest.mock import MagicMock
 
@@ -133,6 +134,7 @@ def _snapshot_with_soc_payload(unit: str, soc_payload: bytes):
         readiness,
         publisher=MagicMock(),
         paho_client=MagicMock(),
+        config_path=Path("unused-mimirheim-config.yaml"),
         solve_queue=None,
     )
     handlers = client._topic_handlers

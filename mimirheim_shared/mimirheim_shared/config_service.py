@@ -1,26 +1,38 @@
-"""Descriptor construction and topic/payload derivation for the Config Service protocol.
+"""Descriptor and validate_and_write construction for the Config Service protocol.
 
 A Config Owner's ``describe()`` step builds a Descriptor (its pydantic validation
 schema plus its FormSpec) and publishes it retained to a well-known,
 per-Config-Owner MQTT topic, cleared via last-will when the owner disconnects
-(see ADR-0001, ADR-0005). This module provides the pure pieces of that step:
-the topic naming convention, the Descriptor shape, and the bytes to publish or
-clear it with.
+(see ADR-0001, ADR-0005). Its ``validate_and_write()`` step accepts Candidate
+Values submitted by a Config Editor over a second well-known topic, validates
+them against its own pydantic model, and, only on success, writes them to its
+configuration file, publishing a result either way. This module provides the
+pure pieces of both steps: topic naming, the Descriptor/request/result shapes,
+and the bytes to publish them with.
 
 It deliberately does not touch an MQTT client. mimirheim_shared never owns or
 constructs a connection (see ``mimirheim_shared/docs/adr/0005``): a Config
 Owner's own connection-management code (mimirheim core's ``MqttClient``, or a
 helper's own MQTT setup) is responsible for calling ``client.will_set(...)``
-with ``descriptor_topic(...)`` and ``CLEARING_PAYLOAD`` before connecting, and
+with ``descriptor_topic(...)`` and ``CLEARING_PAYLOAD`` before connecting,
 ``client.publish(...)`` with ``descriptor_payload(...)`` from its own
-``on_connect`` handler.
+``on_connect`` handler, and subscribing to ``validate_and_write_request_topic(...)``
+to receive Candidate Values and publish a ``validate_and_write_result_payload(...)``
+to ``validate_and_write_response_topic(...)`` in reply. Neither request nor
+response is retained: this is a point-in-time request/response exchange, not
+a state a late subscriber needs to see.
+
+A Config Editor correlates a response to its request by ``request_id``
+(a caller-chosen opaque string, e.g. a UUID) rather than any native MQTT
+request/response feature: mimirheim core's connection negotiates MQTT
+3.1.1, which has no such feature.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from mimirheim_shared.formspec import FormSpec
 
@@ -105,3 +117,77 @@ def descriptor_payload(descriptor: Descriptor) -> bytes:
         UTF-8 encoded JSON bytes.
     """
     return descriptor.model_dump_json().encode("utf-8")
+
+
+def validate_and_write_request_topic(owner_id: str) -> str:
+    """Return the well-known topic a Config Owner accepts validate_and_write requests on.
+
+    Args:
+        owner_id: The Config Owner's stable identifier.
+
+    Returns:
+        The topic string, e.g.
+        ``"mimirheim/config-service/mimirheim-core/validate_and_write/request"``.
+    """
+    return f"{_TOPIC_ROOT}/{owner_id}/validate_and_write/request"
+
+
+def validate_and_write_response_topic(owner_id: str) -> str:
+    """Return the well-known topic a Config Owner publishes validate_and_write results to.
+
+    Args:
+        owner_id: The Config Owner's stable identifier.
+
+    Returns:
+        The topic string, e.g.
+        ``"mimirheim/config-service/mimirheim-core/validate_and_write/response"``.
+    """
+    return f"{_TOPIC_ROOT}/{owner_id}/validate_and_write/response"
+
+
+class ValidateAndWriteRequest(BaseModel):
+    """Candidate Values a Config Editor submits for validation and writing.
+
+    Attributes:
+        request_id: Opaque string chosen by the Config Editor (e.g. a UUID).
+            Echoed back on the matching ``ValidateAndWriteResult`` so the
+            Editor can correlate a response to its request; neither the
+            request nor the response topic is otherwise scoped per-request.
+        values: The proposed field values, as a JSON-compatible dict shaped
+            like the Config Owner's own validation model.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str
+    values: dict[str, Any]
+
+
+class ValidateAndWriteResult(BaseModel):
+    """The outcome of a validate_and_write request, published by the Config Owner.
+
+    Attributes:
+        request_id: Echoed from the ``ValidateAndWriteRequest`` this result
+            answers.
+        success: True if ``values`` validated against the Config Owner's
+            model and were written to its configuration file.
+        errors: Human-readable validation error messages. Empty on success.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str
+    success: bool
+    errors: list[str] = Field(default_factory=list)
+
+
+def validate_and_write_result_payload(result: ValidateAndWriteResult) -> bytes:
+    """Serialise a ValidateAndWriteResult to the bytes a Config Owner publishes.
+
+    Args:
+        result: The result to serialise.
+
+    Returns:
+        UTF-8 encoded JSON bytes.
+    """
+    return result.model_dump_json().encode("utf-8")
