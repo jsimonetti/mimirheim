@@ -7,6 +7,8 @@ This module is deliberately thin. Its only responsibilities are:
 3. Passing the parsed values to ``ReadinessState.update()``.
 4. Calling ``publisher.republish_last_result()`` from ``on_connect``.
 5. Queuing a SolveBundle on ``solve_queue`` when a trigger message arrives.
+6. Publishing mimirheim core's Config Service Descriptor on connect, and
+   clearing it on graceful shutdown.
 
 Solves are only triggered by messages on ``{prefix}/input/trigger``.
 Regular data topic messages (prices, PV, battery SOC, etc.) only update
@@ -19,10 +21,21 @@ All business logic lives elsewhere:
 - Freshness tracking: ``readiness.py``
 - Solving: ``model_builder.py``
 - Publishing: ``mqtt_publisher.py``
+- Config Service Descriptor content: ``io.config_service``
 
-This module imports from ``mimirheim.io`` (parser, publisher) and ``mimirheim.core``
-(readiness, bundle types) but does not import from ``mimirheim.devices`` or call
-``build_and_solve`` directly.
+This client owns mimirheim core's one and only MQTT connection. The Config
+Service Descriptor shares it rather than getting a dedicated connection of its
+own: MQTT allows exactly one last-will per connection, this connection's one
+slot is already spent clearing ``config.outputs.availability`` on ungraceful
+disconnect, and a second persistent connection was judged not worth it just to
+give the Descriptor the same crash-safety. The Descriptor is therefore cleared
+explicitly on graceful shutdown only; an ungraceful disconnect leaves it
+retained-but-stale until this process restarts and republishes it. See
+``mimirheim_shared/docs/adr/0005``.
+
+This module imports from ``mimirheim.io`` (parser, publisher, Config Service
+Descriptor content) and ``mimirheim.core`` (readiness, bundle types) but does
+not import from ``mimirheim.devices`` or call ``build_and_solve`` directly.
 """
 
 import logging
@@ -52,6 +65,8 @@ from mimirheim.io.input_parser import (
 )
 from mimirheim.io.mqtt_publisher import MqttPublisher
 from mimirheim.io.ha_discovery import publish_discovery
+from mimirheim.io import config_service
+from mimirheim_shared.config_service import CLEARING_PAYLOAD
 
 logger = logging.getLogger("mimirheim.mqtt")
 
@@ -119,6 +134,13 @@ class MqttClient:
         # _DEBOUNCE_SECONDS are deduplicated: only the first is acted on.
         self._last_trigger_at: float | None = None
 
+        # Config Service Descriptor topic and payload (see io.config_service
+        # and mimirheim_shared/docs/adr/0005). Computed once here since
+        # MimirheimConfig and its FormSpec do not change over the process
+        # lifetime.
+        self._config_service_topic = config_service.TOPIC
+        self._config_service_payload = config_service.payload_bytes()
+
         prefix = config.mqtt.topic_prefix
         self._trigger_topic = f"{prefix}/input/trigger"
 
@@ -126,6 +148,12 @@ class MqttClient:
         # lost without a clean DISCONNECT (e.g. power cut, kernel kill), the
         # broker will publish this payload automatically so downstream
         # subscribers see the device go offline.
+        #
+        # This is the connection's one and only last-will slot (MQTT permits
+        # exactly one per connection). The Config Service Descriptor
+        # deliberately does not get its own: it is published/cleared by plain
+        # publish() calls in _on_connect/stop() instead. See
+        # mimirheim_shared/docs/adr/0005.
         self._client.will_set(
             config.outputs.availability,
             payload="offline",
@@ -149,15 +177,27 @@ class MqttClient:
         self._client.loop_start()
 
     def stop(self) -> None:
-        """Publish offline, stop the network loop, and disconnect cleanly.
+        """Publish offline, clear the Config Service Descriptor, and disconnect cleanly.
 
         Publishing ``"offline"`` before disconnecting ensures the broker retains
         the correct availability state even when the shutdown is clean (the
         last-will is only triggered on unclean disconnects).
+
+        The Config Service Descriptor has no last-will of its own (see
+        __init__ and mimirheim_shared/docs/adr/0005), so it is only cleared
+        here, on a graceful shutdown. An ungraceful disconnect (crash) leaves
+        it retained-but-stale on the broker until this process restarts and
+        republishes it — a deliberate, disclosed trade-off, not a bug.
         """
         self._client.publish(
             self._config.outputs.availability,
             payload="offline",
+            qos=1,
+            retain=True,
+        )
+        self._client.publish(
+            self._config_service_topic,
+            payload=CLEARING_PAYLOAD,
             qos=1,
             retain=True,
         )
@@ -213,6 +253,16 @@ class MqttClient:
 
         publish_discovery(client, self._config)
         self._publisher.republish_last_result()
+
+        # Config Service Descriptor: retained, no last-will (see __init__ and
+        # mimirheim_shared/docs/adr/0005). Republished on every (re)connect so
+        # a Config Editor that connects later still sees it immediately.
+        client.publish(
+            self._config_service_topic,
+            payload=self._config_service_payload,
+            qos=1,
+            retain=True,
+        )
 
     def _on_message(self, client: Any, userdata: Any, message: Any) -> None:
         """Called by paho when an MQTT message arrives.

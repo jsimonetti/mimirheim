@@ -1,10 +1,11 @@
 """Integration test for the Config Service Descriptor round trip.
 
-Connects a real ConfigServiceClient to an in-process amqtt broker and
-confirms a second, independent client can read the retained Descriptor —
+Connects a real MqttClient (mimirheim core's one and only MQTT connection;
+see mimirheim_shared/docs/adr/0005) to an in-process amqtt broker and confirms
+a second, independent client can read the retained Descriptor it publishes —
 proving the retained publish (and topic naming) work end to end, not just
-against a faked paho client. See tests/unit/test_config_service.py for the
-faked-client unit coverage of last-will registration and payload content.
+against a faked paho client. See tests/unit/test_mqtt_client.py for the
+faked-client unit coverage of the Descriptor publish/clear behaviour.
 """
 
 import asyncio
@@ -16,8 +17,11 @@ import pytest
 pytestmark = pytest.mark.integration
 
 from mimirheim.config.schema import GridConfig, MimirheimConfig, MqttConfig
-from mimirheim.io.config_service import OWNER_ID, ConfigServiceClient
-from mimirheim_shared.config_service import Descriptor, descriptor_topic
+from mimirheim.core.readiness import ReadinessState
+from mimirheim.io.config_service import OWNER_ID, TOPIC
+from mimirheim.io.mqtt_client import MqttClient
+from mimirheim.io.mqtt_publisher import MqttPublisher
+from mimirheim_shared.config_service import Descriptor
 
 
 def _make_config(port: int) -> MimirheimConfig:
@@ -34,9 +38,11 @@ async def test_descriptor_is_retained_and_readable_by_a_second_client(mqtt_broke
 
     paho_client = paho.Client(
         paho.CallbackAPIVersion.VERSION2,
-        client_id=f"{config.mqtt.client_id}-config-service",
+        client_id=config.mqtt.client_id,
     )
-    client = ConfigServiceClient(config, paho_client)
+    readiness = ReadinessState(config)
+    publisher = MqttPublisher(paho_client, config)
+    mqtt_client = MqttClient(config, readiness, publisher, paho_client)
 
     probe = paho.Client(
         paho.CallbackAPIVersion.VERSION2,
@@ -56,17 +62,17 @@ async def test_descriptor_is_retained_and_readable_by_a_second_client(mqtt_broke
     probe.on_message = _on_probe_message
 
     try:
-        client.start()
+        mqtt_client.start()
         await asyncio.sleep(0.5)
 
         # Subscribing after the retained publish must still deliver it: that
         # is the whole point of retain=True for a Descriptor a Config Editor
         # may connect to well after mimirheim core has started.
-        probe.subscribe(descriptor_topic(OWNER_ID), qos=1)
+        probe.subscribe(TOPIC, qos=1)
 
         await asyncio.wait_for(received.wait(), timeout=10.0)
     finally:
-        client.stop()
+        mqtt_client.stop()
         probe.loop_stop()
         probe.disconnect()
 

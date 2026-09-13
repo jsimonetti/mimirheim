@@ -21,8 +21,10 @@ from mimirheim.config.schema import (
     SocTopicConfig,
 )
 from mimirheim.core.readiness import ReadinessState
+from mimirheim.io import config_service
 from mimirheim.io.input_parser import parse_price_steps
 from mimirheim.io.mqtt_client import MqttClient
+from mimirheim_shared.config_service import CLEARING_PAYLOAD
 
 
 def _seg() -> EfficiencySegment:
@@ -182,3 +184,64 @@ class TestFaultLogging:
         assert q.empty()
         assert "Traceback" in caplog.text
         assert "boom" in caplog.text
+
+
+class TestConfigServiceDescriptor:
+    """The Config Service Descriptor shares this connection; see mqtt_client.py's
+    module docstring and mimirheim_shared/docs/adr/0005. It gets no last-will of
+    its own — only the pre-existing availability last-will is registered.
+    """
+
+    def test_only_the_availability_last_will_is_registered(self) -> None:
+        config = _make_config()
+        readiness = MagicMock(spec=ReadinessState)
+        publisher = MagicMock()
+        paho_mock = MagicMock()
+
+        MqttClient(config, readiness, publisher, paho_mock)
+
+        paho_mock.will_set.assert_called_once_with(
+            config.outputs.availability, payload="offline", qos=1, retain=True
+        )
+
+    def _descriptor_publish_calls(self, paho_mock: MagicMock) -> list:
+        return [
+            call
+            for call in paho_mock.publish.call_args_list
+            if call.args[0] == config_service.TOPIC
+        ]
+
+    def test_descriptor_is_published_retained_on_successful_connect(self) -> None:
+        client = _make_mqtt_client()
+        reason_code = MagicMock()
+        reason_code.is_failure = False
+
+        client._on_connect(client._client, None, None, reason_code, None)
+
+        calls = self._descriptor_publish_calls(client._client)
+        assert len(calls) == 1
+        _, kwargs = calls[0]
+        assert kwargs["payload"] == config_service.payload_bytes()
+        assert kwargs["qos"] == 1
+        assert kwargs["retain"] is True
+
+    def test_descriptor_is_not_published_on_failed_connect(self) -> None:
+        client = _make_mqtt_client()
+        reason_code = MagicMock()
+        reason_code.is_failure = True
+
+        client._on_connect(client._client, None, None, reason_code, None)
+
+        assert self._descriptor_publish_calls(client._client) == []
+
+    def test_stop_clears_the_descriptor_with_an_empty_retained_publish(self) -> None:
+        client = _make_mqtt_client()
+
+        client.stop()
+
+        calls = self._descriptor_publish_calls(client._client)
+        assert len(calls) == 1
+        _, kwargs = calls[0]
+        assert kwargs["payload"] == CLEARING_PAYLOAD
+        assert kwargs["qos"] == 1
+        assert kwargs["retain"] is True
