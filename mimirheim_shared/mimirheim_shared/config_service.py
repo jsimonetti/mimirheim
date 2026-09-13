@@ -321,18 +321,48 @@ def _format_validation_error(error: dict[str, Any]) -> str:
     return f"{loc}: {error['msg']}" if loc else error["msg"]
 
 
+def coerced_submission(dumped: dict[str, Any], submitted: dict[str, Any]) -> dict[str, Any]:
+    """Restrict a validated model's dumped values to the keys actually submitted.
+
+    ``model.model_validate(merged)`` coerces types and applies defaults
+    across the whole merged configuration, but Candidate Values may be a
+    partial submission (see ``handle_validate_and_write``), so only the keys
+    present in ``submitted`` should be written back. Recurses into nested
+    dicts so a partial update to one field of a nested section pulls out
+    only that field, coerced, not the rest of the section.
+
+    Args:
+        dumped: ``model.model_dump(mode="json")`` of the validated, merged
+            configuration.
+        submitted: The Candidate Values as submitted, before validation.
+
+    Returns:
+        A dict shaped like ``submitted``, with each leaf replaced by its
+        validated/coerced counterpart from ``dumped``.
+    """
+    result: dict[str, Any] = {}
+    for key, value in submitted.items():
+        dumped_value = dumped.get(key)
+        if isinstance(value, dict) and isinstance(dumped_value, dict):
+            result[key] = coerced_submission(dumped_value, value)
+        else:
+            result[key] = dumped_value
+    return result
+
+
 def handle_validate_and_write(
     payload: bytes, config_path: Path, model: type[BaseModel]
 ) -> bytes:
     """Validate submitted Candidate Values against ``model`` and, only on success, write them.
 
-    This is the generic form of a Config Owner's ``validate_and_write`` step:
-    it is the same sequence mimirheim core's own
-    ``mimirheim.io.config_service.handle_validate_and_write`` performs for
-    ``MimirheimConfig``, parameterised so any Config Owner's validation model
-    can reuse it rather than reimplementing the sequence. It never touches an
-    MQTT client (see this module's own docstring); the caller publishes the
-    returned bytes to its ``validate_and_write`` response topic.
+    This is the generic form of a Config Owner's ``validate_and_write`` step,
+    parameterised so any Config Owner's validation model can reuse it rather
+    than reimplementing the sequence. Mimirheim core's own
+    ``mimirheim.io.config_service.handle_validate_and_write`` is a thin
+    wrapper around this function, parameterised with ``MimirheimConfig``. It
+    never touches an MQTT client (see this module's own docstring); the
+    caller publishes the returned bytes to its ``validate_and_write``
+    response topic.
 
     Parses ``payload`` as a ``ValidateAndWriteRequest``. Candidate Values may
     be a partial update (e.g. just one changed section), matching
@@ -342,8 +372,12 @@ def handle_validate_and_write(
     by itself would reject an update to one field of an otherwise-required
     nested section. On failure, returns a result carrying the validation
     errors and performs no write. On success, calls
-    ``write_yaml_preserving_comments`` to atomically overlay ``values`` onto
-    ``config_path`` and returns a success result.
+    ``write_yaml_preserving_comments`` to atomically overlay the *validated,
+    coerced* counterpart of ``values`` (via ``model.model_dump``) onto
+    ``config_path`` and returns a success result: this writes the type the
+    Config Owner's model actually stores (e.g. a float), not whatever
+    JSON-compatible value the Config Editor happened to submit (e.g. a
+    string).
 
     Args:
         payload: The raw MQTT message payload received on the Config Owner's
@@ -374,7 +408,7 @@ def handle_validate_and_write(
     overlay_values(merged, request.values)
 
     try:
-        model.model_validate(merged)
+        validated = model.model_validate(merged)
     except ValidationError as exc:
         result = ValidateAndWriteResult(
             request_id=request.request_id,
@@ -383,6 +417,7 @@ def handle_validate_and_write(
         )
         return validate_and_write_result_payload(result)
 
-    write_yaml_preserving_comments(config_path, request.values)
+    coerced_values = coerced_submission(validated.model_dump(mode="json"), request.values)
+    write_yaml_preserving_comments(config_path, coerced_values)
     result = ValidateAndWriteResult(request_id=request.request_id, success=True)
     return validate_and_write_result_payload(result)

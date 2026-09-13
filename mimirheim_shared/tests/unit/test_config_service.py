@@ -200,6 +200,32 @@ class TestHandleValidateAndWrite:
         result = ValidateAndWriteResult.model_validate_json(response)
         assert result == ValidateAndWriteResult(request_id="req-3", success=True)
 
+    def test_written_values_are_pydantic_coerced_not_the_raw_submission(
+        self, tmp_path: Path
+    ) -> None:
+        """A Config Editor submits JSON-compatible values (e.g. a string from
+        an HTML form field), not necessarily the type the model stores. The
+        write-through must use the model's coerced value, not the raw string,
+        or the on-disk YAML ends up with the wrong type."""
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text(FIXTURE_PATH.read_text())
+        request = ValidateAndWriteRequest(
+            request_id="req-4", values={"battery": {"capacity_kwh": "15.0"}}
+        )
+
+        response = handle_validate_and_write(
+            request.model_dump_json().encode("utf-8"), config_path, _ToyConfig
+        )
+
+        result = ValidateAndWriteResult.model_validate_json(response)
+        assert result == ValidateAndWriteResult(request_id="req-4", success=True)
+
+        yaml = YAML()
+        with config_path.open() as fh:
+            written = yaml.load(fh)
+        assert written["battery"]["capacity_kwh"] == 15.0
+        assert isinstance(written["battery"]["capacity_kwh"], float)
+
     def test_invalid_candidate_values_are_rejected_and_nothing_is_written(
         self, tmp_path: Path
     ) -> None:

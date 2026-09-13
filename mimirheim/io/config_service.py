@@ -14,15 +14,8 @@ never touches an MQTT client itself, matching
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
-import yaml
-from pydantic import ValidationError
-
-from mimirheim_shared.atomic_write import overlay_values, write_yaml_preserving_comments
 from mimirheim_shared.config_service import (
-    ValidateAndWriteRequest,
-    ValidateAndWriteResult,
     build_descriptor,
     descriptor_payload,
     descriptor_topic,
@@ -30,7 +23,9 @@ from mimirheim_shared.config_service import (
     get_current_values_response_topic,
     validate_and_write_request_topic,
     validate_and_write_response_topic,
-    validate_and_write_result_payload,
+)
+from mimirheim_shared.config_service import (
+    handle_validate_and_write as _shared_handle_validate_and_write,
 )
 
 from mimirheim.config.formspec import MIMIRHEIM_CONFIG_FORM_SPEC
@@ -76,33 +71,14 @@ def payload_bytes() -> bytes:
     )
 
 
-def _format_validation_error(error: dict[str, Any]) -> str:
-    """Render one pydantic error dict as a single human-readable line.
-
-    Args:
-        error: One entry of ``ValidationError.errors()``.
-
-    Returns:
-        ``"<dotted.field.path>: <message>"``, or just the message when the
-        error is not attached to a specific field (an empty ``loc``).
-    """
-    loc = ".".join(str(part) for part in error["loc"])
-    return f"{loc}: {error['msg']}" if loc else error["msg"]
-
-
 def handle_validate_and_write(payload: bytes, config_path: Path) -> bytes:
-    """Validate submitted Candidate Values and, only on success, write them to disk.
+    """Validate submitted Candidate Values against MimirheimConfig and, only on success, write them to disk.
 
-    Parses ``payload`` as a ``ValidateAndWriteRequest``. Candidate Values may
-    be a partial update (e.g. just one changed section), matching
-    ``write_yaml_preserving_comments``'s own overlay semantics (ticket 01), so
-    they are validated against the *merged* result of overlaying them onto
-    the current on-disk configuration, not in isolation: validating a partial
-    submission by itself would reject an update to one field of an
-    otherwise-required nested section. On failure, returns a result carrying
-    the validation errors and performs no write. On success, calls
-    ``write_yaml_preserving_comments`` to atomically overlay ``values`` onto
-    ``config_path`` and returns a success result.
+    Thin wrapper around
+    ``mimirheim_shared.config_service.handle_validate_and_write``,
+    parameterised with ``MimirheimConfig``: mimirheim core's own validation
+    model. See that function's docstring for the full validate-merge-write
+    sequence.
 
     Args:
         payload: The raw MQTT message payload received on ``REQUEST_TOPIC``.
@@ -114,30 +90,7 @@ def handle_validate_and_write(payload: bytes, config_path: Path) -> bytes:
 
     Raises:
         ValidationError: If ``payload`` is not a well-formed
-            ``ValidateAndWriteRequest`` envelope (as opposed to a
-            well-formed envelope carrying invalid Candidate Values, which is
-            reported in the returned result instead). The caller cannot
-            correlate a response to a request it could not parse, so this is
-            left to propagate rather than published.
+            ``ValidateAndWriteRequest`` envelope. See
+            ``mimirheim_shared.config_service.handle_validate_and_write``.
     """
-    request = ValidateAndWriteRequest.model_validate_json(payload)
-
-    current: dict[str, Any] = {}
-    if config_path.exists():
-        current = yaml.safe_load(config_path.read_text()) or {}
-    merged = dict(current)
-    overlay_values(merged, request.values)
-
-    try:
-        MimirheimConfig.model_validate(merged)
-    except ValidationError as exc:
-        result = ValidateAndWriteResult(
-            request_id=request.request_id,
-            success=False,
-            errors=[_format_validation_error(error) for error in exc.errors()],
-        )
-        return validate_and_write_result_payload(result)
-
-    write_yaml_preserving_comments(config_path, request.values)
-    result = ValidateAndWriteResult(request_id=request.request_id, success=True)
-    return validate_and_write_result_payload(result)
+    return _shared_handle_validate_and_write(payload, config_path, MimirheimConfig)

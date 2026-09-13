@@ -441,15 +441,10 @@ def test_e2e_editing_a_nested_named_collection_field_round_trips(
         assert "Saved" in body
         config_service_client.submit_validate_and_write.assert_called_once()
 
-        # handle_validate_and_write writes the raw submitted (string) values
-        # rather than the pydantic-coerced ones (see the follow-up note in
-        # this ticket's summary); float() here tolerates that, since this
-        # test's own concern is the nested edit/sibling-isolation mechanics,
-        # not that pre-existing write-path characteristic.
         written = yaml.safe_load(config_path.read_text())
-        assert float(written["batteries"]["battery_main"]["capacity_kwh"]) == 6.0
+        assert written["batteries"]["battery_main"]["capacity_kwh"] == 6.0
         # Sibling entry and unrelated top-level field survive untouched.
-        assert float(written["batteries"]["battery_sos2_example"]["capacity_kwh"]) == 10.0
+        assert written["batteries"]["battery_sos2_example"]["capacity_kwh"] == 10.0
         assert written["mqtt"]["host"] == "localhost"
         raw = config_path.read_text()
         assert "# usable capacity" in raw
