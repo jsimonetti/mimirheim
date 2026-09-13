@@ -126,7 +126,19 @@ dev = [
     # The floor stays at the version core pinned so the lock does not regress.
     "respx>=0.23.1",
     "jinja2>=3.0",
+    # mimirheim-shared is a genuinely separate distribution (own pyproject.toml,
+    # own version), not part of the mimirheim wheel. It is pulled in here only
+    # so its own test suite runs from the same `uv run pytest` invocation as
+    # everything else; mimirheim core does not declare it as a runtime
+    # dependency.
+    "mimirheim-shared",
 ]
+
+[tool.uv.workspace]
+members = ["mimirheim_shared"]
+
+[tool.uv.sources]
+mimirheim-shared = { workspace = true }
 
 [tool.ruff]
 # Tracks `requires-python` above, which is also what the container runs. Keep
@@ -172,6 +184,7 @@ testpaths = [
     "mimirheim_helpers/baseload/static/tests",
     "mimirheim_helpers/reporter/tests",
     "mimirheim_helpers/config_editor/tests",
+    "mimirheim_shared/tests",
 ]
 markers = [
     "integration: marks tests that require a live MQTT broker (run with -m integration)",

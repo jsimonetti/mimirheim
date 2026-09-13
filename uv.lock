@@ -7,6 +7,12 @@ resolution-markers = [
     "sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
+[manifest]
+members = [
+    "mimirheim",
+    "mimirheim-shared",
+]
+
 [[package]]
 name = "aiohappyeyeballs"
 version = "2.6.1"
@@ -651,6 +657,7 @@ dev = [
     { name = "amqtt" },
     { name = "freezegun" },
     { name = "jinja2" },
+    { name = "mimirheim-shared" },
     { name = "plotly" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -707,6 +714,7 @@ dev = [
     { name = "amqtt", specifier = ">=0.11" },
     { name = "freezegun", specifier = ">=1.4" },
     { name = "jinja2", specifier = ">=3.0" },
+    { name = "mimirheim-shared", editable = "mimirheim_shared" },
     { name = "plotly", specifier = ">=7.0.0" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-asyncio", specifier = ">=1.4.0" },
@@ -714,6 +722,29 @@ dev = [
     { name = "respx", specifier = ">=0.23.1" },
     { name = "ruff", specifier = ">=0.16.6" },
 ]
+
+[[package]]
+name = "mimirheim-shared"
+version = "0.1.0"
+source = { editable = "mimirheim_shared" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "ruamel-yaml" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.13.5" },
+    { name = "ruamel-yaml", specifier = ">=0.18" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.1.1" }]
 
 [[package]]
 name = "mip"

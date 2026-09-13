@@ -1,0 +1,6 @@
+# Top-level system configuration
+mqtt:
+  host: localhost  # broker address
+  port: 1883
+battery:
+  capacity_kwh: 10.0  # usable capacity
