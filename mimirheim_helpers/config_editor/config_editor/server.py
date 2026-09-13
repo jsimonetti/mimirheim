@@ -8,6 +8,7 @@ schema-to-form library):
 
     GET  /owners/<owner_id>   -- render one Config Owner's configuration
     POST /owners/<owner_id>   -- submit Candidate Values for validate_and_write
+    GET  /static/<path>       -- serve a vendored static asset (e.g. Bootstrap5)
 
 This module never imports a Config Owner's pydantic model, and never reads
 or writes any Config Owner's configuration file itself: it only ever
@@ -24,7 +25,10 @@ from __future__ import annotations
 
 import http.server
 import logging
+import mimetypes
+import os
 import urllib.parse
+from pathlib import Path
 from typing import Any, Protocol
 
 import jinja2
@@ -47,6 +51,39 @@ _TEMPLATES = jinja2.Environment(
 # describes; exposed as a Jinja global rather than duplicating the lookup in
 # the template itself.
 _TEMPLATES.globals["option_label"] = option_label
+
+# Vendored static assets (Bootstrap5's CSS/JS; see ADR-0003 -- no CDN, no
+# generic client-side form library). Bundled with this package so the editor
+# renders identically with no internet access.
+_STATIC_DIR = Path(__file__).parent / "static"
+# Only these extensions are served from the static directory; e.g. the
+# vendored Bootstrap LICENSE file is deliberately not servable.
+_ALLOWED_STATIC_EXTENSIONS = {".css", ".js", ".html"}
+
+
+def _safe_join(base: Path, filename: str) -> Path | None:
+    """Resolves `filename` relative to `base` and verifies containment.
+
+    Joins `filename` onto the resolved `base` directory, normalises the
+    result, and confirms that the final path still starts with `base`. This
+    prevents path traversal regardless of how many `..` segments or other
+    tricks are embedded in `filename`.
+
+    The `os.sep` suffix on the prefix check avoids a false pass when a
+    sibling directory shares the same prefix (e.g. `/data` vs `/data2`).
+
+    Args:
+        base: The directory that the result must stay inside.
+        filename: A filename taken from an HTTP request path.
+
+    Returns:
+        Resolved `Path` inside `base`, or `None` if validation fails.
+    """
+    base_path = os.path.realpath(str(base))
+    fullpath = os.path.normpath(os.path.join(base_path, filename))
+    if not fullpath.startswith(base_path + os.sep):
+        return None
+    return Path(fullpath)
 
 
 class ConfigServiceClient(Protocol):
@@ -199,8 +236,17 @@ class ConfigEditorServer:
 
         path = path.split("?")[0]
 
+        # Fast rejection of obvious path traversal attempts before routing.
+        # _safe_join performs the authoritative containment check downstream,
+        # but catching these early avoids unnecessary routing work and makes
+        # the intent clear to static analysis tools.
+        if ".." in path or "\x00" in path:
+            return self._html_response(403, "<h1>Forbidden</h1>")
+
         if method == "GET" and path == "/":
             return self._render_index()
+        if method == "GET" and path.startswith("/static/"):
+            return self._serve_static(path[len("/static/") :])
         if method == "GET" and path.startswith("/owners/"):
             owner_id = urllib.parse.unquote(path[len("/owners/") :])
             return self._render_owner(owner_id)
@@ -266,6 +312,34 @@ class ConfigEditorServer:
             success=success,
         )
         return self._html_response(200, html)
+
+    def _serve_static(self, relative_path: str) -> tuple[int, dict[str, str], bytes]:
+        """Serves a vendored static asset (e.g. Bootstrap5's CSS/JS) with path traversal protection.
+
+        Only files with an allowed extension (`.css`, `.js`, `.html`) are
+        served; every other extension, and any path that resolves outside
+        `_STATIC_DIR`, is rejected with 403.
+
+        Args:
+            relative_path: The request path with the `/static/` prefix
+                already stripped, e.g. `vendor/bootstrap/bootstrap.min.css`.
+
+        Returns:
+            A three-tuple of (status, headers, body).
+        """
+        suffix = Path(relative_path).suffix
+        if suffix not in _ALLOWED_STATIC_EXTENSIONS:
+            return self._html_response(403, "<h1>Forbidden</h1>")
+
+        resolved = _safe_join(_STATIC_DIR, relative_path)
+        if resolved is None:
+            return self._html_response(403, "<h1>Forbidden</h1>")
+
+        if not resolved.exists():
+            return self._html_response(404, "<h1>Not found</h1>")
+
+        content_type = mimetypes.types_map.get(suffix, "application/octet-stream")
+        return 200, {"Content-Type": content_type}, resolved.read_bytes()
 
     @staticmethod
     def _html_response(status: int, html: str) -> tuple[int, dict[str, str], bytes]:

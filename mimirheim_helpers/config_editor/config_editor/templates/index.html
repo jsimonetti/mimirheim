@@ -1,19 +1,28 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-bs-theme="light">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mimirheim Config Editor</title>
+  <link href="/static/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
 </head>
 <body>
-  <h1>Config Owners</h1>
-  {% if owners %}
-  <ul id="owner-list">
-    {% for owner in owners %}
-    <li><a href="/owners/{{ owner.owner_id }}">{{ owner.display_name }}</a></li>
-    {% endfor %}
-  </ul>
-  {% else %}
-  <p>No Config Owners discovered yet.</p>
-  {% endif %}
+  <nav class="navbar navbar-expand navbar-dark bg-dark mb-4">
+    <div class="container">
+      <span class="navbar-brand mb-0 h1">Mimirheim Config Editor</span>
+    </div>
+  </nav>
+  <main class="container pb-5">
+    <h1 class="h3 mb-3">Config Owners</h1>
+    {% if owners %}
+    <div class="list-group" id="owner-list">
+      {% for owner in owners %}
+      <a href="/owners/{{ owner.owner_id }}" class="list-group-item list-group-item-action">{{ owner.display_name }}</a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-muted">No Config Owners discovered yet.</p>
+    {% endif %}
+  </main>
 </body>
 </html>

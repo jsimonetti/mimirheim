@@ -273,7 +273,7 @@ def test_presence_toggle_renders_a_disabled_hidden_fieldset_when_currently_absen
     assert 'data-presence-toggle' in body
     assert 'name="balanced_weights"' in body
     assert "checked" not in body.split("data-presence-toggle", 1)[1].split(">", 1)[0]
-    assert "<fieldset hidden disabled>" in body
+    assert "hidden disabled>" in body
 
 
 def test_presence_toggle_renders_an_enabled_visible_fieldset_when_currently_present(
@@ -287,7 +287,7 @@ def test_presence_toggle_renders_an_enabled_visible_fieldset_when_currently_pres
     status, body = _get(server, "/owners/owner-with-optional")
 
     assert status == 200
-    assert "<fieldset hidden disabled>" not in body
+    assert "hidden disabled>" not in body
     assert 'name="balanced_weights.cost_weight"' in body
 
 
@@ -504,3 +504,78 @@ def test_client_ip_omitted_is_not_restricted(server_with_allowed_ip: ConfigEdito
     the restriction only applies once the real HTTP layer supplies a client_ip."""
     status, _headers, _body = server_with_allowed_ip.handle_request("GET", "/", body=b"")
     assert status == 200
+
+
+# ---------------------------------------------------------------------------
+# Static asset serving (vendored Bootstrap5)
+# ---------------------------------------------------------------------------
+
+
+def test_static_asset_served_for_real_vendored_file(server: ConfigEditorServer) -> None:
+    status, headers, body = server.handle_request(
+        "GET", "/static/vendor/bootstrap/bootstrap.min.css", body=b""
+    )
+
+    assert status == 200
+    assert headers["Content-Type"] == "text/css"
+    assert len(body) > 1000
+
+
+def test_static_asset_path_traversal_is_rejected(server: ConfigEditorServer) -> None:
+    status, _headers, _body = server.handle_request(
+        "GET", "/static/../config.py", body=b""
+    )
+
+    assert status in (403, 404)
+
+
+def test_static_asset_disallowed_extension_is_rejected(server: ConfigEditorServer) -> None:
+    """LICENSE is a real vendored file, but has no allowed extension."""
+    status, _headers, _body = server.handle_request(
+        "GET", "/static/vendor/bootstrap/LICENSE", body=b""
+    )
+
+    assert status == 403
+
+
+def test_static_asset_missing_file_returns_404(server: ConfigEditorServer) -> None:
+    status, _headers, _body = server.handle_request(
+        "GET", "/static/vendor/bootstrap/does-not-exist.css", body=b""
+    )
+
+    assert status == 404
+
+
+def test_index_page_references_vendored_bootstrap_css_and_uses_bootstrap_classes(
+    server: ConfigEditorServer,
+) -> None:
+    status, body = _get(server, "/")
+
+    assert status == 200
+    assert '/static/vendor/bootstrap/bootstrap.min.css' in body
+    assert "navbar" in body
+
+
+def test_owner_page_references_vendored_bootstrap_assets_and_uses_bootstrap_classes(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    _register_nordpool(registry)
+
+    status, body = _get(server, "/owners/nordpool")
+
+    assert status == 200
+    assert '/static/vendor/bootstrap/bootstrap.min.css' in body
+    assert "form-control" in body
+    assert "btn btn-primary" in body
+
+
+def test_no_page_loads_assets_from_a_network_location(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    """Every asset a page references must be vendored, not fetched from a CDN."""
+    _register_nordpool(registry)
+
+    for path in ("/", "/owners/nordpool"):
+        _status, body = _get(server, path)
+        assert "https://" not in body
+        assert "http://" not in body
