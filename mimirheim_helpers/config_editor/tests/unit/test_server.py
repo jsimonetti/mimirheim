@@ -749,6 +749,143 @@ def test_owner_page_with_one_tab_and_one_subtab_renders_no_nav_at_all(
     assert 'ul class="nav' not in body
 
 
+def _register_single_tab_owner(registry: ConfigOwnerRegistry) -> None:
+    registry.update(
+        Descriptor(
+            owner_id="single-tab-owner",
+            display_name="Single tab owner",
+            json_schema={"properties": {}},
+            form_spec=FormSpec(fields={"area": FieldSpec(label="Price area", description="Bidding area.")}),
+        )
+    )
+
+
+def _register_multi_tab_owner(registry: ConfigOwnerRegistry) -> None:
+    registry.update(
+        Descriptor(
+            owner_id="multi-tab-owner",
+            display_name="Multi tab owner",
+            json_schema={"properties": {}},
+            form_spec=FormSpec(
+                fields={
+                    "host": FieldSpec(label="Host", description="Broker host.", tab="MQTT"),
+                    "batteries": FieldSpec(label="Batteries", description="Battery devices.", tab="Devices"),
+                }
+            ),
+        )
+    )
+
+
+def test_owner_page_header_holds_back_link_title_and_stays_pinned(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    _register_single_tab_owner(registry)
+
+    status, body = _get(server, "/owners/single-tab-owner")
+
+    assert status == 200
+    assert "<header" in body and "</header>" in body
+    header = body[body.index("<header") : body.index("</header>")]
+    assert "sticky-top" in header.split(">", 1)[0]
+    assert "Back to Config Owners" in header
+    assert "Single tab owner" in header
+
+
+def test_owner_page_action_bar_has_enabled_save_and_four_disabled_placeholders(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    _register_single_tab_owner(registry)
+
+    status, body = _get(server, "/owners/single-tab-owner")
+
+    assert status == 200
+    header = body[body.index("<header") : body.index("</header>")]
+    assert '<button type="submit" form="owner-form" class="btn btn-primary">Save</button>' in header
+    for label in ("Diff", "Validate", "Commit", "Restart"):
+        assert (
+            f'<button type="button" class="btn btn-outline-secondary" disabled '
+            f'title="Not yet implemented">{label}</button>' in header
+        )
+
+
+def test_owner_page_top_level_tab_nav_is_pinned_inside_header_not_its_content(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    _register_multi_tab_owner(registry)
+
+    status, body = _get(server, "/owners/multi-tab-owner")
+
+    assert status == 200
+    header = body[body.index("<header") : body.index("</header>")]
+    after_header = body[body.index("</header>") :]
+    assert ">MQTT<" in header
+    assert ">Devices<" in header
+    # The tab nav's own content (the fields) scrolls beneath the header, not inside it.
+    assert "Host" not in header
+    assert "Batteries" not in header
+    assert "Host" in after_header
+    assert "Batteries" in after_header
+
+
+def test_owner_page_subtab_nav_and_fields_scroll_beneath_the_header(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    registry.update(
+        Descriptor(
+            owner_id="subtab-owner",
+            display_name="Subtab owner",
+            json_schema={"properties": {}},
+            form_spec=FormSpec(
+                fields={
+                    "battery_capacity": FieldSpec(
+                        label="Battery capacity", description="kWh.", tab="Devices", subtab="Battery"
+                    ),
+                    "ev_capacity": FieldSpec(
+                        label="EV capacity", description="kWh.", tab="Devices", subtab="EV"
+                    ),
+                }
+            ),
+        )
+    )
+
+    status, body = _get(server, "/owners/subtab-owner")
+
+    assert status == 200
+    after_header = body[body.index("</header>") :]
+    assert ">Battery<" in after_header
+    assert ">EV<" in after_header
+    assert "Battery capacity" in after_header
+    assert "EV capacity" in after_header
+
+
+def test_owner_page_save_button_also_remains_at_the_bottom_of_the_form(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    _register_single_tab_owner(registry)
+
+    status, body = _get(server, "/owners/single-tab-owner")
+
+    assert status == 200
+    assert body.count(">Save</button>") == 2
+    after_header = body[body.index("</header>") :]
+    assert ">Save</button>" in after_header
+
+
+def test_owner_page_clicking_tab_toggle_javascript_still_targets_the_relocated_content(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    """The top-level nav now lives in <header> while its tab-content sits after
+    it in the DOM, no longer as siblings, so the click handler must resolve the
+    content by id rather than by nextElementSibling."""
+    _register_multi_tab_owner(registry)
+
+    status, body = _get(server, "/owners/multi-tab-owner")
+
+    assert status == 200
+    assert "data-tab-content-ref" in body
+    assert 'id="top-level-tab-content"' in body
+
+
 def _register_nordpool(registry: ConfigOwnerRegistry) -> None:
     registry.update(
         Descriptor(

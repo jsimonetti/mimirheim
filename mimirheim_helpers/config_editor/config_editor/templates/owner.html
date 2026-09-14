@@ -16,18 +16,6 @@
     </div>
   </nav>
   <main class="container pb-5">
-    <p><a href="/">&laquo; Back to Config Owners</a></p>
-    <h1 class="h3 mb-3">{{ descriptor.display_name }}</h1>
-
-    {% if success %}<div class="alert alert-success">Saved.</div>{% endif %}
-    {% if errors %}
-    <div class="alert alert-danger">
-      <ul class="mb-0">
-        {% for error in errors %}<li>{{ error }}</li>{% endfor %}
-      </ul>
-    </div>
-    {% endif %}
-
     {# Two-level Tab/Subtab nav (ticket 04), orthogonal to the flat `group`
        headings render_groups already renders within whichever pane a field
        lands in. A Tab/Subtab nav is only rendered when there is more than
@@ -36,12 +24,19 @@
        identically to pre-ticket-04 behavior. No Bootstrap JS is vendored
        (see the comment on the script below), so switching panes uses the
        same minimal-vanilla-JS allowance as the Presence Toggle: a nav's
-       buttons and its sibling `data-tab-content` panes are matched purely by
-       list position, not by id, so the one script below drives both the Tab
-       and the Subtab level with no per-instance wiring. #}
-    {% macro render_tabs(tabs) %}
+       buttons and its `data-tab-content` panes are matched purely by list
+       position, not by id, so the one script below drives both the Tab and
+       the Subtab level with no per-instance wiring.
+
+       The top-level Tab nav (render_tab_nav) is split out from its own
+       content (render_tab_content, ticket 05) so the nav can be pinned
+       inside the fixed header below while its panes scroll beneath it; the
+       nav therefore carries an explicit data-tab-content-ref id rather than
+       relying on the content being its next sibling, unlike the Subtab
+       level, which stays adjacent and keeps using that sibling lookup. #}
+    {% macro render_tab_nav(tabs) %}
       {% if tabs|length > 1 %}
-      <ul class="nav nav-tabs mb-3" data-tab-nav role="tablist">
+      <ul class="nav nav-tabs" data-tab-nav data-tab-content-ref="top-level-tab-content" role="tablist">
         {% for tab in tabs %}
         <li class="nav-item" role="presentation">
           <button class="nav-link{% if loop.first %} active{% endif %}" type="button" data-tab-toggle>{{ tab.label }}</button>
@@ -49,7 +44,10 @@
         {% endfor %}
       </ul>
       {% endif %}
-      <div class="tab-content" data-tab-content>
+    {% endmacro %}
+
+    {% macro render_tab_content(tabs) %}
+      <div class="tab-content" data-tab-content id="top-level-tab-content">
         {% for tab in tabs %}
         <div class="tab-pane{% if loop.first or tabs|length == 1 %} active{% else %} d-none{% endif %}" data-tab-pane>
           {{ render_subtabs(tab) }}
@@ -200,8 +198,37 @@
     {% endif %}
     {% endmacro %}
 
-    <form method="post" action="/owners/{{ descriptor.owner_id }}">
-      {{ render_tabs(tabs) }}
+    {# Fixed header (ticket 05): back link, Owner title, action bar, and the
+       top-level Tab nav all stay pinned via `sticky-top` while the Subtab
+       nav (rendered by render_subtabs, part of render_tab_content below) and
+       every field scroll normally beneath it. The header sits outside
+       <form>, so its Save button targets the form by id (the `form`
+       attribute) rather than nesting the whole scrollable body inside the
+       pinned element. #}
+    <header class="config-editor-header sticky-top bg-body border-bottom pb-3 mb-3">
+      <p class="mb-2"><a href="/">&laquo; Back to Config Owners</a></p>
+      <h1 class="h3 mb-3">{{ descriptor.display_name }}</h1>
+      <div class="action-bar d-flex flex-wrap gap-2 mb-3">
+        <button type="submit" form="owner-form" class="btn btn-primary">Save</button>
+        <button type="button" class="btn btn-outline-secondary" disabled title="Not yet implemented">Diff</button>
+        <button type="button" class="btn btn-outline-secondary" disabled title="Not yet implemented">Validate</button>
+        <button type="button" class="btn btn-outline-secondary" disabled title="Not yet implemented">Commit</button>
+        <button type="button" class="btn btn-outline-secondary" disabled title="Not yet implemented">Restart</button>
+      </div>
+      {{ render_tab_nav(tabs) }}
+    </header>
+
+    {% if success %}<div class="alert alert-success">Saved.</div>{% endif %}
+    {% if errors %}
+    <div class="alert alert-danger">
+      <ul class="mb-0">
+        {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <form id="owner-form" method="post" action="/owners/{{ descriptor.owner_id }}">
+      {{ render_tab_content(tabs) }}
       <button type="submit" class="btn btn-primary">Save</button>
     </form>
   </main>
@@ -226,7 +253,11 @@
       var toggle = event.target.closest("[data-tab-toggle]");
       if (!toggle) return;
       var nav = toggle.closest("[data-tab-nav]");
-      var content = nav.nextElementSibling;
+      // The top-level nav's content lives in <header>'s sibling further down
+      // the page (ticket 05), not immediately after the nav itself, so it is
+      // looked up by id; the Subtab nav's content is still its next sibling.
+      var contentRef = nav.getAttribute("data-tab-content-ref");
+      var content = contentRef ? document.getElementById(contentRef) : nav.nextElementSibling;
       var buttons = nav.querySelectorAll("[data-tab-toggle]");
       var panes = content.querySelectorAll(":scope > [data-tab-pane]");
       var index = Array.prototype.indexOf.call(buttons, toggle);
