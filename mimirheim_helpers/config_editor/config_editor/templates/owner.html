@@ -115,10 +115,12 @@
          (collections.js's rename handler rewrites every one of the entry's
          own descendant name/id/for attributes when it changes); an Ordered
          Collection entry keeps its static "#N" legend instead, since
-         position -- not name -- identifies it, and reorder controls are a
-         later ticket (07). Both shapes get a Remove control. #}
+         position -- not name -- identifies it, and gets Move up/down
+         controls instead (ticket 07) that swap its index prefix -- and its
+         "#N" legend text -- with an adjacent sibling's. Both shapes get a
+         Remove control. #}
       <fieldset class="collection-entry card p-3 mb-3" data-entry="{{ entry.key }}">
-        <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+        <div class="d-flex justify-content-between align-items-start gap-2 mb-2" data-entry-header>
           {% if field.spec.shape == "named_collection" %}
           <div class="flex-grow-1">
             <label class="form-label fw-semibold h6 mb-1" for="entry-name-{{ field.name }}.{{ entry.key }}">Name</label>
@@ -128,7 +130,15 @@
           {% else %}
           <legend class="fw-semibold h6 mb-0">{{ entry.label }}</legend>
           {% endif %}
-          <button type="button" class="btn btn-outline-danger btn-sm flex-shrink-0" data-remove-entry>Remove</button>
+          <div class="d-flex gap-2 flex-shrink-0">
+            {% if field.spec.shape == "ordered_collection" %}
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-move-entry="up"
+                    data-collection-name="{{ field.name }}" aria-label="Move entry up">&uarr;</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-move-entry="down"
+                    data-collection-name="{{ field.name }}" aria-label="Move entry down">&darr;</button>
+            {% endif %}
+            <button type="button" class="btn btn-outline-danger btn-sm" data-remove-entry>Remove</button>
+          </div>
         </div>
         {{ render_groups(entry.groups) }}
       </fieldset>
@@ -301,9 +311,10 @@
      disclosure stays a plain <details>/<summary> element, which needs none,
      the Tab/Subtab nav below (ticket 04) is switched by plain
      position-matching rather than Bootstrap's own JS tab component, and the
-     collection Add/Remove/rename handlers below (ticket 06) drive the
-     Remove confirmation modal's classes directly rather than loading
-     Bootstrap's JS modal component for just this one control. #}
+     collection Add/Remove/rename (ticket 06) and Move up/down (ticket 07)
+     handlers below drive the Remove confirmation modal's classes and the
+     entries container's DOM order directly rather than loading Bootstrap's
+     JS modal component or a drag-and-drop library. #}
   <script>
     document.addEventListener("change", function (event) {
       if (!event.target.matches("input[data-presence-toggle]")) return;
@@ -483,6 +494,48 @@
 
       entryFieldset.setAttribute("data-entry", newKey);
       rewriteEntryPrefix(entryFieldset, collectionName + "." + oldKey, collectionName + "." + newKey);
+    });
+
+    // --- Ordered Collection reorder (ticket 07) -----------------------------
+    //
+    // parse_submission (submission.py) reconstructs an Ordered Collection's
+    // list order purely by sorting its entries' index values -- it never
+    // looks at DOM order -- so moving an entry only needs to swap its index
+    // prefix (and matching "#N" legend text) with the adjacent sibling it is
+    // passing, not renumber every entry in the collection. Named Collection
+    // entries never get Move controls (see render_collection_entry), so this
+    // handler only ever runs for an Ordered Collection.
+    function swapEntryIndices(entryA, entryB, collectionName) {
+      var indexA = entryA.getAttribute("data-entry");
+      var indexB = entryB.getAttribute("data-entry");
+
+      rewriteEntryPrefix(entryA, collectionName + "." + indexA, collectionName + "." + indexB);
+      entryA.setAttribute("data-entry", indexB);
+      var legendA = entryA.querySelector(":scope > [data-entry-header] > legend");
+      if (legendA) legendA.textContent = "#" + (parseInt(indexB, 10) + 1);
+
+      rewriteEntryPrefix(entryB, collectionName + "." + indexB, collectionName + "." + indexA);
+      entryB.setAttribute("data-entry", indexA);
+      var legendB = entryB.querySelector(":scope > [data-entry-header] > legend");
+      if (legendB) legendB.textContent = "#" + (parseInt(indexA, 10) + 1);
+    }
+
+    document.addEventListener("click", function (event) {
+      var moveButton = event.target.closest("[data-move-entry]");
+      if (!moveButton) return;
+
+      var entryFieldset = moveButton.closest("[data-entry]");
+      var direction = moveButton.getAttribute("data-move-entry");
+      var adjacent = direction === "up" ? entryFieldset.previousElementSibling : entryFieldset.nextElementSibling;
+      // No-op at either end of the list: there is no sibling to swap with.
+      if (!adjacent || !adjacent.hasAttribute("data-entry")) return;
+
+      swapEntryIndices(entryFieldset, adjacent, moveButton.getAttribute("data-collection-name"));
+      if (direction === "up") {
+        entryFieldset.parentElement.insertBefore(entryFieldset, adjacent);
+      } else {
+        entryFieldset.parentElement.insertBefore(adjacent, entryFieldset);
+      }
     });
   </script>
 </body>

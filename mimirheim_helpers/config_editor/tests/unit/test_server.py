@@ -659,9 +659,13 @@ def test_named_collection_renders_add_remove_and_rename_scaffolding(
     assert '<template data-entry-template>' in body
     assert 'data-remove-entry' in body
     # A Named Collection entry's identifying field is a rename input, not a
-    # static label: position carries no meaning for it (ADR-0008).
+    # static label: position carries no meaning for it (ADR-0008), and it
+    # never gets reorder controls either (ticket 07), for the same reason.
+    # (The shared <script> block always mentions the data-move-entry
+    # selector string, so scope that check to the form markup preceding it.)
     assert 'data-entry-name-input' in body
     assert 'value="battery_main"' in body
+    assert 'data-move-entry' not in body.split("<script>", 1)[0]
 
 
 def _register_ordered_collection_owner(
@@ -708,13 +712,15 @@ def test_ordered_collection_renders_add_and_remove_scaffolding_but_no_rename_inp
     assert '<template data-entry-template>' in body
     assert 'data-remove-entry' in body
     # An Ordered Collection entry is position-identified: no rename input,
-    # and it keeps its static "#N" legend. Reorder controls are ticket 07,
-    # not this one. (The shared <script> block always mentions the
-    # data-entry-name-input selector string, so scope the check to the form
-    # markup preceding it.)
+    # it keeps its static "#N" legend, and it gets Move up/down controls
+    # (ticket 07) instead of a rename input. (The shared <script> block
+    # always mentions the data-entry-name-input selector string, so scope
+    # the check to the form markup preceding it.)
     form_markup = body.split("<script>", 1)[0]
     assert 'data-entry-name-input' not in form_markup
     assert '>#1<' in body
+    assert 'data-move-entry="up"' in body
+    assert 'data-move-entry="down"' in body
 
 
 def test_suggested_value_is_not_rendered_for_optional_object_field(
@@ -1257,6 +1263,72 @@ def test_e2e_ordered_collection_with_a_different_entry_count_round_trips(
         assert len(segments) == 2
         assert segments[0]["power_max_kw"] == 2.5
         assert segments[1] == {"power_max_kw": 1.0, "efficiency": 0.8}
+    finally:
+        server._httpd.server_close()
+
+
+def test_e2e_reordered_ordered_collection_round_trips(registry: ConfigOwnerRegistry, tmp_path: Path) -> None:
+    """Ticket 07's own end-to-end criterion: submitting an Ordered Collection
+    with its entries' index prefixes swapped -- exactly what the Move
+    up/down controls' pairwise index swap (owner.html's swapEntryIndices)
+    would produce, given parse_submission (submission.py) reconstructs list
+    order purely by sorting index values -- writes the new order to the
+    on-disk file."""
+    from mimirheim.config.schema import MimirheimConfig
+    from mimirheim.io import config_service as core_config_service
+
+    config_path = tmp_path / "mimirheim.yaml"
+    config_path.write_text(_BATTERIES_FIXTURE_PATH.read_text())
+
+    descriptor = Descriptor.model_validate_json(core_config_service.payload_bytes())
+    registry.update(descriptor)
+
+    config_service_client = MagicMock()
+    config_service_client.get_current_values.side_effect = lambda owner_id, timeout=10.0: (
+        yaml.safe_load(config_path.read_text()) or {}
+    )
+
+    def _submit(owner_id: str, values: dict, timeout: float = 10.0) -> ValidateAndWriteResult:
+        request = ValidateAndWriteRequest(request_id="req-1", values=values)
+        response = handle_validate_and_write(
+            request.model_dump_json().encode("utf-8"), config_path, MimirheimConfig
+        )
+        return ValidateAndWriteResult.model_validate_json(response)
+
+    config_service_client.submit_validate_and_write.side_effect = _submit
+
+    server = ConfigEditorServer(registry, config_service_client)
+    try:
+        current_values = config_service_client.get_current_values("mimirheim-core")
+        form = _flatten_leaf_values(build_groups(descriptor, values=current_values))
+
+        # battery_main starts with a single charge segment at index 0. Add a
+        # second, as the Add control would, then swap the two entries'
+        # index prefixes, as the Move up/down controls would.
+        form["batteries.battery_main.charge_segments.1.power_max_kw"] = "1.0"
+        form["batteries.battery_main.charge_segments.1.efficiency"] = "0.8"
+        for name in list(form):
+            if name.startswith("batteries.battery_main.charge_segments.0."):
+                form[name.replace(".charge_segments.0.", ".charge_segments.9.", 1)] = form.pop(name)
+        for name in list(form):
+            if name.startswith("batteries.battery_main.charge_segments.1."):
+                form[name.replace(".charge_segments.1.", ".charge_segments.0.", 1)] = form.pop(name)
+        for name in list(form):
+            if name.startswith("batteries.battery_main.charge_segments.9."):
+                form[name.replace(".charge_segments.9.", ".charge_segments.1.", 1)] = form.pop(name)
+
+        status, body = _post(server, "/owners/mimirheim-core", form)
+
+        assert status == 200
+        assert "Saved" in body
+
+        written = yaml.safe_load(config_path.read_text())
+        segments = written["batteries"]["battery_main"]["charge_segments"]
+        assert len(segments) == 2
+        # The added entry (originally at index 1) now sorts first; the
+        # original on-disk entry (originally at index 0) now sorts second.
+        assert segments[0] == {"power_max_kw": 1.0, "efficiency": 0.8}
+        assert segments[1]["power_max_kw"] == 2.5
     finally:
         server._httpd.server_close()
 
