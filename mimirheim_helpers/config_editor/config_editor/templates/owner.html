@@ -1,15 +1,18 @@
+{% import "_theme_toggle.html" as theme_toggle %}
 <!DOCTYPE html>
-<html lang="en" data-bs-theme="light">
+<html lang="en"{% if theme %} data-bs-theme="{{ theme }}"{% endif %}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ descriptor.display_name }} configuration</title>
   <link href="/static/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/static/theme.css" rel="stylesheet">
 </head>
 <body>
   <nav class="navbar navbar-expand navbar-dark bg-dark mb-4">
-    <div class="container">
+    <div class="container d-flex justify-content-between align-items-center">
       <a class="navbar-brand mb-0 h1" href="/">Mimirheim Config Editor</a>
+      {{ theme_toggle.render(theme, current_path) }}
     </div>
   </nav>
   <main class="container pb-5">

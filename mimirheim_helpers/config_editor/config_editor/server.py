@@ -9,6 +9,7 @@ schema-to-form library):
     GET  /owners/<owner_id>   -- render one Config Owner's configuration
     POST /owners/<owner_id>   -- submit Candidate Values for validate_and_write
     GET  /static/<path>       -- serve a vendored static asset (e.g. Bootstrap5)
+    GET  /theme/<dark|light>  -- record the visitor's theme choice in a cookie
 
 This module never imports a Config Owner's pydantic model, and never reads
 or writes any Config Owner's configuration file itself: it only ever
@@ -23,6 +24,7 @@ that touches MQTT.
 
 from __future__ import annotations
 
+import http.cookies
 import http.server
 import logging
 import mimetypes
@@ -59,6 +61,32 @@ _STATIC_DIR = Path(__file__).parent / "static"
 # Only these extensions are served from the static directory; e.g. the
 # vendored Bootstrap LICENSE file is deliberately not servable.
 _ALLOWED_STATIC_EXTENSIONS = {".css", ".js", ".html"}
+
+# The two theme names a visitor can pick via the toggle control and record in
+# the "theme" cookie. Any other cookie value (stale, tampered, or from a
+# future version) is treated the same as no cookie at all.
+_VALID_THEMES = {"dark", "light"}
+
+
+def _theme_from_cookie(cookie_header: str | None) -> str | None:
+    """Extracts the "theme" cookie's value, if present and recognised.
+
+    Args:
+        cookie_header: The raw `Cookie` request header, or None if absent.
+
+    Returns:
+        "dark" or "light" if that is what the cookie carries, otherwise None
+        (no cookie, no "theme" entry, or an unrecognised value) -- meaning
+        the page should fall back to the OS/browser color-scheme preference.
+    """
+    if not cookie_header:
+        return None
+    cookies: http.cookies.SimpleCookie = http.cookies.SimpleCookie()
+    cookies.load(cookie_header)
+    morsel = cookies.get("theme")
+    if morsel is None or morsel.value not in _VALID_THEMES:
+        return None
+    return morsel.value
 
 
 def _safe_join(base: Path, filename: str) -> Path | None:
@@ -166,7 +194,11 @@ class ConfigEditorServer:
         class _Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802
                 status, headers, body = server_self.handle_request(
-                    "GET", self.path, body=b"", client_ip=self.client_address[0]
+                    "GET",
+                    self.path,
+                    body=b"",
+                    client_ip=self.client_address[0],
+                    cookie=self.headers.get("Cookie"),
                 )
                 self._send(status, headers, body)
 
@@ -174,7 +206,11 @@ class ConfigEditorServer:
                 length = int(self.headers.get("Content-Length", 0))
                 request_body = self.rfile.read(length) if length else b""
                 status, headers, body = server_self.handle_request(
-                    "POST", self.path, body=request_body, client_ip=self.client_address[0]
+                    "POST",
+                    self.path,
+                    body=request_body,
+                    client_ip=self.client_address[0],
+                    cookie=self.headers.get("Cookie"),
                 )
                 self._send(status, headers, body)
 
@@ -209,7 +245,12 @@ class ConfigEditorServer:
     # ------------------------------------------------------------------
 
     def handle_request(
-        self, method: str, path: str, body: bytes, client_ip: str | None = None
+        self,
+        method: str,
+        path: str,
+        body: bytes,
+        client_ip: str | None = None,
+        cookie: str | None = None,
     ) -> tuple[int, dict[str, str], bytes]:
         """Dispatches a request and returns (status_code, headers, body_bytes).
 
@@ -218,7 +259,9 @@ class ConfigEditorServer:
 
         Args:
             method: HTTP method. "GET" and "POST" are supported.
-            path: Request path, possibly with a query string (ignored).
+            path: Request path, optionally with a query string. The query
+                string is ignored by every route except `/theme/<name>`,
+                which reads a `next` parameter from it.
             body: Raw request body bytes. Used only for POST, as a
                 `application/x-www-form-urlencoded` body (the `<form>` in
                 `templates/owner.html` submits with no explicit `enctype`,
@@ -227,6 +270,9 @@ class ConfigEditorServer:
                 real HTTP handler's `client_address`. Checked against
                 `allowed_ip` only when both are set; a caller (e.g. an
                 existing unit test) that omits it is never restricted.
+            cookie: The raw `Cookie` request header, as supplied by the real
+                HTTP handler. Used to read the visitor's "theme" override; a
+                caller that omits it renders as if no cookie were sent.
 
         Returns:
             A three-tuple of (HTTP status code, response headers, body bytes).
@@ -234,7 +280,7 @@ class ConfigEditorServer:
         if self._allowed_ip and client_ip is not None and client_ip != self._allowed_ip:
             return self._html_response(403, "<h1>Forbidden</h1>")
 
-        path = path.split("?")[0]
+        path, _, query = path.partition("?")
 
         # Fast rejection of obvious path traversal attempts before routing.
         # _safe_join performs the authoritative containment check downstream,
@@ -243,16 +289,20 @@ class ConfigEditorServer:
         if ".." in path or "\x00" in path:
             return self._html_response(403, "<h1>Forbidden</h1>")
 
+        theme = _theme_from_cookie(cookie)
+
         if method == "GET" and path == "/":
-            return self._render_index()
+            return self._render_index(theme=theme)
         if method == "GET" and path.startswith("/static/"):
             return self._serve_static(path[len("/static/") :])
+        if method == "GET" and path.startswith("/theme/"):
+            return self._set_theme(path[len("/theme/") :], query)
         if method == "GET" and path.startswith("/owners/"):
             owner_id = urllib.parse.unquote(path[len("/owners/") :])
-            return self._render_owner(owner_id)
+            return self._render_owner(owner_id, theme=theme)
         if method == "POST" and path.startswith("/owners/"):
             owner_id = urllib.parse.unquote(path[len("/owners/") :])
-            return self._submit_owner(owner_id, body)
+            return self._submit_owner(owner_id, body, theme=theme)
 
         return self._html_response(404, "<h1>Not found</h1>")
 
@@ -260,12 +310,12 @@ class ConfigEditorServer:
     # Pages
     # ------------------------------------------------------------------
 
-    def _render_index(self) -> tuple[int, dict[str, str], bytes]:
+    def _render_index(self, *, theme: str | None) -> tuple[int, dict[str, str], bytes]:
         template = _TEMPLATES.get_template("index.html")
-        html = template.render(owners=self._registry.all())
+        html = template.render(owners=self._registry.all(), theme=theme, current_path="/")
         return self._html_response(200, html)
 
-    def _render_owner(self, owner_id: str) -> tuple[int, dict[str, str], bytes]:
+    def _render_owner(self, owner_id: str, *, theme: str | None) -> tuple[int, dict[str, str], bytes]:
         descriptor = self._registry.get(owner_id)
         if descriptor is None:
             return self._html_response(404, "<h1>Unknown Config Owner</h1>")
@@ -275,9 +325,11 @@ class ConfigEditorServer:
         except TimeoutError:
             logger.warning("Timed out fetching current values from %r; showing schema defaults.", owner_id)
             current_values = None
-        return self._render_owner_page(descriptor, values=current_values)
+        return self._render_owner_page(descriptor, values=current_values, theme=theme)
 
-    def _submit_owner(self, owner_id: str, body: bytes) -> tuple[int, dict[str, str], bytes]:
+    def _submit_owner(
+        self, owner_id: str, body: bytes, *, theme: str | None
+    ) -> tuple[int, dict[str, str], bytes]:
         descriptor = self._registry.get(owner_id)
         if descriptor is None:
             return self._html_response(404, "<h1>Unknown Config Owner</h1>")
@@ -290,11 +342,11 @@ class ConfigEditorServer:
         except TimeoutError:
             logger.warning("Timed out awaiting validate_and_write response from %r.", owner_id)
             errors = ["Timed out waiting for a response from this Config Owner."]
-            return self._render_owner_page(descriptor, values=values, errors=errors)
+            return self._render_owner_page(descriptor, values=values, errors=errors, theme=theme)
 
         if result.success:
-            return self._render_owner_page(descriptor, values=values, success=True)
-        return self._render_owner_page(descriptor, values=values, errors=result.errors)
+            return self._render_owner_page(descriptor, values=values, success=True, theme=theme)
+        return self._render_owner_page(descriptor, values=values, errors=result.errors, theme=theme)
 
     def _render_owner_page(
         self,
@@ -303,6 +355,7 @@ class ConfigEditorServer:
         values: dict[str, Any] | None = None,
         errors: list[str] | None = None,
         success: bool = False,
+        theme: str | None = None,
     ) -> tuple[int, dict[str, str], bytes]:
         template = _TEMPLATES.get_template("owner.html")
         html = template.render(
@@ -310,8 +363,39 @@ class ConfigEditorServer:
             groups=build_groups(descriptor, values=values),
             errors=errors or [],
             success=success,
+            theme=theme,
+            current_path=f"/owners/{urllib.parse.quote(descriptor.owner_id)}",
         )
         return self._html_response(200, html)
+
+    def _set_theme(self, theme: str, query: str) -> tuple[int, dict[str, str], bytes]:
+        """Records the visitor's theme choice in a cookie and redirects back.
+
+        Args:
+            theme: The path segment after `/theme/`, e.g. "dark" or "light".
+            query: The request's raw query string, read for a `next`
+                parameter naming the page to redirect back to.
+
+        Returns:
+            A 302 redirect to `next` (or "/" if absent or not same-origin),
+            with a `Set-Cookie` header recording the chosen theme. 404 if
+            `theme` is not a recognised theme name.
+        """
+        if theme not in _VALID_THEMES:
+            return self._html_response(404, "<h1>Not found</h1>")
+
+        next_path = urllib.parse.parse_qs(query).get("next", ["/"])[0]
+        # Guards against an off-site open redirect: a leading "//" is parsed
+        # by browsers as a protocol-relative URL (e.g. "//evil.example"), not
+        # a same-origin path.
+        if not next_path.startswith("/") or next_path.startswith("//"):
+            next_path = "/"
+
+        headers = {
+            "Location": next_path,
+            "Set-Cookie": f"theme={theme}; Path=/; Max-Age=31536000",
+        }
+        return 302, headers, b""
 
     def _serve_static(self, relative_path: str) -> tuple[int, dict[str, str], bytes]:
         """Serves a vendored static asset (e.g. Bootstrap5's CSS/JS) with path traversal protection.

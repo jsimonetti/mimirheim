@@ -579,3 +579,115 @@ def test_no_page_loads_assets_from_a_network_location(
         _status, body = _get(server, path)
         assert "https://" not in body
         assert "http://" not in body
+
+
+# ---------------------------------------------------------------------------
+# Dark/light theme (ticket 12)
+# ---------------------------------------------------------------------------
+
+
+def test_index_omits_data_bs_theme_when_no_theme_cookie_is_set(server: ConfigEditorServer) -> None:
+    """No cookie: the OS/browser preference decides, via CSS alone, so the
+    server must not force a light or dark theme onto the page."""
+    status, _headers, body = server.handle_request("GET", "/", body=b"")
+
+    assert status == 200
+    assert "data-bs-theme" not in body.decode("utf-8")
+
+
+def test_index_renders_dark_theme_when_dark_cookie_is_set(server: ConfigEditorServer) -> None:
+    status, _headers, body = server.handle_request(
+        "GET", "/", body=b"", cookie="theme=dark"
+    )
+
+    assert status == 200
+    assert 'data-bs-theme="dark"' in body.decode("utf-8")
+
+
+def test_index_renders_light_theme_when_light_cookie_is_set(server: ConfigEditorServer) -> None:
+    status, _headers, body = server.handle_request(
+        "GET", "/", body=b"", cookie="theme=light"
+    )
+
+    assert status == 200
+    assert 'data-bs-theme="light"' in body.decode("utf-8")
+
+
+def test_owner_page_honours_theme_cookie(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    _register_nordpool(registry)
+
+    status, _headers, body = server.handle_request(
+        "GET", "/owners/nordpool", body=b"", cookie="theme=dark"
+    )
+
+    assert status == 200
+    assert 'data-bs-theme="dark"' in body.decode("utf-8")
+
+
+def test_an_invalid_theme_cookie_value_is_ignored(server: ConfigEditorServer) -> None:
+    status, _headers, body = server.handle_request(
+        "GET", "/", body=b"", cookie="theme=purple"
+    )
+
+    assert status == 200
+    assert "data-bs-theme" not in body.decode("utf-8")
+
+
+def test_index_shows_a_theme_toggle_control(server: ConfigEditorServer) -> None:
+    status, _headers, body = server.handle_request("GET", "/", body=b"")
+    decoded = body.decode("utf-8")
+
+    assert status == 200
+    assert "/theme/dark" in decoded
+
+
+def test_setting_theme_to_dark_sets_cookie_and_redirects(server: ConfigEditorServer) -> None:
+    status, headers, _body = server.handle_request(
+        "GET", "/theme/dark?next=/owners/nordpool", body=b""
+    )
+
+    assert status == 302
+    assert headers["Location"] == "/owners/nordpool"
+    assert "theme=dark" in headers["Set-Cookie"]
+
+
+def test_setting_theme_to_light_sets_cookie_and_redirects(server: ConfigEditorServer) -> None:
+    status, headers, _body = server.handle_request("GET", "/theme/light", body=b"")
+
+    assert status == 302
+    assert headers["Location"] == "/"
+    assert "theme=light" in headers["Set-Cookie"]
+
+
+def test_setting_theme_rejects_an_unrecognised_theme_name(server: ConfigEditorServer) -> None:
+    status, _headers, _body = server.handle_request("GET", "/theme/purple", body=b"")
+
+    assert status == 404
+
+
+def test_setting_theme_rejects_an_off_site_next_redirect(server: ConfigEditorServer) -> None:
+    """`next` must stay same-origin: a protocol-relative URL like `//evil.example`
+    would otherwise let a crafted link redirect the user off-site."""
+    status, headers, _body = server.handle_request(
+        "GET", "/theme/dark?next=//evil.example", body=b""
+    )
+
+    assert status == 302
+    assert headers["Location"] == "/"
+
+
+def test_theme_css_is_served_and_reacts_to_prefers_color_scheme(server: ConfigEditorServer) -> None:
+    status, headers, body = server.handle_request("GET", "/static/theme.css", body=b"")
+
+    assert status == 200
+    assert headers["Content-Type"] == "text/css"
+    assert "prefers-color-scheme" in body.decode("utf-8")
+
+
+def test_index_references_theme_css(server: ConfigEditorServer) -> None:
+    status, _headers, body = server.handle_request("GET", "/", body=b"")
+
+    assert status == 200
+    assert "/static/theme.css" in body.decode("utf-8")
