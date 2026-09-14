@@ -232,6 +232,66 @@ class TestNestedObjectShape:
         assert nested_group.basic_fields[0].name == "mqtt.host"
         assert nested_group.basic_fields[0].value == "localhost"
 
+    def test_nested_field_with_no_on_disk_value_prefills_from_its_own_schema_default(self) -> None:
+        nested_spec = FormSpec(
+            fields={"host": FieldSpec(label="Host", description="Broker host.", shape=FieldShape.SCALAR)}
+        )
+        descriptor = _descriptor(
+            FormSpec(
+                fields={
+                    "mqtt": FieldSpec(
+                        label="MQTT",
+                        description="Broker connection.",
+                        shape=FieldShape.NESTED_OBJECT,
+                        nested_form_spec=nested_spec,
+                    )
+                }
+            ),
+            json_schema={
+                "properties": {
+                    "mqtt": {
+                        "type": "object",
+                        "properties": {"host": {"type": "string", "default": "localhost"}},
+                    }
+                }
+            },
+        )
+
+        (group,) = build_groups(descriptor, values={"mqtt": {}})
+
+        nested_field = group.basic_fields[0].nested_groups[0].basic_fields[0]
+        assert nested_field.value == "localhost"
+
+    def test_nested_field_with_on_disk_value_shows_it_not_its_schema_default(self) -> None:
+        nested_spec = FormSpec(
+            fields={"host": FieldSpec(label="Host", description="Broker host.", shape=FieldShape.SCALAR)}
+        )
+        descriptor = _descriptor(
+            FormSpec(
+                fields={
+                    "mqtt": FieldSpec(
+                        label="MQTT",
+                        description="Broker connection.",
+                        shape=FieldShape.NESTED_OBJECT,
+                        nested_form_spec=nested_spec,
+                    )
+                }
+            ),
+            json_schema={
+                "properties": {
+                    "mqtt": {
+                        "type": "object",
+                        "properties": {"host": {"type": "string", "default": "localhost"}},
+                    }
+                }
+            },
+        )
+
+        (group,) = build_groups(descriptor, values={"mqtt": {"host": "broker.example.com"}})
+
+        nested_field = group.basic_fields[0].nested_groups[0].basic_fields[0]
+        assert nested_field.value == "broker.example.com"
+
 
 class TestNamedCollectionShape:
     _NESTED_SPEC = FormSpec(
@@ -288,6 +348,66 @@ class TestNamedCollectionShape:
 
         assert group.basic_fields[0].entries == []
 
+    def test_entry_field_with_no_on_disk_value_prefills_from_its_own_schema_default(self) -> None:
+        descriptor = _descriptor(
+            FormSpec(
+                fields={
+                    "batteries": FieldSpec(
+                        label="Batteries",
+                        description="Named battery devices.",
+                        shape=FieldShape.NAMED_COLLECTION,
+                        nested_form_spec=self._NESTED_SPEC,
+                    )
+                }
+            ),
+            json_schema={
+                "properties": {
+                    "batteries": {"type": "object", "additionalProperties": {"$ref": "#/$defs/Battery"}}
+                },
+                "$defs": {
+                    "Battery": {
+                        "type": "object",
+                        "properties": {"capacity_kwh": {"type": "number", "default": 5.0}},
+                    }
+                },
+            },
+        )
+
+        (group,) = build_groups(descriptor, values={"batteries": {"battery_main": {}}})
+
+        entry_field = group.basic_fields[0].entries[0].groups[0].basic_fields[0]
+        assert entry_field.value == 5.0
+
+    def test_entry_field_with_on_disk_value_shows_it_not_its_schema_default(self) -> None:
+        descriptor = _descriptor(
+            FormSpec(
+                fields={
+                    "batteries": FieldSpec(
+                        label="Batteries",
+                        description="Named battery devices.",
+                        shape=FieldShape.NAMED_COLLECTION,
+                        nested_form_spec=self._NESTED_SPEC,
+                    )
+                }
+            ),
+            json_schema={
+                "properties": {
+                    "batteries": {"type": "object", "additionalProperties": {"$ref": "#/$defs/Battery"}}
+                },
+                "$defs": {
+                    "Battery": {
+                        "type": "object",
+                        "properties": {"capacity_kwh": {"type": "number", "default": 5.0}},
+                    }
+                },
+            },
+        )
+
+        (group,) = build_groups(descriptor, values={"batteries": {"battery_main": {"capacity_kwh": 9.9}}})
+
+        entry_field = group.basic_fields[0].entries[0].groups[0].basic_fields[0]
+        assert entry_field.value == 9.9
+
 
 class TestOrderedCollectionShape:
     _NESTED_SPEC = FormSpec(
@@ -327,6 +447,62 @@ class TestOrderedCollectionShape:
         assert field.entries[0].groups[0].basic_fields[0].name == "charge_segments.0.power_max_kw"
         assert field.entries[0].groups[0].basic_fields[0].value == 2.5
         assert field.entries[1].groups[0].basic_fields[0].value == 1.4
+
+    def test_entry_field_with_no_on_disk_value_prefills_from_its_own_schema_default(self) -> None:
+        descriptor = _descriptor(
+            FormSpec(
+                fields={
+                    "charge_segments": FieldSpec(
+                        label="Charge segments",
+                        description="Piecewise charge efficiency.",
+                        shape=FieldShape.ORDERED_COLLECTION,
+                        nested_form_spec=self._NESTED_SPEC,
+                    )
+                }
+            ),
+            json_schema={
+                "properties": {"charge_segments": {"type": "array", "items": {"$ref": "#/$defs/Segment"}}},
+                "$defs": {
+                    "Segment": {
+                        "type": "object",
+                        "properties": {"power_max_kw": {"type": "number", "default": 3.7}},
+                    }
+                },
+            },
+        )
+
+        (group,) = build_groups(descriptor, values={"charge_segments": [{}]})
+
+        entry_field = group.basic_fields[0].entries[0].groups[0].basic_fields[0]
+        assert entry_field.value == 3.7
+
+    def test_entry_field_with_on_disk_value_shows_it_not_its_schema_default(self) -> None:
+        descriptor = _descriptor(
+            FormSpec(
+                fields={
+                    "charge_segments": FieldSpec(
+                        label="Charge segments",
+                        description="Piecewise charge efficiency.",
+                        shape=FieldShape.ORDERED_COLLECTION,
+                        nested_form_spec=self._NESTED_SPEC,
+                    )
+                }
+            ),
+            json_schema={
+                "properties": {"charge_segments": {"type": "array", "items": {"$ref": "#/$defs/Segment"}}},
+                "$defs": {
+                    "Segment": {
+                        "type": "object",
+                        "properties": {"power_max_kw": {"type": "number", "default": 3.7}},
+                    }
+                },
+            },
+        )
+
+        (group,) = build_groups(descriptor, values={"charge_segments": [{"power_max_kw": 9.9}]})
+
+        entry_field = group.basic_fields[0].entries[0].groups[0].basic_fields[0]
+        assert entry_field.value == 9.9
 
 
 class TestOptionalObjectShape:

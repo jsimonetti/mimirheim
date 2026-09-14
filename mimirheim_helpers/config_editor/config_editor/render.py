@@ -55,6 +55,31 @@ def schema_default_values(json_schema: dict[str, Any]) -> dict[str, Any]:
     return {name: prop["default"] for name, prop in properties.items() if "default" in prop}
 
 
+def _merge_defaults(schema: dict[str, Any], value: Any) -> dict[str, Any]:
+    """Merges a nested object's or collection entry's own values on top of its own schema defaults.
+
+    Used at every level `_build_field` recurses through a NESTED_OBJECT field
+    or a NAMED_COLLECTION/ORDERED_COLLECTION entry, so a field with no
+    on-disk value still prefills from its own Pydantic default at that
+    nesting depth, the same way `build_groups` already does at the top
+    level (see `schema_default_values`).
+
+    Args:
+        schema: The resolved JSON Schema fragment for this level (a nested
+            object's own `field_schema`, or a collection's own resolved
+            `item_schema`), whose own "properties" carry the defaults to
+            merge in.
+        value: The on-disk dict of values already set at this level, or
+            anything else (e.g. `None`, when a collection entry has no
+            explicit fields set) when nothing is set yet.
+
+    Returns:
+        `schema`'s own defaults merged with `value`'s entries, `value`'s
+        entries winning on any key present in both.
+    """
+    return {**schema_default_values(schema), **(value if isinstance(value, dict) else {})}
+
+
 @dataclass(frozen=True)
 class RenderedEntry:
     """One existing entry of a Named Collection (keyed) or Ordered Collection (indexed) field."""
@@ -140,8 +165,13 @@ def build_groups(descriptor: Descriptor, values: dict[str, Any] | None = None) -
             are not lost. Always merged on top of the Descriptor's own JSON
             Schema defaults (see `schema_default_values`) at the top level,
             so a field never explicitly set still evaluates as its pydantic
-            default would. `None` (nothing available yet, e.g. a timed-out
-            `get_current_values`) renders from schema defaults alone.
+            default would. `_build_field` repeats this same merge (see
+            `_merge_defaults`) at every nested-object and collection-entry
+            recursion using that level's own JSON Schema fragment, so a
+            field with no on-disk value prefills from its pydantic default
+            at any nesting depth. `None` (nothing available yet, e.g. a
+            timed-out `get_current_values`) renders from schema defaults
+            alone.
 
     Returns:
         Groups in first-seen order, each with its filtered Basic and Expert
@@ -194,10 +224,9 @@ def _build_field(
     shape = spec.shape or FieldShape.SCALAR
 
     if shape is FieldShape.NESTED_OBJECT and spec.nested_form_spec is not None:
-        nested_values = value if isinstance(value, dict) else {}
         nested_properties = field_schema.get("properties", {})
         nested_groups = _build_groups(
-            spec.nested_form_spec, nested_values, field_name, nested_properties, defs
+            spec.nested_form_spec, _merge_defaults(field_schema, value), field_name, nested_properties, defs
         )
         return RenderedField(name=field_name, spec=spec, nested_groups=nested_groups)
 
@@ -223,7 +252,11 @@ def _build_field(
             for key, entry_value in value.items():
                 entry_prefix = f"{field_name}.{key}"
                 entry_groups = _build_groups(
-                    spec.nested_form_spec, entry_value or {}, entry_prefix, item_properties, defs
+                    spec.nested_form_spec,
+                    _merge_defaults(item_schema, entry_value),
+                    entry_prefix,
+                    item_properties,
+                    defs,
                 )
                 entries.append(RenderedEntry(key=key, label=key, groups=entry_groups))
         return RenderedField(name=field_name, spec=spec, entries=entries)
@@ -236,7 +269,11 @@ def _build_field(
             for index, entry_value in enumerate(value):
                 entry_prefix = f"{field_name}.{index}"
                 entry_groups = _build_groups(
-                    spec.nested_form_spec, entry_value or {}, entry_prefix, item_properties, defs
+                    spec.nested_form_spec,
+                    _merge_defaults(item_schema, entry_value),
+                    entry_prefix,
+                    item_properties,
+                    defs,
                 )
                 entries.append(RenderedEntry(key=str(index), label=f"#{index + 1}", groups=entry_groups))
         return RenderedField(name=field_name, spec=spec, entries=entries)
