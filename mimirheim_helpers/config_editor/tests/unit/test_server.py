@@ -643,6 +643,112 @@ def test_suggested_value_is_not_rendered_for_optional_object_field(
     assert "Suggested:" not in body
 
 
+def test_owner_page_with_no_tab_set_renders_no_tab_nav(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    registry.update(
+        Descriptor(
+            owner_id="nordpool",
+            display_name="Nordpool prices",
+            json_schema={"properties": {}},
+            form_spec=FormSpec(
+                fields={"area": FieldSpec(label="Price area", description="Nordpool bidding area.")}
+            ),
+        )
+    )
+
+    status, body = _get(server, "/owners/nordpool")
+
+    assert status == 200
+    assert "Price area" in body
+    assert 'ul class="nav' not in body
+
+
+def test_owner_page_with_multiple_tabs_renders_a_clickable_top_level_nav(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    registry.update(
+        Descriptor(
+            owner_id="multi-tab-owner",
+            display_name="Multi tab owner",
+            json_schema={"properties": {}},
+            form_spec=FormSpec(
+                fields={
+                    "host": FieldSpec(label="Host", description="Broker host.", tab="MQTT"),
+                    "batteries": FieldSpec(label="Batteries", description="Battery devices.", tab="Devices"),
+                }
+            ),
+        )
+    )
+
+    status, body = _get(server, "/owners/multi-tab-owner")
+
+    assert status == 200
+    assert body.count("data-tab-toggle") >= 2
+    assert ">MQTT<" in body
+    assert ">Devices<" in body
+    assert "Host" in body
+    assert "Batteries" in body
+
+
+def test_owner_page_with_multiple_subtabs_in_one_tab_renders_a_nested_nav(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    registry.update(
+        Descriptor(
+            owner_id="subtab-owner",
+            display_name="Subtab owner",
+            json_schema={"properties": {}},
+            form_spec=FormSpec(
+                fields={
+                    "battery_capacity": FieldSpec(
+                        label="Battery capacity",
+                        description="kWh.",
+                        tab="Devices",
+                        subtab="Battery",
+                    ),
+                    "ev_capacity": FieldSpec(
+                        label="EV capacity", description="kWh.", tab="Devices", subtab="EV"
+                    ),
+                }
+            ),
+        )
+    )
+
+    status, body = _get(server, "/owners/subtab-owner")
+
+    assert status == 200
+    assert ">Battery<" in body
+    assert ">EV<" in body
+    assert "Battery capacity" in body
+    assert "EV capacity" in body
+
+
+def test_owner_page_with_one_tab_and_one_subtab_renders_no_nav_at_all(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    registry.update(
+        Descriptor(
+            owner_id="single-tab-subtab-owner",
+            display_name="Single tab/subtab owner",
+            json_schema={"properties": {}},
+            form_spec=FormSpec(
+                fields={
+                    "host": FieldSpec(
+                        label="Host", description="Broker host.", tab="MQTT", subtab="Connection"
+                    ),
+                }
+            ),
+        )
+    )
+
+    status, body = _get(server, "/owners/single-tab-subtab-owner")
+
+    assert status == 200
+    assert "Host" in body
+    assert 'ul class="nav' not in body
+
+
 def _register_nordpool(registry: ConfigOwnerRegistry) -> None:
     registry.update(
         Descriptor(

@@ -28,6 +28,55 @@
     </div>
     {% endif %}
 
+    {# Two-level Tab/Subtab nav (ticket 04), orthogonal to the flat `group`
+       headings render_groups already renders within whichever pane a field
+       lands in. A Tab/Subtab nav is only rendered when there is more than
+       one pane to switch between, so a FormSpec with no `tab`/`subtab` set
+       renders its single implicit "General" tab/subtab with no nav at all,
+       identically to pre-ticket-04 behavior. No Bootstrap JS is vendored
+       (see the comment on the script below), so switching panes uses the
+       same minimal-vanilla-JS allowance as the Presence Toggle: a nav's
+       buttons and its sibling `data-tab-content` panes are matched purely by
+       list position, not by id, so the one script below drives both the Tab
+       and the Subtab level with no per-instance wiring. #}
+    {% macro render_tabs(tabs) %}
+      {% if tabs|length > 1 %}
+      <ul class="nav nav-tabs mb-3" data-tab-nav role="tablist">
+        {% for tab in tabs %}
+        <li class="nav-item" role="presentation">
+          <button class="nav-link{% if loop.first %} active{% endif %}" type="button" data-tab-toggle>{{ tab.label }}</button>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      <div class="tab-content" data-tab-content>
+        {% for tab in tabs %}
+        <div class="tab-pane{% if loop.first or tabs|length == 1 %} active{% else %} d-none{% endif %}" data-tab-pane>
+          {{ render_subtabs(tab) }}
+        </div>
+        {% endfor %}
+      </div>
+    {% endmacro %}
+
+    {% macro render_subtabs(tab) %}
+      {% if tab.has_subtab_nav %}
+      <ul class="nav nav-pills mb-3" data-tab-nav role="tablist">
+        {% for subtab in tab.subtabs %}
+        <li class="nav-item" role="presentation">
+          <button class="nav-link{% if loop.first %} active{% endif %}" type="button" data-tab-toggle>{{ subtab.label }}</button>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      <div class="tab-content" data-tab-content>
+        {% for subtab in tab.subtabs %}
+        <div class="tab-pane{% if loop.first or not tab.has_subtab_nav %} active{% else %} d-none{% endif %}" data-tab-pane>
+          {{ render_groups(subtab.groups) }}
+        </div>
+        {% endfor %}
+      </div>
+    {% endmacro %}
+
     {% macro render_groups(groups) %}
       {% for group in groups %}
       <section class="mb-4" data-group="{{ group.label }}">
@@ -152,7 +201,7 @@
     {% endmacro %}
 
     <form method="post" action="/owners/{{ descriptor.owner_id }}">
-      {{ render_groups(groups) }}
+      {{ render_tabs(tabs) }}
       <button type="submit" class="btn btn-primary">Save</button>
     </form>
   </main>
@@ -162,13 +211,32 @@
      .field-optional-object wrapper holds exactly one <fieldset>, so toggling
      its hidden/disabled state needs no id or bookkeeping beyond that. No
      Bootstrap JS is loaded: the Advanced disclosure stays a plain
-     <details>/<summary> element, which needs none. #}
+     <details>/<summary> element, which needs none, and the Tab/Subtab nav
+     below (ticket 04) is switched by plain position-matching rather than
+     Bootstrap's own JS tab component. #}
   <script>
     document.addEventListener("change", function (event) {
       if (!event.target.matches("input[data-presence-toggle]")) return;
       var fieldset = event.target.closest(".field-optional-object").querySelector("fieldset");
       fieldset.hidden = !event.target.checked;
       fieldset.disabled = !event.target.checked;
+    });
+
+    document.addEventListener("click", function (event) {
+      var toggle = event.target.closest("[data-tab-toggle]");
+      if (!toggle) return;
+      var nav = toggle.closest("[data-tab-nav]");
+      var content = nav.nextElementSibling;
+      var buttons = nav.querySelectorAll("[data-tab-toggle]");
+      var panes = content.querySelectorAll(":scope > [data-tab-pane]");
+      var index = Array.prototype.indexOf.call(buttons, toggle);
+      buttons.forEach(function (button, i) {
+        button.classList.toggle("active", i === index);
+      });
+      panes.forEach(function (pane, i) {
+        pane.classList.toggle("active", i === index);
+        pane.classList.toggle("d-none", i !== index);
+      });
     });
   </script>
 </body>

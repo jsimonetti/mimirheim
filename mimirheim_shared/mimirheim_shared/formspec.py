@@ -91,6 +91,15 @@ class FieldSpec(BaseModel):
     # (NESTED_OBJECT, OPTIONAL_OBJECT, NAMED_COLLECTION, ORDERED_COLLECTION),
     # so the Config Editor only renders it for a scalar leaf field.
     suggested_value: Any | None = None
+    # The top-level navigable pane this field belongs to. Unset falls back to
+    # the default "General" tab (mimirheim_shared.CONTEXT.md's Tab entry),
+    # orthogonal to `group`: `group` still renders flat headings within
+    # whichever Tab/Subtab pane a field lands in.
+    tab: str | None = None
+    # A second, nested navigation level scoped within this field's Tab. Same
+    # "General" fallback as `tab` when unset. The Tab/Subtab hierarchy is
+    # exactly two levels deep; there is no third level.
+    subtab: str | None = None
     # The nested model's own FormSpec, for a field whose derived (or
     # overridden) Field Shape is NESTED_OBJECT, OPTIONAL_OBJECT,
     # NAMED_COLLECTION, or ORDERED_COLLECTION. Authored once by the package

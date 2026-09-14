@@ -184,6 +184,102 @@ def build_groups(descriptor: Descriptor, values: dict[str, Any] | None = None) -
     return _build_groups(descriptor.form_spec, merged, name_prefix="", properties=properties, defs=defs)
 
 
+@dataclass(frozen=True)
+class RenderedSubtab:
+    """One Subtab pane's groups, scoped within a single top-level Tab."""
+
+    label: str
+    groups: list[RenderedGroup] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class RenderedTab:
+    """One top-level Tab pane, holding one or more Subtab panes.
+
+    Always has at least one `RenderedSubtab`, even when no field in this Tab
+    declares a `subtab`: that single, unlabelled-nav pane still carries the
+    Tab's groups, so `owner.html` can render every Tab uniformly regardless
+    of whether it has a nested Subtab nav (see `has_subtab_nav`).
+    """
+
+    label: str
+    subtabs: list[RenderedSubtab] = field(default_factory=list)
+
+    @property
+    def has_subtab_nav(self) -> bool:
+        """Whether this Tab's fields declare more than one distinct Subtab.
+
+        A single Subtab value (or none at all, i.e. every field falls back
+        to the default "General" Subtab) needs no nested nav; `owner.html`
+        renders that lone pane's groups directly, matching pre-ticket-04
+        behaviour exactly (ADR requirement: no tab/subtab set renders
+        identically to today).
+        """
+        return len(self.subtabs) > 1
+
+
+def build_tabs(descriptor: Descriptor, values: dict[str, Any] | None = None) -> list[RenderedTab]:
+    """Partitions a Descriptor's top-level fields into the two-level Tab/Subtab hierarchy.
+
+    Fields are first bucketed by `FieldSpec.tab` (default "General", the same
+    `UNGROUPED_LABEL` fallback `group` already uses), then within each Tab by
+    `FieldSpec.subtab` (same default), each in first-seen order. Each
+    resulting (Tab, Subtab) bucket's fields are then grouped exactly as
+    `build_groups` groups the whole form, by delegating to the same
+    `_build_groups` helper, so `group`, Tier, Conditional Visibility, and
+    recursion into structural Field Shapes behave identically to before this
+    ticket.
+
+    This only partitions the Descriptor's top-level fields: a nested
+    object's or collection entry's own fields are not Tab/Subtab-aware,
+    since the two-level hierarchy is a top-of-form navigation aid, not a
+    per-nesting-level concept (see `mimirheim_shared.CONTEXT.md`'s Tab/
+    Subtab entries).
+
+    Args:
+        descriptor: The Config Owner's Descriptor to render.
+        values: Same as `build_groups`'s `values` argument.
+
+    Returns:
+        Tabs in first-seen order. Every Tab always has at least one Subtab
+        (see `RenderedTab`); `RenderedTab.has_subtab_nav` tells `owner.html`
+        whether to render the nested nav for it.
+    """
+    merged = {**schema_default_values(descriptor.json_schema), **(values or {})}
+    defs = descriptor.json_schema.get("$defs", {})
+    properties = descriptor.json_schema.get("properties", {})
+    form_spec = descriptor.form_spec
+
+    tab_order: list[str] = []
+    subtab_order_by_tab: dict[str, list[str]] = {}
+    field_names_by_bucket: dict[tuple[str, str], list[str]] = {}
+
+    for name, spec in form_spec.fields.items():
+        tab_label = spec.tab or UNGROUPED_LABEL
+        subtab_label = spec.subtab or UNGROUPED_LABEL
+
+        if tab_label not in subtab_order_by_tab:
+            subtab_order_by_tab[tab_label] = []
+            tab_order.append(tab_label)
+        if subtab_label not in subtab_order_by_tab[tab_label]:
+            subtab_order_by_tab[tab_label].append(subtab_label)
+
+        field_names_by_bucket.setdefault((tab_label, subtab_label), []).append(name)
+
+    tabs = []
+    for tab_label in tab_order:
+        subtabs = []
+        for subtab_label in subtab_order_by_tab[tab_label]:
+            bucket_fields = {
+                name: form_spec.fields[name] for name in field_names_by_bucket[(tab_label, subtab_label)]
+            }
+            bucket_form_spec = FormSpec(fields=bucket_fields)
+            groups = _build_groups(bucket_form_spec, merged, name_prefix="", properties=properties, defs=defs)
+            subtabs.append(RenderedSubtab(label=subtab_label, groups=groups))
+        tabs.append(RenderedTab(label=tab_label, subtabs=subtabs))
+    return tabs
+
+
 def _build_groups(
     form_spec: FormSpec,
     values: dict[str, Any],

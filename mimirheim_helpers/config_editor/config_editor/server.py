@@ -39,7 +39,7 @@ from mimirheim_shared.config_service import Descriptor, ValidateAndWriteResult
 from mimirheim_shared.formspec import option_label
 
 from config_editor.registry import ConfigOwnerRegistry
-from config_editor.render import build_groups
+from config_editor.render import build_tabs
 from config_editor.submission import parse_submission
 
 logger = logging.getLogger(__name__)
@@ -360,7 +360,7 @@ class ConfigEditorServer:
         template = _TEMPLATES.get_template("owner.html")
         html = template.render(
             descriptor=descriptor,
-            groups=build_groups(descriptor, values=values),
+            tabs=build_tabs(descriptor, values=values),
             errors=errors or [],
             success=success,
             theme=theme,

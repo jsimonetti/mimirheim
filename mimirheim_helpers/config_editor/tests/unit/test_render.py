@@ -10,7 +10,7 @@ from mimirheim_shared.field_shape import FieldShape
 from mimirheim_shared.formspec import FieldSpec, FormSpec, Tier
 from mimirheim_shared.visibility import Comparison, ComparisonOperator
 
-from config_editor.render import RenderedField, RenderedGroup, UNGROUPED_LABEL, build_groups, schema_default_values
+from config_editor.render import RenderedField, RenderedGroup, UNGROUPED_LABEL, build_groups, build_tabs, schema_default_values
 
 
 def _find_field(groups: list[RenderedGroup], name: str) -> RenderedField:
@@ -814,3 +814,172 @@ def test_real_mimirheim_descriptor_renders_a_battery_soc_unit_through_every_nest
     unit_field = _find_field(soc_field.nested_groups, "batteries.bat1.inputs.soc.unit")
     assert unit_field.options == ["kwh", "percent"]
     assert unit_field.value == "kwh"
+
+
+class TestBuildTabs:
+    """build_tabs partitions a FormSpec's top-level fields into the two-level
+    Tab/Subtab hierarchy (ticket 04), then groups each pane's fields exactly
+    as build_groups already does."""
+
+    def test_no_tab_set_renders_a_single_implicit_general_tab_with_no_subtab_nav(self) -> None:
+        descriptor = _descriptor(
+            FormSpec(
+                fields={
+                    "host": FieldSpec(label="Host", description="Broker host.", group="MQTT"),
+                    "port": FieldSpec(label="Port", description="Broker port.", group="MQTT"),
+                }
+            )
+        )
+
+        tabs = build_tabs(descriptor)
+
+        assert [t.label for t in tabs] == [UNGROUPED_LABEL]
+        (tab,) = tabs
+        assert tab.has_subtab_nav is False
+        (subtab,) = tab.subtabs
+        assert subtab.label == UNGROUPED_LABEL
+        assert [g.label for g in subtab.groups] == ["MQTT"]
+        assert [f.name for f in subtab.groups[0].basic_fields] == ["host", "port"]
+
+    def test_fields_split_across_tabs_produce_one_tab_per_declared_value_in_first_seen_order(self) -> None:
+        descriptor = _descriptor(
+            FormSpec(
+                fields={
+                    "host": FieldSpec(label="Host", description="Broker host.", tab="MQTT"),
+                    "batteries": FieldSpec(label="Batteries", description="Battery devices.", tab="Devices"),
+                    "port": FieldSpec(label="Port", description="Broker port.", tab="MQTT"),
+                }
+            )
+        )
+
+        tabs = build_tabs(descriptor)
+
+        assert [t.label for t in tabs] == ["MQTT", "Devices"]
+        mqtt_tab, devices_tab = tabs
+        assert mqtt_tab.has_subtab_nav is False
+        (mqtt_subtab,) = mqtt_tab.subtabs
+        assert [f.name for f in mqtt_subtab.groups[0].basic_fields] == ["host", "port"]
+        (devices_subtab,) = devices_tab.subtabs
+        assert [f.name for f in devices_subtab.groups[0].basic_fields] == ["batteries"]
+
+    def test_field_with_no_tab_set_falls_under_the_default_general_tab(self) -> None:
+        descriptor = _descriptor(
+            FormSpec(
+                fields={
+                    "host": FieldSpec(label="Host", description="Broker host."),
+                    "batteries": FieldSpec(label="Batteries", description="Battery devices.", tab="Devices"),
+                }
+            )
+        )
+
+        tabs = build_tabs(descriptor)
+
+        assert [t.label for t in tabs] == [UNGROUPED_LABEL, "Devices"]
+
+    def test_multiple_subtabs_within_one_tab_render_a_nested_nav(self) -> None:
+        descriptor = _descriptor(
+            FormSpec(
+                fields={
+                    "battery": FieldSpec(
+                        label="Battery", description="Battery devices.", tab="Devices", subtab="Battery"
+                    ),
+                    "ev": FieldSpec(label="EV", description="EV devices.", tab="Devices", subtab="EV"),
+                }
+            )
+        )
+
+        (tab,) = build_tabs(descriptor)
+
+        assert tab.label == "Devices"
+        assert tab.has_subtab_nav is True
+        assert [s.label for s in tab.subtabs] == ["Battery", "EV"]
+        assert [f.name for f in tab.subtabs[0].groups[0].basic_fields] == ["battery"]
+        assert [f.name for f in tab.subtabs[1].groups[0].basic_fields] == ["ev"]
+
+    def test_single_subtab_value_within_a_tab_renders_no_subtab_nav(self) -> None:
+        descriptor = _descriptor(
+            FormSpec(
+                fields={
+                    "battery": FieldSpec(
+                        label="Battery", description="Battery devices.", tab="Devices", subtab="Battery"
+                    ),
+                }
+            )
+        )
+
+        (tab,) = build_tabs(descriptor)
+
+        assert tab.has_subtab_nav is False
+        assert [s.label for s in tab.subtabs] == ["Battery"]
+
+    def test_field_with_no_subtab_set_falls_under_the_default_general_subtab(self) -> None:
+        descriptor = _descriptor(
+            FormSpec(
+                fields={
+                    "battery": FieldSpec(
+                        label="Battery", description="Battery devices.", tab="Devices", subtab="Battery"
+                    ),
+                    "misc": FieldSpec(label="Misc", description="Uncategorised.", tab="Devices"),
+                }
+            )
+        )
+
+        (tab,) = build_tabs(descriptor)
+
+        assert [s.label for s in tab.subtabs] == ["Battery", UNGROUPED_LABEL]
+
+    def test_group_still_renders_flat_headings_within_a_tab_subtab_pane(self) -> None:
+        descriptor = _descriptor(
+            FormSpec(
+                fields={
+                    "capacity": FieldSpec(
+                        label="Capacity",
+                        description="kWh.",
+                        tab="Devices",
+                        subtab="Battery",
+                        group="Sizing",
+                    ),
+                }
+            )
+        )
+
+        (tab,) = build_tabs(descriptor)
+        (subtab,) = tab.subtabs
+
+        assert [g.label for g in subtab.groups] == ["Sizing"]
+
+    def test_hidden_and_conditionally_visible_fields_are_still_honoured_per_tab(self) -> None:
+        descriptor = _descriptor(
+            FormSpec(
+                fields={
+                    "enabled": FieldSpec(label="Enabled", description="Enable it.", tab="Devices"),
+                    "prefix": FieldSpec(
+                        label="Prefix",
+                        description="Prefix.",
+                        tab="Devices",
+                        visible_if=Comparison(field="enabled", operator=ComparisonOperator.EQ, value=True),
+                    ),
+                }
+            ),
+            json_schema={
+                "properties": {
+                    "enabled": {"type": "boolean", "default": False},
+                    "prefix": {"type": "string", "default": "homeassistant"},
+                }
+            },
+        )
+
+        (tab,) = build_tabs(descriptor)
+        (subtab,) = tab.subtabs
+
+        assert [f.name for f in subtab.groups[0].basic_fields] == ["enabled"]
+
+    def test_values_override_is_honoured_the_same_as_build_groups(self) -> None:
+        descriptor = _descriptor(
+            FormSpec(fields={"area": FieldSpec(label="Price area", description="Bidding area.", tab="Prices")}),
+            json_schema={"properties": {"area": {"type": "string", "default": "SE1"}}},
+        )
+
+        (tab,) = build_tabs(descriptor, values={"area": "SE3"})
+
+        assert tab.subtabs[0].groups[0].basic_fields[0].value == "SE3"

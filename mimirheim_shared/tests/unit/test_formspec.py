@@ -25,6 +25,8 @@ def test_field_spec_minimal() -> None:
     assert spec.option_labels is None
     assert spec.nested_form_spec is None
     assert spec.suggested_value is None
+    assert spec.tab is None
+    assert spec.subtab is None
 
 
 def test_field_spec_full() -> None:
@@ -95,6 +97,18 @@ def test_field_spec_carries_a_suggested_value() -> None:
     )
 
     assert spec.suggested_value == 5000
+
+
+def test_field_spec_carries_a_tab_and_subtab() -> None:
+    spec = FieldSpec(
+        label="Capacity",
+        description="Usable capacity in kWh.",
+        tab="Devices",
+        subtab="Battery",
+    )
+
+    assert spec.tab == "Devices"
+    assert spec.subtab == "Battery"
 
 
 def test_option_label_falls_back_to_raw_value_when_unset() -> None:
