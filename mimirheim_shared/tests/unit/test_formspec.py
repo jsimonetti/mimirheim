@@ -24,6 +24,7 @@ def test_field_spec_minimal() -> None:
     assert spec.shape_override is None
     assert spec.option_labels is None
     assert spec.nested_form_spec is None
+    assert spec.suggested_value is None
 
 
 def test_field_spec_full() -> None:
@@ -84,6 +85,16 @@ def test_field_spec_carries_a_shape_override() -> None:
     )
 
     assert spec.shape_override is FieldShape.SCALAR
+
+
+def test_field_spec_carries_a_suggested_value() -> None:
+    spec = FieldSpec(
+        label="Import limit",
+        description="Grid import limit in kW.",
+        suggested_value=5000,
+    )
+
+    assert spec.suggested_value == 5000
 
 
 def test_option_label_falls_back_to_raw_value_when_unset() -> None:

@@ -84,6 +84,13 @@ class FieldSpec(BaseModel):
     # by the literal's own string form. A value with no entry here falls back
     # to its raw literal value; see option_label().
     option_labels: dict[str, str] | None = None
+    # A hint value shown as static help text next to a scalar field (str,
+    # int, float, bool, or ENUM_SELECT), distinct from the field's own
+    # schema default: it never pre-fills the input and never overwrites an
+    # on-disk value already there. Meaningless on a structural Field Shape
+    # (NESTED_OBJECT, OPTIONAL_OBJECT, NAMED_COLLECTION, ORDERED_COLLECTION),
+    # so the Config Editor only renders it for a scalar leaf field.
+    suggested_value: Any | None = None
     # The nested model's own FormSpec, for a field whose derived (or
     # overridden) Field Shape is NESTED_OBJECT, OPTIONAL_OBJECT,
     # NAMED_COLLECTION, or ORDERED_COLLECTION. Authored once by the package

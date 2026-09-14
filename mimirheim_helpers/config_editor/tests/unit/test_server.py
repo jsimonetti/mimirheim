@@ -458,6 +458,191 @@ def test_numeric_field_with_no_declared_bound_has_no_min_or_max_attribute(
     assert "max=" not in body
 
 
+def _register_suggested_value_owner(registry: ConfigOwnerRegistry) -> None:
+    registry.update(
+        Descriptor(
+            owner_id="suggested-owner",
+            display_name="Suggested owner",
+            json_schema={"properties": {"import_limit_kw": {"type": "number"}}},
+            form_spec=FormSpec(
+                fields={
+                    "import_limit_kw": FieldSpec(
+                        label="Import limit", description="Grid import limit in kW.", suggested_value=5000
+                    )
+                }
+            ),
+        )
+    )
+
+
+def test_scalar_field_with_suggested_value_renders_it_as_help_text(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    _register_suggested_value_owner(registry)
+
+    status, body = _get(server, "/owners/suggested-owner")
+
+    assert status == 200
+    assert "Suggested: 5000" in body
+
+
+def test_suggested_value_never_prefills_the_input(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    _register_suggested_value_owner(registry)
+
+    status, body = _get(server, "/owners/suggested-owner")
+
+    assert status == 200
+    assert 'value="5000"' not in body
+
+
+def test_field_with_on_disk_value_and_suggested_value_shows_on_disk_value_not_suggestion(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer, config_service_client: MagicMock
+) -> None:
+    _register_suggested_value_owner(registry)
+    config_service_client.get_current_values.return_value = {"import_limit_kw": 7500}
+
+    status, body = _get(server, "/owners/suggested-owner")
+
+    assert status == 200
+    assert 'value="7500"' in body
+    assert 'value="5000"' not in body
+    assert "Suggested: 5000" in body
+
+
+def test_suggested_value_is_not_rendered_for_nested_object_field(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    registry.update(
+        Descriptor(
+            owner_id="nested-suggested",
+            display_name="Nested suggested",
+            json_schema={"properties": {}},
+            form_spec=FormSpec(
+                fields={
+                    "mqtt": FieldSpec(
+                        label="MQTT",
+                        description="Broker connection.",
+                        shape=FieldShape.NESTED_OBJECT,
+                        suggested_value="ignored",
+                        nested_form_spec=FormSpec(
+                            fields={"host": FieldSpec(label="Host", description="Broker host.")}
+                        ),
+                    )
+                }
+            ),
+        )
+    )
+
+    status, body = _get(server, "/owners/nested-suggested")
+
+    assert status == 200
+    assert "Suggested:" not in body
+
+
+def test_suggested_value_is_not_rendered_for_named_collection_field(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    registry.update(
+        Descriptor(
+            owner_id="named-collection-suggested",
+            display_name="Named collection suggested",
+            json_schema={
+                "properties": {
+                    "batteries": {"type": "object", "additionalProperties": {"$ref": "#/$defs/Battery"}}
+                },
+                "$defs": {"Battery": {"type": "object", "properties": {"capacity_kwh": {"type": "number"}}}},
+            },
+            form_spec=FormSpec(
+                fields={
+                    "batteries": FieldSpec(
+                        label="Batteries",
+                        description="Named battery devices.",
+                        shape=FieldShape.NAMED_COLLECTION,
+                        suggested_value="ignored",
+                        nested_form_spec=FormSpec(
+                            fields={
+                                "capacity_kwh": FieldSpec(label="Capacity", description="Usable capacity in kWh.")
+                            }
+                        ),
+                    )
+                }
+            ),
+        )
+    )
+
+    status, body = _get(server, "/owners/named-collection-suggested")
+
+    assert status == 200
+    assert "Suggested:" not in body
+
+
+def test_suggested_value_is_not_rendered_for_ordered_collection_field(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    registry.update(
+        Descriptor(
+            owner_id="ordered-collection-suggested",
+            display_name="Ordered collection suggested",
+            json_schema={
+                "properties": {"charge_segments": {"type": "array", "items": {"$ref": "#/$defs/Segment"}}},
+                "$defs": {"Segment": {"type": "object", "properties": {"power_max_kw": {"type": "number"}}}},
+            },
+            form_spec=FormSpec(
+                fields={
+                    "charge_segments": FieldSpec(
+                        label="Charge segments",
+                        description="Piecewise charge efficiency.",
+                        shape=FieldShape.ORDERED_COLLECTION,
+                        suggested_value="ignored",
+                        nested_form_spec=FormSpec(
+                            fields={
+                                "power_max_kw": FieldSpec(label="Max power", description="Max power in kW.")
+                            }
+                        ),
+                    )
+                }
+            ),
+        )
+    )
+
+    status, body = _get(server, "/owners/ordered-collection-suggested")
+
+    assert status == 200
+    assert "Suggested:" not in body
+
+
+def test_suggested_value_is_not_rendered_for_optional_object_field(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    registry.update(
+        Descriptor(
+            owner_id="optional-object-suggested",
+            display_name="Optional object suggested",
+            json_schema={"properties": {}},
+            form_spec=FormSpec(
+                fields={
+                    "balanced_weights": FieldSpec(
+                        label="Balanced weights",
+                        description="Optional weighting.",
+                        shape=FieldShape.OPTIONAL_OBJECT,
+                        suggested_value="ignored",
+                        nested_form_spec=FormSpec(
+                            fields={"cost_weight": FieldSpec(label="Cost weight", description="Weight.")}
+                        ),
+                    )
+                }
+            ),
+        )
+    )
+
+    status, body = _get(server, "/owners/optional-object-suggested")
+
+    assert status == 200
+    assert "Suggested:" not in body
+
+
 def _register_nordpool(registry: ConfigOwnerRegistry) -> None:
     registry.update(
         Descriptor(

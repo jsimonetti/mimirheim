@@ -102,6 +102,7 @@
         <label class="form-label" for="field-{{ field.name }}">{{ field.spec.label }}</label>
         <p class="text-muted small">{{ field.spec.description }}</p>
         {% if field.spec.help_text %}<p class="form-text">{{ field.spec.help_text }}</p>{% endif %}
+        {% if field.spec.suggested_value is not none %}<p class="form-text suggested-value">Suggested: {{ field.spec.suggested_value }}</p>{% endif %}
         {% if field.spec.doc_link %}<a class="d-inline-block mb-2" href="{{ field.spec.doc_link }}">Learn more</a>{% endif %}
         <select class="form-select" id="field-{{ field.name }}" name="{{ field.name }}">
           {% for option in field.options %}
@@ -112,6 +113,7 @@
     {% elif field.input_type == "checkbox" %}
       <div class="field mb-3" data-field="{{ field.name }}">
         {% if field.spec.help_text %}<p class="form-text">{{ field.spec.help_text }}</p>{% endif %}
+        {% if field.spec.suggested_value is not none %}<p class="form-text suggested-value">Suggested: {{ field.spec.suggested_value }}</p>{% endif %}
         {% if field.spec.doc_link %}<a class="d-inline-block mb-2" href="{{ field.spec.doc_link }}">Learn more</a>{% endif %}
         {{ form_switch(field.name, field.spec.label, field.value) }}
         {# An unchecked checkbox submits nothing at all, so with no fallback
@@ -129,6 +131,7 @@
         <label class="form-label" for="field-{{ field.name }}">{{ field.spec.label }}</label>
         <p class="text-muted small">{{ field.spec.description }}</p>
         {% if field.spec.help_text %}<p class="form-text">{{ field.spec.help_text }}</p>{% endif %}
+        {% if field.spec.suggested_value is not none %}<p class="form-text suggested-value">Suggested: {{ field.spec.suggested_value }}</p>{% endif %}
         {% if field.spec.doc_link %}<a class="d-inline-block mb-2" href="{{ field.spec.doc_link }}">Learn more</a>{% endif %}
         <input class="form-control" id="field-{{ field.name }}" name="{{ field.name }}" type="number"
                step="{{ field.step }}"
@@ -141,6 +144,7 @@
         <label class="form-label" for="field-{{ field.name }}">{{ field.spec.label }}</label>
         <p class="text-muted small">{{ field.spec.description }}</p>
         {% if field.spec.help_text %}<p class="form-text">{{ field.spec.help_text }}</p>{% endif %}
+        {% if field.spec.suggested_value is not none %}<p class="form-text suggested-value">Suggested: {{ field.spec.suggested_value }}</p>{% endif %}
         {% if field.spec.doc_link %}<a class="d-inline-block mb-2" href="{{ field.spec.doc_link }}">Learn more</a>{% endif %}
         <input class="form-control" id="field-{{ field.name }}" name="{{ field.name }}" type="text" value="{{ field.value if field.value is not none else '' }}">
       </div>
