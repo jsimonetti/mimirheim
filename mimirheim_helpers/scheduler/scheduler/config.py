@@ -78,14 +78,13 @@ class SchedulerConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    mqtt: MqttConfig = Field(description="MQTT broker connection parameters.", json_schema_extra={"ui_label": "MQTT", "ui_group": "basic"})
+    mqtt: MqttConfig = Field(description="MQTT broker connection parameters.")
     schedules: list[dict[str, str]] = Field(
         min_length=1,
         description=(
             "List of schedule entries. Each entry is a single-key dict: "
             "{cron_expression: mqtt_topic}."
-        ),
-        json_schema_extra={"ui_label": "Schedules", "ui_group": "basic"},
+        )
     )
 
     @field_validator("schedules")

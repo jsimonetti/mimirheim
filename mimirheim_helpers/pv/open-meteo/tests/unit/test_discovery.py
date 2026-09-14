@@ -12,12 +12,15 @@ Tests verify:
 """
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import paho.mqtt.client as mqtt
 
 from pv_openmeteo.__main__ import PvOpenMeteoDaemon
 from pv_openmeteo.config import PvOpenMeteoConfig
+
+_CONFIG_PATH = Path("/tmp/pv-openmeteo-test-config.yaml")
 
 
 def _make_daemon(ha: dict | None) -> PvOpenMeteoDaemon:
@@ -32,7 +35,7 @@ def _make_daemon(ha: dict | None) -> PvOpenMeteoDaemon:
     }
     if ha is not None:
         raw["ha_discovery"] = ha
-    daemon = PvOpenMeteoDaemon(PvOpenMeteoConfig.model_validate(raw))
+    daemon = PvOpenMeteoDaemon(PvOpenMeteoConfig.model_validate(raw), _CONFIG_PATH)
     client = MagicMock()
     client.publish.return_value.rc = mqtt.MQTT_ERR_SUCCESS
     daemon._client = client

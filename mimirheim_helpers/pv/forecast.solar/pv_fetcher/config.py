@@ -36,8 +36,7 @@ class ForecastSolarApiConfig(BaseModel):
 
     api_key: str | None = Field(
         default=None,
-        description="forecast.solar API key. Null = free anonymous tier.",
-        json_schema_extra={"ui_label": "API key", "ui_group": "advanced"},
+        description="forecast.solar API key. Null = free anonymous tier."
     )
 
 
@@ -70,25 +69,21 @@ class ArrayConfig(BaseModel):
         description=(
             "MQTT topic for the forecast payload. Retained. "
             "Defaults to '{mimir_topic_prefix}/input/pv/{array_key}/forecast' when not set."
-        ),
-        json_schema_extra={"ui_label": "Output topic", "ui_group": "advanced", "ui_placeholder": "{mimir_topic_prefix}/input/pv/{array_key}/forecast", "ui_source": "pv_arrays"},
+        )
     )
-    latitude: float = Field(description="Site latitude in decimal degrees.", json_schema_extra={"ui_label": "Latitude", "ui_group": "basic"})
-    longitude: float = Field(description="Site longitude in decimal degrees.", json_schema_extra={"ui_label": "Longitude", "ui_group": "basic"})
+    latitude: float = Field(description="Site latitude in decimal degrees.")
+    longitude: float = Field(description="Site longitude in decimal degrees.")
     declination: int = Field(
         ge=0, le=90,
-        description="Panel tilt in degrees from horizontal. 0 = flat, 90 = vertical.",
-        json_schema_extra={"ui_label": "Panel tilt", "ui_group": "basic"},
+        description="Panel tilt in degrees from horizontal. 0 = flat, 90 = vertical."
     )
     azimuth: int = Field(
         ge=-180, le=180,
-        description="Panel azimuth: deviation from south in degrees.",
-        json_schema_extra={"ui_label": "Panel azimuth", "ui_group": "basic"},
+        description="Panel azimuth: deviation from south in degrees."
     )
     peak_power_kwp: float = Field(
         gt=0,
-        description="Array peak power in kWp.",
-        json_schema_extra={"ui_label": "Peak power (kWp)", "ui_group": "basic"},
+        description="Array peak power in kWp."
     )
 
 
@@ -110,23 +105,19 @@ class ConfidenceDecayConfig(BaseModel):
 
     hours_0_to_6: float = Field(
         default=0.90, ge=0.0, le=1.0,
-        description="Confidence for steps 0–6 h ahead.",
-        json_schema_extra={"ui_label": "Confidence 0–6 h", "ui_group": "advanced"},
+        description="Confidence for steps 0–6 h ahead."
     )
     hours_6_to_24: float = Field(
         default=0.75, ge=0.0, le=1.0,
-        description="Confidence for steps 6–24 h ahead.",
-        json_schema_extra={"ui_label": "Confidence 6–24 h", "ui_group": "advanced"},
+        description="Confidence for steps 6–24 h ahead."
     )
     hours_24_to_48: float = Field(
         default=0.55, ge=0.0, le=1.0,
-        description="Confidence for steps 24–48 h ahead.",
-        json_schema_extra={"ui_label": "Confidence 24–48 h", "ui_group": "advanced"},
+        description="Confidence for steps 24–48 h ahead."
     )
     hours_48_plus: float = Field(
         default=0.35, ge=0.0, le=1.0,
-        description="Confidence for steps 48+ h ahead.",
-        json_schema_extra={"ui_label": "Confidence 48+ h", "ui_group": "advanced"},
+        description="Confidence for steps 48+ h ahead."
     )
 
 
@@ -153,46 +144,38 @@ class PvFetcherConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    mqtt: MqttConfig = Field(description="MQTT broker connection settings.", json_schema_extra={"ui_label": "MQTT", "ui_group": "basic"})
+    mqtt: MqttConfig = Field(description="MQTT broker connection settings.")
     mimir_topic_prefix: str = Field(
         default="mimir",
-        description="mimirheim mqtt.topic_prefix. Used to derive default array output and trigger topics.",
-        json_schema_extra={"ui_label": "mimirheim topic prefix", "ui_group": "advanced"},
+        description="mimirheim mqtt.topic_prefix. Used to derive default array output and trigger topics."
     )
-    trigger_topic: str = Field(description="MQTT topic that triggers a fetch cycle.", json_schema_extra={"ui_label": "Trigger topic", "ui_group": "advanced"})
+    trigger_topic: str = Field(description="MQTT topic that triggers a fetch cycle.")
     forecast_solar: ForecastSolarApiConfig = Field(
         default_factory=ForecastSolarApiConfig,
-        description="forecast.solar API configuration.",
-        json_schema_extra={"ui_label": "forecast.solar API", "ui_group": "basic"},
+        description="forecast.solar API configuration."
     )
     arrays: dict[str, ArrayConfig] = Field(
-        description="Named map of PV array configurations.",
-        json_schema_extra={"ui_label": "PV arrays", "ui_group": "basic"},
+        description="Named map of PV array configurations."
     )
     confidence_decay: ConfidenceDecayConfig = Field(
         default_factory=ConfidenceDecayConfig,
-        description="Per-band confidence values. Optional; defaults apply.",
-        json_schema_extra={"ui_label": "Confidence decay", "ui_group": "advanced"},
+        description="Per-band confidence values. Optional; defaults apply."
     )
     signal_mimir: bool = Field(
         default=False,
-        description="Publish to mimir_trigger_topic after all arrays are published.",
-        json_schema_extra={"ui_label": "Signal mimirheim", "ui_group": "advanced"},
+        description="Publish to mimir_trigger_topic after all arrays are published."
     )
     mimir_trigger_topic: str | None = Field(
         default=None,
-        description="mimirheim trigger topic. Defaults to '{mimir_topic_prefix}/input/trigger'.",
-        json_schema_extra={"ui_label": "mimirheim trigger topic", "ui_group": "advanced", "ui_placeholder": "{mimir_topic_prefix}/input/trigger"},
+        description="mimirheim trigger topic. Defaults to '{mimir_topic_prefix}/input/trigger'."
     )
     ha_discovery: HomeAssistantConfig | None = Field(
         default=None,
-        description="HA MQTT discovery configuration.",
-        json_schema_extra={"ui_label": "HA discovery", "ui_group": "advanced"},
+        description="HA MQTT discovery configuration."
     )
     stats_topic: str | None = Field(
         default=None,
-        description="MQTT topic where per-cycle run statistics are published.",
-        json_schema_extra={"ui_label": "Stats topic", "ui_group": "advanced"},
+        description="MQTT topic where per-cycle run statistics are published."
     )
 
     @model_validator(mode="after")

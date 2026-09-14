@@ -157,7 +157,7 @@ class TestTrainingCycle:
         from pv_ml_learner.__main__ import PvLearnerDaemon
 
         cfg = _make_config(tmp_path)
-        daemon = PvLearnerDaemon(cfg)
+        daemon = PvLearnerDaemon(cfg, tmp_path / "config.yaml")
         client = MagicMock()
 
         knmi_rows = _synthetic_knmi_rows(n_months=3)
@@ -185,7 +185,7 @@ class TestTrainingCycle:
         from pv_ml_learner.__main__ import PvLearnerDaemon
 
         cfg = _make_config(tmp_path)
-        daemon = PvLearnerDaemon(cfg)
+        daemon = PvLearnerDaemon(cfg, tmp_path / "config.yaml")
         client = MagicMock()
 
         # Only 1 month of data — threshold is 3.
@@ -217,7 +217,7 @@ class TestTrainingCycle:
         from pv_ml_learner.__main__ import PvLearnerDaemon
 
         cfg = _make_config(tmp_path, array_names=["east", "west"])
-        daemon = PvLearnerDaemon(cfg)
+        daemon = PvLearnerDaemon(cfg, tmp_path / "config.yaml")
         client = MagicMock()
 
         knmi_rows = _synthetic_knmi_rows(n_months=3)
@@ -257,7 +257,7 @@ class TestInferenceCycle:
         from pv_ml_learner.trainer import train_model
 
         cfg = _make_config(tmp_path, array_names=["east", "west"])
-        daemon = PvLearnerDaemon(cfg)
+        daemon = PvLearnerDaemon(cfg, tmp_path / "config.yaml")
         client = MagicMock()
 
         # Pre-train models for both arrays so inference can proceed.
@@ -296,7 +296,7 @@ class TestInferenceCycle:
         from pv_ml_learner.meteoserver_fetcher import FetchError
 
         cfg = _make_config(tmp_path)
-        daemon = PvLearnerDaemon(cfg)
+        daemon = PvLearnerDaemon(cfg, tmp_path / "config.yaml")
         client = MagicMock()
 
         with (
@@ -317,7 +317,7 @@ class TestInferenceCycle:
         from pv_ml_learner.trainer import train_model
 
         cfg = _make_config(tmp_path, array_names=["east", "west"])
-        daemon = PvLearnerDaemon(cfg)
+        daemon = PvLearnerDaemon(cfg, tmp_path / "config.yaml")
         client = MagicMock()
 
         # Only train the "east" array; "west" has no model.

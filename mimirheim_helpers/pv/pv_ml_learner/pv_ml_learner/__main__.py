@@ -22,6 +22,12 @@ What this module does not do:
   delegated to the respective modules.
 - It does not read or write the Home Assistant database directly; that is
   ``ha_actuals``'s responsibility.
+
+``PvLearnerDaemon`` also opts into the Config Service protocol via
+``helper_common.config_owner.ConfigOwnerSupport``, so its configuration is
+discoverable, renderable, and editable in the same running Config Editor as
+mimirheim core's (config-editor-v3 ticket 06). This is additive: it changes
+nothing about the training/inference behavior above.
 """
 
 from __future__ import annotations
@@ -37,6 +43,7 @@ from typing import Any
 import paho.mqtt.client as mqtt
 import sqlalchemy as sa
 
+from helper_common.config_owner import ConfigOwnerSupport
 from helper_common.cycle import CycleResult
 from helper_common.daemon import MqttDaemon
 from helper_common.publish import publish_checked
@@ -44,6 +51,7 @@ from helper_common.discovery import publish_trigger_discovery
 
 from pv_ml_learner.config import ArrayConfig, PvLearnerConfig, load_config
 from pv_ml_learner.dataset_builder import build_training_rows
+from pv_ml_learner.formspec import PV_LEARNER_CONFIG_FORM_SPEC
 from pv_ml_learner.ha_actuals import build_ha_engine, compute_hourly_kwh
 from pv_ml_learner.knmi_fetcher import FetchError as KnmiFetchError
 from pv_ml_learner.knmi_fetcher import fetch_knmi_hours
@@ -66,6 +74,11 @@ from pv_ml_learner.storage import (
 from pv_ml_learner.trainer import InsufficientDataError, train_model
 
 logger = logging.getLogger("pv_ml_learner")
+
+# Stable regardless of user configuration; the Config Editor needs a fixed
+# identity for this tool across restarts and reconfiguration.
+CONFIG_OWNER_ID = "pv_ml_learner"
+CONFIG_OWNER_DISPLAY_NAME = "PV forecast (ML learner)"
 
 # Home Assistant publishes "online" retained to this topic on startup and on
 # MQTT integration reload. Subscribing allows the daemon to re-publish its
@@ -174,7 +187,7 @@ class PvLearnerDaemon(MqttDaemon):
             used for per-topic debounce.
     """
 
-    def __init__(self, config: PvLearnerConfig) -> None:
+    def __init__(self, config: PvLearnerConfig, config_path: Path) -> None:
         # SQLite engine must be ready before MqttDaemon.__init__ constructs the
         # paho client (which calls _on_connect on the network thread).
         Path(config.storage.db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -189,6 +202,15 @@ class PvLearnerDaemon(MqttDaemon):
         self._last_trigger_at: dict[str, float] = {}
 
         super().__init__(config)
+        self._config_owner = ConfigOwnerSupport(
+            owner_id=CONFIG_OWNER_ID,
+            display_name=CONFIG_OWNER_DISPLAY_NAME,
+            model=PvLearnerConfig,
+            form_spec=PV_LEARNER_CONFIG_FORM_SPEC,
+            config_path=config_path,
+        )
+        # Must be registered before self._client.connect() (called by run()).
+        self._config_owner.register_last_will(self._client)
         logger.info("Storage schema ready at %s.", config.storage.db_path)
 
     # ------------------------------------------------------------------
@@ -206,6 +228,7 @@ class PvLearnerDaemon(MqttDaemon):
         super()._on_connect(client, userdata, flags, reason_code, properties)
         if reason_code.is_failure:
             return
+        self._config_owner.on_connect(client)
         cfg = self._config
         client.subscribe(cfg.training.train_trigger_topic, qos=1)
         client.subscribe(cfg.training.inference_trigger_topic, qos=1)
@@ -238,6 +261,8 @@ class PvLearnerDaemon(MqttDaemon):
         userdata: Any,
         message: Any,
     ) -> None:
+        if self._config_owner.handle_message(client, message):
+            return
         topic = message.topic
 
         # HA birth message must be checked before the retain guard because
@@ -662,6 +687,9 @@ class PvLearnerDaemon(MqttDaemon):
     # network loop, and blocks until SIGTERM/SIGINT. Startup training (for
     # arrays with no model) is triggered from _on_connect.
 
+    def _on_shutdown(self) -> None:
+        self._config_owner.clear_descriptor(self._client)
+
 
 def main() -> None:
     """Parse CLI arguments, load config, and start the daemon."""
@@ -687,7 +715,7 @@ def main() -> None:
     # Meteoserver API key in log files.  Suppress it to WARNING.
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
-    PvLearnerDaemon(load_config(args.config)).run()
+    PvLearnerDaemon(load_config(args.config), Path(args.config)).run()
 
 
 if __name__ == "__main__":

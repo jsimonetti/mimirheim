@@ -9,6 +9,7 @@ setting.
 """
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from zonneplan_prices.__main__ import ZonneplanPricesDaemon
@@ -17,6 +18,8 @@ from zonneplan_prices.config import (
     ZonneplanApiConfig,
     ZonneplanPricesConfig,
 )
+
+_CONFIG_PATH = Path("/tmp/zonneplan-test-config.yaml")
 
 _VALID_TOKEN: dict = {
     "access_token": "at",
@@ -37,7 +40,7 @@ def _make_config(price_interval: str) -> ZonneplanPricesConfig:
 
 
 def _make_daemon(price_interval: str) -> ZonneplanPricesDaemon:
-    return ZonneplanPricesDaemon(_make_config(price_interval))
+    return ZonneplanPricesDaemon(_make_config(price_interval), _CONFIG_PATH)
 
 
 def _run_cycle_with_n_steps(daemon: ZonneplanPricesDaemon, n_steps: int):

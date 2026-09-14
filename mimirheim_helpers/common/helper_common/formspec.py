@@ -13,6 +13,7 @@ re-describing their labels and help text.
 from __future__ import annotations
 
 from mimirheim_shared.formspec import FieldSpec, FormSpec, Tier
+from mimirheim_shared.visibility import Comparison, ComparisonOperator
 
 MQTT_CONFIG_FORM_SPEC = FormSpec(
     fields={
@@ -20,18 +21,18 @@ MQTT_CONFIG_FORM_SPEC = FormSpec(
             label="Broker host", description="Broker hostname or IP address.", tier=Tier.BASIC
         ),
         "port": FieldSpec(
-            label="Broker port", description="Broker TCP port.", tier=Tier.EXPERT
+            label="Broker port", description="Broker TCP port.", tier=Tier.BASIC
+        ),
+        "username": FieldSpec(
+            label="Username", description="Broker username.", tier=Tier.BASIC
+        ),
+        "password": FieldSpec(
+            label="Password", description="Broker password.", tier=Tier.BASIC
         ),
         "client_id": FieldSpec(
             label="Client ID",
             description="MQTT client identifier. Defaults to a tool-specific value when not set.",
-            tier=Tier.BASIC,
-        ),
-        "username": FieldSpec(
-            label="Username", description="Broker username.", tier=Tier.EXPERT
-        ),
-        "password": FieldSpec(
-            label="Password", description="Broker password.", tier=Tier.EXPERT
+            tier=Tier.EXPERT,
         ),
         "tls": FieldSpec(
             label="Enable TLS",
@@ -51,22 +52,25 @@ HOME_ASSISTANT_CONFIG_FORM_SPEC = FormSpec(
         "enabled": FieldSpec(
             label="Enable HA discovery",
             description="Enable HA MQTT discovery.",
-            tier=Tier.EXPERT,
+            tier=Tier.BASIC,
         ),
         "discovery_prefix": FieldSpec(
             label="Discovery prefix",
             description="HA MQTT discovery topic prefix.",
             tier=Tier.EXPERT,
+            visible_if=Comparison(field="enabled", operator=ComparisonOperator.EQ, value=True),
         ),
         "device_name": FieldSpec(
             label="HA device name",
             description="Display name for the HA device. Defaults to tool name.",
             tier=Tier.EXPERT,
+            visible_if=Comparison(field="enabled", operator=ComparisonOperator.EQ, value=True),
         ),
         "forecast_sensor": FieldSpec(
             label="Enable forecast sensor",
             description="Publish an additional HA sensor entity for the helper's forecast output topic.",
             tier=Tier.EXPERT,
+            visible_if=Comparison(field="enabled", operator=ComparisonOperator.EQ, value=True),
         ),
     }
 )

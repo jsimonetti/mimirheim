@@ -38,8 +38,7 @@ class KnmiConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     station_id: int = Field(
-        description="KNMI station ID. 260 = De Bilt.",
-        json_schema_extra={"ui_label": "KNMI station ID", "ui_group": "basic"},
+        description="KNMI station ID. 260 = De Bilt."
     )
 
 
@@ -59,15 +58,14 @@ class MeteoserverConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    api_key: str = Field(description="Meteoserver API key.", json_schema_extra={"ui_label": "API key", "ui_group": "basic"})
-    latitude: float = Field(description="Site latitude in decimal degrees.", json_schema_extra={"ui_label": "Latitude", "ui_group": "basic"})
-    longitude: float = Field(description="Site longitude in decimal degrees.", json_schema_extra={"ui_label": "Longitude", "ui_group": "basic"})
+    api_key: str = Field(description="Meteoserver API key.")
+    latitude: float = Field(description="Site latitude in decimal degrees.")
+    longitude: float = Field(description="Site longitude in decimal degrees.")
     forecast_horizon_hours: int = Field(
         default=48,
         ge=1,
         le=54,
-        description="Number of hourly forecast steps to use (1–54).",
-        json_schema_extra={"ui_label": "Forecast horizon (h)", "ui_group": "advanced"},
+        description="Number of hourly forecast steps to use (1–54)."
     )
 
 
@@ -103,8 +101,7 @@ class HomeAssistantConfig(BaseModel):
             "Examples: sqlite:////config/home-assistant_v2.db, "
             "postgresql+psycopg2://user:pass@host/homeassistant, "
             "mysql+pymysql://user:pass@host/homeassistant."
-        ),
-        json_schema_extra={"ui_label": "HA DB URL", "ui_group": "basic"},
+        )
     )
 
     @model_validator(mode="after")
@@ -150,31 +147,27 @@ class ArrayConfig(BaseModel):
 
     peak_power_kwp: float = Field(
         gt=0,
-        description="Installed PV peak power in kWp.",
-        json_schema_extra={"ui_label": "Peak power (kWp)", "ui_group": "basic"},
+        description="Installed PV peak power in kWp."
     )
     output_topic: str | None = Field(
         default=None,
         description=(
             "MQTT topic for the retained forecast payload. "
             "Defaults to '{mimir_topic_prefix}/input/pv/{array_key}/forecast' when not set."
-        ),
-        json_schema_extra={"ui_label": "Output topic", "ui_group": "advanced", "ui_placeholder": "{mimir_topic_prefix}/input/pv/{array_key}/forecast", "ui_source": "pv_arrays"},
+        )
     )
     sum_entity_ids: list[str] = Field(
         min_length=1,
-        description="Entity IDs to sum for hourly PV production.",
-        json_schema_extra={"ui_label": "Sum entity IDs", "ui_group": "basic"},
+        description="Entity IDs to sum for hourly PV production."
     )
-    model_path: str = Field(description="joblib model file path.", json_schema_extra={"ui_label": "Model path", "ui_group": "advanced"})
-    metadata_path: str = Field(description="JSON metadata file path.", json_schema_extra={"ui_label": "Metadata path", "ui_group": "advanced"})
+    model_path: str = Field(description="joblib model file path.")
+    metadata_path: str = Field(description="JSON metadata file path.")
     exclude_limiting_entity_ids: list[str] = Field(
         default_factory=list,
         description=(
             "Binary/numeric sensors indicating active inverter limiting. "
             "Matching training hours are excluded from the dataset."
-        ),
-        json_schema_extra={"ui_label": "Exclude limiting entities", "ui_group": "advanced"},
+        )
     )
 
 
@@ -191,7 +184,7 @@ class StorageConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    db_path: str = Field(description="SQLite database path.", json_schema_extra={"ui_label": "Storage DB path", "ui_group": "basic"})
+    db_path: str = Field(description="SQLite database path.")
 
 
 class HyperparamConfig(BaseModel):
@@ -211,11 +204,11 @@ class HyperparamConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    n_estimators: list[int] = Field(default=[200], json_schema_extra={"ui_label": "n_estimators", "ui_group": "advanced"})
-    max_depth: list[int] = Field(default=[5], json_schema_extra={"ui_label": "max_depth", "ui_group": "advanced"})
-    learning_rate: list[float] = Field(default=[0.08], json_schema_extra={"ui_label": "learning_rate", "ui_group": "advanced"})
-    subsample: list[float] = Field(default=[0.9], json_schema_extra={"ui_label": "subsample", "ui_group": "advanced"})
-    min_child_weight: list[int] = Field(default=[1], json_schema_extra={"ui_label": "min_child_weight", "ui_group": "advanced"})
+    n_estimators: list[int] = Field(default=[200])
+    max_depth: list[int] = Field(default=[5])
+    learning_rate: list[float] = Field(default=[0.08])
+    subsample: list[float] = Field(default=[0.9])
+    min_child_weight: list[int] = Field(default=[1])
 
 
 class TrainingConfig(BaseModel):
@@ -240,29 +233,24 @@ class TrainingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     train_trigger_topic: str = Field(
-        description="MQTT topic that triggers a training run.",
-        json_schema_extra={"ui_label": "Train trigger topic", "ui_group": "basic"},
+        description="MQTT topic that triggers a training run."
     )
     inference_trigger_topic: str = Field(
-        description="MQTT topic that triggers an inference run.",
-        json_schema_extra={"ui_label": "Inference trigger topic", "ui_group": "basic"},
+        description="MQTT topic that triggers an inference run."
     )
     min_months_required: int = Field(
         default=12,
         ge=1,
-        description="Minimum distinct calendar months required to train.",
-        json_schema_extra={"ui_label": "Min months required", "ui_group": "advanced"},
+        description="Minimum distinct calendar months required to train."
     )
     hyperparams: HyperparamConfig = Field(
         default_factory=HyperparamConfig,
-        description="XGBoost grid search configuration.",
-        json_schema_extra={"ui_label": "Hyperparameters", "ui_group": "advanced"},
+        description="XGBoost grid search configuration."
     )
     n_cv_splits: int = Field(
         default=5,
         ge=2,
-        description="Number of TimeSeriesSplit CV folds.",
-        json_schema_extra={"ui_label": "CV splits", "ui_group": "advanced"},
+        description="Number of TimeSeriesSplit CV folds."
     )
 
 
@@ -277,7 +265,7 @@ class HaDiscoveryConfig(_HelperHaDiscoveryConfig):
         device_name: Device name shown in HA. Default 'MIMIRHEIM PV Learner'.
     """
 
-    device_name: str = Field(default="MIMIRHEIM PV Learner", json_schema_extra={"ui_label": "Device name", "ui_group": "advanced"})
+    device_name: str = Field(default="MIMIRHEIM PV Learner")
 
 
 class PvLearnerConfig(BaseModel):
@@ -303,37 +291,32 @@ class PvLearnerConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    mqtt: MqttConfig = Field(description="MQTT broker connection settings.", json_schema_extra={"ui_label": "MQTT", "ui_group": "basic"})
+    mqtt: MqttConfig = Field(description="MQTT broker connection settings.")
     mimir_topic_prefix: str = Field(
         default="mimir",
-        description="mimirheim mqtt.topic_prefix. Used to derive default array output and trigger topics.",
-        json_schema_extra={"ui_label": "mimirheim topic prefix", "ui_group": "advanced"},
+        description="mimirheim mqtt.topic_prefix. Used to derive default array output and trigger topics."
     )
     signal_mimir: bool = Field(
         default=False,
-        description="Publish to mimir_trigger_topic after each forecast cycle.",
-        json_schema_extra={"ui_label": "Signal mimirheim", "ui_group": "advanced"},
+        description="Publish to mimir_trigger_topic after each forecast cycle."
     )
     mimir_trigger_topic: str | None = Field(
         default=None,
-        description="mimirheim trigger topic. Defaults to '{mimir_topic_prefix}/input/trigger'.",
-        json_schema_extra={"ui_label": "mimirheim trigger topic", "ui_group": "advanced", "ui_placeholder": "{mimir_topic_prefix}/input/trigger"},
+        description="mimirheim trigger topic. Defaults to '{mimir_topic_prefix}/input/trigger'."
     )
-    knmi: KnmiConfig = Field(description="KNMI weather station configuration.", json_schema_extra={"ui_label": "KNMI", "ui_group": "basic"})
-    meteoserver: MeteoserverConfig = Field(description="Meteoserver API configuration.", json_schema_extra={"ui_label": "Meteoserver", "ui_group": "basic"})
-    homeassistant: HomeAssistantConfig = Field(description="Home Assistant database configuration.", json_schema_extra={"ui_label": "Home Assistant", "ui_group": "basic"})
+    knmi: KnmiConfig = Field(description="KNMI weather station configuration.")
+    meteoserver: MeteoserverConfig = Field(description="Meteoserver API configuration.")
+    homeassistant: HomeAssistantConfig = Field(description="Home Assistant database configuration.")
     arrays: dict[str, ArrayConfig] = Field(
         min_length=1,
-        description="Named map of PV array configurations. The key is used as the array identifier and mimirheim device name.",
-        json_schema_extra={"ui_label": "PV arrays", "ui_group": "basic"},
+        description="Named map of PV array configurations. The key is used as the array identifier and mimirheim device name."
     )
-    storage: StorageConfig = Field(description="Shared SQLite storage configuration.", json_schema_extra={"ui_label": "Storage", "ui_group": "basic"})
-    training: TrainingConfig = Field(description="Training and inference trigger configuration.", json_schema_extra={"ui_label": "Training", "ui_group": "basic"})
-    ha_discovery: HaDiscoveryConfig = Field(default_factory=HaDiscoveryConfig, json_schema_extra={"ui_label": "HA discovery", "ui_group": "advanced"})
+    storage: StorageConfig = Field(description="Shared SQLite storage configuration.")
+    training: TrainingConfig = Field(description="Training and inference trigger configuration.")
+    ha_discovery: HaDiscoveryConfig = Field(default_factory=HaDiscoveryConfig)
     stats_topic: str | None = Field(
         default=None,
-        description="MQTT topic where per-cycle run statistics are published.",
-        json_schema_extra={"ui_label": "Stats topic", "ui_group": "advanced"},
+        description="MQTT topic where per-cycle run statistics are published."
     )
 
     @model_validator(mode="after")

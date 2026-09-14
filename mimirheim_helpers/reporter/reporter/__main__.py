@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+from pathlib import Path
 
 from reporter.config import load_config
 from reporter.daemon import ReporterDaemon
@@ -38,7 +39,7 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     config = load_config(args.config)
-    daemon = ReporterDaemon(config)
+    daemon = ReporterDaemon(config, Path(args.config))
     daemon.run()
 
 

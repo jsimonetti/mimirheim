@@ -13,6 +13,16 @@ This module is responsible for:
 What this module does not do:
 - It does not implement scheduling logic — that is loop.py's responsibility.
 - It does not parse configuration — that is config.py's responsibility.
+
+The scheduler also opts into the Config Service protocol via
+``helper_common.config_owner.ConfigOwnerSupport``, so its configuration is
+discoverable, renderable, and editable in the same running Config Editor as
+mimirheim core's (config-editor-v3 ticket 06). Unlike every other helper,
+the scheduler has no ``MqttDaemon``/``HelperDaemon`` base class to wire
+this into: it drives its own paho client directly, so the four
+``ConfigOwnerSupport`` calls are made from this module's own
+``_on_connect``/``_on_message`` callbacks and from ``main()`` around
+``client.connect``/``client.disconnect``.
 """
 
 import argparse
@@ -20,24 +30,38 @@ import logging
 import signal
 import ssl
 import threading
+from pathlib import Path
 
 import paho.mqtt.client as paho
 
+from helper_common.config_owner import ConfigOwnerSupport
+
 from scheduler.config import SchedulerConfig, load_config
+from scheduler.formspec import SCHEDULER_CONFIG_FORM_SPEC
 from scheduler.loop import run
 
 logger = logging.getLogger("scheduler")
 
+# Stable regardless of user configuration; the Config Editor needs a fixed
+# identity for this tool across restarts and reconfiguration.
+CONFIG_OWNER_ID = "scheduler"
+CONFIG_OWNER_DISPLAY_NAME = "Scheduler"
 
-def _make_paho_client(config: SchedulerConfig) -> paho.Client:
+
+def _make_paho_client(config: SchedulerConfig, config_owner: ConfigOwnerSupport) -> paho.Client:
     """Construct and connect a paho MQTT client for the scheduler.
 
-    The scheduler only publishes — it never subscribes to any topic.
-    Reconnection is handled automatically by paho's internal loop.
+    The scheduler's own job publishes and never subscribes to any topic, but
+    the client now also carries the Config Owner's ``validate_and_write``
+    subscription (see ``config_owner``). Reconnection is handled
+    automatically by paho's internal loop.
 
     Args:
         config: Validated scheduler configuration, used for broker address
             and credentials.
+        config_owner: This tool's Config Service wiring. Its last-will is
+            registered here, before ``connect()``; its ``on_connect`` and
+            ``handle_message`` are wired into this client's own callbacks.
 
     Returns:
         A connected paho ``Client`` instance with ``loop_start()`` not yet
@@ -57,6 +81,8 @@ def _make_paho_client(config: SchedulerConfig) -> paho.Client:
     if config.mqtt.username is not None:
         client.username_pw_set(config.mqtt.username, config.mqtt.password)
 
+    config_owner.register_last_will(client)
+
     def _on_connect(
         cl: paho.Client,
         userdata: object,
@@ -66,10 +92,11 @@ def _make_paho_client(config: SchedulerConfig) -> paho.Client:
     ) -> None:
         if reason_code.is_failure:
             logger.warning("MQTT connection failed: reason_code=%s", reason_code)
-        else:
-            logger.info(
-                "Connected to MQTT broker %s:%d.", config.mqtt.host, config.mqtt.port
-            )
+            return
+        logger.info(
+            "Connected to MQTT broker %s:%d.", config.mqtt.host, config.mqtt.port
+        )
+        config_owner.on_connect(cl)
 
     def _on_disconnect(
         cl: paho.Client,
@@ -84,8 +111,16 @@ def _make_paho_client(config: SchedulerConfig) -> paho.Client:
                 reason_code,
             )
 
+    def _on_message(
+        cl: paho.Client,
+        userdata: object,
+        message: paho.MQTTMessage,
+    ) -> None:
+        config_owner.handle_message(cl, message)
+
     client.on_connect = _on_connect
     client.on_disconnect = _on_disconnect
+    client.on_message = _on_message
 
     client.connect(config.mqtt.host, config.mqtt.port, keepalive=60)
     return client
@@ -132,6 +167,14 @@ def main() -> None:
     config = load_config(args.config)
     schedules = config.parsed_schedules()
 
+    config_owner = ConfigOwnerSupport(
+        owner_id=CONFIG_OWNER_ID,
+        display_name=CONFIG_OWNER_DISPLAY_NAME,
+        model=SchedulerConfig,
+        form_spec=SCHEDULER_CONFIG_FORM_SPEC,
+        config_path=Path(args.config),
+    )
+
     stop_event = threading.Event()
 
     def _request_shutdown(signum: int, frame: object) -> None:
@@ -141,7 +184,7 @@ def main() -> None:
     signal.signal(signal.SIGTERM, _request_shutdown)
     signal.signal(signal.SIGINT, _request_shutdown)
 
-    client = _make_paho_client(config)
+    client = _make_paho_client(config, config_owner)
     client.loop_start()
 
     logger.info(
@@ -154,6 +197,7 @@ def main() -> None:
     try:
         run(client, schedules, stop_event)
     finally:
+        config_owner.clear_descriptor(client)
         client.loop_stop()
         client.disconnect()
         logger.info("Scheduler shut down cleanly.")

@@ -7,6 +7,7 @@ duration, same rule as the Nordpool helper).
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from epexpredictor_prices.__main__ import EpexPredictorPricesDaemon
@@ -17,6 +18,8 @@ from epexpredictor_prices.config import (
 )
 from epexpredictor_prices.fetcher import FetchError, FetchResult
 
+_CONFIG_PATH = Path("/tmp/epexpredictor-test-config.yaml")
+
 
 def _make_daemon(price_interval: str = "quarter_hourly") -> EpexPredictorPricesDaemon:
     config = EpexPredictorPricesConfig(
@@ -24,7 +27,7 @@ def _make_daemon(price_interval: str = "quarter_hourly") -> EpexPredictorPricesD
         trigger_topic="mimir/input/tools/prices/trigger",
         epexpredictor=EpexPredictorApiConfig(area="NL", price_interval=price_interval),
     )
-    return EpexPredictorPricesDaemon(config)
+    return EpexPredictorPricesDaemon(config, _CONFIG_PATH)
 
 
 def _fake_result(n_steps: int) -> FetchResult:
@@ -89,7 +92,7 @@ class TestSignalMimir:
             signal_mimir=True,
             mimir_trigger_topic="mimir/input/trigger",
         )
-        daemon = EpexPredictorPricesDaemon(config)
+        daemon = EpexPredictorPricesDaemon(config, _CONFIG_PATH)
         client = MagicMock()
 
         with patch(
