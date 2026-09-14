@@ -29,6 +29,14 @@ from mimirheim_shared.visibility import evaluate_condition
 # an empty string.
 UNGROUPED_LABEL = "General"
 
+# Placeholder key a Named or Ordered Collection's entry_template is built
+# under (ticket 06). owner.html renders this template entry inert, inside a
+# <template> element the browser never submits; collections.js's Add control
+# clones it and replaces every occurrence of this token in the clone's
+# name/id attributes with a freshly generated, sibling-unique key before
+# inserting it into the live entries container.
+NEW_ENTRY_KEY = "__new__"
+
 
 def schema_default_values(json_schema: dict[str, Any]) -> dict[str, Any]:
     """Extracts each top-level property's JSON Schema default, if any.
@@ -105,7 +113,14 @@ class RenderedField:
       live via JS, so a currently-absent section can be populated without a
       page reload, while a disabled fieldset's controls are never submitted.
     - `entries`: a Named Collection or Ordered Collection field, one
-      `RenderedEntry` per existing entry.
+      `RenderedEntry` per existing entry. `entry_template` is always built
+      alongside `entries` for these two shapes (even when `entries` is
+      empty): one further `RenderedEntry` keyed by `NEW_ENTRY_KEY`, prefilled
+      from the item schema's own defaults exactly like a real entry with no
+      on-disk value would be. `owner.html` renders it inert, inside a
+      `<template>` element; the Add control (ticket 06) clones it client-side
+      and substitutes a freshly generated key for `NEW_ENTRY_KEY` before
+      inserting the clone into the live entries container.
 
     Attributes:
         name: The field's full dotted/indexed path (e.g.
@@ -124,6 +139,7 @@ class RenderedField:
     options: list[Any] | None = None
     nested_groups: list["RenderedGroup"] | None = None
     entries: list[RenderedEntry] | None = None
+    entry_template: RenderedEntry | None = None
     present: bool = False
     # Widget kind for a SCALAR leaf field ("text", "checkbox", or "number"),
     # derived from the field's own JSON Schema "type" (see _widget_attrs).
@@ -310,6 +326,30 @@ def _build_groups(
     return [groups[label] for label in order]
 
 
+def _build_entry_template(
+    field_name: str,
+    nested_form_spec: FormSpec,
+    item_schema: dict[str, Any],
+    item_properties: dict[str, Any],
+    defs: dict[str, Any],
+) -> RenderedEntry:
+    """Builds the one inert entry (ticket 06) an Add control clones client-side.
+
+    Prefilled the same way a real entry with no on-disk value would be (its
+    own item schema's defaults, via `_merge_defaults`), keyed by
+    `NEW_ENTRY_KEY` rather than a real Named Collection key or Ordered
+    Collection index: `owner.html` renders it inside a `<template>` element,
+    which the browser parses but never submits, so this placeholder key never
+    reaches a real form submission unless collections.js's Add control
+    substitutes a real one for it first.
+    """
+    entry_prefix = f"{field_name}.{NEW_ENTRY_KEY}"
+    entry_groups = _build_groups(
+        nested_form_spec, _merge_defaults(item_schema, {}), entry_prefix, item_properties, defs
+    )
+    return RenderedEntry(key=NEW_ENTRY_KEY, label=NEW_ENTRY_KEY, groups=entry_groups)
+
+
 def _build_field(
     field_name: str,
     spec: FieldSpec,
@@ -355,7 +395,10 @@ def _build_field(
                     defs,
                 )
                 entries.append(RenderedEntry(key=key, label=key, groups=entry_groups))
-        return RenderedField(name=field_name, spec=spec, entries=entries)
+        entry_template = _build_entry_template(
+            field_name, spec.nested_form_spec, item_schema, item_properties, defs
+        )
+        return RenderedField(name=field_name, spec=spec, entries=entries, entry_template=entry_template)
 
     if shape is FieldShape.ORDERED_COLLECTION and spec.nested_form_spec is not None:
         item_schema = _resolve_schema(field_schema.get("items", {}), defs)
@@ -372,7 +415,10 @@ def _build_field(
                     defs,
                 )
                 entries.append(RenderedEntry(key=str(index), label=f"#{index + 1}", groups=entry_groups))
-        return RenderedField(name=field_name, spec=spec, entries=entries)
+        entry_template = _build_entry_template(
+            field_name, spec.nested_form_spec, item_schema, item_properties, defs
+        )
+        return RenderedField(name=field_name, spec=spec, entries=entries, entry_template=entry_template)
 
     if shape is FieldShape.ENUM_SELECT:
         options = field_schema.get("enum", [])

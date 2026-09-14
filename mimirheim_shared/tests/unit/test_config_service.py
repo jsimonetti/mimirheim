@@ -71,6 +71,16 @@ class _ToyConfig(BaseModel):
     battery: _ToyBattery
 
 
+class _ToyConfigWithNamedCollection(BaseModel):
+    """Adds a Named Collection (``batteries``) alongside the plain nested
+    ``mqtt`` object, for the collection-resize round-trip tests below."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mqtt: _ToyMqtt
+    batteries: dict[str, _ToyBattery]
+
+
 def test_descriptor_topic_is_well_known_and_owner_scoped() -> None:
     assert descriptor_topic("mimirheim-core") == "mimirheim/config-service/mimirheim-core/descriptor"
     assert descriptor_topic("nordpool") == "mimirheim/config-service/nordpool/descriptor"
@@ -252,6 +262,47 @@ class TestHandleValidateAndWrite:
 
         with pytest.raises(ValidationError):
             handle_validate_and_write(b"not json", config_path, _ToyConfig)
+
+    def test_a_named_collection_submitted_with_a_different_key_set_replaces_the_whole_field(
+        self, tmp_path: Path
+    ) -> None:
+        """Ticket 06's own round-trip criterion: an entry removed, added, or
+        renamed leaves the Named Collection resized on disk, not just merged
+        on top of the stale on-disk keys (ADR-0008)."""
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text(
+            "mqtt:\n  host: localhost\n"
+            "batteries:\n"
+            "  battery_main:\n    capacity_kwh: 10.0\n"
+            "  battery_old:\n    capacity_kwh: 1.0\n"
+        )
+        request = ValidateAndWriteRequest(
+            request_id="req-5",
+            values={
+                "batteries": {
+                    "battery_main": {"capacity_kwh": 12.0},
+                    "battery_new": {"capacity_kwh": 5.0},
+                }
+            },
+        )
+
+        response = handle_validate_and_write(
+            request.model_dump_json().encode("utf-8"), config_path, _ToyConfigWithNamedCollection
+        )
+
+        result = ValidateAndWriteResult.model_validate_json(response)
+        assert result == ValidateAndWriteResult(request_id="req-5", success=True)
+
+        yaml = YAML()
+        with config_path.open() as fh:
+            written = yaml.load(fh)
+        assert written["batteries"] == {
+            "battery_main": {"capacity_kwh": 12.0},
+            "battery_new": {"capacity_kwh": 5.0},
+        }
+        assert "battery_old" not in written["batteries"]
+        # Unrelated sibling field survives untouched.
+        assert written["mqtt"]["host"] == "localhost"
 
 
 def test_get_current_values_request_topic_is_well_known_and_owner_scoped() -> None:

@@ -109,19 +109,53 @@
       </div>
     {% endmacro %}
 
+    {% macro render_collection_entry(field, entry) %}
+      {# One Named Collection (keyed) or Ordered Collection (indexed) entry.
+         A Named Collection entry's identifying name is an editable input
+         (collections.js's rename handler rewrites every one of the entry's
+         own descendant name/id/for attributes when it changes); an Ordered
+         Collection entry keeps its static "#N" legend instead, since
+         position -- not name -- identifies it, and reorder controls are a
+         later ticket (07). Both shapes get a Remove control. #}
+      <fieldset class="collection-entry card p-3 mb-3" data-entry="{{ entry.key }}">
+        <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+          {% if field.spec.shape == "named_collection" %}
+          <div class="flex-grow-1">
+            <label class="form-label fw-semibold h6 mb-1" for="entry-name-{{ field.name }}.{{ entry.key }}">Name</label>
+            <input class="form-control" type="text" id="entry-name-{{ field.name }}.{{ entry.key }}"
+                   value="{{ entry.key }}" data-entry-name-input data-collection-name="{{ field.name }}">
+          </div>
+          {% else %}
+          <legend class="fw-semibold h6 mb-0">{{ entry.label }}</legend>
+          {% endif %}
+          <button type="button" class="btn btn-outline-danger btn-sm flex-shrink-0" data-remove-entry>Remove</button>
+        </div>
+        {{ render_groups(entry.groups) }}
+      </fieldset>
+    {% endmacro %}
+
     {% macro render_field(field) %}
     {% if field.entries is not none %}
-      {# Named Collection (keyed) or Ordered Collection (indexed): one fieldset
-         per existing entry, no control to add/remove/rename/reorder (ticket 08). #}
+      {# Named Collection (keyed) or Ordered Collection (indexed): one
+         fieldset per existing entry, an Add control that appends a new one
+         (client-side JS only, ticket 06), and a Remove control on every
+         entry. `entry_template` is rendered inert inside a <template>, which
+         the Add control clones and keys with a freshly generated name. #}
       <div class="field field-collection mb-3" data-field="{{ field.name }}">
         <p class="fw-semibold mb-1">{{ field.spec.label }}</p>
         <p class="text-muted small">{{ field.spec.description }}</p>
-        {% for entry in field.entries %}
-        <fieldset class="collection-entry card p-3 mb-3" data-entry="{{ entry.key }}">
-          <legend class="fw-semibold h6">{{ entry.label }}</legend>
-          {{ render_groups(entry.groups) }}
-        </fieldset>
-        {% endfor %}
+        <div data-entries>
+          {% for entry in field.entries %}
+            {{ render_collection_entry(field, entry) }}
+          {% endfor %}
+        </div>
+        <button type="button" class="btn btn-outline-primary btn-sm" data-add-entry
+                data-collection-name="{{ field.name }}" data-collection-shape="{{ field.spec.shape.value }}">
+          Add {{ field.spec.label }} entry
+        </button>
+        {% if field.entry_template is not none %}
+        <template data-entry-template>{{ render_collection_entry(field, field.entry_template) }}</template>
+        {% endif %}
       </div>
     {% elif field.spec.shape == "optional_object" %}
       {# Presence Toggle: nested fields always render, inside a <fieldset
@@ -233,14 +267,43 @@
     </form>
   </main>
 
+  {# One reusable Remove confirmation modal (ticket 06) for every collection
+     entry's Remove control, rather than one per entry: collections.js shows
+     it, remembers which entry is pending removal, and only removes that
+     entry from the DOM on confirmation. No Bootstrap JS is vendored (see the
+     script below), so its show/hide state is driven entirely by
+     collections.js toggling the classes/attributes Bootstrap's own CSS
+     already keys off of. #}
+  <div class="modal" tabindex="-1" data-remove-entry-modal aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Remove entry?</h5>
+          <button type="button" class="btn-close" data-remove-entry-cancel aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-0">This removes the entry from the form. It is not written to disk unless you Save afterwards.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-remove-entry-cancel>Cancel</button>
+          <button type="button" class="btn btn-danger" data-remove-entry-confirm>Remove</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop" data-remove-entry-backdrop hidden></div>
+
   {# Only interactivity in the whole editor (ADR-0003 allows "minimal
-     client-side JS for interactivity"): a Presence Toggle checkbox's own
-     .field-optional-object wrapper holds exactly one <fieldset>, so toggling
-     its hidden/disabled state needs no id or bookkeeping beyond that. No
-     Bootstrap JS is loaded: the Advanced disclosure stays a plain
-     <details>/<summary> element, which needs none, and the Tab/Subtab nav
-     below (ticket 04) is switched by plain position-matching rather than
-     Bootstrap's own JS tab component. #}
+     client-side JS for interactivity ... such as add/remove rows"): a
+     Presence Toggle checkbox's own .field-optional-object wrapper holds
+     exactly one <fieldset>, so toggling its hidden/disabled state needs no
+     id or bookkeeping beyond that. No Bootstrap JS is loaded: the Advanced
+     disclosure stays a plain <details>/<summary> element, which needs none,
+     the Tab/Subtab nav below (ticket 04) is switched by plain
+     position-matching rather than Bootstrap's own JS tab component, and the
+     collection Add/Remove/rename handlers below (ticket 06) drive the
+     Remove confirmation modal's classes directly rather than loading
+     Bootstrap's JS modal component for just this one control. #}
   <script>
     document.addEventListener("change", function (event) {
       if (!event.target.matches("input[data-presence-toggle]")) return;
@@ -269,6 +332,159 @@
         pane.classList.toggle("d-none", i !== index);
       });
     });
+
+    // --- Collection Add/Remove/rename (ticket 06) ---------------------------
+    //
+    // A collection entry's own DOM identity is entirely carried by the
+    // "{collectionName}.{entryKey}" prefix embedded in every one of its
+    // descendant name/id/for attributes (see render.py's RenderedField/
+    // RenderedEntry): parse_submission (submission.py) derives a Named
+    // Collection's keys, and an Ordered Collection's indices, purely from
+    // whatever prefixes are present in the submitted form at Save time. So
+    // Add, Remove, and rename never need a new server endpoint: they only
+    // ever rewrite that prefix client-side, on the already-rendered DOM, and
+    // the existing Save POST does the rest.
+
+    // Named Collections auto-generate a new entry's name from the shape's
+    // own base name -- the collection field's last dotted segment,
+    // singularized -- plus the lowest free integer suffix among current
+    // sibling names (e.g. "batteries" -> "battery_2"). An Ordered
+    // Collection has no name to generate; a new entry is simply appended at
+    // the next index.
+    function singularizeBaseName(fieldName) {
+      var lastSegment = fieldName.split(".").pop();
+      if (lastSegment.endsWith("ies")) return lastSegment.slice(0, -3) + "y";
+      if (lastSegment.endsWith("s") && !lastSegment.endsWith("ss")) return lastSegment.slice(0, -1);
+      return lastSegment;
+    }
+
+    function nextUniqueEntryName(fieldName, siblingKeys) {
+      var base = singularizeBaseName(fieldName);
+      var usedSuffixes = {};
+      siblingKeys.forEach(function (key) {
+        var match = /^(.*)_(\d+)$/.exec(key);
+        if (match && match[1] === base) usedSuffixes[match[2]] = true;
+      });
+      var suffix = 1;
+      while (usedSuffixes[String(suffix)]) suffix++;
+      return base + "_" + suffix;
+    }
+
+    function siblingEntryKeys(entriesContainer) {
+      return Array.prototype.map.call(
+        entriesContainer.querySelectorAll(":scope > [data-entry]"),
+        function (entryElement) { return entryElement.getAttribute("data-entry"); }
+      );
+    }
+
+    // Rewrites every occurrence of oldPrefix (e.g. "batteries.__new__", or
+    // "batteries.battery_main" on rename) to newPrefix across `root`'s own
+    // descendants' name/id/for/data-collection-name attributes. A nested
+    // collection field's own Add button and entry-name input carry
+    // data-collection-name values built from the same dotted prefix, so
+    // renaming or keying an outer entry must also rewrite those, not only
+    // the leaf name/id/for attributes parse_submission actually reads.
+    function rewriteEntryPrefix(root, oldPrefix, newPrefix) {
+      var attributesToRewrite = ["name", "id", "for", "data-collection-name"];
+      root.querySelectorAll("*").forEach(function (element) {
+        attributesToRewrite.forEach(function (attribute) {
+          if (!element.hasAttribute(attribute)) return;
+          element.setAttribute(attribute, element.getAttribute(attribute).split(oldPrefix).join(newPrefix));
+        });
+      });
+    }
+
+    document.addEventListener("click", function (event) {
+      var addButton = event.target.closest("[data-add-entry]");
+      if (!addButton) return;
+
+      var wrapper = addButton.closest(".field-collection");
+      var entriesContainer = wrapper.querySelector(":scope > [data-entries]");
+      var template = wrapper.querySelector(":scope > template[data-entry-template]");
+      var collectionName = addButton.getAttribute("data-collection-name");
+      var shape = addButton.getAttribute("data-collection-shape");
+
+      var siblingKeys = siblingEntryKeys(entriesContainer);
+      var newKey = shape === "named_collection"
+        ? nextUniqueEntryName(collectionName, siblingKeys)
+        : String(siblingKeys.length);
+
+      var clone = template.content.cloneNode(true);
+      var newEntryFieldset = clone.querySelector("[data-entry]");
+      newEntryFieldset.setAttribute("data-entry", newKey);
+      rewriteEntryPrefix(clone, collectionName + ".__new__", collectionName + "." + newKey);
+      var nameInput = newEntryFieldset.querySelector("[data-entry-name-input]");
+      if (nameInput) nameInput.value = newKey;
+
+      entriesContainer.appendChild(clone);
+
+      var addedEntry = entriesContainer.lastElementChild;
+      var focusTarget = addedEntry.querySelector("[data-entry-name-input]") ||
+        addedEntry.querySelector("input, select, textarea");
+      if (focusTarget) focusTarget.focus();
+    });
+
+    // Remove: a single reusable confirmation modal (see the markup after
+    // <main>) shared by every entry's Remove control, rather than one modal
+    // instance per entry.
+    var pendingRemoveEntry = null;
+
+    function showRemoveEntryModal() {
+      document.querySelector("[data-remove-entry-modal]").style.display = "block";
+      document.querySelector("[data-remove-entry-modal]").classList.add("show");
+      document.querySelector("[data-remove-entry-backdrop]").hidden = false;
+      document.querySelector("[data-remove-entry-backdrop]").classList.add("show");
+    }
+
+    function hideRemoveEntryModal() {
+      document.querySelector("[data-remove-entry-modal]").style.display = "none";
+      document.querySelector("[data-remove-entry-modal]").classList.remove("show");
+      document.querySelector("[data-remove-entry-backdrop]").hidden = true;
+      document.querySelector("[data-remove-entry-backdrop]").classList.remove("show");
+    }
+
+    document.addEventListener("click", function (event) {
+      if (event.target.closest("[data-remove-entry]")) {
+        pendingRemoveEntry = event.target.closest("[data-entry]");
+        showRemoveEntryModal();
+        return;
+      }
+      if (event.target.closest("[data-remove-entry-confirm]")) {
+        if (pendingRemoveEntry) pendingRemoveEntry.remove();
+        pendingRemoveEntry = null;
+        hideRemoveEntryModal();
+        return;
+      }
+      if (event.target.closest("[data-remove-entry-cancel]") || event.target.matches("[data-remove-entry-backdrop]")) {
+        pendingRemoveEntry = null;
+        hideRemoveEntryModal();
+      }
+    });
+
+    // Rename: a Named Collection entry's own name input rewrites its
+    // fieldset's data-entry attribute plus every one of its own descendant
+    // name/id/for/data-collection-name attributes to the new key, after
+    // checking the new name does not collide with a sibling entry.
+    document.addEventListener("change", function (event) {
+      var nameInput = event.target.closest("[data-entry-name-input]");
+      if (!nameInput) return;
+
+      var entryFieldset = nameInput.closest("[data-entry]");
+      var entriesContainer = entryFieldset.parentElement;
+      var collectionName = nameInput.getAttribute("data-collection-name");
+      var oldKey = entryFieldset.getAttribute("data-entry");
+      var newKey = nameInput.value.trim();
+
+      var siblingKeys = siblingEntryKeys(entriesContainer).filter(function (key) { return key !== oldKey; });
+      if (!newKey || siblingKeys.indexOf(newKey) !== -1) {
+        nameInput.value = oldKey;
+        return;
+      }
+
+      entryFieldset.setAttribute("data-entry", newKey);
+      rewriteEntryPrefix(entryFieldset, collectionName + "." + oldKey, collectionName + "." + newKey);
+    });
   </script>
 </body>
 </html>
+

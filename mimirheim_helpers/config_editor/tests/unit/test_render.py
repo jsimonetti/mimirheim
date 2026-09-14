@@ -10,7 +10,15 @@ from mimirheim_shared.field_shape import FieldShape
 from mimirheim_shared.formspec import FieldSpec, FormSpec, Tier
 from mimirheim_shared.visibility import Comparison, ComparisonOperator
 
-from config_editor.render import RenderedField, RenderedGroup, UNGROUPED_LABEL, build_groups, build_tabs, schema_default_values
+from config_editor.render import (
+    NEW_ENTRY_KEY,
+    RenderedField,
+    RenderedGroup,
+    UNGROUPED_LABEL,
+    build_groups,
+    build_tabs,
+    schema_default_values,
+)
 
 
 def _find_field(groups: list[RenderedGroup], name: str) -> RenderedField:
@@ -408,6 +416,47 @@ class TestNamedCollectionShape:
         entry_field = group.basic_fields[0].entries[0].groups[0].basic_fields[0]
         assert entry_field.value == 9.9
 
+    def test_entry_template_is_built_keyed_by_the_new_entry_placeholder(self) -> None:
+        descriptor = self._descriptor()
+
+        (group,) = build_groups(descriptor, values={"batteries": {"battery_main": {"capacity_kwh": 5.4}}})
+
+        field = group.basic_fields[0]
+        assert field.entry_template is not None
+        assert field.entry_template.key == NEW_ENTRY_KEY
+        template_field = field.entry_template.groups[0].basic_fields[0]
+        assert template_field.name == f"batteries.{NEW_ENTRY_KEY}.capacity_kwh"
+
+    def test_entry_template_prefills_from_the_item_schemas_own_defaults(self) -> None:
+        descriptor = _descriptor(
+            FormSpec(
+                fields={
+                    "batteries": FieldSpec(
+                        label="Batteries",
+                        description="Named battery devices.",
+                        shape=FieldShape.NAMED_COLLECTION,
+                        nested_form_spec=self._NESTED_SPEC,
+                    )
+                }
+            ),
+            json_schema={
+                "properties": {
+                    "batteries": {"type": "object", "additionalProperties": {"$ref": "#/$defs/Battery"}}
+                },
+                "$defs": {
+                    "Battery": {
+                        "type": "object",
+                        "properties": {"capacity_kwh": {"type": "number", "default": 5.0}},
+                    }
+                },
+            },
+        )
+
+        (group,) = build_groups(descriptor, values={"batteries": {}})
+
+        template_field = group.basic_fields[0].entry_template.groups[0].basic_fields[0]
+        assert template_field.value == 5.0
+
 
 class TestOrderedCollectionShape:
     _NESTED_SPEC = FormSpec(
@@ -503,6 +552,29 @@ class TestOrderedCollectionShape:
 
         entry_field = group.basic_fields[0].entries[0].groups[0].basic_fields[0]
         assert entry_field.value == 9.9
+
+    def test_entry_template_is_built_keyed_by_the_new_entry_placeholder(self) -> None:
+        descriptor = _descriptor(
+            FormSpec(
+                fields={
+                    "charge_segments": FieldSpec(
+                        label="Charge segments",
+                        description="Piecewise charge efficiency.",
+                        shape=FieldShape.ORDERED_COLLECTION,
+                        nested_form_spec=self._NESTED_SPEC,
+                    )
+                }
+            ),
+            json_schema=self._JSON_SCHEMA,
+        )
+
+        (group,) = build_groups(descriptor, values={"charge_segments": [{"power_max_kw": 2.5}]})
+
+        field = group.basic_fields[0]
+        assert field.entry_template is not None
+        assert field.entry_template.key == NEW_ENTRY_KEY
+        template_field = field.entry_template.groups[0].basic_fields[0]
+        assert template_field.name == f"charge_segments.{NEW_ENTRY_KEY}.power_max_kw"
 
 
 class TestOptionalObjectShape:

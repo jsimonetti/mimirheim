@@ -613,6 +613,110 @@ def test_suggested_value_is_not_rendered_for_ordered_collection_field(
     assert "Suggested:" not in body
 
 
+def _register_named_collection_owner(
+    registry: ConfigOwnerRegistry, config_service_client: MagicMock
+) -> None:
+    registry.update(
+        Descriptor(
+            owner_id="named-collection-owner",
+            display_name="Named collection owner",
+            json_schema={
+                "properties": {
+                    "batteries": {"type": "object", "additionalProperties": {"$ref": "#/$defs/Battery"}}
+                },
+                "$defs": {"Battery": {"type": "object", "properties": {"capacity_kwh": {"type": "number"}}}},
+            },
+            form_spec=FormSpec(
+                fields={
+                    "batteries": FieldSpec(
+                        label="Batteries",
+                        description="Named battery devices.",
+                        shape=FieldShape.NAMED_COLLECTION,
+                        nested_form_spec=FormSpec(
+                            fields={
+                                "capacity_kwh": FieldSpec(label="Capacity", description="Usable capacity in kWh.")
+                            }
+                        ),
+                    )
+                }
+            ),
+        )
+    )
+    config_service_client.get_current_values.return_value = {"batteries": {"battery_main": {"capacity_kwh": 5.0}}}
+
+
+def test_named_collection_renders_add_remove_and_rename_scaffolding(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer, config_service_client: MagicMock
+) -> None:
+    _register_named_collection_owner(registry, config_service_client)
+
+    status, body = _get(server, "/owners/named-collection-owner")
+
+    assert status == 200
+    assert 'data-add-entry' in body
+    assert 'data-collection-shape="named_collection"' in body
+    assert 'data-entries' in body
+    assert '<template data-entry-template>' in body
+    assert 'data-remove-entry' in body
+    # A Named Collection entry's identifying field is a rename input, not a
+    # static label: position carries no meaning for it (ADR-0008).
+    assert 'data-entry-name-input' in body
+    assert 'value="battery_main"' in body
+
+
+def _register_ordered_collection_owner(
+    registry: ConfigOwnerRegistry, config_service_client: MagicMock
+) -> None:
+    registry.update(
+        Descriptor(
+            owner_id="ordered-collection-owner",
+            display_name="Ordered collection owner",
+            json_schema={
+                "properties": {"charge_segments": {"type": "array", "items": {"$ref": "#/$defs/Segment"}}},
+                "$defs": {"Segment": {"type": "object", "properties": {"power_max_kw": {"type": "number"}}}},
+            },
+            form_spec=FormSpec(
+                fields={
+                    "charge_segments": FieldSpec(
+                        label="Charge segments",
+                        description="Piecewise charge efficiency.",
+                        shape=FieldShape.ORDERED_COLLECTION,
+                        nested_form_spec=FormSpec(
+                            fields={
+                                "power_max_kw": FieldSpec(label="Max power", description="Max power in kW.")
+                            }
+                        ),
+                    )
+                }
+            ),
+        )
+    )
+    config_service_client.get_current_values.return_value = {"charge_segments": [{"power_max_kw": 2.5}]}
+
+
+def test_ordered_collection_renders_add_and_remove_scaffolding_but_no_rename_input(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer, config_service_client: MagicMock
+) -> None:
+    _register_ordered_collection_owner(registry, config_service_client)
+
+    status, body = _get(server, "/owners/ordered-collection-owner")
+
+    assert status == 200
+    assert 'data-add-entry' in body
+    assert 'data-collection-shape="ordered_collection"' in body
+    assert 'data-entries' in body
+    assert '<template data-entry-template>' in body
+    assert 'data-remove-entry' in body
+    # An Ordered Collection entry is position-identified: no rename input,
+    # and it keeps its static "#N" legend. Reorder controls are ticket 07,
+    # not this one. (The shared <script> block always mentions the
+    # data-entry-name-input selector string, so scope the check to the form
+    # markup preceding it.)
+    form_markup = body.split("<script>", 1)[0]
+    assert 'data-entry-name-input' not in form_markup
+    assert '>#1<' in body
+
+
 def test_suggested_value_is_not_rendered_for_optional_object_field(
     registry: ConfigOwnerRegistry, server: ConfigEditorServer
 ) -> None:
@@ -1035,6 +1139,124 @@ def test_e2e_editing_a_nested_named_collection_field_round_trips(
         assert written["mqtt"]["host"] == "localhost"
         raw = config_path.read_text()
         assert "# usable capacity" in raw
+    finally:
+        server._httpd.server_close()
+
+
+def test_e2e_named_collection_with_a_different_key_set_round_trips(
+    registry: ConfigOwnerRegistry, tmp_path: Path
+) -> None:
+    """Ticket 06's own end-to-end criterion: a Named Collection submitted with
+    a different key set than what was loaded -- one entry removed, a
+    surviving entry renamed, and a new entry added -- round-trips correctly,
+    exactly as the Remove/rename/Add controls would produce from a real
+    browser submission."""
+    from mimirheim.config.schema import MimirheimConfig
+    from mimirheim.io import config_service as core_config_service
+
+    config_path = tmp_path / "mimirheim.yaml"
+    config_path.write_text(_BATTERIES_FIXTURE_PATH.read_text())
+
+    descriptor = Descriptor.model_validate_json(core_config_service.payload_bytes())
+    registry.update(descriptor)
+
+    config_service_client = MagicMock()
+    config_service_client.get_current_values.side_effect = lambda owner_id, timeout=10.0: (
+        yaml.safe_load(config_path.read_text()) or {}
+    )
+
+    def _submit(owner_id: str, values: dict, timeout: float = 10.0) -> ValidateAndWriteResult:
+        request = ValidateAndWriteRequest(request_id="req-1", values=values)
+        response = handle_validate_and_write(
+            request.model_dump_json().encode("utf-8"), config_path, MimirheimConfig
+        )
+        return ValidateAndWriteResult.model_validate_json(response)
+
+    config_service_client.submit_validate_and_write.side_effect = _submit
+
+    server = ConfigEditorServer(registry, config_service_client)
+    try:
+        current_values = config_service_client.get_current_values("mimirheim-core")
+        form = _flatten_leaf_values(build_groups(descriptor, values=current_values))
+
+        # Remove battery_sos2_example entirely, as the Remove control would.
+        for stale_key in [name for name in form if name.startswith("batteries.battery_sos2_example.")]:
+            del form[stale_key]
+
+        # Rename battery_main -> battery_renamed, as the rename input would,
+        # rewriting every one of its own (including nested) field names.
+        for old_name in [name for name in form if name.startswith("batteries.battery_main.")]:
+            new_name = old_name.replace("batteries.battery_main.", "batteries.battery_renamed.", 1)
+            form[new_name] = form.pop(old_name)
+
+        # Add a brand-new entry, as the Add control would.
+        form["batteries.battery_new.capacity_kwh"] = "7.0"
+        form["batteries.battery_new.charge_segments.0.power_max_kw"] = "2.0"
+        form["batteries.battery_new.charge_segments.0.efficiency"] = "0.9"
+        form["batteries.battery_new.discharge_segments.0.power_max_kw"] = "2.0"
+        form["batteries.battery_new.discharge_segments.0.efficiency"] = "0.9"
+
+        status, body = _post(server, "/owners/mimirheim-core", form)
+
+        assert status == 200
+        assert "Saved" in body
+
+        written = yaml.safe_load(config_path.read_text())
+        assert set(written["batteries"].keys()) == {"battery_renamed", "battery_new"}
+        assert written["batteries"]["battery_renamed"]["capacity_kwh"] == 5.4
+        assert written["batteries"]["battery_new"]["capacity_kwh"] == 7.0
+    finally:
+        server._httpd.server_close()
+
+
+def test_e2e_ordered_collection_with_a_different_entry_count_round_trips(
+    registry: ConfigOwnerRegistry, tmp_path: Path
+) -> None:
+    """Ticket 06's own end-to-end criterion, for an Ordered Collection: a
+    resized entry list (one segment added) round-trips correctly, exactly as
+    the Add control would produce from a real browser submission."""
+    from mimirheim.config.schema import MimirheimConfig
+    from mimirheim.io import config_service as core_config_service
+
+    config_path = tmp_path / "mimirheim.yaml"
+    config_path.write_text(_BATTERIES_FIXTURE_PATH.read_text())
+
+    descriptor = Descriptor.model_validate_json(core_config_service.payload_bytes())
+    registry.update(descriptor)
+
+    config_service_client = MagicMock()
+    config_service_client.get_current_values.side_effect = lambda owner_id, timeout=10.0: (
+        yaml.safe_load(config_path.read_text()) or {}
+    )
+
+    def _submit(owner_id: str, values: dict, timeout: float = 10.0) -> ValidateAndWriteResult:
+        request = ValidateAndWriteRequest(request_id="req-1", values=values)
+        response = handle_validate_and_write(
+            request.model_dump_json().encode("utf-8"), config_path, MimirheimConfig
+        )
+        return ValidateAndWriteResult.model_validate_json(response)
+
+    config_service_client.submit_validate_and_write.side_effect = _submit
+
+    server = ConfigEditorServer(registry, config_service_client)
+    try:
+        current_values = config_service_client.get_current_values("mimirheim-core")
+        form = _flatten_leaf_values(build_groups(descriptor, values=current_values))
+
+        # Append a second charge segment for battery_main, as the Add control would.
+        form["batteries.battery_main.charge_segments.1.power_max_kw"] = "1.0"
+        form["batteries.battery_main.charge_segments.1.efficiency"] = "0.8"
+
+        status, body = _post(server, "/owners/mimirheim-core", form)
+
+        assert status == 200
+        assert "Saved" in body
+
+        written = yaml.safe_load(config_path.read_text())
+        segments = written["batteries"]["battery_main"]["charge_segments"]
+        assert len(segments) == 2
+        assert segments[0]["power_max_kw"] == 2.5
+        assert segments[1] == {"power_max_kw": 1.0, "efficiency": 0.8}
     finally:
         server._httpd.server_close()
 

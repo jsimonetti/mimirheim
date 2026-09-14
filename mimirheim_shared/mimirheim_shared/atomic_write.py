@@ -17,14 +17,19 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from pydantic import BaseModel
 from ruamel.yaml import YAML
+
+from mimirheim_shared.field_shape import FieldShape, derive_field_shape, nested_model_of
 
 _yaml = YAML()
 _yaml.preserve_quotes = True
 _yaml.width = 4096
 
 
-def write_yaml_preserving_comments(file_path: Path, values: dict[str, Any]) -> None:
+def write_yaml_preserving_comments(
+    file_path: Path, values: dict[str, Any], model: type[BaseModel] | None = None
+) -> None:
     """Atomically overlay ``values`` onto the YAML file at ``file_path``.
 
     Loads the existing file, if any, with ruamel.yaml's round-trip loader so
@@ -37,6 +42,9 @@ def write_yaml_preserving_comments(file_path: Path, values: dict[str, Any]) -> N
     Args:
         file_path: The YAML file to update. Created if it does not exist.
         values: The values to overlay onto the existing document.
+        model: The Config Owner's validation model, passed through to
+            ``overlay_values`` so a Named Collection field is replaced
+            wholesale rather than merged key by key. See ``overlay_values``.
 
     Raises:
         OSError: If writing the temp file or renaming it over ``file_path``
@@ -51,7 +59,7 @@ def write_yaml_preserving_comments(file_path: Path, values: dict[str, Any]) -> N
     else:
         document = {}
 
-    overlay_values(document, values)
+    overlay_values(document, values, model)
 
     fd, tmp_name = tempfile.mkstemp(dir=file_path.parent, suffix=".tmp")
     tmp_path = Path(tmp_name)
@@ -64,7 +72,7 @@ def write_yaml_preserving_comments(file_path: Path, values: dict[str, Any]) -> N
         raise
 
 
-def overlay_values(document: Any, values: dict[str, Any]) -> None:
+def overlay_values(document: Any, values: dict[str, Any], model: type[BaseModel] | None = None) -> None:
     """Recursively write ``values`` into ``document`` in place.
 
     A key present as a dict (or ``dict``-like mapping, e.g. a ruamel
@@ -77,14 +85,71 @@ def overlay_values(document: Any, values: dict[str, Any]) -> None:
     above), and validating them in isolation would reject an update to one
     field of an otherwise-required nested section.
 
+    A Named Collection field (a ``Dict[str, Model]`` field on ``model``) gets
+    one further rule on top of that merge: Candidate Values for it always
+    carry the complete surviving set of entries (ADR-0008), so any on-disk
+    entry key missing from ``values`` is dropped from ``document`` -- an
+    entry removed or renamed in the Config Editor must actually disappear on
+    write, not be left behind forever by an ordinary key-by-key merge. An
+    entry key present in both is still merged recursively rather than
+    replaced outright, so an untouched sibling field (and its comment) on a
+    surviving entry is preserved exactly like any other nested object's
+    field would be; only a genuinely stale key is dropped. This distinction
+    needs ``model``: a plain dict cannot tell a Named Collection's own
+    entries apart from a nested object's own fields on structure alone.
+
     Args:
         document: The mapping to update in place. Typically either a plain
             ``dict`` (validation) or a ruamel round-trip-loaded document
             (writing).
         values: The values to overlay onto ``document``.
+        model: The pydantic model ``document``/``values`` are shaped like, at
+            this recursion depth. None (the default) preserves the original,
+            shape-unaware merge-every-dict behaviour, e.g. for a caller with
+            no model context.
     """
     for key, value in values.items():
-        if isinstance(document.get(key), dict) and isinstance(value, dict):
-            overlay_values(document[key], value)
-        else:
+        model_field = model.model_fields.get(key) if model is not None else None
+        shape = derive_field_shape(model_field.annotation) if model_field is not None else None
+        nested_model = nested_model_of(model_field.annotation) if model_field is not None else None
+
+        if not isinstance(document.get(key), dict) or not isinstance(value, dict):
             document[key] = value
+            continue
+
+        existing = document[key]
+        if shape is FieldShape.NAMED_COLLECTION:
+            _overlay_named_collection_entries(existing, value, nested_model)
+            continue
+
+        overlay_values(existing, value, nested_model)
+
+
+def _overlay_named_collection_entries(
+    existing: Any, entries: dict[str, Any], entry_model: type[BaseModel] | None
+) -> None:
+    """Overlay a Named Collection's own entries dict onto ``existing`` in place.
+
+    An entry key is not a field name of any pydantic model (it is the
+    Named Collection's own dict key, e.g. a battery's name), so it cannot be
+    dispatched through ``overlay_values``'s own model-field lookup the way an
+    ordinary nested object's fields are: this is a dedicated helper rather
+    than a recursive ``overlay_values`` call on ``entries`` itself.
+
+    Args:
+        existing: The Named Collection's current on-disk entries dict.
+        entries: The complete surviving set of entries from Candidate Values
+            (ADR-0008).
+        entry_model: The Named Collection's own item model (e.g. the battery
+            model), used so a surviving entry's own nested structure is
+            still merged correctly, not just shallowly.
+    """
+    for stale_key in [entry_key for entry_key in existing if entry_key not in entries]:
+        del existing[stale_key]
+
+    for entry_key, entry_value in entries.items():
+        if isinstance(existing.get(entry_key), dict) and isinstance(entry_value, dict):
+            overlay_values(existing[entry_key], entry_value, entry_model)
+        else:
+            existing[entry_key] = entry_value
+

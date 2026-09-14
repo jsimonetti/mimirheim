@@ -405,7 +405,7 @@ def handle_validate_and_write(
     if config_path.exists():
         current = yaml.safe_load(config_path.read_text()) or {}
     merged = dict(current)
-    overlay_values(merged, request.values)
+    overlay_values(merged, request.values, model)
 
     try:
         validated = model.model_validate(merged)
@@ -418,6 +418,6 @@ def handle_validate_and_write(
         return validate_and_write_result_payload(result)
 
     coerced_values = coerced_submission(validated.model_dump(mode="json"), request.values)
-    write_yaml_preserving_comments(config_path, coerced_values)
+    write_yaml_preserving_comments(config_path, coerced_values, model)
     result = ValidateAndWriteResult(request_id=request.request_id, success=True)
     return validate_and_write_result_payload(result)
