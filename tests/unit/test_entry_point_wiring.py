@@ -49,7 +49,7 @@ class TestReporterMain:
             reporter_main.main()
 
         load.assert_called_once_with(str(config_path))
-        daemon_cls.assert_called_once_with(loaded)
+        daemon_cls.assert_called_once_with(loaded, config_path)
         daemon_cls.return_value.run.assert_called_once()
 
     def test_config_is_required(
@@ -83,7 +83,7 @@ class TestReporterMain:
             patch.object(
                 reporter_main,
                 "ReporterDaemon",
-                side_effect=lambda _c: order.append("daemon") or MagicMock(),
+                side_effect=lambda _c, _p: order.append("daemon") or MagicMock(),
             ),
         ):
             reporter_main.main()

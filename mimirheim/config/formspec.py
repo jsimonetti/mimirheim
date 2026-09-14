@@ -1046,21 +1046,21 @@ CORE_MQTT_CONFIG_FORM_SPEC = FormSpec(
             label="Broker host", description="MQTT broker hostname or IP address.", tier=Tier.BASIC
         ),
         "port": FieldSpec(
-            label="Broker port", description="MQTT broker port.", tier=Tier.EXPERT
+            label="Broker port", description="MQTT broker port.", tier=Tier.BASIC
+        ),
+        "username": FieldSpec(
+            label="Username", description="Broker username. Omit for anonymous access.", tier=Tier.BASIC
+        ),
+        "password": FieldSpec(
+            label="Password", description="Broker password.", tier=Tier.BASIC
         ),
         "client_id": FieldSpec(
             label="Client ID",
             description="MQTT client identifier. Defaults to 'mimir' when not set.",
-            tier=Tier.BASIC,
+            tier=Tier.EXPERT,
         ),
         "topic_prefix": FieldSpec(
             label="Topic prefix", description="Topic prefix for all mimirheim topics.", tier=Tier.EXPERT
-        ),
-        "username": FieldSpec(
-            label="Username", description="Broker username. Omit for anonymous access.", tier=Tier.EXPERT
-        ),
-        "password": FieldSpec(
-            label="Password", description="Broker password.", tier=Tier.EXPERT
         ),
         "tls": FieldSpec(
             label="Enable TLS", description="Enable TLS for the broker connection.", tier=Tier.EXPERT
