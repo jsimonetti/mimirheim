@@ -49,6 +49,19 @@
       {% endfor %}
     {% endmacro %}
 
+    {% macro form_switch(name, label, checked, presence_toggle=False) %}
+      {# Shared by the Presence Toggle and a plain boolean field: both render
+         as the same Bootstrap form-switch control, differing only in
+         whether the checkbox carries data-presence-toggle (which
+         presence-toggle.js below keys off of) and what drives `checked`. #}
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" role="switch" id="field-{{ name }}"
+               name="{{ name }}" value="on"{% if presence_toggle %} data-presence-toggle{% endif %}
+               {% if checked %}checked{% endif %}>
+        <label class="form-check-label fw-semibold" for="field-{{ name }}">{{ label }}</label>
+      </div>
+    {% endmacro %}
+
     {% macro render_field(field) %}
     {% if field.entries is not none %}
       {# Named Collection (keyed) or Ordered Collection (indexed): one fieldset
@@ -72,12 +85,7 @@
          populate a currently-absent section, or clear an existing one,
          without a page reload. #}
       <div class="field field-optional-object mb-3" data-field="{{ field.name }}">
-        <div class="form-check form-switch">
-          <input class="form-check-input" type="checkbox" role="switch" name="{{ field.name }}" value="on"
-                 id="field-{{ field.name }}" data-presence-toggle
-                 {% if field.present %}checked{% endif %}>
-          <label class="form-check-label fw-semibold" for="field-{{ field.name }}">{{ field.spec.label }}</label>
-        </div>
+        {{ form_switch(field.name, field.spec.label, field.present, presence_toggle=True) }}
         <p class="text-muted small">{{ field.spec.description }}</p>
         <fieldset class="border rounded p-3 ms-4" {% if not field.present %}hidden disabled{% endif %}>
           {{ render_groups(field.nested_groups) }}
@@ -105,11 +113,15 @@
       <div class="field mb-3" data-field="{{ field.name }}">
         {% if field.spec.help_text %}<p class="form-text">{{ field.spec.help_text }}</p>{% endif %}
         {% if field.spec.doc_link %}<a class="d-inline-block mb-2" href="{{ field.spec.doc_link }}">Learn more</a>{% endif %}
-        <div class="form-check form-switch">
-          <input class="form-check-input" type="checkbox" role="switch" id="field-{{ field.name }}"
-                 name="{{ field.name }}" value="on" {% if field.value %}checked{% endif %}>
-          <label class="form-check-label fw-semibold" for="field-{{ field.name }}">{{ field.spec.label }}</label>
-        </div>
+        {{ form_switch(field.name, field.spec.label, field.value) }}
+        {# An unchecked checkbox submits nothing at all, so with no fallback
+           this field would simply be missing from the submission rather
+           than explicitly false. _parse_form_body (server.py) keeps only
+           the first submitted value per name, and the checkbox above is
+           rendered before this hidden input, so an "on" from a checked box
+           is submitted first and wins; when unchecked, only this hidden
+           "false" is submitted. #}
+        <input type="hidden" name="{{ field.name }}" value="false">
         <p class="text-muted small">{{ field.spec.description }}</p>
       </div>
     {% elif field.input_type == "number" %}

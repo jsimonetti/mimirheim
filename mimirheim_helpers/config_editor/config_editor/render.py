@@ -285,18 +285,34 @@ def _widget_attrs(field_schema: dict[str, Any]) -> tuple[str, Any, Any, str | No
         return "checkbox", None, None, None
 
     if json_type == "integer":
-        min_value = field_schema.get("minimum", field_schema.get("exclusiveMinimum"))
-        max_value = field_schema.get("maximum", field_schema.get("exclusiveMaximum"))
-        return "number", min_value, max_value, "1"
+        return "number", *_numeric_bounds(field_schema), "1"
 
     if json_type == "number":
-        min_value = field_schema.get("minimum", field_schema.get("exclusiveMinimum"))
-        max_value = field_schema.get("maximum", field_schema.get("exclusiveMaximum"))
         multiple_of = field_schema.get("multipleOf")
         step = str(multiple_of) if multiple_of is not None else "any"
-        return "number", min_value, max_value, step
+        return "number", *_numeric_bounds(field_schema), step
 
     return "text", None, None, None
+
+
+def _numeric_bounds(field_schema: dict[str, Any]) -> tuple[Any, Any]:
+    """Read a numeric field's min/max, preferring an inclusive bound over an exclusive one.
+
+    Args:
+        field_schema: The field's own resolved JSON Schema fragment.
+
+    Returns:
+        A `(min_value, max_value)` tuple: each is the JSON Schema `minimum`/
+        `maximum` keyword (from the Pydantic model's `ge`/`le`) if declared,
+        otherwise `exclusiveMinimum`/`exclusiveMaximum` (from `gt`/`lt`) if
+        that is declared instead, otherwise `None`. HTML's `min`/`max`
+        attributes have no exclusive form, so an exclusive bound is rendered
+        as if it were inclusive -- a best-effort hint, not a guarantee; the
+        model's own validation remains the source of truth on submit.
+    """
+    min_value = field_schema.get("minimum", field_schema.get("exclusiveMinimum"))
+    max_value = field_schema.get("maximum", field_schema.get("exclusiveMaximum"))
+    return min_value, max_value
 
 
 def _resolve_schema(schema_fragment: dict[str, Any], defs: dict[str, Any]) -> dict[str, Any]:

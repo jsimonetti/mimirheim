@@ -343,6 +343,51 @@ def test_boolean_field_renders_as_a_bootstrap_switch_not_a_plain_checkbox(
     assert 'checked' in body
 
 
+def test_boolean_field_renders_a_hidden_false_fallback_after_the_checkbox(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer, config_service_client: MagicMock
+) -> None:
+    _register_boolean_owner(registry)
+    config_service_client.get_current_values.return_value = {"enabled": True}
+
+    status, body = _get(server, "/owners/ha-helper")
+
+    assert status == 200
+    assert '<input type="hidden" name="enabled" value="false">' in body
+    # The checkbox must precede its hidden fallback in document order: a
+    # browser submits same-named fields in document order, and
+    # _parse_form_body keeps only the first value, so a checked box's "on"
+    # has to arrive before the fallback's "false" for the checked state to
+    # win.
+    assert body.index('type="checkbox"') < body.index('type="hidden" name="enabled"')
+
+
+def test_unchecking_a_boolean_field_submits_false_rather_than_omitting_it(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer, config_service_client: MagicMock
+) -> None:
+    _register_boolean_owner(registry)
+    # An unchecked switch sends nothing at all; only its hidden fallback is
+    # submitted, matching what a real browser would send.
+    status, _body = _post(server, "/owners/ha-helper", {"enabled": "false"})
+
+    assert status == 200
+    config_service_client.submit_validate_and_write.assert_called_once_with("ha-helper", {"enabled": "false"})
+
+
+def test_checking_a_boolean_field_submits_on_even_with_the_hidden_fallback_present(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer, config_service_client: MagicMock
+) -> None:
+    _register_boolean_owner(registry)
+    # Mimics a real browser submitting a *checked* switch: both the checkbox
+    # ("on") and its hidden false-fallback are sent, in the document order
+    # they are rendered in (checkbox first).
+    body = urllib.parse.urlencode([("enabled", "on"), ("enabled", "false")]).encode("utf-8")
+
+    status, _headers, _response_body = server.handle_request("POST", "/owners/ha-helper", body=body)
+
+    assert status == 200
+    config_service_client.submit_validate_and_write.assert_called_once_with("ha-helper", {"enabled": "on"})
+
+
 def _register_numeric_owner(registry: ConfigOwnerRegistry, *, field_schema: dict) -> None:
     registry.update(
         Descriptor(
