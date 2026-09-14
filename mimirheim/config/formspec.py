@@ -1162,131 +1162,157 @@ REPORTING_CONFIG_FORM_SPEC = FormSpec(
 # Root
 # ---------------------------------------------------------------------------
 
+# Every top-level field declares a tab: one per controllable device type
+# (batteries, PV arrays, ...), one for Grid, and one shared "Mimirheim
+# Internals" tab for every non-device, non-Grid section (objectives through
+# reporting) -- so the Config Editor's top-level Tab nav (config-editor-v3
+# ticket 04) groups the form by concern instead of one long flat page.
 MIMIRHEIM_CONFIG_FORM_SPEC = FormSpec(
     fields={
         "batteries": FieldSpec(
             label="Batteries",
             description="Named battery devices.",
+            tab="Batteries",
             tier=Tier.BASIC,
             nested_form_spec=BATTERY_CONFIG_FORM_SPEC,
         ),
         "pv_arrays": FieldSpec(
             label="PV arrays",
             description="Named PV array devices.",
+            tab="PV Arrays",
             tier=Tier.BASIC,
             nested_form_spec=PV_CONFIG_FORM_SPEC,
         ),
         "ev_chargers": FieldSpec(
             label="EV chargers",
             description="Named EV charger devices.",
+            tab="EV Chargers",
             tier=Tier.BASIC,
             nested_form_spec=EV_CONFIG_FORM_SPEC,
         ),
         "deferrable_loads": FieldSpec(
             label="Deferrable loads",
             description="Named deferrable load devices (e.g. a dishwasher or washing machine with a scheduling window).",
+            tab="Deferrable Loads",
             tier=Tier.EXPERT,
             nested_form_spec=DEFERRABLE_LOAD_CONFIG_FORM_SPEC,
         ),
         "static_loads": FieldSpec(
             label="Static loads",
             description="Named static (forecast-only) load devices.",
+            tab="Static Loads",
             tier=Tier.BASIC,
             nested_form_spec=STATIC_LOAD_CONFIG_FORM_SPEC,
         ),
         "hybrid_inverters": FieldSpec(
             label="Hybrid inverters",
             description="Named hybrid inverter devices (combined PV and battery behind one inverter).",
+            tab="Hybrid Inverters",
             tier=Tier.BASIC,
             nested_form_spec=HYBRID_INVERTER_CONFIG_FORM_SPEC,
         ),
         "thermal_boilers": FieldSpec(
             label="Thermal boilers",
             description="Named domestic hot water thermal boiler devices.",
+            tab="Thermal Boilers",
             tier=Tier.EXPERT,
             nested_form_spec=THERMAL_BOILER_CONFIG_FORM_SPEC,
         ),
         "space_heating_hps": FieldSpec(
             label="Space heating heat pumps",
             description="Named space heating heat pump devices.",
+            tab="Space Heating Heat Pumps",
             tier=Tier.EXPERT,
             nested_form_spec=SPACE_HEATING_CONFIG_FORM_SPEC,
         ),
         "combi_heat_pumps": FieldSpec(
             label="Combi heat pumps",
             description="Named combi heat pump devices (domestic hot water and space heating combined).",
+            tab="Combi Heat Pumps",
             tier=Tier.EXPERT,
             nested_form_spec=COMBI_HEAT_PUMP_CONFIG_FORM_SPEC,
         ),
         "grid": FieldSpec(
             label="Grid connection",
             description="Grid connection parameters (import/export limits). Exactly one per mimirheim instance.",
+            tab="Grid",
             tier=Tier.BASIC,
             nested_form_spec=GRID_CONFIG_FORM_SPEC,
         ),
         "objectives": FieldSpec(
             label="Objectives",
             description="Objective function parameters, such as the weights used by the balanced strategy.",
+            tab="Mimirheim Internals",
             tier=Tier.EXPERT,
             nested_form_spec=OBJECTIVES_CONFIG_FORM_SPEC,
         ),
         "constraints": FieldSpec(
             label="Constraints",
             description="Hard constraints on grid import/export power, enforced independently of strategy.",
+            tab="Mimirheim Internals",
             tier=Tier.EXPERT,
             nested_form_spec=CONSTRAINTS_CONFIG_FORM_SPEC,
         ),
         "solver": FieldSpec(
             label="Solver",
             description="Solver tuning parameters for the CBC MILP backend (horizon cap, thread count, time limit).",
+            tab="Mimirheim Internals",
             tier=Tier.EXPERT,
             nested_form_spec=SOLVER_CONFIG_FORM_SPEC,
         ),
         "readiness": FieldSpec(
             label="Readiness",
             description="Forecast coverage thresholds controlling when mimirheim is willing to solve.",
+            tab="Mimirheim Internals",
             tier=Tier.EXPERT,
             nested_form_spec=READINESS_CONFIG_FORM_SPEC,
         ),
         "mqtt": FieldSpec(
             label="MQTT",
             description="MQTT broker connection parameters.",
+            tab="Mimirheim Internals",
             tier=Tier.BASIC,
             nested_form_spec=CORE_MQTT_CONFIG_FORM_SPEC,
         ),
         "outputs": FieldSpec(
             label="Output topics",
             description="MQTT output topic names.",
+            tab="Mimirheim Internals",
             tier=Tier.EXPERT,
             nested_form_spec=OUTPUTS_CONFIG_FORM_SPEC,
         ),
         "inputs": FieldSpec(
             label="Input topics",
             description="MQTT input topic overrides. Fields default to the standard derived topic when unset.",
+            tab="Mimirheim Internals",
             tier=Tier.EXPERT,
             nested_form_spec=INPUTS_CONFIG_FORM_SPEC,
         ),
         "homeassistant": FieldSpec(
             label="Home Assistant",
             description="Home Assistant MQTT autodiscovery settings.",
+            tab="Mimirheim Internals",
             tier=Tier.EXPERT,
             nested_form_spec=CORE_HOME_ASSISTANT_CONFIG_FORM_SPEC,
         ),
         "debug": FieldSpec(
             label="Debug",
             description="Debug and diagnostic settings (verbose logging, dump files).",
+            tab="Mimirheim Internals",
             tier=Tier.EXPERT,
             nested_form_spec=DEBUG_CONFIG_FORM_SPEC,
         ),
         "control": FieldSpec(
             label="Control",
             description="Parameters for the mode-arbitration and enforcer-selection engine.",
+            tab="Mimirheim Internals",
             tier=Tier.EXPERT,
             nested_form_spec=CONTROL_CONFIG_FORM_SPEC,
         ),
         "reporting": FieldSpec(
             label="Reporting",
             description="Settings for the standalone mimirheim-reporter daemon's dump archive.",
+            tab="Mimirheim Internals",
             tier=Tier.EXPERT,
             nested_form_spec=REPORTING_CONFIG_FORM_SPEC,
         ),
