@@ -304,6 +304,115 @@ def test_presence_toggle_javascript_is_present_exactly_once(
     assert "addEventListener(\"change\"" in body
 
 
+def test_presence_toggle_renders_as_a_bootstrap_switch(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer, config_service_client: MagicMock
+) -> None:
+    _register_optional_object_owner(registry)
+    config_service_client.get_current_values.return_value = {"balanced_weights": None}
+
+    status, body = _get(server, "/owners/owner-with-optional")
+
+    assert status == 200
+    assert "form-switch" in body
+    assert 'role="switch"' in body
+
+
+def _register_boolean_owner(registry: ConfigOwnerRegistry) -> None:
+    registry.update(
+        Descriptor(
+            owner_id="ha-helper",
+            display_name="HA helper",
+            json_schema={"properties": {"enabled": {"type": "boolean"}}},
+            form_spec=FormSpec(fields={"enabled": FieldSpec(label="Enabled", description="Turn it on.")}),
+        )
+    )
+
+
+def test_boolean_field_renders_as_a_bootstrap_switch_not_a_plain_checkbox(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer, config_service_client: MagicMock
+) -> None:
+    _register_boolean_owner(registry)
+    config_service_client.get_current_values.return_value = {"enabled": True}
+
+    status, body = _get(server, "/owners/ha-helper")
+
+    assert status == 200
+    assert 'type="checkbox"' in body
+    assert "form-switch" in body
+    assert 'role="switch"' in body
+    assert 'checked' in body
+
+
+def _register_numeric_owner(registry: ConfigOwnerRegistry, *, field_schema: dict) -> None:
+    registry.update(
+        Descriptor(
+            owner_id="numeric-owner",
+            display_name="Numeric owner",
+            json_schema={"properties": {"value": field_schema}},
+            form_spec=FormSpec(fields={"value": FieldSpec(label="Value", description="A number.")}),
+        )
+    )
+
+
+def test_integer_field_renders_number_input_with_step_one(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    _register_numeric_owner(registry, field_schema={"type": "integer"})
+
+    status, body = _get(server, "/owners/numeric-owner")
+
+    assert status == 200
+    assert 'type="number"' in body
+    assert 'step="1"' in body
+
+
+def test_float_field_renders_number_input_with_step_any(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    _register_numeric_owner(registry, field_schema={"type": "number"})
+
+    status, body = _get(server, "/owners/numeric-owner")
+
+    assert status == 200
+    assert 'type="number"' in body
+    assert 'step="any"' in body
+
+
+def test_float_field_with_multiple_of_uses_it_as_step(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    _register_numeric_owner(registry, field_schema={"type": "number", "multipleOf": 0.05})
+
+    status, body = _get(server, "/owners/numeric-owner")
+
+    assert status == 200
+    assert 'step="0.05"' in body
+
+
+def test_numeric_field_with_ge_le_renders_matching_min_max(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    _register_numeric_owner(registry, field_schema={"type": "integer", "minimum": 1, "maximum": 65535})
+
+    status, body = _get(server, "/owners/numeric-owner")
+
+    assert status == 200
+    assert 'min="1"' in body
+    assert 'max="65535"' in body
+
+
+def test_numeric_field_with_no_declared_bound_has_no_min_or_max_attribute(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    _register_numeric_owner(registry, field_schema={"type": "number"})
+
+    status, body = _get(server, "/owners/numeric-owner")
+
+    assert status == 200
+    assert "min=" not in body
+    assert "max=" not in body
+
+
 def _register_nordpool(registry: ConfigOwnerRegistry) -> None:
     registry.update(
         Descriptor(

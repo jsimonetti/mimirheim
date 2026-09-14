@@ -100,6 +100,19 @@ class RenderedField:
     nested_groups: list["RenderedGroup"] | None = None
     entries: list[RenderedEntry] | None = None
     present: bool = False
+    # Widget kind for a SCALAR leaf field ("text", "checkbox", or "number"),
+    # derived from the field's own JSON Schema "type" (see _widget_attrs).
+    # ENUM_SELECT and every structural shape ignore this; they render from
+    # `options`/`nested_groups`/`entries` instead.
+    input_type: str = "text"
+    # HTML min/max for a "number" input_type, read from the Pydantic model's
+    # own minimum/maximum (ge/le) or exclusiveMinimum/exclusiveMaximum
+    # (gt/lt) JSON Schema keywords. None when the model declares no bound.
+    min_value: Any = None
+    max_value: Any = None
+    # HTML step for a "number" input_type: "1" for an integer field, an
+    # explicit multipleOf when the model declares one, otherwise "any".
+    step: str | None = None
 
 
 @dataclass(frozen=True)
@@ -233,7 +246,57 @@ def _build_field(
         return RenderedField(name=field_name, spec=spec, value=value, options=options)
 
     # SCALAR, or a Shape Override simplifying a structural field down to it.
-    return RenderedField(name=field_name, spec=spec, value=value)
+    input_type, min_value, max_value, step = _widget_attrs(field_schema)
+    return RenderedField(
+        name=field_name,
+        spec=spec,
+        value=value,
+        input_type=input_type,
+        min_value=min_value,
+        max_value=max_value,
+        step=step,
+    )
+
+
+def _widget_attrs(field_schema: dict[str, Any]) -> tuple[str, Any, Any, str | None]:
+    """Derive a SCALAR field's HTML widget kind and numeric bounds from its JSON Schema.
+
+    Reads the field's own JSON Schema type and, for a numeric type, its
+    minimum/maximum (from the Pydantic model's `ge`/`le`) or
+    exclusiveMinimum/exclusiveMaximum (from `gt`/`lt`) directly off the
+    already-resolved schema fragment, per ADR-0002: a numeric bound is not
+    duplicated onto FieldSpec, it is read once from the model's own JSON
+    Schema.
+
+    Args:
+        field_schema: The field's own resolved JSON Schema fragment (see
+            `_resolve_schema`).
+
+    Returns:
+        A `(input_type, min_value, max_value, step)` tuple. `input_type` is
+        "checkbox" for a boolean field, "number" for an integer or float
+        field, otherwise "text" (string, or a shape-overridden field with no
+        recognised scalar JSON type). `min_value`/`max_value`/`step` are only
+        meaningful when `input_type` is "number".
+    """
+    json_type = field_schema.get("type")
+
+    if json_type == "boolean":
+        return "checkbox", None, None, None
+
+    if json_type == "integer":
+        min_value = field_schema.get("minimum", field_schema.get("exclusiveMinimum"))
+        max_value = field_schema.get("maximum", field_schema.get("exclusiveMaximum"))
+        return "number", min_value, max_value, "1"
+
+    if json_type == "number":
+        min_value = field_schema.get("minimum", field_schema.get("exclusiveMinimum"))
+        max_value = field_schema.get("maximum", field_schema.get("exclusiveMaximum"))
+        multiple_of = field_schema.get("multipleOf")
+        step = str(multiple_of) if multiple_of is not None else "any"
+        return "number", min_value, max_value, step
+
+    return "text", None, None, None
 
 
 def _resolve_schema(schema_fragment: dict[str, Any], defs: dict[str, Any]) -> dict[str, Any]:

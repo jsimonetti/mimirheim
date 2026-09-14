@@ -402,6 +402,124 @@ class TestEnumSelectShape:
         assert field.value == "percent"
 
 
+class TestTypedWidgets:
+    def test_boolean_field_gets_checkbox_input_type(self) -> None:
+        descriptor = _descriptor(
+            FormSpec(fields={"enabled": FieldSpec(label="Enabled", description="Enable it.")}),
+            json_schema={"properties": {"enabled": {"type": "boolean"}}},
+        )
+
+        (group,) = build_groups(descriptor, values={"enabled": True})
+
+        field = group.basic_fields[0]
+        assert field.input_type == "checkbox"
+        assert field.value is True
+
+    def test_integer_field_gets_number_input_type_and_step_one(self) -> None:
+        descriptor = _descriptor(
+            FormSpec(fields={"poll_interval": FieldSpec(label="Poll interval", description="Seconds.")}),
+            json_schema={"properties": {"poll_interval": {"type": "integer"}}},
+        )
+
+        (group,) = build_groups(descriptor)
+
+        field = group.basic_fields[0]
+        assert field.input_type == "number"
+        assert field.step == "1"
+
+    def test_float_field_gets_number_input_type_and_step_any_with_no_multiple_of(self) -> None:
+        descriptor = _descriptor(
+            FormSpec(fields={"capacity_kwh": FieldSpec(label="Capacity", description="kWh.")}),
+            json_schema={"properties": {"capacity_kwh": {"type": "number"}}},
+        )
+
+        (group,) = build_groups(descriptor)
+
+        field = group.basic_fields[0]
+        assert field.input_type == "number"
+        assert field.step == "any"
+
+    def test_float_field_with_multiple_of_uses_it_as_step(self) -> None:
+        descriptor = _descriptor(
+            FormSpec(fields={"efficiency": FieldSpec(label="Efficiency", description="Fraction.")}),
+            json_schema={"properties": {"efficiency": {"type": "number", "multipleOf": 0.05}}},
+        )
+
+        (group,) = build_groups(descriptor)
+
+        field = group.basic_fields[0]
+        assert field.step == "0.05"
+
+    def test_ge_le_bounds_become_min_max(self) -> None:
+        descriptor = _descriptor(
+            FormSpec(fields={"port": FieldSpec(label="Port", description="Port.")}),
+            json_schema={"properties": {"port": {"type": "integer", "minimum": 1, "maximum": 65535}}},
+        )
+
+        (group,) = build_groups(descriptor)
+
+        field = group.basic_fields[0]
+        assert field.min_value == 1
+        assert field.max_value == 65535
+
+    def test_gt_lt_bounds_become_min_max(self) -> None:
+        descriptor = _descriptor(
+            FormSpec(fields={"weight": FieldSpec(label="Weight", description="Weight.")}),
+            json_schema={
+                "properties": {"weight": {"type": "number", "exclusiveMinimum": 0.0, "exclusiveMaximum": 1.0}}
+            },
+        )
+
+        (group,) = build_groups(descriptor)
+
+        field = group.basic_fields[0]
+        assert field.min_value == 0.0
+        assert field.max_value == 1.0
+
+    def test_numeric_field_with_no_declared_bound_has_no_min_or_max(self) -> None:
+        descriptor = _descriptor(
+            FormSpec(fields={"capacity_kwh": FieldSpec(label="Capacity", description="kWh.")}),
+            json_schema={"properties": {"capacity_kwh": {"type": "number"}}},
+        )
+
+        (group,) = build_groups(descriptor)
+
+        field = group.basic_fields[0]
+        assert field.min_value is None
+        assert field.max_value is None
+
+    def test_string_field_keeps_text_input_type(self) -> None:
+        descriptor = _descriptor(
+            FormSpec(fields={"host": FieldSpec(label="Host", description="Broker host.")}),
+            json_schema={"properties": {"host": {"type": "string"}}},
+        )
+
+        (group,) = build_groups(descriptor)
+
+        field = group.basic_fields[0]
+        assert field.input_type == "text"
+
+    def test_enum_select_field_is_unaffected_by_widget_typing(self) -> None:
+        descriptor = _descriptor(
+            FormSpec(
+                fields={
+                    "unit": FieldSpec(
+                        label="SOC unit",
+                        description="Unit.",
+                        shape=FieldShape.ENUM_SELECT,
+                    )
+                }
+            ),
+            json_schema={"properties": {"unit": {"type": "string", "enum": ["kwh", "percent"]}}},
+        )
+
+        (group,) = build_groups(descriptor, values={"unit": "kwh"})
+
+        field = group.basic_fields[0]
+        assert field.options == ["kwh", "percent"]
+        assert field.input_type == "text"
+
+
 class TestShapeOverride:
     def test_field_overridden_to_scalar_renders_as_a_leaf_despite_a_nested_form_spec(self) -> None:
         nested_spec = FormSpec(

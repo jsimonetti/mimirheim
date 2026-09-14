@@ -72,8 +72,8 @@
          populate a currently-absent section, or clear an existing one,
          without a page reload. #}
       <div class="field field-optional-object mb-3" data-field="{{ field.name }}">
-        <div class="form-check">
-          <input class="form-check-input" type="checkbox" name="{{ field.name }}" value="on"
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" role="switch" name="{{ field.name }}" value="on"
                  id="field-{{ field.name }}" data-presence-toggle
                  {% if field.present %}checked{% endif %}>
           <label class="form-check-label fw-semibold" for="field-{{ field.name }}">{{ field.spec.label }}</label>
@@ -100,6 +100,29 @@
           <option value="{{ option }}" {% if field.value == option %}selected{% endif %}>{{ option_label(field.spec, option) }}</option>
           {% endfor %}
         </select>
+      </div>
+    {% elif field.input_type == "checkbox" %}
+      <div class="field mb-3" data-field="{{ field.name }}">
+        {% if field.spec.help_text %}<p class="form-text">{{ field.spec.help_text }}</p>{% endif %}
+        {% if field.spec.doc_link %}<a class="d-inline-block mb-2" href="{{ field.spec.doc_link }}">Learn more</a>{% endif %}
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" role="switch" id="field-{{ field.name }}"
+                 name="{{ field.name }}" value="on" {% if field.value %}checked{% endif %}>
+          <label class="form-check-label fw-semibold" for="field-{{ field.name }}">{{ field.spec.label }}</label>
+        </div>
+        <p class="text-muted small">{{ field.spec.description }}</p>
+      </div>
+    {% elif field.input_type == "number" %}
+      <div class="field mb-3" data-field="{{ field.name }}">
+        <label class="form-label" for="field-{{ field.name }}">{{ field.spec.label }}</label>
+        <p class="text-muted small">{{ field.spec.description }}</p>
+        {% if field.spec.help_text %}<p class="form-text">{{ field.spec.help_text }}</p>{% endif %}
+        {% if field.spec.doc_link %}<a class="d-inline-block mb-2" href="{{ field.spec.doc_link }}">Learn more</a>{% endif %}
+        <input class="form-control" id="field-{{ field.name }}" name="{{ field.name }}" type="number"
+               step="{{ field.step }}"
+               {% if field.min_value is not none %}min="{{ field.min_value }}"{% endif %}
+               {% if field.max_value is not none %}max="{{ field.max_value }}"{% endif %}
+               value="{{ field.value if field.value is not none else '' }}">
       </div>
     {% else %}
       <div class="field mb-3" data-field="{{ field.name }}">
