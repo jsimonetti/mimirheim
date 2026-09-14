@@ -30,8 +30,8 @@ presentation layer)
 
 **FormSpec**:
 The presentation-only counterpart to a Config Owner's validation model:
-labels, help text, documentation links, Tier, grouping, and Conditional
-Visibility. Carries no validation rules of its own.
+labels, help text, documentation links, Tier, grouping, Tab placement, and
+Conditional Visibility. Carries no validation rules of its own.
 _Avoid_: UI schema, schema extension, x- annotations
 
 **Field Shape**:
@@ -66,6 +66,17 @@ it is shown by default or hidden behind an Advanced disclosure.
 _Avoid_: level, mode (mode implies a single global switch; tiering is
 per-field)
 
+**Tab**:
+A FormSpec-level grouping that partitions a Config Owner's fields into
+top-level navigable panes. A field with no Tab set belongs to the default
+Tab, "General".
+_Avoid_: section, page
+
+**Subtab**:
+A second, nested level of Tab, scoped within one Tab. The Tab/Subtab
+hierarchy is exactly two levels deep; it does not nest further.
+_Avoid_: sub-group, nested tab
+
 **Conditional Visibility**:
 A declarative, serializable rule on a FormSpec field — a comparison
 against another field's value, optionally combined with AND/OR — that
@@ -77,6 +88,14 @@ _Avoid_: visibility logic, dynamic field
 The control that expresses whether an optional nested object field exists
 at all, independent of whatever values its own fields hold once present.
 _Avoid_: null checkbox, optional flag
+
+**Suggested Value**:
+A FormSpec-authored hint value for a scalar field, shown as static help
+text alongside the field rather than pre-filled into it. Distinct from the
+Config Owner's own schema default (which does pre-fill the field) and from
+Candidate Values (the submission payload); a Suggested Value never
+validates and never submits on its own.
+_Avoid_: default (reserved for the schema's own default), placeholder
 
 **Candidate Values**:
 The set of proposed field values a Config Editor submits to a Config Owner

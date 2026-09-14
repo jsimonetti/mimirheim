@@ -83,10 +83,21 @@ def _run_entry_point(module: str, config_path: Path) -> list[str]:
     root.setLevel(logging.DEBUG)
     saved_argv = sys.argv
     sys.argv = [module, "--config", str(config_path)]
+    # If f"{module}.__main__" is already in sys.modules (e.g. another test
+    # file imported it), runpy warns "found in sys.modules ... prior to
+    # execution". Remove it first, then put back whatever was there --
+    # module-level test doubles elsewhere are patched by string path against
+    # that exact module object, so it must not be replaced or dropped.
+    submodule_key = f"{module}.__main__"
+    original_submodule = sys.modules.pop(submodule_key, None)
     try:
         with pytest.raises(SystemExit):
             runpy.run_module(module, run_name="__main__")
     finally:
+        if original_submodule is not None:
+            sys.modules[submodule_key] = original_submodule
+        else:
+            sys.modules.pop(submodule_key, None)
         sys.argv = saved_argv
         root.removeHandler(handler)
         root.setLevel(previous_level)
