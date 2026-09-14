@@ -86,9 +86,31 @@ def parse_submission(form_spec: FormSpec, raw: dict[str, str], name_prefix: str 
                 result[name] = rows
             continue
 
+        if shape is FieldShape.SCALAR_LIST:
+            # Each entry is a bare leaf value at "field_name.index", with no
+            # nested_form_spec to recurse into. A blank entry (an emptied
+            # number/text input, e.g. a freshly Added but not yet filled-in
+            # row) is dropped from the list rather than passed through as a
+            # literal "", for the same reason a blank scalar field is
+            # treated as unset below.
+            indices = sorted(int(child) for child in _immediate_children(raw, field_name))
+            rows = [
+                raw[f"{field_name}.{index}"]
+                for index in indices
+                if raw[f"{field_name}.{index}"] != ""
+            ]
+            if rows:
+                result[name] = rows
+            continue
+
         # SCALAR or ENUM_SELECT: a leaf field, submitted as a single value at
-        # its own exact dotted path.
-        if field_name in raw:
+        # its own exact dotted path. A blank optional field (an empty number
+        # or text input) submits "" rather than being absent from `raw`; an
+        # empty string fails pydantic validation for every non-string type
+        # (e.g. "Input should be a valid number"), so it is treated the same
+        # as an unrendered field -- omitted here, leaving the on-disk value
+        # untouched -- rather than passed through as a literal "".
+        if field_name in raw and raw[field_name] != "":
             result[name] = raw[field_name]
 
     return result

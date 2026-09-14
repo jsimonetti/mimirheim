@@ -8,11 +8,12 @@ Conditional Visibility rule evaluates as expected.
 
 from mimirheim_shared.alignment import assert_form_spec_complete
 from mimirheim_shared.config_service import build_descriptor
-from mimirheim_shared.formspec import resolve_field_shapes
+from mimirheim_shared.field_shape import FieldShape
+from mimirheim_shared.formspec import option_label, resolve_field_shapes
 from mimirheim_shared.visibility import evaluate_condition
 
-from nordpool.config import NordpoolConfig
-from nordpool.formspec import NORDPOOL_CONFIG_FORM_SPEC
+from nordpool.config import NordpoolApiConfig, NordpoolConfig
+from nordpool.formspec import NORDPOOL_API_CONFIG_FORM_SPEC, NORDPOOL_CONFIG_FORM_SPEC
 
 
 def test_form_spec_is_aligned_with_nordpool_config() -> None:
@@ -40,3 +41,18 @@ def test_mimir_trigger_topic_is_only_visible_when_signal_mimir_is_enabled() -> N
 
     assert evaluate_condition(condition, {"signal_mimir": True}) is True
     assert evaluate_condition(condition, {"signal_mimir": False}) is False
+
+
+def test_area_resolves_to_an_enum_select_of_pynordpools_own_area_codes() -> None:
+    resolved = resolve_field_shapes(NordpoolApiConfig, NORDPOOL_API_CONFIG_FORM_SPEC)
+    area_spec = resolved.fields["area"]
+
+    assert area_spec.shape is FieldShape.ENUM_SELECT
+    assert "NO2" in NordpoolApiConfig.model_fields["area"].annotation.__args__
+    assert "SYS" not in NordpoolApiConfig.model_fields["area"].annotation.__args__
+
+
+def test_area_option_labels_show_the_country_name_alongside_the_code() -> None:
+    area_spec = NORDPOOL_API_CONFIG_FORM_SPEC.fields["area"]
+
+    assert option_label(area_spec, "NO2") == "Norway 2 (NO2)"

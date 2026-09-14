@@ -56,7 +56,7 @@ SOC_TOPIC_CONFIG_FORM_SPEC = FormSpec(
         "topic": FieldSpec(
             label="SOC MQTT topic",
             description="MQTT topic publishing the SOC value. Defaults to a derived path when not set.",
-            tier=Tier.EXPERT,
+            tier=Tier.BASIC,
         ),
         "unit": FieldSpec(
             label="SOC unit",
@@ -64,7 +64,7 @@ SOC_TOPIC_CONFIG_FORM_SPEC = FormSpec(
                 "Unit of the published value. 'percent' when the sensor publishes a "
                 "0-100 percentage; 'kwh' when it publishes an absolute energy value."
             ),
-            tier=Tier.EXPERT,
+            tier=Tier.BASIC,
             option_labels={"kwh": "kWh", "percent": "Percent"},
         ),
     }
@@ -111,31 +111,37 @@ SOC_RATCHET_FORM_SPEC = FormSpec(
             label="Target interval (days)",
             description="Days the battery may go without a full charge before the floor climbs.",
             tier=Tier.BASIC,
+            visible_if=Comparison(field="enabled", operator=ComparisonOperator.EQ, value=True),
         ),
         "full_threshold_pct": FieldSpec(
             label="Full threshold (%)",
             description="Observed SOC, in percent of capacity, that counts as a full charge.",
             tier=Tier.BASIC,
+            visible_if=Comparison(field="enabled", operator=ComparisonOperator.EQ, value=True),
         ),
         "step_pct": FieldSpec(
             label="Ratchet step (%)",
             description="Percentage points of capacity added to the floor per missed interval.",
             tier=Tier.EXPERT,
+            visible_if=Comparison(field="enabled", operator=ComparisonOperator.EQ, value=True),
         ),
         "cap_pct": FieldSpec(
             label="Ratchet cap (%)",
             description="Ceiling on the dynamic floor, in percent of capacity.",
             tier=Tier.EXPERT,
+            visible_if=Comparison(field="enabled", operator=ComparisonOperator.EQ, value=True),
         ),
         "target_pct": FieldSpec(
             label="Charge target (%)",
             description="SOC, in percent of capacity, the plan is asked to reach and hold.",
             tier=Tier.EXPERT,
+            visible_if=Comparison(field="enabled", operator=ComparisonOperator.EQ, value=True),
         ),
         "hold_hours": FieldSpec(
             label="Hold at target (hours)",
             description="Hours the SOC must stay at or above the target once reached. 0 = a single touch.",
             tier=Tier.EXPERT,
+            visible_if=Comparison(field="enabled", operator=ComparisonOperator.EQ, value=True),
         ),
     }
 )
@@ -145,7 +151,7 @@ BATTERY_INPUTS_FORM_SPEC = FormSpec(
         "soc": FieldSpec(
             label="SOC topic config",
             description="Battery state-of-charge MQTT topic configuration. Defaults to derived topic with percent unit.",
-            tier=Tier.EXPERT,
+            tier=Tier.BASIC,
             nested_form_spec=SOC_TOPIC_CONFIG_FORM_SPEC,
         ),
     }
@@ -158,6 +164,17 @@ BATTERY_CONFIG_FORM_SPEC = FormSpec(
         ),
         "min_soc_kwh": FieldSpec(
             label="Minimum SOC (kWh)", description="Minimum SOC in kWh.", tier=Tier.BASIC
+        ),
+        "capabilities": FieldSpec(
+            label="Hardware capabilities",
+            description="",
+            tier=Tier.BASIC,
+            nested_form_spec=BATTERY_CAPABILITIES_FORM_SPEC,
+        ),
+        "wear_cost_eur_per_kwh": FieldSpec(
+            label="Wear cost (€/kWh)",
+            description="Battery degradation cost per kWh of energy throughput, in EUR.",
+            tier=Tier.BASIC,
         ),
         "charge_segments": FieldSpec(
             label="Charge segments",
@@ -186,7 +203,7 @@ BATTERY_CONFIG_FORM_SPEC = FormSpec(
         "charge_efficiency_curve": FieldSpec(
             label="Charge efficiency curve",
             description="SOS2 piecewise-linear efficiency curve for charging. Mutually exclusive with charge_segments.",
-            tier=Tier.EXPERT,
+            tier=Tier.BASIC,
             nested_form_spec=EFFICIENCY_BREAKPOINT_FORM_SPEC,
             visible_if=Comparison(
                 field="charge_segments", operator=ComparisonOperator.EQ, value=None
@@ -195,16 +212,11 @@ BATTERY_CONFIG_FORM_SPEC = FormSpec(
         "discharge_efficiency_curve": FieldSpec(
             label="Discharge efficiency curve",
             description="SOS2 piecewise-linear efficiency curve for discharging. Mutually exclusive with discharge_segments.",
-            tier=Tier.EXPERT,
+            tier=Tier.BASIC,
             nested_form_spec=EFFICIENCY_BREAKPOINT_FORM_SPEC,
             visible_if=Comparison(
                 field="discharge_segments", operator=ComparisonOperator.EQ, value=None
             ),
-        ),
-        "wear_cost_eur_per_kwh": FieldSpec(
-            label="Wear cost (€/kWh)",
-            description="Battery degradation cost per kWh of energy throughput, in EUR.",
-            tier=Tier.BASIC,
         ),
         "optimal_lower_soc_kwh": FieldSpec(
             label="Preferred minimum SOC (kWh)",
@@ -236,12 +248,6 @@ BATTERY_CONFIG_FORM_SPEC = FormSpec(
             description="Max discharge power in kW at minimum SOC, once derating has kicked in.",
             tier=Tier.EXPERT,
         ),
-        "capabilities": FieldSpec(
-            label="Hardware capabilities",
-            description="Hardware capability flags.",
-            tier=Tier.EXPERT,
-            nested_form_spec=BATTERY_CAPABILITIES_FORM_SPEC,
-        ),
         "inputs": FieldSpec(
             label="Input topics",
             description="MQTT input topic configuration for battery state readings.",
@@ -264,11 +270,13 @@ BATTERY_CONFIG_FORM_SPEC = FormSpec(
             label="Minimum charge power (kW)",
             description="Minimum charge power in kW when the battery is actively charging.",
             tier=Tier.EXPERT,
+            group="Minimum power",
         ),
         "min_discharge_kw": FieldSpec(
             label="Minimum discharge power (kW)",
             description="Minimum discharge power in kW when the battery is actively discharging.",
             tier=Tier.EXPERT,
+            group="Minimum power",
         ),
     }
 )
@@ -957,10 +965,10 @@ OBJECTIVES_CONFIG_FORM_SPEC = FormSpec(
 CONSTRAINTS_CONFIG_FORM_SPEC = FormSpec(
     fields={
         "max_import_kw": FieldSpec(
-            label="Max import cap (kW)", description="Hard cap on grid import in kW.", tier=Tier.EXPERT
+            label="Max import cap (kW)", description="Hard cap on grid import in kW.", tier=Tier.BASIC
         ),
         "max_export_kw": FieldSpec(
-            label="Max export cap (kW)", description="Hard cap on grid export in kW.", tier=Tier.EXPERT
+            label="Max export cap (kW)", description="Hard cap on grid export in kW.", tier=Tier.BASIC
         ),
     }
 )
@@ -1103,20 +1111,28 @@ INPUTS_CONFIG_FORM_SPEC = FormSpec(
 CORE_HOME_ASSISTANT_CONFIG_FORM_SPEC = FormSpec(
     fields={
         "enabled": FieldSpec(
-            label="Enable HA discovery", description="Enable HA MQTT discovery. Default: false.", tier=Tier.EXPERT
+            label="Enable HA discovery",
+            description="Enable HA MQTT discovery. Default: false.",
+            tier=Tier.BASIC,
         ),
         "discovery_prefix": FieldSpec(
             label="Discovery prefix",
             description="Topic prefix used by HA for discovery. Default: 'homeassistant'.",
             tier=Tier.EXPERT,
+            visible_if=Comparison(field="enabled", operator=ComparisonOperator.EQ, value=True),
         ),
         "device_name": FieldSpec(
-            label="HA device name", description="Human-readable device name shown in HA.", tier=Tier.EXPERT
+            label="HA device name",
+            description="Human-readable device name shown in HA.",
+            tier=Tier.EXPERT,
+            visible_if=Comparison(field="enabled", operator=ComparisonOperator.EQ, value=True),
         ),
         "device_id": FieldSpec(
             label="HA device ID",
             description="Stable device identifier for the HA device registry. Defaults to mqtt.client_id.",
             tier=Tier.EXPERT,
+            visible_if=Comparison(field="enabled", operator=ComparisonOperator.EQ, value=True),
+
         ),
     }
 )
@@ -1194,7 +1210,7 @@ MIMIRHEIM_CONFIG_FORM_SPEC = FormSpec(
             label="Deferrable loads",
             description="Named deferrable load devices (e.g. a dishwasher or washing machine with a scheduling window).",
             tab="Deferrable Loads",
-            tier=Tier.EXPERT,
+            tier=Tier.BASIC,
             nested_form_spec=DEFERRABLE_LOAD_CONFIG_FORM_SPEC,
         ),
         "static_loads": FieldSpec(
@@ -1215,27 +1231,28 @@ MIMIRHEIM_CONFIG_FORM_SPEC = FormSpec(
             label="Thermal boilers",
             description="Named domestic hot water thermal boiler devices.",
             tab="Thermal Boilers",
-            tier=Tier.EXPERT,
+            tier=Tier.BASIC,
             nested_form_spec=THERMAL_BOILER_CONFIG_FORM_SPEC,
         ),
         "space_heating_hps": FieldSpec(
             label="Space heating heat pumps",
             description="Named space heating heat pump devices.",
             tab="Space Heating Heat Pumps",
-            tier=Tier.EXPERT,
+            tier=Tier.BASIC,
             nested_form_spec=SPACE_HEATING_CONFIG_FORM_SPEC,
         ),
         "combi_heat_pumps": FieldSpec(
             label="Combi heat pumps",
             description="Named combi heat pump devices (domestic hot water and space heating combined).",
             tab="Combi Heat Pumps",
-            tier=Tier.EXPERT,
+            tier=Tier.BASIC,
             nested_form_spec=COMBI_HEAT_PUMP_CONFIG_FORM_SPEC,
         ),
         "grid": FieldSpec(
             label="Grid connection",
             description="Grid connection parameters (import/export limits). Exactly one per mimirheim instance.",
             tab="Grid",
+            subtab="Grid",
             tier=Tier.BASIC,
             nested_form_spec=GRID_CONFIG_FORM_SPEC,
         ),
@@ -1249,7 +1266,8 @@ MIMIRHEIM_CONFIG_FORM_SPEC = FormSpec(
         "constraints": FieldSpec(
             label="Constraints",
             description="Hard constraints on grid import/export power, enforced independently of strategy.",
-            tab="Mimirheim Internals",
+            tab="Grid",
+            subtab="Constraints",
             tier=Tier.EXPERT,
             nested_form_spec=CONSTRAINTS_CONFIG_FORM_SPEC,
         ),
@@ -1271,6 +1289,7 @@ MIMIRHEIM_CONFIG_FORM_SPEC = FormSpec(
             label="MQTT",
             description="MQTT broker connection parameters.",
             tab="Mimirheim Internals",
+            subtab="MQTT",
             tier=Tier.BASIC,
             nested_form_spec=CORE_MQTT_CONFIG_FORM_SPEC,
         ),
@@ -1278,6 +1297,7 @@ MIMIRHEIM_CONFIG_FORM_SPEC = FormSpec(
             label="Output topics",
             description="MQTT output topic names.",
             tab="Mimirheim Internals",
+            subtab="MQTT",
             tier=Tier.EXPERT,
             nested_form_spec=OUTPUTS_CONFIG_FORM_SPEC,
         ),
@@ -1285,6 +1305,7 @@ MIMIRHEIM_CONFIG_FORM_SPEC = FormSpec(
             label="Input topics",
             description="MQTT input topic overrides. Fields default to the standard derived topic when unset.",
             tab="Mimirheim Internals",
+            subtab="MQTT",
             tier=Tier.EXPERT,
             nested_form_spec=INPUTS_CONFIG_FORM_SPEC,
         ),
@@ -1292,7 +1313,8 @@ MIMIRHEIM_CONFIG_FORM_SPEC = FormSpec(
             label="Home Assistant",
             description="Home Assistant MQTT autodiscovery settings.",
             tab="Mimirheim Internals",
-            tier=Tier.EXPERT,
+            subtab="MQTT",
+            tier=Tier.BASIC,
             nested_form_spec=CORE_HOME_ASSISTANT_CONFIG_FORM_SPEC,
         ),
         "debug": FieldSpec(

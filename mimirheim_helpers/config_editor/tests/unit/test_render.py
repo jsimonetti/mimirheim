@@ -3,8 +3,6 @@ and (ticket 08) recursive rendering of every Field Shape."""
 
 from __future__ import annotations
 
-import pytest
-
 from mimirheim_shared.config_service import Descriptor
 from mimirheim_shared.field_shape import FieldShape
 from mimirheim_shared.formspec import FieldSpec, FormSpec, Tier
@@ -100,6 +98,7 @@ def test_expert_tier_fields_are_separated_from_basic_fields() -> None:
     assert [f.name for f in group.basic_fields] == ["host"]
     assert [f.name for f in group.expert_fields] == ["tls"]
     assert group.has_expert_fields is True
+    assert group.has_visible_expert_field is True
 
 
 def test_group_with_no_expert_fields_reports_has_expert_fields_false() -> None:
@@ -110,6 +109,37 @@ def test_group_with_no_expert_fields_reports_has_expert_fields_false() -> None:
     (group,) = build_groups(descriptor)
 
     assert group.has_expert_fields is False
+
+
+def test_group_with_only_conditionally_hidden_expert_fields_reports_no_visible_expert_field() -> None:
+    descriptor = _descriptor(
+        FormSpec(
+            fields={
+                "enabled": FieldSpec(label="Enabled", description="Enable it."),
+                "poll_interval": FieldSpec(
+                    label="Poll interval",
+                    description="Poll interval.",
+                    tier=Tier.EXPERT,
+                    visible_if=Comparison(field="enabled", operator=ComparisonOperator.EQ, value=True),
+                ),
+            }
+        ),
+        json_schema={
+            "properties": {
+                "enabled": {"type": "boolean", "default": False},
+                "poll_interval": {"type": "integer", "default": 60},
+            }
+        },
+    )
+
+    (group,) = build_groups(descriptor)
+
+    assert group.has_expert_fields is True
+    assert group.has_visible_expert_field is False
+
+    (group_when_enabled,) = build_groups(descriptor, values={"enabled": True})
+
+    assert group_when_enabled.has_visible_expert_field is True
 
 
 def test_hidden_field_is_excluded_entirely() -> None:
@@ -149,7 +179,10 @@ def test_conditional_visibility_hides_field_when_condition_is_false() -> None:
 
     (group,) = build_groups(descriptor)
 
-    assert [f.name for f in group.basic_fields] == ["enabled"]
+    assert [f.name for f in group.basic_fields] == ["enabled", "prefix"]
+    enabled_field, prefix_field = group.basic_fields
+    assert enabled_field.visible is True
+    assert prefix_field.visible is False
 
 
 def test_values_override_replaces_schema_defaults() -> None:
@@ -577,6 +610,59 @@ class TestOrderedCollectionShape:
         assert template_field.name == f"charge_segments.{NEW_ENTRY_KEY}.power_max_kw"
 
 
+class TestScalarListShape:
+    _JSON_SCHEMA = {"properties": {"production_stages": {"type": "array", "items": {"type": "number"}}}}
+
+    def _descriptor(self) -> Descriptor:
+        return _descriptor(
+            FormSpec(
+                fields={
+                    "production_stages": FieldSpec(
+                        label="Production stages",
+                        description="Discrete power levels.",
+                        shape=FieldShape.SCALAR_LIST,
+                    )
+                }
+            ),
+            json_schema=self._JSON_SCHEMA,
+        )
+
+    def test_renders_one_entry_per_existing_item_in_index_order(self) -> None:
+        descriptor = self._descriptor()
+
+        (group,) = build_groups(descriptor, values={"production_stages": [0.0, 1.5, 3.0]})
+
+        field = group.basic_fields[0]
+        assert field.nested_groups is None
+        assert [entry.key for entry in field.entries] == ["0", "1", "2"]
+        assert [entry.value for entry in field.entries] == [0.0, 1.5, 3.0]
+        assert field.input_type == "number"
+
+    def test_renders_no_entries_when_the_list_is_empty(self) -> None:
+        descriptor = self._descriptor()
+
+        (group,) = build_groups(descriptor, values={"production_stages": []})
+
+        assert group.basic_fields[0].entries == []
+
+    def test_renders_no_entries_when_the_field_is_absent(self) -> None:
+        descriptor = self._descriptor()
+
+        (group,) = build_groups(descriptor)
+
+        assert group.basic_fields[0].entries == []
+
+    def test_entry_template_is_built_keyed_by_the_new_entry_placeholder_with_no_value(self) -> None:
+        descriptor = self._descriptor()
+
+        (group,) = build_groups(descriptor, values={"production_stages": [0.0]})
+
+        field = group.basic_fields[0]
+        assert field.entry_template is not None
+        assert field.entry_template.key == NEW_ENTRY_KEY
+        assert field.entry_template.value is None
+
+
 class TestOptionalObjectShape:
     _NESTED_SPEC = FormSpec(
         fields={
@@ -823,9 +909,8 @@ class TestBatterySegmentsVersusCurveConditionalVisibility:
             }
         )
 
-        assert _find_field(groups, "batteries.bat1.charge_segments") is not None
-        with pytest.raises(AssertionError):
-            _find_field(groups, "batteries.bat1.charge_efficiency_curve")
+        assert _find_field(groups, "batteries.bat1.charge_segments").visible is True
+        assert _find_field(groups, "batteries.bat1.charge_efficiency_curve").visible is False
 
     def test_charge_efficiency_curve_populated_hides_charge_segments(self) -> None:
         groups = self._battery_groups(
@@ -842,15 +927,14 @@ class TestBatterySegmentsVersusCurveConditionalVisibility:
             }
         )
 
-        assert _find_field(groups, "batteries.bat1.charge_efficiency_curve") is not None
-        with pytest.raises(AssertionError):
-            _find_field(groups, "batteries.bat1.charge_segments")
+        assert _find_field(groups, "batteries.bat1.charge_efficiency_curve").visible is True
+        assert _find_field(groups, "batteries.bat1.charge_segments").visible is False
 
     def test_neither_populated_both_render(self) -> None:
         groups = self._battery_groups({"capacity_kwh": 5.0})
 
-        assert _find_field(groups, "batteries.bat1.charge_segments") is not None
-        assert _find_field(groups, "batteries.bat1.charge_efficiency_curve") is not None
+        assert _find_field(groups, "batteries.bat1.charge_segments").visible is True
+        assert _find_field(groups, "batteries.bat1.charge_efficiency_curve").visible is True
 
 
 def test_real_mimirheim_descriptor_renders_a_battery_soc_unit_through_every_nesting_level() -> None:
@@ -1044,7 +1128,9 @@ class TestBuildTabs:
         (tab,) = build_tabs(descriptor)
         (subtab,) = tab.subtabs
 
-        assert [f.name for f in subtab.groups[0].basic_fields] == ["enabled"]
+        assert [f.name for f in subtab.groups[0].basic_fields] == ["enabled", "prefix"]
+        prefix_field = subtab.groups[0].basic_fields[1]
+        assert prefix_field.visible is False
 
     def test_values_override_is_honoured_the_same_as_build_groups(self) -> None:
         descriptor = _descriptor(

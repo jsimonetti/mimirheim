@@ -52,6 +52,16 @@ class TestNordpoolApiConfig:
         assert cfg.import_formula == "price"
         assert cfg.export_formula == "price"
 
+    def test_rejects_an_area_code_pynordpool_does_not_recognise(self) -> None:
+        with pytest.raises(ValidationError):
+            NordpoolApiConfig(area="XX")
+
+    def test_rejects_the_synthetic_system_price_area(self) -> None:
+        # "SYS" is pynordpool's system price reference, not a bidding zone any
+        # supplier bills from -- excluded from the valid area codes.
+        with pytest.raises(ValidationError):
+            NordpoolApiConfig(area="SYS")
+
     def test_custom_import_formula_accepted(self) -> None:
         cfg = NordpoolApiConfig(area="NL", import_formula="((price + 0.09161) * 1.21) + 0.0248")
         assert "0.09161" in cfg.import_formula

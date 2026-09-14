@@ -9,6 +9,7 @@ from typing import Callable, Literal
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pynordpool.const import AREAS
 
 from helper_common.config import HomeAssistantConfig, MqttConfig
 import helper_common.topics as _topics
@@ -17,6 +18,12 @@ import helper_common.topics as _topics
 # Users override these with their own supplier's pricing formula.
 _DEFAULT_IMPORT_FORMULA = "price"
 _DEFAULT_EXPORT_FORMULA = "price"
+
+# Valid Nordpool day-ahead bidding zone codes, from pynordpool's own area
+# registry (the same set its client accepts as `area=`), excluding "SYS":
+# Nordpool's synthetic system price, not a zone any supplier actually bills
+# from.
+_AREA_CODES = tuple(code for code in AREAS if code != "SYS")
 
 # Nordpool day-ahead is quoted on a 15-minute market time unit for most areas
 # since October 2025, so quarter-hourly is the pass-through default. Suppliers
@@ -78,7 +85,8 @@ class NordpoolApiConfig(BaseModel):
     By default both formulas pass the raw spot price through unchanged.
 
     Attributes:
-        area: Nordpool area code (e.g. ``"NO2"``, ``"NL"``, ``"SE3"``).
+        area: Nordpool area code (e.g. ``"NO2"``, ``"NL"``, ``"SE3"``), restricted
+            to pynordpool's own registry of valid bidding zones.
         import_formula: Python expression that computes the all-in import
             price in EUR/kWh from the raw spot price. Applied to every step.
         export_formula: Python expression that computes the net export price
@@ -97,14 +105,15 @@ class NordpoolApiConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    area: str = Field(description="Nordpool price area code (e.g. 'NO2', 'NL', 'SE3').", json_schema_extra={"ui_label": "Nordpool area", "ui_group": "basic"})
+    area: Literal[_AREA_CODES] = Field(
+        description="Nordpool price area code (e.g. 'NO2', 'NL', 'SE3')."
+    )
     import_formula: str = Field(
         default=_DEFAULT_IMPORT_FORMULA,
         description=(
             "Python expression for the all-in import price in EUR/kWh. "
             "Available variables: ``price`` (raw spot, EUR/kWh), ``ts`` (datetime, UTC)."
         ),
-        json_schema_extra={"ui_label": "Import price formula", "ui_group": "basic"},
     )
     export_formula: str = Field(
         default=_DEFAULT_EXPORT_FORMULA,
@@ -112,7 +121,6 @@ class NordpoolApiConfig(BaseModel):
             "Python expression for the net export price in EUR/kWh. "
             "Available variables: ``price`` (raw spot, EUR/kWh), ``ts`` (datetime, UTC)."
         ),
-        json_schema_extra={"ui_label": "Export price formula", "ui_group": "basic"},
     )
     price_interval: Literal["hourly", "quarter_hourly"] = Field(
         default=_DEFAULT_PRICE_INTERVAL,
@@ -122,7 +130,6 @@ class NordpoolApiConfig(BaseModel):
             "hour into a single step, matching suppliers that bill one dynamic price "
             "per hour."
         ),
-        json_schema_extra={"ui_label": "Price interval", "ui_group": "basic"},
     )
 
     @field_validator("import_formula", "export_formula", mode="after")
@@ -155,34 +162,30 @@ class NordpoolConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    mqtt: MqttConfig = Field(description="MQTT broker connection settings.", json_schema_extra={"ui_label": "MQTT", "ui_group": "basic"})
+    mqtt: MqttConfig = Field(description="MQTT broker connection settings.")
     mimir_topic_prefix: str = Field(
         default="mimir",
         description="mimirheim mqtt.topic_prefix. Used to derive default output and trigger topics.",
-        json_schema_extra={"ui_label": "mimirheim topic prefix", "ui_group": "advanced"},
     )
-    trigger_topic: str = Field(description="MQTT topic that triggers a fetch cycle.", json_schema_extra={"ui_label": "Trigger topic", "ui_group": "advanced"})
+    trigger_topic: str = Field(description="MQTT topic that triggers a fetch cycle.")
     output_topic: str | None = Field(
         default=None,
         description=(
             "MQTT topic for the retained price payload. "
             "Defaults to '{mimir_topic_prefix}/input/prices' when not set."
         ),
-        json_schema_extra={"ui_label": "Output topic", "ui_group": "advanced", "ui_placeholder": "{mimir_topic_prefix}/input/prices"},
     )
-    nordpool: NordpoolApiConfig = Field(description="Nordpool API and pricing formula parameters.", json_schema_extra={"ui_label": "Nordpool API", "ui_group": "basic"})
+    nordpool: NordpoolApiConfig = Field(description="Nordpool API and pricing formula parameters.")
     ha_discovery: HomeAssistantConfig | None = Field(
         default=None,
         description="Optional Home Assistant MQTT discovery settings.",
-        json_schema_extra={"ui_label": "HA discovery", "ui_group": "advanced"},
     )
     stats_topic: str | None = Field(
         default=None,
         description="MQTT topic where per-cycle run statistics are published.",
-        json_schema_extra={"ui_label": "Stats topic", "ui_group": "advanced"},
     )
-    signal_mimir: bool = Field(default=False, description="Publish to mimir_trigger_topic after publishing prices.", json_schema_extra={"ui_label": "Signal mimirheim", "ui_group": "advanced"})
-    mimir_trigger_topic: str | None = Field(default=None, description="Topic to trigger mimirheim. Derived from mimir_topic_prefix when not set.", json_schema_extra={"ui_label": "mimirheim trigger topic", "ui_group": "advanced"})
+    signal_mimir: bool = Field(default=False, description="Publish to mimir_trigger_topic after publishing prices.")
+    mimir_trigger_topic: str | None = Field(default=None, description="Topic to trigger mimirheim. Derived from mimir_topic_prefix when not set.")
 
     @model_validator(mode="after")
     def _derive_hioo_topics(self) -> "NordpoolConfig":

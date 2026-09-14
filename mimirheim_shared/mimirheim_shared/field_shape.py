@@ -28,6 +28,10 @@ class FieldShape(str, Enum):
     ORDERED_COLLECTION = "ordered_collection"
     OPTIONAL_OBJECT = "optional_object"
     ENUM_SELECT = "enum_select"
+    # A list of scalars (e.g. list[float]), as distinct from ORDERED_COLLECTION's
+    # list of a nested model: there is no nested model to recurse into, but it is
+    # still rendered/submitted as one entry per item, not one opaque text field.
+    SCALAR_LIST = "scalar_list"
 
 
 def _is_model(candidate: Any) -> bool:
@@ -80,6 +84,8 @@ def derive_field_shape(annotation: Any) -> FieldShape:
         args = get_args(inner)
         if len(args) == 1 and _is_model(args[0]):
             return FieldShape.ORDERED_COLLECTION
+        if len(args) == 1:
+            return FieldShape.SCALAR_LIST
         return FieldShape.SCALAR
 
     if _is_model(inner):

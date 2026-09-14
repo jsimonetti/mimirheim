@@ -83,9 +83,11 @@ def test_grid_has_its_own_tab_distinct_from_devices_and_internals() -> None:
 
 
 def test_non_device_non_grid_sections_share_one_internals_tab() -> None:
+    # "constraints" is deliberately excluded: it groups under the "Grid" tab
+    # (as its own subtab) rather than "Mimirheim Internals", since grid import/
+    # export constraints are conceptually part of grid configuration.
     internals_field_names = (
         "objectives",
-        "constraints",
         "solver",
         "readiness",
         "mqtt",
@@ -104,6 +106,14 @@ def test_non_device_non_grid_sections_share_one_internals_tab() -> None:
 
     assert len(internals_tabs) == 1
     assert internals_tabs.isdisjoint(device_and_grid_tabs)
+
+
+def test_constraints_shares_the_grid_tab_as_its_own_subtab() -> None:
+    grid_spec = MIMIRHEIM_CONFIG_FORM_SPEC.fields["grid"]
+    constraints_spec = MIMIRHEIM_CONFIG_FORM_SPEC.fields["constraints"]
+
+    assert constraints_spec.tab == grid_spec.tab
+    assert constraints_spec.subtab != grid_spec.subtab
 
 
 def test_objectives_balanced_weights_is_a_real_optional_object() -> None:
@@ -147,3 +157,25 @@ def test_battery_discharge_segments_and_curve_are_mutually_visible() -> None:
     assert evaluate_condition(segments_condition, {"discharge_efficiency_curve": []}) is False
     assert evaluate_condition(curve_condition, {"discharge_segments": None}) is True
     assert evaluate_condition(curve_condition, {"discharge_segments": []}) is False
+
+
+def test_soc_ratchet_fields_are_hidden_unless_enabled() -> None:
+    from mimirheim_shared.visibility import evaluate_condition
+
+    from mimirheim.config.formspec import SOC_RATCHET_FORM_SPEC
+
+    gated_field_names = (
+        "target_interval_days",
+        "full_threshold_pct",
+        "step_pct",
+        "cap_pct",
+        "target_pct",
+        "hold_hours",
+    )
+
+    assert SOC_RATCHET_FORM_SPEC.fields["enabled"].visible_if is None
+    for name in gated_field_names:
+        condition = SOC_RATCHET_FORM_SPEC.fields[name].visible_if
+        assert condition is not None, name
+        assert evaluate_condition(condition, {"enabled": True}) is True
+        assert evaluate_condition(condition, {"enabled": False}) is False

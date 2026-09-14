@@ -29,6 +29,16 @@ def test_scalar_field_absent_from_the_submission_is_omitted() -> None:
     assert values == {"area": "SE3"}
 
 
+def test_blank_scalar_field_is_omitted_rather_than_passed_through_as_empty_string() -> None:
+    form_spec = FormSpec(
+        fields={"min_charge_kw": FieldSpec(label="Minimum charge power", description="kW.")}
+    )
+
+    values = parse_submission(form_spec, {"min_charge_kw": ""})
+
+    assert values == {}
+
+
 def test_hidden_field_is_never_included_even_if_present_in_the_raw_submission() -> None:
     form_spec = FormSpec(
         fields={"internal": FieldSpec(label="Internal", description="Not shown.", hidden=True)}
@@ -161,6 +171,41 @@ class TestOptionalObject:
         assert values == {"balanced_weights": {"grid_price_weight": "0.5"}}
 
     def test_omitted_entirely_when_it_was_not_rendered(self) -> None:
+        values = parse_submission(self._FORM_SPEC, {})
+
+        assert values == {}
+
+
+class TestScalarList:
+    _FORM_SPEC = FormSpec(
+        fields={
+            "production_stages": FieldSpec(
+                label="Production stages",
+                description="Discrete power levels.",
+                shape=FieldShape.SCALAR_LIST,
+            )
+        }
+    )
+
+    def test_builds_a_list_ordered_by_index_regardless_of_raw_key_order(self) -> None:
+        raw = {
+            "production_stages.1": "1.5",
+            "production_stages.0": "0.0",
+            "production_stages.2": "3.0",
+        }
+
+        values = parse_submission(self._FORM_SPEC, raw)
+
+        assert values == {"production_stages": ["0.0", "1.5", "3.0"]}
+
+    def test_a_blank_entry_is_dropped_rather_than_passed_through_as_empty_string(self) -> None:
+        raw = {"production_stages.0": "0.0", "production_stages.1": ""}
+
+        values = parse_submission(self._FORM_SPEC, raw)
+
+        assert values == {"production_stages": ["0.0"]}
+
+    def test_omitted_entirely_when_the_list_has_no_rows_in_the_submission(self) -> None:
         values = parse_submission(self._FORM_SPEC, {})
 
         assert values == {}

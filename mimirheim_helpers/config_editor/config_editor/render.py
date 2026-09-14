@@ -4,19 +4,21 @@
 ADR-0006 and ADR-0007), producing a tree of `RenderedGroup`/`RenderedField`/
 `RenderedEntry` objects: `RenderedGroup`'s `RenderedField`s cover a section's
 Basic (always shown) and Expert (collapsed behind an Advanced disclosure)
-fields, already Conditional-Visibility filtered, and a structural
-`RenderedField` (nested object, optional object, Named Collection, or Ordered
-Collection) carries its own recursively-built `RenderedGroup`/`RenderedEntry`
-list rather than a leaf value. `server.py` and its Jinja2 templates only ever
-iterate these plain objects, never a Descriptor or FormSpec directly. This
-module does no I/O and never writes a Config Owner's configuration file; it
-only prepares an already-received Descriptor, plus the current values
-`server.py` fetched via `get_current_values`, for read-only display.
+fields, each carrying its own current Conditional Visibility state
+(`RenderedField.visible`) rather than being omitted when hidden, and a
+structural `RenderedField` (nested object, optional object, Named Collection,
+or Ordered Collection) carries its own recursively-built
+`RenderedGroup`/`RenderedEntry` list rather than a leaf value. `server.py` and
+its Jinja2 templates only ever iterate these plain objects, never a
+Descriptor or FormSpec directly. This module does no I/O and never writes a
+Config Owner's configuration file; it only prepares an already-received
+Descriptor, plus the current values `server.py` fetched via
+`get_current_values`, for read-only display.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from mimirheim_shared.config_service import Descriptor
@@ -36,6 +38,23 @@ UNGROUPED_LABEL = "General"
 # name/id attributes with a freshly generated, sibling-unique key before
 # inserting it into the live entries container.
 NEW_ENTRY_KEY = "__new__"
+
+
+def visible_if_json(spec: FieldSpec) -> str | None:
+    """Serializes a FieldSpec's Conditional Visibility rule for owner.html's visibility.js.
+
+    Args:
+        spec: The FieldSpec to read `visible_if` from.
+
+    Returns:
+        The rule (a `Comparison` or `ConditionGroup`) as a JSON string, ready
+        to embed in a `data-visible-if` attribute for visibility.js to parse
+        and re-evaluate on every change, or None when the field carries no
+        `visible_if` at all.
+    """
+    if spec.visible_if is None:
+        return None
+    return spec.visible_if.model_dump_json()
 
 
 def schema_default_values(json_schema: dict[str, Any]) -> dict[str, Any]:
@@ -90,11 +109,18 @@ def _merge_defaults(schema: dict[str, Any], value: Any) -> dict[str, Any]:
 
 @dataclass(frozen=True)
 class RenderedEntry:
-    """One existing entry of a Named Collection (keyed) or Ordered Collection (indexed) field."""
+    """One existing entry of a Named Collection (keyed), Ordered Collection (indexed), or Scalar List field.
+
+    `groups` describes a Named/Ordered Collection entry (one nested FormSpec
+    per item); `value` describes a Scalar List entry instead (a bare scalar,
+    with no nested FormSpec of its own). Exactly one is populated, matching
+    the owning `RenderedField`'s effective Field Shape.
+    """
 
     key: str
     label: str
-    groups: list["RenderedGroup"]
+    groups: list["RenderedGroup"] = field(default_factory=list)
+    value: Any = None
 
 
 @dataclass(frozen=True)
@@ -112,15 +138,21 @@ class RenderedField:
       inside a `<fieldset disabled>` its Presence Toggle checkbox enables
       live via JS, so a currently-absent section can be populated without a
       page reload, while a disabled fieldset's controls are never submitted.
-    - `entries`: a Named Collection or Ordered Collection field, one
-      `RenderedEntry` per existing entry. `entry_template` is always built
-      alongside `entries` for these two shapes (even when `entries` is
-      empty): one further `RenderedEntry` keyed by `NEW_ENTRY_KEY`, prefilled
-      from the item schema's own defaults exactly like a real entry with no
-      on-disk value would be. `owner.html` renders it inert, inside a
-      `<template>` element; the Add control (ticket 06) clones it client-side
-      and substitutes a freshly generated key for `NEW_ENTRY_KEY` before
-      inserting the clone into the live entries container.
+    - `entries`: a Named Collection, Ordered Collection, or Scalar List
+      field, one `RenderedEntry` per existing entry (a Scalar List entry
+      carries a bare `value` rather than its own `groups`). `entry_template`
+      is always built alongside `entries` for these shapes (even when
+      `entries` is empty): one further `RenderedEntry` keyed by
+      `NEW_ENTRY_KEY`, prefilled from the item schema's own defaults exactly
+      like a real entry with no on-disk value would be (a Scalar List's own
+      template entry has no default and prefills to `None`). `owner.html`
+      renders it inert, inside a `<template>` element; the Add control
+      (ticket 06) clones it client-side and substitutes a freshly generated
+      key for `NEW_ENTRY_KEY` before inserting the clone into the live
+      entries container. A Scalar List field also carries `input_type`,
+      `min_value`, `max_value`, and `step` (see below), read from its own
+      item schema rather than its own JSON Schema fragment, since the field
+      itself is a list, not a number/string/bool.
 
     Attributes:
         name: The field's full dotted/indexed path (e.g.
@@ -131,6 +163,13 @@ class RenderedField:
         spec: This field's FieldSpec, as resolved by
             `mimirheim_shared.formspec.resolve_field_shapes` when the Config
             Owner built its Descriptor.
+        visible: Whether `spec.visible_if` (Conditional Visibility) currently
+            holds. Always True when `spec.visible_if` is None. A field is
+            built regardless of this flag, exactly like an optional object's
+            `nested_groups` is always built regardless of `present`, so
+            owner.html can render a currently-hidden field inside a
+            `<fieldset disabled>` and visibility.js can reveal it live on
+            change, without a page reload re-evaluating it.
     """
 
     name: str
@@ -141,6 +180,7 @@ class RenderedField:
     entries: list[RenderedEntry] | None = None
     entry_template: RenderedEntry | None = None
     present: bool = False
+    visible: bool = True
     # Widget kind for a SCALAR leaf field ("text", "checkbox", or "number"),
     # derived from the field's own JSON Schema "type" (see _widget_attrs).
     # ENUM_SELECT and every structural shape ignore this; they render from
@@ -158,7 +198,7 @@ class RenderedField:
 
 @dataclass(frozen=True)
 class RenderedGroup:
-    """One group's Basic and Expert fields, both already Conditional-Visibility filtered."""
+    """One group's Basic and Expert fields, each carrying its own current Conditional Visibility state."""
 
     label: str
     basic_fields: list[RenderedField] = field(default_factory=list)
@@ -168,6 +208,17 @@ class RenderedGroup:
     def has_expert_fields(self) -> bool:
         """Whether this group has any Expert-tier field to collapse behind Advanced."""
         return bool(self.expert_fields)
+
+    @property
+    def has_visible_expert_field(self) -> bool:
+        """Whether at least one Expert-tier field's Conditional Visibility currently holds.
+
+        Read at initial render to decide whether the Advanced disclosure
+        starts hidden; visibility.js (owner.html) re-derives the same thing
+        client-side on every change, since an Expert field's own visibility
+        can flip live without a page reload.
+        """
+        return any(f.visible for f in self.expert_fields)
 
 
 def build_groups(descriptor: Descriptor, values: dict[str, Any] | None = None) -> list[RenderedGroup]:
@@ -309,8 +360,6 @@ def _build_groups(
     for name, spec in form_spec.fields.items():
         if spec.hidden:
             continue
-        if spec.visible_if is not None and not evaluate_condition(spec.visible_if, values):
-            continue
 
         label = spec.group or UNGROUPED_LABEL
         if label not in groups:
@@ -320,6 +369,15 @@ def _build_groups(
         field_name = f"{name_prefix}.{name}" if name_prefix else name
         field_schema = _resolve_schema(properties.get(name, {}), defs)
         rendered = _build_field(field_name, spec, values.get(name), field_schema, defs)
+        # Built regardless of Conditional Visibility (rather than omitted, as
+        # before ticket 09): owner.html renders a currently-hidden field
+        # inside a <fieldset disabled>, the same native-HTML "a disabled
+        # fieldset's descendants are never submitted" guarantee the Presence
+        # Toggle already relies on, so visibility.js can reveal it live on
+        # change (ADR-0003 promises "minimal JS for interactivity such as
+        # conditional visibility") without a page reload re-evaluating it.
+        if spec.visible_if is not None and not evaluate_condition(spec.visible_if, values):
+            rendered = replace(rendered, visible=False)
         target = groups[label].expert_fields if spec.tier is Tier.EXPERT else groups[label].basic_fields
         target.append(rendered)
 
@@ -419,6 +477,28 @@ def _build_field(
             field_name, spec.nested_form_spec, item_schema, item_properties, defs
         )
         return RenderedField(name=field_name, spec=spec, entries=entries, entry_template=entry_template)
+
+    if shape is FieldShape.SCALAR_LIST:
+        # No nested model to recurse into (unlike ORDERED_COLLECTION): each
+        # entry is a bare scalar, widget-typed from the list's own JSON
+        # Schema "items" fragment rather than a nested object's properties.
+        item_schema = _resolve_schema(field_schema.get("items", {}), defs)
+        input_type, min_value, max_value, step = _widget_attrs(item_schema)
+        entries = [
+            RenderedEntry(key=str(index), label=f"#{index + 1}", value=entry_value)
+            for index, entry_value in enumerate(value)
+        ] if isinstance(value, list) else []
+        entry_template = RenderedEntry(key=NEW_ENTRY_KEY, label=NEW_ENTRY_KEY)
+        return RenderedField(
+            name=field_name,
+            spec=spec,
+            entries=entries,
+            entry_template=entry_template,
+            input_type=input_type,
+            min_value=min_value,
+            max_value=max_value,
+            step=step,
+        )
 
     if shape is FieldShape.ENUM_SELECT:
         options = field_schema.get("enum", [])

@@ -8,8 +8,10 @@ mimirheim core's own schema (`mimirheim.config.schema`) no longer carries
 ui_label/ui_group/ui_instance_name_description json_schema_extra hints:
 config-editor-v3 ticket 10 removed them, since `mimirheim/config/formspec.py`
 now gives core's Config Editor presentation layer full FormSpec coverage
-instead. Helpers have not made that same move yet, so their coverage tests
-remain here until they do.
+instead. `nordpool` has made the same move (see `nordpool/formspec.py`) and is
+excluded from the parametrized coverage tests below for the same reason.
+Remaining helpers have not made that move yet, so their coverage tests stay
+here until they do.
 
 What this module does not do:
 - It does not test the correctness of annotation values (e.g. whether a
@@ -181,7 +183,6 @@ def test_wizard_invalid_output_is_rejected() -> None:
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("model_cls_import", [
-    ("nordpool.config", "NordpoolConfig"),
     ("pv_fetcher.config", "PvFetcherConfig"),
     ("pv_openmeteo.config", "PvOpenMeteoConfig"),
     ("pv_ml_learner.config", "PvLearnerConfig"),
@@ -207,7 +208,6 @@ def test_helper_all_fields_have_ui_label(model_cls_import: tuple[str, str]) -> N
 
 
 @pytest.mark.parametrize("model_cls_import", [
-    ("nordpool.config", "NordpoolConfig"),
     ("pv_fetcher.config", "PvFetcherConfig"),
     ("pv_openmeteo.config", "PvOpenMeteoConfig"),
     ("pv_ml_learner.config", "PvLearnerConfig"),

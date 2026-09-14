@@ -258,3 +258,14 @@ def test_shape_override_to_scalar_skips_recursion() -> None:
     )
 
     assert_form_spec_complete(_WithNestedObject, spec)
+
+
+def test_scalar_list_field_needs_no_nested_form_spec() -> None:
+    class _WithScalarList(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        stages: list[float]
+
+    spec = FormSpec(fields={"stages": FieldSpec(label="Stages", description="Power stages.")})
+
+    assert_form_spec_complete(_WithScalarList, spec)

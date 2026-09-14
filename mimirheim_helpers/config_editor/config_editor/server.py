@@ -39,7 +39,7 @@ from mimirheim_shared.config_service import Descriptor, ValidateAndWriteResult
 from mimirheim_shared.formspec import option_label
 
 from config_editor.registry import ConfigOwnerRegistry
-from config_editor.render import build_tabs
+from config_editor.render import UNGROUPED_LABEL, build_tabs, visible_if_json
 from config_editor.submission import parse_submission
 
 logger = logging.getLogger(__name__)
@@ -53,6 +53,13 @@ _TEMPLATES = jinja2.Environment(
 # describes; exposed as a Jinja global rather than duplicating the lookup in
 # the template itself.
 _TEMPLATES.globals["option_label"] = option_label
+# render_groups (owner.html) compares against this to suppress a section's
+# heading when it is the single implicit group, the same fallback build_groups
+# uses for a field whose FieldSpec.group is unset.
+_TEMPLATES.globals["UNGROUPED_LABEL"] = UNGROUPED_LABEL
+# render_conditional_field (owner.html) embeds this in a data-visible-if
+# attribute for visibility.js to parse and re-evaluate live on change.
+_TEMPLATES.globals["visible_if_json"] = visible_if_json
 
 # Vendored static assets (Bootstrap5's CSS/JS; see ADR-0003 -- no CDN, no
 # generic client-side form library). Bundled with this package so the editor

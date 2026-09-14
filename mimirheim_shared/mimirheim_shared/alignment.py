@@ -26,9 +26,10 @@ from mimirheim_shared.field_shape import (
 )
 from mimirheim_shared.formspec import FormSpec
 
-# Shapes with no nested FormSpec to recurse into: a plain value and a
-# Literal[...] select both render as a single field, never a sub-form.
-_LEAF_SHAPES = frozenset({FieldShape.SCALAR, FieldShape.ENUM_SELECT})
+# Shapes with no nested FormSpec to recurse into: a plain value, a
+# Literal[...] select, and a list of scalars all render as a single field
+# (or one entry per item with no sub-form), never a sub-form.
+_LEAF_SHAPES = frozenset({FieldShape.SCALAR, FieldShape.ENUM_SELECT, FieldShape.SCALAR_LIST})
 
 
 def assert_form_spec_complete(

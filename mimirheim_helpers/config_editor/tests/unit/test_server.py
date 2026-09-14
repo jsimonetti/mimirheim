@@ -84,6 +84,21 @@ def _post(server: ConfigEditorServer, path: str, form: dict[str, str]) -> tuple[
     return status, response_body.decode("utf-8")
 
 
+def _conditional_fieldset_tag(body: str, field_name: str) -> str:
+    """Extracts a Conditional Visibility field's own opening <fieldset ...> tag.
+
+    Used to assert on its `disabled`/`d-none` state without depending on
+    attribute order, since a conditionally-visible field is always rendered
+    (never omitted): render_conditional_field (owner.html) wraps it in a
+    <fieldset data-conditional-field="{field_name}">.
+    """
+    marker = f'data-conditional-field="{field_name}"'
+    marker_index = body.index(marker)
+    tag_start = body.rindex("<fieldset", 0, marker_index)
+    tag_end = body.index(">", marker_index)
+    return body[tag_start:tag_end]
+
+
 def test_index_lists_no_owners_when_registry_is_empty(server: ConfigEditorServer) -> None:
     status, body = _get(server, "/")
 
@@ -172,6 +187,41 @@ def test_owner_page_collapses_expert_fields_behind_advanced_disclosure(
     assert "Advanced" in body[details_start:details_end]
 
 
+def test_owner_page_hides_advanced_disclosure_when_no_expert_field_is_visible(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    registry.update(
+        Descriptor(
+            owner_id="nordpool",
+            display_name="Nordpool prices",
+            json_schema={
+                "properties": {
+                    "enabled": {"type": "boolean", "default": False},
+                    "poll_interval": {"type": "integer", "default": 60},
+                }
+            },
+            form_spec=FormSpec(
+                fields={
+                    "enabled": FieldSpec(label="Enable it", description="Enable it.", tier=Tier.BASIC),
+                    "poll_interval": FieldSpec(
+                        label="Poll interval",
+                        description="Seconds between polls.",
+                        tier=Tier.EXPERT,
+                        visible_if=Comparison(field="enabled", operator=ComparisonOperator.EQ, value=True),
+                    ),
+                }
+            ),
+        )
+    )
+
+    status, body = _get(server, "/owners/nordpool")
+
+    assert status == 200
+    details_start = body.index("<details")
+    details_end = body.index(">", details_start)
+    assert "d-none" in body[details_start:details_end]
+
+
 def test_owner_page_applies_conditional_visibility(
     registry: ConfigOwnerRegistry, server: ConfigEditorServer
 ) -> None:
@@ -202,7 +252,12 @@ def test_owner_page_applies_conditional_visibility(
 
     assert status == 200
     assert "Enable HA discovery" in body
-    assert "Discovery prefix" not in body
+    # The field is still rendered (never omitted), so visibility.js can
+    # reveal it live on change; it starts inside a disabled/hidden fieldset.
+    assert "Discovery prefix" in body
+    tag = _conditional_fieldset_tag(body, "discovery_prefix")
+    assert "disabled" in tag
+    assert "d-none" in tag
 
 
 def test_owner_page_shows_conditionally_visible_field_when_condition_holds(
@@ -235,6 +290,9 @@ def test_owner_page_shows_conditionally_visible_field_when_condition_holds(
 
     assert status == 200
     assert "Discovery prefix" in body
+    tag = _conditional_fieldset_tag(body, "discovery_prefix")
+    assert "disabled" not in tag
+    assert "d-none" not in tag
 
 
 def _register_optional_object_owner(registry: ConfigOwnerRegistry) -> None:
@@ -300,7 +358,11 @@ def test_presence_toggle_javascript_is_present_exactly_once(
     status, body = _get(server, "/owners/owner-with-optional")
 
     assert status == 200
-    assert body.count("data-presence-toggle") == 2  # the <input> attribute and the JS selector
+    # The <input> attribute, the Presence Toggle change handler's own JS
+    # selector, and readFieldValue's own JS selector (Conditional Visibility
+    # reads a Presence Toggle's checked state as its sibling value) -- one
+    # occurrence each, not duplicated per rendered field.
+    assert body.count("data-presence-toggle") == 3
     assert "addEventListener(\"change\"" in body
 
 
@@ -723,6 +785,73 @@ def test_ordered_collection_renders_add_and_remove_scaffolding_but_no_rename_inp
     assert 'data-move-entry="down"' in body
 
 
+def _register_scalar_list_owner(registry: ConfigOwnerRegistry, config_service_client: MagicMock) -> None:
+    registry.update(
+        Descriptor(
+            owner_id="scalar-list-owner",
+            display_name="Scalar list owner",
+            json_schema={
+                "properties": {
+                    "production_stages": {"type": "array", "items": {"type": "number"}}
+                }
+            },
+            form_spec=FormSpec(
+                fields={
+                    "production_stages": FieldSpec(
+                        label="Production stages",
+                        description="Discrete power levels.",
+                        shape=FieldShape.SCALAR_LIST,
+                    )
+                }
+            ),
+        )
+    )
+    config_service_client.get_current_values.return_value = {"production_stages": [0.0, 1.5]}
+
+
+def test_scalar_list_renders_bare_inputs_with_add_move_and_remove_scaffolding_but_no_rename_input(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer, config_service_client: MagicMock
+) -> None:
+    _register_scalar_list_owner(registry, config_service_client)
+
+    status, body = _get(server, "/owners/scalar-list-owner")
+
+    assert status == 200
+    assert 'data-add-entry' in body
+    assert 'data-collection-shape="scalar_list"' in body
+    assert 'data-entries' in body
+    assert '<template data-entry-template>' in body
+    assert 'data-remove-entry' in body
+    # A Scalar List entry is a bare value with no nested FormSpec: no rename
+    # input and no render_groups recursion, just the widget itself plus Move
+    # up/down (order matters, like an Ordered Collection) and Remove.
+    form_markup = body.split("<script>", 1)[0]
+    assert 'data-entry-name-input' not in form_markup
+    assert 'data-move-entry="up"' in body
+    assert 'data-move-entry="down"' in body
+    assert 'name="production_stages.0"' in body
+    assert 'value="0.0"' in body
+    assert 'name="production_stages.1"' in body
+    assert 'value="1.5"' in body
+
+
+def test_scalar_list_submission_rebuilds_the_list_from_indexed_bare_inputs(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer, config_service_client: MagicMock
+) -> None:
+    _register_scalar_list_owner(registry, config_service_client)
+
+    status, _body = _post(
+        server,
+        "/owners/scalar-list-owner",
+        {"production_stages.0": "0.0", "production_stages.1": "1.5", "production_stages.2": "3.0"},
+    )
+
+    assert status == 200
+    config_service_client.submit_validate_and_write.assert_called_once_with(
+        "scalar-list-owner", {"production_stages": ["0.0", "1.5", "3.0"]}
+    )
+
+
 def test_suggested_value_is_not_rendered_for_optional_object_field(
     registry: ConfigOwnerRegistry, server: ConfigEditorServer
 ) -> None:
@@ -857,6 +986,51 @@ def test_owner_page_with_one_tab_and_one_subtab_renders_no_nav_at_all(
     assert status == 200
     assert "Host" in body
     assert 'ul class="nav' not in body
+
+
+def test_owner_page_with_single_ungrouped_group_renders_no_group_heading(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    registry.update(
+        Descriptor(
+            owner_id="ungrouped-owner",
+            display_name="Ungrouped owner",
+            json_schema={"properties": {}},
+            form_spec=FormSpec(
+                fields={"area": FieldSpec(label="Price area", description="Nordpool bidding area.")}
+            ),
+        )
+    )
+
+    status, body = _get(server, "/owners/ungrouped-owner")
+
+    assert status == 200
+    assert "Price area" in body
+    assert ">General<" not in body
+
+
+def test_owner_page_with_one_explicit_group_still_renders_its_heading(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    registry.update(
+        Descriptor(
+            owner_id="one-group-owner",
+            display_name="One group owner",
+            json_schema={"properties": {}},
+            form_spec=FormSpec(
+                fields={
+                    "area": FieldSpec(
+                        label="Price area", description="Nordpool bidding area.", group="Capabilities"
+                    )
+                }
+            ),
+        )
+    )
+
+    status, body = _get(server, "/owners/one-group-owner")
+
+    assert status == 200
+    assert ">Capabilities<" in body
 
 
 def _register_single_tab_owner(registry: ConfigOwnerRegistry) -> None:

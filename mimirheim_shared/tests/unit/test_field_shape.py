@@ -30,6 +30,8 @@ class _Toy(BaseModel):
     optional_ordered_collection_field: list[_Nested] | None
     enum_field: Literal["a", "b"]
     optional_scalar_field: float | None
+    scalar_list_field: list[float]
+    optional_scalar_list_field: list[float] | None
 
 
 def _annotation(name: str) -> object:
@@ -73,8 +75,22 @@ def test_enum_select_shape() -> None:
     assert derive_field_shape(_annotation("enum_field")) is FieldShape.ENUM_SELECT
 
 
+def test_scalar_list_shape() -> None:
+    assert derive_field_shape(_annotation("scalar_list_field")) is FieldShape.SCALAR_LIST
+
+
+def test_optional_scalar_list_is_still_scalar_list() -> None:
+    assert (
+        derive_field_shape(_annotation("optional_scalar_list_field")) is FieldShape.SCALAR_LIST
+    )
+
+
 def test_nested_model_of_scalar_is_none() -> None:
     assert nested_model_of(_annotation("scalar_field")) is None
+
+
+def test_nested_model_of_scalar_list_is_none() -> None:
+    assert nested_model_of(_annotation("scalar_list_field")) is None
 
 
 def test_nested_model_of_nested_object() -> None:

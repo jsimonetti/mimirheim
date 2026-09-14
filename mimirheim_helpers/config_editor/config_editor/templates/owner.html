@@ -78,22 +78,51 @@
     {% macro render_groups(groups) %}
       {% for group in groups %}
       <section class="mb-4" data-group="{{ group.label }}">
+        {# Same "no chrome for a single implicit bucket" rule as the
+           Tab/Subtab nav above: a field with no `group` set falls under the
+           UNGROUPED_LABEL fallback, and a heading naming that fallback is
+           noise when it is the section's only group. This check re-applies
+           at every nesting depth, since render_groups also renders a nested
+           object's/collection entry's own `groups` list further down. #}
+        {% if not (groups|length == 1 and group.label == UNGROUPED_LABEL) %}
         <h2 class="h5 border-bottom pb-2 mb-3">{{ group.label }}</h2>
+        {% endif %}
         {% for f in group.basic_fields %}
-          {{ render_field(f) }}
+          {{ render_conditional_field(f) }}
         {% endfor %}
         {% if group.has_expert_fields %}
-        <details class="advanced mt-2">
+        <details class="advanced mt-2{% if not group.has_visible_expert_field %} d-none{% endif %}" data-advanced-group>
           <summary class="text-primary">Advanced</summary>
-          <div class="mt-3">
+          <div class="mt-3" data-expert-fields>
             {% for f in group.expert_fields %}
-              {{ render_field(f) }}
+              {{ render_conditional_field(f) }}
             {% endfor %}
           </div>
         </details>
         {% endif %}
       </section>
       {% endfor %}
+    {% endmacro %}
+
+    {% macro render_conditional_field(f) %}
+      {% if f.spec.visible_if is none %}
+        {{ render_field(f) }}
+      {% else %}
+      {# Conditional Visibility (ADR-0003's "minimal JS for interactivity"):
+         the field is always built (render.py) regardless of whether its
+         condition currently holds, so it can be revealed live on change
+         without a page reload. A currently-hidden field's <fieldset disabled>
+         relies on the same native-HTML guarantee the Presence Toggle's own
+         fieldset already does: a disabled fieldset's descendant controls are
+         never submitted, however deeply nested. visibility.js (below) keeps
+         data-visible-if's condition and this disabled/d-none state in sync
+         with data-conditional-field's sibling value on every change. #}
+      <fieldset class="field-conditional{% if not f.visible %} d-none{% endif %}"
+                data-visible-if="{{ visible_if_json(f.spec) }}" data-conditional-field="{{ f.name }}"
+                {% if not f.visible %}disabled{% endif %}>
+        {{ render_field(f) }}
+      </fieldset>
+      {% endif %}
     {% endmacro %}
 
     {% macro form_switch(name, label, checked, presence_toggle=False) %}
@@ -144,19 +173,50 @@
       </fieldset>
     {% endmacro %}
 
+    {% macro render_scalar_list_entry(field, entry) %}
+      {# One Scalar List (e.g. list[float]) entry: a bare value, no nested
+         FormSpec, so unlike render_collection_entry there is no Name input
+         and no render_groups recursion -- just the one widget itself, plus
+         the same Move up/down and Remove controls an Ordered Collection
+         entry gets, since order matters here too. collections.js's Add,
+         Remove, and Move handlers key off data-entry/data-collection-name
+         alone, so they need no changes to support this shape. #}
+      <fieldset class="collection-entry card p-3 mb-3 d-flex flex-row align-items-center gap-2" data-entry="{{ entry.key }}">
+        {% if field.input_type == "number" %}
+        <input class="form-control" type="number" name="{{ field.name }}.{{ entry.key }}" step="{{ field.step }}"
+               {% if field.min_value is not none %}min="{{ field.min_value }}"{% endif %}
+               {% if field.max_value is not none %}max="{{ field.max_value }}"{% endif %}
+               value="{{ entry.value if entry.value is not none else '' }}">
+        {% else %}
+        <input class="form-control" type="text" name="{{ field.name }}.{{ entry.key }}"
+               value="{{ entry.value if entry.value is not none else '' }}">
+        {% endif %}
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-move-entry="up"
+                data-collection-name="{{ field.name }}" aria-label="Move entry up">&uarr;</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-move-entry="down"
+                data-collection-name="{{ field.name }}" aria-label="Move entry down">&darr;</button>
+        <button type="button" class="btn btn-outline-danger btn-sm" data-remove-entry>Remove</button>
+      </fieldset>
+    {% endmacro %}
+
     {% macro render_field(field) %}
     {% if field.entries is not none %}
-      {# Named Collection (keyed) or Ordered Collection (indexed): one
-         fieldset per existing entry, an Add control that appends a new one
-         (client-side JS only, ticket 06), and a Remove control on every
-         entry. `entry_template` is rendered inert inside a <template>, which
-         the Add control clones and keys with a freshly generated name. #}
+      {# Named Collection (keyed), Ordered Collection (indexed), or Scalar
+         List: one fieldset per existing entry, an Add control that appends
+         a new one (client-side JS only, ticket 06), and a Remove control on
+         every entry. `entry_template` is rendered inert inside a <template>,
+         which the Add control clones and keys with a freshly generated
+         name. #}
       <div class="field field-collection mb-3" data-field="{{ field.name }}">
         <p class="fw-semibold mb-1">{{ field.spec.label }}</p>
         <p class="text-muted small">{{ field.spec.description }}</p>
         <div data-entries>
           {% for entry in field.entries %}
-            {{ render_collection_entry(field, entry) }}
+            {% if field.spec.shape == "scalar_list" %}
+              {{ render_scalar_list_entry(field, entry) }}
+            {% else %}
+              {{ render_collection_entry(field, entry) }}
+            {% endif %}
           {% endfor %}
         </div>
         <button type="button" class="btn btn-outline-primary btn-sm" data-add-entry
@@ -164,7 +224,13 @@
           Add {{ field.spec.label }} entry
         </button>
         {% if field.entry_template is not none %}
-        <template data-entry-template>{{ render_collection_entry(field, field.entry_template) }}</template>
+        <template data-entry-template>
+          {% if field.spec.shape == "scalar_list" %}
+            {{ render_scalar_list_entry(field, field.entry_template) }}
+          {% else %}
+            {{ render_collection_entry(field, field.entry_template) }}
+          {% endif %}
+        </template>
         {% endif %}
       </div>
     {% elif field.spec.shape == "optional_object" %}
@@ -304,10 +370,13 @@
   <div class="modal-backdrop" data-remove-entry-backdrop hidden></div>
 
   {# Only interactivity in the whole editor (ADR-0003 allows "minimal
-     client-side JS for interactivity ... such as add/remove rows"): a
-     Presence Toggle checkbox's own .field-optional-object wrapper holds
-     exactly one <fieldset>, so toggling its hidden/disabled state needs no
-     id or bookkeeping beyond that. No Bootstrap JS is loaded: the Advanced
+     client-side JS for interactivity ... such as conditional visibility and
+     add/remove rows"): a Presence Toggle checkbox's own .field-optional-object
+     wrapper holds exactly one <fieldset>, so toggling its hidden/disabled
+     state needs no id or bookkeeping beyond that; a Conditional Visibility
+     field's own data-visible-if condition is likewise re-evaluated against
+     its sibling's live value on every change (see visibility.js below), no
+     id or bookkeeping either. No Bootstrap JS is loaded: the Advanced
      disclosure stays a plain <details>/<summary> element, which needs none,
      the Tab/Subtab nav below (ticket 04) is switched by plain
      position-matching rather than Bootstrap's own JS tab component, and the
@@ -316,6 +385,78 @@
      entries container's DOM order directly rather than loading Bootstrap's
      JS modal component or a drag-and-drop library. #}
   <script>
+    // --- Conditional Visibility (ticket 09) ---------------------------------
+    //
+    // Mirrors mimirheim_shared.visibility.evaluate_condition in JS: a
+    // data-visible-if condition's "field" always names a sibling within the
+    // same object as the field it guards (see _build_groups, render.py),
+    // so it is resolved by swapping the last dotted segment of the guarded
+    // field's own data-conditional-field name, never by an absolute path.
+    function siblingFieldName(ownName, siblingField) {
+      var parts = ownName.split(".");
+      parts[parts.length - 1] = siblingField;
+      return parts.join(".");
+    }
+
+    // Reads a sibling field's current Candidate Value straight from the DOM,
+    // typed to match what evaluate_condition would see server-side: a
+    // checkbox's boolean, a Presence Toggle's present/absent, a collection's
+    // empty/non-empty, or a plain control's own value.
+    function readFieldValue(name) {
+      var collectionField = document.querySelector('.field-collection[data-field="' + name + '"]');
+      if (collectionField) {
+        var entries = collectionField.querySelector(":scope > [data-entries]");
+        return entries.children.length > 0 ? [] : null;
+      }
+      var optionalObjectField = document.querySelector('.field-optional-object[data-field="' + name + '"]');
+      if (optionalObjectField) {
+        var presenceToggle = optionalObjectField.querySelector("[data-presence-toggle]");
+        return presenceToggle.checked ? {} : null;
+      }
+      var control = document.querySelector('[name="' + name + '"]');
+      if (!control) return null;
+      if (control.type === "checkbox") return control.checked;
+      if (control.type === "number") return control.value === "" ? null : Number(control.value);
+      return control.value;
+    }
+
+    function evaluateCondition(condition, ownName) {
+      if (condition.kind === "group") {
+        var results = condition.conditions.map(function (nested) {
+          return evaluateCondition(nested, ownName);
+        });
+        return condition.operator === "and" ? results.every(Boolean) : results.some(Boolean);
+      }
+      var actual = readFieldValue(siblingFieldName(ownName, condition.field));
+      if (condition.operator === "eq") return actual === condition.value;
+      if (condition.operator === "ne") return actual !== condition.value;
+      return false;
+    }
+
+    function updateConditionalVisibility() {
+      document.querySelectorAll("[data-visible-if]").forEach(function (fieldset) {
+        var condition = JSON.parse(fieldset.getAttribute("data-visible-if"));
+        var ownName = fieldset.getAttribute("data-conditional-field");
+        var visible = evaluateCondition(condition, ownName);
+        fieldset.classList.toggle("d-none", !visible);
+        fieldset.disabled = !visible;
+      });
+      // An Advanced disclosure (render_groups, owner.html) starts hidden when
+      // every one of its Expert fields is conditionally hidden; re-derive
+      // that after the pass above, since it must run after each field's own
+      // d-none state is up to date. A child with no data-visible-if has no
+      // condition to fail, so it always counts as visible.
+      document.querySelectorAll("[data-advanced-group]").forEach(function (details) {
+        var expertFields = details.querySelector("[data-expert-fields]");
+        var anyVisible = Array.prototype.some.call(expertFields.children, function (child) {
+          return !child.hasAttribute("data-visible-if") || !child.classList.contains("d-none");
+        });
+        details.classList.toggle("d-none", !anyVisible);
+      });
+    }
+
+    document.addEventListener("change", updateConditionalVisibility);
+
     document.addEventListener("change", function (event) {
       if (!event.target.matches("input[data-presence-toggle]")) return;
       var fieldset = event.target.closest(".field-optional-object").querySelector("fieldset");
