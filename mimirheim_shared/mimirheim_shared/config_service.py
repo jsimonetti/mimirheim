@@ -30,8 +30,9 @@ request/response feature: mimirheim core's connection negotiates MQTT
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -39,17 +40,26 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from mimirheim_shared.atomic_write import overlay_values, write_yaml_preserving_comments
 from mimirheim_shared.formspec import FormSpec, resolve_field_shapes
 
-# Fixed regardless of any Config Owner's own business MQTT topic prefix (e.g.
-# mimirheim core's mqtt.topic_prefix): the Config Editor must be able to
-# discover every Config Owner from one well-known namespace without prior
-# knowledge of each owner's own topic layout.
-_TOPIC_ROOT = "mimirheim/config-service"
-
 # The MQTT idiom for clearing a retained message: an empty payload published
 # retained removes it from the broker. Used both as the explicit clearing
 # publish on graceful shutdown and as the last-will payload registered for
 # ungraceful disconnects.
 CLEARING_PAYLOAD: bytes = b""
+
+
+def _topic_root() -> str:
+    """Return the Config Service topic root, e.g. ``"mimir/config-service"``.
+
+    Read from ``MQTT_PREFIX`` on every call rather than cached at import
+    time, so a process (or a test using ``monkeypatch.setenv``) that sets
+    the environment variable before calling a topic-naming function below
+    sees the override without needing to reload this module. Independent of
+    any Config Owner's own parsed configuration (e.g. mimirheim core's
+    ``mqtt.topic_prefix``): see ``mimirheim_shared/docs/adr/0014`` for why
+    every Config Owner in a deployment must agree on this root by
+    construction rather than by each owner's own settings.
+    """
+    return f"{os.environ.get('MQTT_PREFIX', 'mimir')}/config-service"
 
 
 def descriptor_topic(owner_id: str) -> str:
@@ -59,9 +69,9 @@ def descriptor_topic(owner_id: str) -> str:
         owner_id: The Config Owner's stable identifier (e.g. ``"mimirheim-core"``).
 
     Returns:
-        The topic string, e.g. ``"mimirheim/config-service/mimirheim-core/descriptor"``.
+        The topic string, e.g. ``"mimir/config-service/mimirheim-core/descriptor"``.
     """
-    return f"{_TOPIC_ROOT}/{owner_id}/descriptor"
+    return f"{_topic_root()}/{owner_id}/descriptor"
 
 
 class Descriptor(BaseModel):
@@ -134,9 +144,9 @@ def get_current_values_request_topic(owner_id: str) -> str:
 
     Returns:
         The topic string, e.g.
-        ``"mimirheim/config-service/mimirheim-core/get_current_values/request"``.
+        ``"mimir/config-service/mimirheim-core/get_current_values/request"``.
     """
-    return f"{_TOPIC_ROOT}/{owner_id}/get_current_values/request"
+    return f"{_topic_root()}/{owner_id}/get_current_values/request"
 
 
 def get_current_values_response_topic(owner_id: str) -> str:
@@ -147,9 +157,9 @@ def get_current_values_response_topic(owner_id: str) -> str:
 
     Returns:
         The topic string, e.g.
-        ``"mimirheim/config-service/mimirheim-core/get_current_values/response"``.
+        ``"mimir/config-service/mimirheim-core/get_current_values/response"``.
     """
-    return f"{_TOPIC_ROOT}/{owner_id}/get_current_values/response"
+    return f"{_topic_root()}/{owner_id}/get_current_values/response"
 
 
 class GetCurrentValuesRequest(BaseModel):
@@ -241,9 +251,9 @@ def validate_and_write_request_topic(owner_id: str) -> str:
 
     Returns:
         The topic string, e.g.
-        ``"mimirheim/config-service/mimirheim-core/validate_and_write/request"``.
+        ``"mimir/config-service/mimirheim-core/validate_and_write/request"``.
     """
-    return f"{_TOPIC_ROOT}/{owner_id}/validate_and_write/request"
+    return f"{_topic_root()}/{owner_id}/validate_and_write/request"
 
 
 def validate_and_write_response_topic(owner_id: str) -> str:
@@ -254,9 +264,9 @@ def validate_and_write_response_topic(owner_id: str) -> str:
 
     Returns:
         The topic string, e.g.
-        ``"mimirheim/config-service/mimirheim-core/validate_and_write/response"``.
+        ``"mimir/config-service/mimirheim-core/validate_and_write/response"``.
     """
-    return f"{_TOPIC_ROOT}/{owner_id}/validate_and_write/response"
+    return f"{_topic_root()}/{owner_id}/validate_and_write/response"
 
 
 class ValidateAndWriteRequest(BaseModel):
@@ -421,3 +431,125 @@ def handle_validate_and_write(
     write_yaml_preserving_comments(config_path, coerced_values, model)
     result = ValidateAndWriteResult(request_id=request.request_id, success=True)
     return validate_and_write_result_payload(result)
+
+
+def state_topic(owner_id: str) -> str:
+    """Return the well-known retained topic a Config Owner's Operational State is published to.
+
+    Published and cleared in lockstep with the Descriptor (see
+    ``mimirheim_shared/CONTEXT.md``'s Operational State entry and
+    ``mimirheim_shared/docs/adr/0010``), but on its own topic rather than a
+    field of the Descriptor: the Descriptor describes what a Config Owner
+    *can* be configured as, never whether it is currently running.
+
+    Args:
+        owner_id: The Config Owner's stable identifier.
+
+    Returns:
+        The topic string, e.g. ``"mimir/config-service/mimirheim-core/state"``.
+    """
+    return f"{_topic_root()}/{owner_id}/state"
+
+
+class OperationalState(BaseModel):
+    """The payload a Config Owner publishes retained, describing its Operational State.
+
+    See ``mimirheim_shared/CONTEXT.md``'s Operational State, Awaiting
+    Configuration, and Operational entries, and ADR-0010 and ADR-0011.
+
+    Attributes:
+        state: ``"awaiting_configuration"`` if the Config Owner's
+            configuration does not yet fully validate (or does not exist),
+            ``"operational"`` once it does and the Config Owner is running
+            its own function.
+        detail: An optional human-readable elaboration, e.g. a summary of
+            why validation is failing. ``None`` when there is nothing to add.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    state: Literal["awaiting_configuration", "operational"]
+    detail: str | None = None
+
+
+def operational_state_payload(state: OperationalState) -> bytes:
+    """Serialise an OperationalState to the bytes a Config Owner publishes retained.
+
+    Args:
+        state: The OperationalState to serialise.
+
+    Returns:
+        UTF-8 encoded JSON bytes.
+    """
+    return state.model_dump_json().encode("utf-8")
+
+
+def restart_request_topic(owner_id: str) -> str:
+    """Return the well-known topic a Config Owner accepts a Restart Request on.
+
+    See ``mimirheim_shared/CONTEXT.md``'s Restart Request entry and
+    ADR-0012: a Config Owner acts on this request by clearing its Descriptor
+    and Operational State, disconnecting gracefully, and exiting, relying on
+    its container supervisor to start a fresh process.
+
+    Args:
+        owner_id: The Config Owner's stable identifier.
+
+    Returns:
+        The topic string, e.g.
+        ``"mimir/config-service/mimirheim-core/restart/request"``.
+    """
+    return f"{_topic_root()}/{owner_id}/restart/request"
+
+
+def restart_response_topic(owner_id: str) -> str:
+    """Return the well-known topic a Config Owner publishes a Restart Request's response to.
+
+    Args:
+        owner_id: The Config Owner's stable identifier.
+
+    Returns:
+        The topic string, e.g.
+        ``"mimir/config-service/mimirheim-core/restart/response"``.
+    """
+    return f"{_topic_root()}/{owner_id}/restart/response"
+
+
+class RestartRequest(BaseModel):
+    """A Config Editor's request that a Config Owner exit for its supervisor to restart it.
+
+    Attributes:
+        request_id: Opaque string chosen by the Config Editor (e.g. a UUID),
+            echoed back on the matching ``RestartResponse`` so the Editor can
+            correlate a response to its request, matching
+            ``ValidateAndWriteRequest``'s existing correlation shape.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str
+
+
+class RestartResponse(BaseModel):
+    """A Config Owner's acknowledgement of a Restart Request, published before it exits.
+
+    Attributes:
+        request_id: Echoed from the ``RestartRequest`` this response
+            acknowledges.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str
+
+
+def restart_response_payload(response: RestartResponse) -> bytes:
+    """Serialise a RestartResponse to the bytes a Config Owner publishes.
+
+    Args:
+        response: The response to serialise.
+
+    Returns:
+        UTF-8 encoded JSON bytes.
+    """
+    return response.model_dump_json().encode("utf-8")

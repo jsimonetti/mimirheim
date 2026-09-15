@@ -1,10 +1,11 @@
-"""Tests for the Config Service Descriptor building blocks.
+"""Tests for the Config Service protocol's pure building blocks.
 
 mimirheim_shared never touches an MQTT client (see config_service.py's module
-docstring): these tests only exercise the pure topic-naming, Descriptor
-construction, payload serialisation, and the generic ``handle_validate_and_write``
-validate-then-write sequence. Each Config Owner's own test suite covers wiring
-its Descriptor onto an actual (faked) MQTT client.
+docstring): these tests only exercise the pure topic-naming, Descriptor/
+OperationalState/RestartRequest/RestartResponse construction, payload
+serialisation, and the generic ``handle_validate_and_write``/
+``handle_get_current_values`` sequences. Each Config Owner's own test suite
+covers wiring these onto an actual (faked) MQTT client.
 """
 
 from pathlib import Path
@@ -18,6 +19,9 @@ from mimirheim_shared.config_service import (
     Descriptor,
     GetCurrentValuesRequest,
     GetCurrentValuesResult,
+    OperationalState,
+    RestartRequest,
+    RestartResponse,
     ValidateAndWriteRequest,
     ValidateAndWriteResult,
     build_descriptor,
@@ -28,6 +32,11 @@ from mimirheim_shared.config_service import (
     get_current_values_result_payload,
     handle_get_current_values,
     handle_validate_and_write,
+    operational_state_payload,
+    restart_request_topic,
+    restart_response_payload,
+    restart_response_topic,
+    state_topic,
     validate_and_write_request_topic,
     validate_and_write_response_topic,
     validate_and_write_result_payload,
@@ -82,8 +91,22 @@ class _ToyConfigWithNamedCollection(BaseModel):
 
 
 def test_descriptor_topic_is_well_known_and_owner_scoped() -> None:
-    assert descriptor_topic("mimirheim-core") == "mimirheim/config-service/mimirheim-core/descriptor"
-    assert descriptor_topic("nordpool") == "mimirheim/config-service/nordpool/descriptor"
+    assert descriptor_topic("mimirheim-core") == "mimir/config-service/mimirheim-core/descriptor"
+    assert descriptor_topic("nordpool") == "mimir/config-service/nordpool/descriptor"
+
+
+def test_topic_root_prefix_defaults_to_mimir_when_mqtt_prefix_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("MQTT_PREFIX", raising=False)
+    assert descriptor_topic("nordpool") == "mimir/config-service/nordpool/descriptor"
+
+
+def test_topic_root_prefix_uses_mqtt_prefix_override_when_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MQTT_PREFIX", "custom-prefix")
+    assert descriptor_topic("nordpool") == "custom-prefix/config-service/nordpool/descriptor"
 
 
 def test_clearing_payload_is_empty() -> None:
@@ -116,22 +139,22 @@ def test_descriptor_payload_round_trips_as_json() -> None:
 def test_validate_and_write_request_topic_is_well_known_and_owner_scoped() -> None:
     assert (
         validate_and_write_request_topic("mimirheim-core")
-        == "mimirheim/config-service/mimirheim-core/validate_and_write/request"
+        == "mimir/config-service/mimirheim-core/validate_and_write/request"
     )
     assert (
         validate_and_write_request_topic("nordpool")
-        == "mimirheim/config-service/nordpool/validate_and_write/request"
+        == "mimir/config-service/nordpool/validate_and_write/request"
     )
 
 
 def test_validate_and_write_response_topic_is_well_known_and_owner_scoped() -> None:
     assert (
         validate_and_write_response_topic("mimirheim-core")
-        == "mimirheim/config-service/mimirheim-core/validate_and_write/response"
+        == "mimir/config-service/mimirheim-core/validate_and_write/response"
     )
     assert (
         validate_and_write_response_topic("nordpool")
-        == "mimirheim/config-service/nordpool/validate_and_write/response"
+        == "mimir/config-service/nordpool/validate_and_write/response"
     )
 
 
@@ -308,22 +331,22 @@ class TestHandleValidateAndWrite:
 def test_get_current_values_request_topic_is_well_known_and_owner_scoped() -> None:
     assert (
         get_current_values_request_topic("mimirheim-core")
-        == "mimirheim/config-service/mimirheim-core/get_current_values/request"
+        == "mimir/config-service/mimirheim-core/get_current_values/request"
     )
     assert (
         get_current_values_request_topic("nordpool")
-        == "mimirheim/config-service/nordpool/get_current_values/request"
+        == "mimir/config-service/nordpool/get_current_values/request"
     )
 
 
 def test_get_current_values_response_topic_is_well_known_and_owner_scoped() -> None:
     assert (
         get_current_values_response_topic("mimirheim-core")
-        == "mimirheim/config-service/mimirheim-core/get_current_values/response"
+        == "mimir/config-service/mimirheim-core/get_current_values/response"
     )
     assert (
         get_current_values_response_topic("nordpool")
-        == "mimirheim/config-service/nordpool/get_current_values/response"
+        == "mimir/config-service/nordpool/get_current_values/response"
     )
 
 
@@ -372,3 +395,60 @@ class TestHandleGetCurrentValues:
 
         with pytest.raises(ValidationError):
             handle_get_current_values(b"not json", config_path)
+
+
+def test_state_topic_is_well_known_and_owner_scoped() -> None:
+    assert state_topic("mimirheim-core") == "mimir/config-service/mimirheim-core/state"
+    assert state_topic("nordpool") == "mimir/config-service/nordpool/state"
+
+
+def test_operational_state_payload_round_trips_as_json_when_awaiting_configuration() -> None:
+    state = OperationalState(state="awaiting_configuration", detail="no configuration file found")
+
+    payload = operational_state_payload(state)
+
+    assert isinstance(payload, bytes)
+    assert OperationalState.model_validate_json(payload) == state
+
+
+def test_operational_state_payload_round_trips_as_json_when_operational() -> None:
+    state = OperationalState(state="operational")
+
+    payload = operational_state_payload(state)
+
+    assert OperationalState.model_validate_json(payload) == state
+    assert OperationalState.model_validate_json(payload).detail is None
+
+
+def test_operational_state_rejects_an_unknown_state_literal() -> None:
+    with pytest.raises(ValidationError):
+        OperationalState(state="degraded")
+
+
+def test_restart_request_topic_is_well_known_and_owner_scoped() -> None:
+    assert restart_request_topic("mimirheim-core") == "mimir/config-service/mimirheim-core/restart/request"
+    assert restart_request_topic("nordpool") == "mimir/config-service/nordpool/restart/request"
+
+
+def test_restart_response_topic_is_well_known_and_owner_scoped() -> None:
+    assert (
+        restart_response_topic("mimirheim-core") == "mimir/config-service/mimirheim-core/restart/response"
+    )
+    assert restart_response_topic("nordpool") == "mimir/config-service/nordpool/restart/response"
+
+
+def test_restart_request_round_trips_as_json() -> None:
+    request = RestartRequest(request_id="req-1")
+
+    payload = request.model_dump_json().encode("utf-8")
+
+    assert RestartRequest.model_validate_json(payload) == request
+
+
+def test_restart_response_payload_round_trips_as_json() -> None:
+    response = RestartResponse(request_id="req-1")
+
+    payload = restart_response_payload(response)
+
+    assert isinstance(payload, bytes)
+    assert RestartResponse.model_validate_json(payload) == response
