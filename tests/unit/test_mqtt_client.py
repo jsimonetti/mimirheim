@@ -31,6 +31,9 @@ from mimirheim_shared.config_service import (
     CLEARING_PAYLOAD,
     GetCurrentValuesRequest,
     GetCurrentValuesResult,
+    OperationalState,
+    RestartRequest,
+    RestartResponse,
     ValidateAndWriteRequest,
     ValidateAndWriteResult,
 )
@@ -78,7 +81,10 @@ def _make_trigger_msg(retain: bool = False) -> MagicMock:
     return msg
 
 
-def _make_mqtt_client(solve_queue: queue.Queue | None = None) -> MqttClient:
+def _make_mqtt_client(
+    solve_queue: queue.Queue | None = None,
+    on_restart_requested: MagicMock | None = None,
+) -> MqttClient:
     config = _make_config()
     readiness = MagicMock(spec=ReadinessState)
     readiness.is_ready.return_value = True
@@ -86,7 +92,13 @@ def _make_mqtt_client(solve_queue: queue.Queue | None = None) -> MqttClient:
     publisher = MagicMock()
     paho_mock = MagicMock()
     return MqttClient(
-        config, readiness, publisher, paho_mock, _CONFIG_PATH, solve_queue=solve_queue
+        config,
+        readiness,
+        publisher,
+        paho_mock,
+        _CONFIG_PATH,
+        solve_queue=solve_queue,
+        on_restart_requested=on_restart_requested,
     )
 
 
@@ -431,3 +443,116 @@ def _fixture_import_limit_kw(config_path: Path) -> float:
     with config_path.open() as fh:
         document = yaml.load(fh)
     return document["grid"]["import_limit_kw"]
+
+
+class TestOperationalState:
+    """Operational State is published/cleared in lockstep with the Descriptor
+    on this connection; see mimirheim_shared/CONTEXT.md's Operational State
+    entry and ADR-0010.
+    """
+
+    def _state_publish_calls(self, paho_mock: MagicMock) -> list:
+        return [
+            call
+            for call in paho_mock.publish.call_args_list
+            if call.args[0] == config_service.STATE_TOPIC
+        ]
+
+    def test_operational_state_is_published_retained_on_successful_connect(self) -> None:
+        client = _make_mqtt_client()
+        reason_code = MagicMock()
+        reason_code.is_failure = False
+
+        client._on_connect(client._client, None, None, reason_code, None)
+
+        calls = self._state_publish_calls(client._client)
+        assert len(calls) == 1
+        _, kwargs = calls[0]
+        state = OperationalState.model_validate_json(kwargs["payload"])
+        assert state.state == "operational"
+        assert kwargs["qos"] == 1
+        assert kwargs["retain"] is True
+
+    def test_operational_state_is_not_published_on_failed_connect(self) -> None:
+        client = _make_mqtt_client()
+        reason_code = MagicMock()
+        reason_code.is_failure = True
+
+        client._on_connect(client._client, None, None, reason_code, None)
+
+        assert self._state_publish_calls(client._client) == []
+
+    def test_stop_clears_operational_state_with_an_empty_retained_publish(self) -> None:
+        client = _make_mqtt_client()
+
+        client.stop()
+
+        calls = self._state_publish_calls(client._client)
+        assert len(calls) == 1
+        _, kwargs = calls[0]
+        assert kwargs["payload"] == CLEARING_PAYLOAD
+        assert kwargs["qos"] == 1
+        assert kwargs["retain"] is True
+
+
+class TestConfigServiceRestartRequest:
+    """restart_request is served in both Operational and Awaiting
+    Configuration; this covers the Operational side (see ADR-0012). The
+    Awaiting Configuration side is covered by
+    tests/unit/test_awaiting_configuration.py.
+    """
+
+    def _make_request_msg(self, request: RestartRequest) -> MagicMock:
+        msg = MagicMock()
+        msg.topic = config_service.RESTART_REQUEST_TOPIC
+        msg.payload = request.model_dump_json().encode("utf-8")
+        return msg
+
+    def _response_publish_calls(self, paho_mock: MagicMock) -> list:
+        return [
+            call
+            for call in paho_mock.publish.call_args_list
+            if call.args[0] == config_service.RESTART_RESPONSE_TOPIC
+        ]
+
+    def test_request_topic_is_subscribed_on_connect(self) -> None:
+        client = _make_mqtt_client()
+        reason_code = MagicMock()
+        reason_code.is_failure = False
+
+        client._on_connect(client._client, None, None, reason_code, None)
+
+        subscribed_topics = {call.args[0] for call in client._client.subscribe.call_args_list}
+        assert config_service.RESTART_REQUEST_TOPIC in subscribed_topics
+
+    def test_valid_request_is_acknowledged_and_triggers_the_restart_callback(self) -> None:
+        on_restart_requested = MagicMock()
+        client = _make_mqtt_client(on_restart_requested=on_restart_requested)
+        request = RestartRequest(request_id="req-9")
+
+        client._on_message(client._client, None, self._make_request_msg(request))
+
+        calls = self._response_publish_calls(client._client)
+        assert len(calls) == 1
+        _, kwargs = calls[0]
+        response = RestartResponse.model_validate_json(kwargs["payload"])
+        assert response.request_id == "req-9"
+        assert kwargs["qos"] == 1
+        assert kwargs["retain"] is False
+        on_restart_requested.assert_called_once_with()
+
+    def test_malformed_request_envelope_is_logged_and_dropped(self, caplog) -> None:
+        import logging
+
+        on_restart_requested = MagicMock()
+        client = _make_mqtt_client(on_restart_requested=on_restart_requested)
+        msg = MagicMock()
+        msg.topic = config_service.RESTART_REQUEST_TOPIC
+        msg.payload = b"not json"
+
+        with caplog.at_level(logging.ERROR, logger="mimirheim.mqtt"):
+            client._on_message(client._client, None, msg)
+
+        assert self._response_publish_calls(client._client) == []
+        on_restart_requested.assert_not_called()
+        assert "Traceback" in caplog.text

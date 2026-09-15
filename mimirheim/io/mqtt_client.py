@@ -7,11 +7,18 @@ This module is deliberately thin. Its only responsibilities are:
 3. Passing the parsed values to ``ReadinessState.update()``.
 4. Calling ``publisher.republish_last_result()`` from ``on_connect``.
 5. Queuing a SolveBundle on ``solve_queue`` when a trigger message arrives.
-6. Publishing mimirheim core's Config Service Descriptor on connect, and
-   clearing it on graceful shutdown.
+6. Publishing mimirheim core's Config Service Descriptor and Operational
+   State on connect, and clearing both on graceful shutdown.
 7. Handling validate_and_write requests: subscribing to the request topic,
    delegating to ``io.config_service.handle_validate_and_write`` (validation
    plus, on success, the atomic write), and publishing its result.
+8. Handling a Restart Request: acknowledging it, then invoking an
+   ``on_restart_requested`` callback supplied by ``__main__.py`` so the solve
+   loop exits and the container supervisor restarts the process (ADR-0012).
+   This class is only used while mimirheim core is Operational (a fully
+   valid ``MimirheimConfig``, see ``mimirheim_shared/CONTEXT.md``'s
+   Operational entry); ``io.awaiting_configuration.AwaitingConfigurationClient``
+   is its counterpart while Awaiting Configuration.
 
 Solves are only triggered by messages on ``{prefix}/input/trigger``.
 Regular data topic messages (prices, PV, battery SOC, etc.) only update
@@ -47,7 +54,7 @@ import random
 import threading
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from mimirheim.config.schema import MimirheimConfig
 from mimirheim.core.readiness import ReadinessState
@@ -108,6 +115,8 @@ class MqttClient:
         _solve_queue: Optional queue that receives a SolveBundle on trigger.
         _trigger_topic: The MQTT topic that requests a new solve cycle.
         _topic_handlers: Mapping from data topic string to a handler function.
+        _on_restart_requested: Called after a Restart Request is acknowledged,
+            so ``__main__.py`` can exit the solve loop (ADR-0012).
     """
 
     def __init__(
@@ -118,6 +127,7 @@ class MqttClient:
         paho_client: Any,
         config_path: Path,
         solve_queue: queue.Queue | None = None,
+        on_restart_requested: Callable[[], None] | None = None,
     ) -> None:
         """Construct the client and register callbacks.
 
@@ -132,6 +142,9 @@ class MqttClient:
                 time a trigger message arrives and ``is_ready()`` is True.
                 Uses ``put_nowait``; if the queue is full the bundle is
                 discarded. Pass ``None`` to disable queuing.
+            on_restart_requested: Called once a Restart Request has been
+                acknowledged. Pass ``None`` to disable Restart Request
+                handling (e.g. in tests that do not exercise it).
         """
         self._client = paho_client
         self._config = config
@@ -139,6 +152,7 @@ class MqttClient:
         self._readiness = readiness
         self._publisher = publisher
         self._solve_queue = solve_queue
+        self._on_restart_requested = on_restart_requested
         # Monotonic timestamp of the last accepted trigger, used to enforce a
         # 5-second debounce window. Two triggers arriving closer together than
         # _DEBOUNCE_SECONDS are deduplicated: only the first is acted on.
@@ -154,6 +168,9 @@ class MqttClient:
         self._config_service_response_topic = config_service.RESPONSE_TOPIC
         self._get_current_values_request_topic = config_service.GET_CURRENT_VALUES_REQUEST_TOPIC
         self._get_current_values_response_topic = config_service.GET_CURRENT_VALUES_RESPONSE_TOPIC
+        self._state_topic = config_service.STATE_TOPIC
+        self._restart_request_topic = config_service.RESTART_REQUEST_TOPIC
+        self._restart_response_topic = config_service.RESTART_RESPONSE_TOPIC
 
         prefix = config.mqtt.topic_prefix
         self._trigger_topic = f"{prefix}/input/trigger"
@@ -215,6 +232,12 @@ class MqttClient:
             qos=1,
             retain=True,
         )
+        self._client.publish(
+            self._state_topic,
+            payload=CLEARING_PAYLOAD,
+            qos=1,
+            retain=True,
+        )
         self._client.disconnect()
         self._client.loop_stop()
 
@@ -255,11 +278,12 @@ class MqttClient:
         # discovery payloads after HA restarts or reloads its MQTT integration.
         client.subscribe(_HA_STATUS_TOPIC, qos=1)
 
-        # Subscribe to the Config Service validate_and_write and
-        # get_current_values request topics (see io.config_service).
-        # Requests are handled in _on_message.
+        # Subscribe to the Config Service validate_and_write,
+        # get_current_values, and restart request topics (see
+        # io.config_service). Requests are handled in _on_message.
         client.subscribe(self._config_service_request_topic, qos=1)
         client.subscribe(self._get_current_values_request_topic, qos=1)
+        client.subscribe(self._restart_request_topic, qos=1)
 
         # Publish the birth message retained so any subscriber that connects
         # later immediately sees the current online state without waiting for
@@ -284,6 +308,16 @@ class MqttClient:
             retain=True,
         )
 
+        # Operational State: published alongside the Descriptor (ADR-0010).
+        # This class is only used while Operational (see this module's
+        # docstring), so the state is always "operational" here.
+        client.publish(
+            self._state_topic,
+            payload=config_service.operational_state_payload_bytes(),
+            qos=1,
+            retain=True,
+        )
+
     def _on_message(self, client: Any, userdata: Any, message: Any) -> None:
         """Called by paho when an MQTT message arrives.
 
@@ -299,6 +333,11 @@ class MqttClient:
         - **Config Service get_current_values request topic**: delegate to
           ``mimirheim_shared.config_service.handle_get_current_values`` and
           publish its result. Same malformed-envelope handling as above.
+        - **Config Service restart request topic**: delegate to
+          ``io.config_service.handle_restart_request``, publish the
+          acknowledgement, then invoke ``on_restart_requested`` (ADR-0012).
+          Same malformed-envelope handling as above; the callback is not
+          invoked when the envelope is malformed.
         - **Data topics**: route to the appropriate parser, call
           ``ReadinessState.update()``. Never queue a solve. Parse errors are
           logged and swallowed — the readiness state is simply not updated,
@@ -447,6 +486,26 @@ class MqttClient:
                 qos=1,
                 retain=False,
             )
+            return
+
+        # --- Config Service: restart request ---
+        if topic == self._restart_request_topic:
+            try:
+                response_payload = config_service.handle_restart_request(message.payload)
+            except Exception:
+                # Deliberately broad, same reason as the validate_and_write
+                # handler above. A malformed request has no request_id to
+                # reply with, and there is nothing to restart yet either.
+                logger.exception("Failed to handle restart_request on %r.", topic)
+                return
+            client.publish(
+                self._restart_response_topic,
+                payload=response_payload,
+                qos=1,
+                retain=False,
+            )
+            if self._on_restart_requested is not None:
+                self._on_restart_requested()
             return
 
         # --- Data topics: update readiness only, never queue a solve ---

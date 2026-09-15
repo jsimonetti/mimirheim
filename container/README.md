@@ -41,10 +41,12 @@ calls `sleep infinity` — it idles without consuming resources or spamming
 logs. Restart the container (or the individual service) once the config file
 has been bind-mounted.
 
-The `mimirheim` solver behaves differently: it calls `sleep 5` and exits, which
-causes s6-overlay to restart it shortly afterwards. This produces a
-steady retry loop so that `mimirheim` starts automatically once
-`/config/mimirheim.yaml` appears, without any manual intervention.
+The `mimirheim` solver behaves differently: it always execs Python, even
+when `/config/mimirheim.yaml` is missing or invalid. It connects to MQTT on
+Broker Settings alone and enters Awaiting Configuration, serving only the
+Config Service protocol (Descriptor, `get_current_values`,
+`validate_and_write`, `restart_request`) until a valid configuration is
+written and a restart is requested. See IMPLEMENTATION_DETAILS.md.
 
 ### Shared venv
 

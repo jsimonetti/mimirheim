@@ -16,11 +16,19 @@ from __future__ import annotations
 from pathlib import Path
 
 from mimirheim_shared.config_service import (
+    OperationalState,
+    RestartRequest,
+    RestartResponse,
     build_descriptor,
     descriptor_payload,
     descriptor_topic,
     get_current_values_request_topic,
     get_current_values_response_topic,
+    operational_state_payload,
+    restart_request_topic,
+    restart_response_payload,
+    restart_response_topic,
+    state_topic,
     validate_and_write_request_topic,
     validate_and_write_response_topic,
 )
@@ -54,6 +62,17 @@ RESPONSE_TOPIC = validate_and_write_response_topic(OWNER_ID)
 # MimirheimConfig-specific parameterisation.
 GET_CURRENT_VALUES_REQUEST_TOPIC = get_current_values_request_topic(OWNER_ID)
 GET_CURRENT_VALUES_RESPONSE_TOPIC = get_current_values_response_topic(OWNER_ID)
+
+# The well-known, retained topic mimirheim core's Operational State is
+# published to (see mimirheim_shared/CONTEXT.md's Operational State entry
+# and ADR-0010).
+STATE_TOPIC = state_topic(OWNER_ID)
+
+# The well-known topics a Config Editor sends a Restart Request to, and
+# reads the acknowledgement from. Neither is retained, same reason as
+# REQUEST_TOPIC/RESPONSE_TOPIC above (see ADR-0012).
+RESTART_REQUEST_TOPIC = restart_request_topic(OWNER_ID)
+RESTART_RESPONSE_TOPIC = restart_response_topic(OWNER_ID)
 
 
 def payload_bytes() -> bytes:
@@ -94,3 +113,60 @@ def handle_validate_and_write(payload: bytes, config_path: Path) -> bytes:
             ``mimirheim_shared.config_service.handle_validate_and_write``.
     """
     return _shared_handle_validate_and_write(payload, config_path, MimirheimConfig)
+
+
+def operational_state_payload_bytes() -> bytes:
+    """Serialise the Operational payload mimirheim core publishes retained to ``STATE_TOPIC``.
+
+    Published once mimirheim core's configuration validates in full and it is
+    running its own function (the solve loop). See
+    ``mimirheim_shared/CONTEXT.md``'s Operational entry and ADR-0010.
+
+    Returns:
+        UTF-8 encoded JSON bytes.
+    """
+    return operational_state_payload(OperationalState(state="operational"))
+
+
+def awaiting_configuration_state_payload(detail: str) -> bytes:
+    """Serialise the Awaiting Configuration payload mimirheim core publishes retained to ``STATE_TOPIC``.
+
+    Published while mimirheim core's configuration fails full validation (or
+    does not exist yet), alongside the Descriptor. See
+    ``mimirheim_shared/CONTEXT.md``'s Awaiting Configuration entry and
+    ADR-0009/ADR-0011.
+
+    Args:
+        detail: A human-readable summary of why the configuration does not
+            currently validate, e.g. the ``str()`` of the Pydantic
+            ``ValidationError``.
+
+    Returns:
+        UTF-8 encoded JSON bytes.
+    """
+    return operational_state_payload(OperationalState(state="awaiting_configuration", detail=detail))
+
+
+def handle_restart_request(payload: bytes) -> bytes:
+    """Parse a Restart Request and build its acknowledgement.
+
+    Unlike ``handle_validate_and_write``, acting on the request (clearing the
+    Descriptor and Operational State, disconnecting, exiting) is orchestration
+    that only the caller can perform (see ADR-0012); this function only builds
+    the response bytes the caller publishes before doing so.
+
+    Args:
+        payload: The raw MQTT message payload received on
+            ``RESTART_REQUEST_TOPIC``.
+
+    Returns:
+        UTF-8 encoded JSON bytes to publish to ``RESTART_RESPONSE_TOPIC``.
+
+    Raises:
+        ValidationError: If ``payload`` is not a well-formed
+            ``RestartRequest`` envelope. The caller cannot correlate a
+            response to a request it could not parse, so this is left to
+            propagate rather than published.
+    """
+    request = RestartRequest.model_validate_json(payload)
+    return restart_response_payload(RestartResponse(request_id=request.request_id))

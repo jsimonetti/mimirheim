@@ -22,15 +22,27 @@ from mimirheim.io.config_service import (
     OWNER_ID,
     REQUEST_TOPIC,
     RESPONSE_TOPIC,
+    RESTART_REQUEST_TOPIC,
+    RESTART_RESPONSE_TOPIC,
+    STATE_TOPIC,
     TOPIC,
+    awaiting_configuration_state_payload,
+    handle_restart_request,
     handle_validate_and_write,
+    operational_state_payload_bytes,
     payload_bytes,
 )
 from mimirheim_shared.config_service import (
     Descriptor,
+    OperationalState,
+    RestartRequest,
+    RestartResponse,
     ValidateAndWriteRequest,
     ValidateAndWriteResult,
     descriptor_topic,
+    restart_request_topic,
+    restart_response_topic,
+    state_topic,
     validate_and_write_request_topic,
     validate_and_write_response_topic,
 )
@@ -176,3 +188,40 @@ class TestHandleValidateAndWrite:
 
         with pytest.raises(ValidationError):
             handle_validate_and_write(b"not json", config_path)
+
+
+def test_state_topic_is_the_well_known_state_topic_for_this_owner() -> None:
+    assert STATE_TOPIC == state_topic(OWNER_ID)
+
+
+def test_restart_topics_are_the_well_known_ones_for_this_owner() -> None:
+    assert RESTART_REQUEST_TOPIC == restart_request_topic(OWNER_ID)
+    assert RESTART_RESPONSE_TOPIC == restart_response_topic(OWNER_ID)
+
+
+def test_operational_state_payload_bytes_is_operational_with_no_detail() -> None:
+    state = OperationalState.model_validate_json(operational_state_payload_bytes())
+    assert state.state == "operational"
+    assert state.detail is None
+
+
+def test_awaiting_configuration_state_payload_carries_the_validation_detail() -> None:
+    state = OperationalState.model_validate_json(
+        awaiting_configuration_state_payload("grid.import_limit_kw: must be >= 0")
+    )
+    assert state.state == "awaiting_configuration"
+    assert state.detail == "grid.import_limit_kw: must be >= 0"
+
+
+class TestHandleRestartRequest:
+    def test_valid_request_is_acknowledged_by_echoed_request_id(self) -> None:
+        request = RestartRequest(request_id="req-5")
+
+        response_payload = handle_restart_request(request.model_dump_json().encode("utf-8"))
+
+        response = RestartResponse.model_validate_json(response_payload)
+        assert response.request_id == "req-5"
+
+    def test_malformed_request_envelope_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            handle_restart_request(b"not json")
