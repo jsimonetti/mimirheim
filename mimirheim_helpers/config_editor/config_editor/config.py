@@ -3,9 +3,10 @@
 Defines the single Pydantic model that validates config-editor.yaml: the
 MQTT broker connection used to discover Config Owners via the Config Service
 protocol (see `mimirheim_shared/docs/adr/0001`), the TCP port this process's
-own HTTP server listens on, and a small set of deployment-only settings
-(`allowed_ip`, `disabled`) that have no bearing on the Config Service
-protocol itself.
+own HTTP server listens on, and a deployment-only `allowed_ip` setting that
+has no bearing on the Config Service protocol itself. Whether the process
+runs at all is a container-level concern, gated purely by the
+ENABLE_CONFIG_EDITOR environment variable (ADR-0013), not a config field.
 
 This module has no imports from mimirheim core, `mimirheim_shared`, or any
 specific Config Owner.
@@ -15,7 +16,6 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 
 from helper_common.config import MqttConfig, load_helper_config
 from pydantic import BaseModel, ConfigDict, Field
@@ -43,9 +43,6 @@ class ConfigEditorConfig(BaseModel):
             CONFIG_EDITOR_ALLOWED_IP environment variable overrides this value
             when set, which is how the HA add-on supplies the ingress
             gateway address.
-        disabled: Set to true, or included as a bare key without a value, to
-            disable the editor without removing its config file.
-            load_config() exits with code 0 when this is set.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -61,14 +58,6 @@ class ConfigEditorConfig(BaseModel):
             "all IPs are accepted. The CONFIG_EDITOR_ALLOWED_IP environment "
             "variable overrides this value when set, which is how the HA add-on "
             "supplies the ingress gateway address."
-        ),
-    )
-    disabled: bool | None = Field(
-        default=False,
-        description=(
-            "Set to true, or include as a bare key without a value, to disable the "
-            "config editor without removing the config file. load_config() exits "
-            "with code 0 when this is set."
         ),
     )
 
@@ -97,7 +86,6 @@ def load_config(path: str, logger: logging.Logger) -> ConfigEditorConfig:
         from CONFIG_EDITOR_ALLOWED_IP if that environment variable is set.
 
     Raises:
-        SystemExit: With code 0 if the config marks the editor as disabled.
         SystemExit: With code 1 if the `mqtt:` section does not validate on
             its own. With code 0 after Awaiting Configuration mode ends
             (Restart Request or termination signal) if the rest of the
@@ -111,11 +99,6 @@ def load_config(path: str, logger: logging.Logger) -> ConfigEditorConfig:
         display_name=CONFIG_OWNER_DISPLAY_NAME,
         form_spec=CONFIG_EDITOR_CONFIG_FORM_SPEC,
     )
-
-    # A bare `disabled` key (YAML null) or `disabled: true` both mean the user
-    # wants the editor off. Exit cleanly so the process terminates without noise.
-    if cfg.disabled is None or cfg.disabled is True:
-        sys.exit(0)
 
     # Override allowed_ip from the environment variable injected by
     # cont-init.d/00-options-env.sh when running as a HA add-on. The variable

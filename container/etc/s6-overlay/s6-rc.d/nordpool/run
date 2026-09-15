@@ -1,10 +1,10 @@
 #!/command/with-contenv sh
 exec 2>&1
 # ENABLE_NORDPOOL is set by cont-init.d/00-options-env.sh when running as a
-# HA add-on. When unset (plain Docker), default to true so the service runs
-# unless explicitly disabled.
-if [ "${ENABLE_NORDPOOL:-true}" != "true" ]; then
-    echo "nordpool: disabled via add-on options"
+# HA add-on. Must equal the literal string "true" to start; unset or any
+# other value keeps the service down (ADR-0013, fail-closed).
+if [ "${ENABLE_NORDPOOL}" != "true" ]; then
+    echo "nordpool: disabled (set ENABLE_NORDPOOL=true to enable)"
     /command/s6-svc -d /run/service/nordpool
     exit 0
 fi

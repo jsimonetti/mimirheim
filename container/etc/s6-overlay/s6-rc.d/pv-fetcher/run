@@ -1,7 +1,7 @@
 #!/command/with-contenv sh
 exec 2>&1
-if [ "${ENABLE_PV_FETCHER:-true}" != "true" ]; then
-    echo "pv-fetcher: disabled via add-on options"
+if [ "${ENABLE_PV_FETCHER}" != "true" ]; then
+    echo "pv-fetcher: disabled (set ENABLE_PV_FETCHER=true to enable)"
     /command/s6-svc -d /run/service/pv-fetcher
     exit 0
 fi

@@ -1,7 +1,7 @@
 #!/command/with-contenv sh
 exec 2>&1
-if [ "${ENABLE_BASELOAD_HA:-true}" != "true" ]; then
-    echo "baseload-ha: disabled via add-on options"
+if [ "${ENABLE_BASELOAD_HA}" != "true" ]; then
+    echo "baseload-ha: disabled (set ENABLE_BASELOAD_HA=true to enable)"
     /command/s6-svc -d /run/service/baseload-ha
     exit 0
 fi

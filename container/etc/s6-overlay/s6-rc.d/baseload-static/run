@@ -1,7 +1,7 @@
 #!/command/with-contenv sh
 exec 2>&1
-if [ "${ENABLE_BASELOAD_STATIC:-true}" != "true" ]; then
-    echo "baseload-static: disabled via add-on options"
+if [ "${ENABLE_BASELOAD_STATIC}" != "true" ]; then
+    echo "baseload-static: disabled (set ENABLE_BASELOAD_STATIC=true to enable)"
     /command/s6-svc -d /run/service/baseload-static
     exit 0
 fi

@@ -1,7 +1,7 @@
 #!/command/with-contenv sh
 exec 2>&1
-if [ "${ENABLE_PV_ML_LEARNER:-true}" != "true" ]; then
-    echo "pv-ml-learner: disabled via add-on options"
+if [ "${ENABLE_PV_ML_LEARNER}" != "true" ]; then
+    echo "pv-ml-learner: disabled (set ENABLE_PV_ML_LEARNER=true to enable)"
     /command/s6-svc -d /run/service/pv-ml-learner
     exit 0
 fi

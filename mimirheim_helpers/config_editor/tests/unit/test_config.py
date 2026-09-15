@@ -2,7 +2,7 @@
 
 Tests verify:
 - Default field values are applied when only the required mqtt section is given.
-- Custom values for port, log_level, allowed_ip and disabled are accepted.
+- Custom values for port, log_level, and allowed_ip are accepted.
 - port values outside the valid range (1024-65535) are rejected.
 - Unknown top-level fields are rejected (extra="forbid").
 - load_config() delegates to helper_common.config.load_helper_config
@@ -15,8 +15,6 @@ Tests verify:
 - load_config() clears allowed_ip when CONFIG_EDITOR_ALLOWED_IP is unset,
   even if a previous call had set a value (env var takes precedence over
   any residual state).
-- load_config() exits with code 0 when disabled is true or null (bare key).
-- load_config() continues normally when disabled is false or absent.
 """
 from __future__ import annotations
 
@@ -56,7 +54,6 @@ def test_defaults_are_applied() -> None:
     assert cfg.port == 8099
     assert cfg.log_level == "INFO"
     assert cfg.allowed_ip is None
-    assert cfg.disabled is False
 
 
 def test_missing_mqtt_section_is_rejected() -> None:
@@ -255,55 +252,3 @@ def test_load_config_keeps_allowed_ip_from_yaml_when_env_is_empty(
     cfg_file.write_text(yaml.dump({"mqtt": {"host": "localhost"}, "allowed_ip": "192.168.1.5"}))
     cfg = load_config(str(cfg_file), _logger)
     assert cfg.allowed_ip == "192.168.1.5"
-
-
-# ---------------------------------------------------------------------------
-# ConfigEditorConfig: disabled field
-# ---------------------------------------------------------------------------
-
-def test_disabled_true_accepted() -> None:
-    cfg = ConfigEditorConfig.model_validate({"mqtt": {"host": "localhost"}, "disabled": True})
-    assert cfg.disabled is True
-
-
-def test_disabled_false_accepted() -> None:
-    cfg = ConfigEditorConfig.model_validate({"mqtt": {"host": "localhost"}, "disabled": False})
-    assert cfg.disabled is False
-
-
-def test_disabled_null_accepted() -> None:
-    """A bare disabled key (YAML null) is accepted as None."""
-    cfg = ConfigEditorConfig.model_validate({"mqtt": {"host": "localhost"}, "disabled": None})
-    assert cfg.disabled is None
-
-
-# ---------------------------------------------------------------------------
-# load_config(): disabled exits cleanly
-# ---------------------------------------------------------------------------
-
-def test_load_config_disabled_true_exits_with_code_zero(tmp_path: Path) -> None:
-    cfg_file = tmp_path / "config-editor.yaml"
-    cfg_file.write_text(yaml.dump({"mqtt": {"host": "localhost"}, "disabled": True}))
-    with pytest.raises(SystemExit) as exc_info:
-        load_config(str(cfg_file), _logger)
-    assert exc_info.value.code == 0
-
-
-def test_load_config_disabled_null_exits_with_code_zero(tmp_path: Path) -> None:
-    """In YAML, 'disabled:' (key with no value) deserialises to {"disabled": None}.
-
-    This is the form a user would write if they want to disable the editor
-    without assigning an explicit true/false value.
-    """
-    cfg_file = tmp_path / "config-editor.yaml"
-    cfg_file.write_text("mqtt:\n  host: localhost\ndisabled:\n")
-    with pytest.raises(SystemExit) as exc_info:
-        load_config(str(cfg_file), _logger)
-    assert exc_info.value.code == 0
-
-
-def test_load_config_disabled_false_does_not_exit(tmp_path: Path) -> None:
-    cfg_file = tmp_path / "config-editor.yaml"
-    cfg_file.write_text(yaml.dump({"mqtt": {"host": "localhost"}, "disabled": False}))
-    cfg = load_config(str(cfg_file), _logger)
-    assert cfg.disabled is False

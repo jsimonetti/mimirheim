@@ -51,15 +51,5 @@ CONFIG_EDITOR_CONFIG_FORM_SPEC = FormSpec(
             ),
             tier=Tier.EXPERT,
         ),
-        "disabled": FieldSpec(
-            label="Disabled",
-            description="Disable the editor without removing its config file.",
-            tier=Tier.EXPERT,
-            # The Config Editor cannot render or serve a form for itself while
-            # it is disabled -- the whole HTTP server exits before any of
-            # this is reachable (see config_editor.config.load_config). There
-            # is nothing useful a form entry could do here.
-            hidden=True,
-        ),
     }
 )
