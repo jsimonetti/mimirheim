@@ -22,11 +22,47 @@ Values for validation and writing. Never writes a configuration file
 itself.
 _Avoid_: the app, the UI, the editor backend
 
+**Broker Settings**:
+The subset of a Config Owner's own configuration — broker host, port, and
+credentials — needed only to connect and become reachable over MQTT.
+Validated on its own, before the rest of a Config Owner's configuration; a
+Config Owner cannot reach any Operational State without valid Broker
+Settings, and a Broker Settings failure is always fatal, never Awaiting
+Configuration.
+_Avoid_: mqtt config, connection settings
+
 **Descriptor**:
 The payload a Config Owner publishes, retained, describing its
-configuration: the validation schema together with its FormSpec.
+configuration: the validation schema together with its FormSpec. Describes
+what a Config Owner can be configured as; never whether its current
+configuration is valid or running — that is Operational State.
 _Avoid_: schema (ambiguous between the validation shape and the
 presentation layer)
+
+**Operational State**:
+Whether a Config Owner is currently running its own function or withholding
+it because its configuration does not yet fully validate: `Operational` or
+`Awaiting Configuration`. Published retained on its own topic, separate
+from the Descriptor, and updated in lockstep with it. Unrelated to
+mimirheim core's own internal solver readiness tracking (stale-input
+detection ahead of a solve), which is a different, non-Config-Service
+concept.
+_Avoid_: readiness, status, health
+
+**Awaiting Configuration**:
+The Operational State of a Config Owner that has valid Broker Settings and
+is connected, but whose configuration fails full validation (or does not
+exist yet). It still publishes its Descriptor and accepts Candidate Values
+and a Restart Request, but runs none of its own function until its
+configuration validates in full.
+_Avoid_: degraded, disabled (disabled describes a Config Owner's container
+not running at all, a different and unrelated condition)
+
+**Operational**:
+The Operational State of a Config Owner whose configuration fully validates
+and which is running its own function — the solve loop, a helper's
+fetch/trigger cycle, or the Config Editor's HTTP server — alongside the
+Config Service protocol.
 
 **FormSpec**:
 The presentation-only counterpart to a Config Owner's validation model:
@@ -101,3 +137,13 @@ _Avoid_: default (reserved for the schema's own default), placeholder
 The set of proposed field values a Config Editor submits to a Config Owner
 for validation and writing. Distinct from the values currently on disk.
 _Avoid_: form data, payload, submission
+
+**Restart Request**:
+A Config Service action, parallel to a Candidate Values submission, by
+which the Config Editor asks a Config Owner to give up its process so its
+container supervisor restarts it against whatever configuration is
+currently on disk. Not scoped to a preceding Save; usable on any Config
+Owner at any time as a general recovery action.
+_Avoid_: reload, hot-reload (a Restart Request never reconstructs a Config
+Owner's own running objects in place; it always exits and lets the
+supervisor start a fresh process)
