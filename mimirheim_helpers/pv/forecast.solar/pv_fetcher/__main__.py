@@ -32,12 +32,13 @@ from typing import Any
 
 import paho.mqtt.client as mqtt
 
+from helper_common.config import load_helper_config
 from helper_common.config_owner import ConfigOwnerSupport
 from helper_common.cycle import CycleResult
 from helper_common.daemon import HelperDaemon
 from helper_common.publish import publish_checked
 
-from pv_fetcher.config import PvFetcherConfig, load_config
+from pv_fetcher.config import PvFetcherConfig
 from pv_fetcher.confidence import ConfidenceDecay, apply_confidence
 from pv_fetcher.fetcher import FetchError, RatelimitError, fetch_array
 from pv_fetcher.formspec import PV_FETCHER_CONFIG_FORM_SPEC
@@ -266,7 +267,15 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    PvFetcherDaemon(load_config(args.config), Path(args.config)).run()
+    config = load_helper_config(
+        args.config,
+        PvFetcherConfig,
+        logger,
+        owner_id=CONFIG_OWNER_ID,
+        display_name=CONFIG_OWNER_DISPLAY_NAME,
+        form_spec=PV_FETCHER_CONFIG_FORM_SPEC,
+    )
+    PvFetcherDaemon(config, Path(args.config)).run()
 
 
 if __name__ == "__main__":

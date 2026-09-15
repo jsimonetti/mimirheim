@@ -16,13 +16,18 @@ from __future__ import annotations
 import logging
 import os
 import sys
-from pathlib import Path
-from typing import Any
 
-import yaml
-from helper_common.config import MqttConfig, apply_mqtt_env_overrides
+from helper_common.config import MqttConfig, load_helper_config
 from pydantic import BaseModel, ConfigDict, Field
-from pydantic import ValidationError as PydanticValidationError
+
+from config_editor.formspec import CONFIG_EDITOR_CONFIG_FORM_SPEC
+
+# Stable regardless of user configuration; the Config Editor needs a fixed
+# identity for this tool across restarts and reconfiguration -- including
+# for its own configuration, since it is a Config Owner of itself the same
+# way every other helper is a Config Owner of its own configuration.
+CONFIG_OWNER_ID = "config-editor"
+CONFIG_OWNER_DISPLAY_NAME = "Config Editor"
 
 
 class ConfigEditorConfig(BaseModel):
@@ -69,18 +74,23 @@ class ConfigEditorConfig(BaseModel):
 
 
 def load_config(path: str, logger: logging.Logger) -> ConfigEditorConfig:
-    """Loads and validates config-editor.yaml, tolerating a missing file.
+    """Loads and validates config-editor.yaml via the shared helper startup path.
 
-    Unlike every other helper (`helper_common.load_helper_config`), the Config
-    Editor is allowed to start before its own config file exists: it is the
-    tool a first-time user relies on to create every other file. A missing
-    file is therefore treated as an empty one, not a fatal error. MQTT remains
-    a hard requirement regardless: if neither the file nor the HA Supervisor
-    environment supplies a broker, validation fails and the process exits.
+    Delegates to `helper_common.config.load_helper_config`, the same
+    two-phase load (Broker Settings, then the full model) every other
+    helper uses (config-owner-startup-resilience ticket 03): Broker
+    Settings failure remains immediately fatal, since MQTT is a hard
+    requirement regardless of what the Config Editor is for. Any other
+    failure -- including a missing file, since the Config Editor is the
+    tool a first-time user relies on to create every other file -- is no
+    longer fatal; the process connects to MQTT and shows up in the Config
+    Editor's own registry as Awaiting Configuration, exactly like every
+    other helper, until a corrected configuration is written and a Restart
+    Request arrives.
 
     Args:
         path: Filesystem path to the YAML configuration file.
-        logger: Logger used to record the full traceback on failure.
+        logger: Logger passed through to `load_helper_config`.
 
     Returns:
         The validated ConfigEditorConfig, with allowed_ip already overridden
@@ -88,18 +98,19 @@ def load_config(path: str, logger: logging.Logger) -> ConfigEditorConfig:
 
     Raises:
         SystemExit: With code 0 if the config marks the editor as disabled.
-        SystemExit: With code 1 if the file cannot be read or parsed, or if
-            the configuration fails Pydantic validation.
+        SystemExit: With code 1 if the `mqtt:` section does not validate on
+            its own. With code 0 after Awaiting Configuration mode ends
+            (Restart Request or termination signal) if the rest of the
+            configuration did not validate.
     """
-    try:
-        raw: dict[str, Any] = {}
-        if Path(path).exists():
-            raw = yaml.safe_load(Path(path).read_text()) or {}
-        apply_mqtt_env_overrides(raw)
-        cfg = ConfigEditorConfig.model_validate(raw)
-    except (OSError, PydanticValidationError, ValueError):
-        logger.exception("Failed to load configuration from %s", path)
-        sys.exit(1)
+    cfg = load_helper_config(
+        path,
+        ConfigEditorConfig,
+        logger,
+        owner_id=CONFIG_OWNER_ID,
+        display_name=CONFIG_OWNER_DISPLAY_NAME,
+        form_spec=CONFIG_EDITOR_CONFIG_FORM_SPEC,
+    )
 
     # A bare `disabled` key (YAML null) or `disabled: true` both mean the user
     # wants the editor off. Exit cleanly so the process terminates without noise.

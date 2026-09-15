@@ -34,9 +34,10 @@ from pathlib import Path
 
 import paho.mqtt.client as paho
 
+from helper_common.config import load_helper_config
 from helper_common.config_owner import ConfigOwnerSupport
 
-from scheduler.config import SchedulerConfig, load_config
+from scheduler.config import SchedulerConfig
 from scheduler.formspec import SCHEDULER_CONFIG_FORM_SPEC
 from scheduler.loop import run
 
@@ -46,6 +47,12 @@ logger = logging.getLogger("scheduler")
 # identity for this tool across restarts and reconfiguration.
 CONFIG_OWNER_ID = "scheduler"
 CONFIG_OWNER_DISPLAY_NAME = "Scheduler"
+
+# How often the restart-request watcher thread checks the Config Owner's
+# restart_requested event (ADR-0012). Mirrors helper_common.daemon's own
+# poll interval; the scheduler has no MqttDaemon base class to inherit that
+# polling from, so it is replicated here.
+_RESTART_POLL_INTERVAL_S = 0.5
 
 
 def _make_paho_client(config: SchedulerConfig, config_owner: ConfigOwnerSupport) -> paho.Client:
@@ -143,6 +150,33 @@ def _configure_logging() -> None:
     logging.getLogger("apscheduler").setLevel(logging.WARNING)
 
 
+def _watch_for_restart_request(
+    config_owner: ConfigOwnerSupport, stop_event: threading.Event
+) -> None:
+    """Set ``stop_event`` once a Restart Request is acknowledged.
+
+    ``loop.run()`` only wakes on ``stop_event``, and a Restart Request is
+    delivered over the MQTT connection rather than as an OS signal, so
+    nothing else notices it. Run this in its own thread, alongside
+    ``loop.run()`` on the main thread; it returns once it has set
+    ``stop_event``, either because it observed the Restart Request or
+    because something else (a SIGTERM/SIGINT handler) set ``stop_event``
+    first.
+
+    Args:
+        config_owner: This tool's Config Service wiring; its
+            ``restart_requested`` event (ADR-0012) is polled here.
+        stop_event: Set when a Restart Request is observed. Also checked so
+            this thread exits promptly if shutdown was triggered some other
+            way.
+    """
+    while not stop_event.is_set():
+        if config_owner.restart_requested.wait(timeout=_RESTART_POLL_INTERVAL_S):
+            logger.info("Restart requested; shutting down.")
+            stop_event.set()
+            return
+
+
 def main() -> None:
     """Run the scheduler daemon until SIGTERM or SIGINT.
 
@@ -164,7 +198,14 @@ def main() -> None:
 
     _configure_logging()
 
-    config = load_config(args.config)
+    config = load_helper_config(
+        args.config,
+        SchedulerConfig,
+        logger,
+        owner_id=CONFIG_OWNER_ID,
+        display_name=CONFIG_OWNER_DISPLAY_NAME,
+        form_spec=SCHEDULER_CONFIG_FORM_SPEC,
+    )
     schedules = config.parsed_schedules()
 
     config_owner = ConfigOwnerSupport(
@@ -193,6 +234,11 @@ def main() -> None:
         config.mqtt.port,
         len(schedules),
     )
+
+    restart_watcher = threading.Thread(
+        target=_watch_for_restart_request, args=(config_owner, stop_event), daemon=True
+    )
+    restart_watcher.start()
 
     try:
         run(client, schedules, stop_event)

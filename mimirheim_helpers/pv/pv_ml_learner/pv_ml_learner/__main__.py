@@ -43,13 +43,14 @@ from typing import Any
 import paho.mqtt.client as mqtt
 import sqlalchemy as sa
 
+from helper_common.config import load_helper_config
 from helper_common.config_owner import ConfigOwnerSupport
 from helper_common.cycle import CycleResult
 from helper_common.daemon import MqttDaemon
 from helper_common.publish import publish_checked
 from helper_common.discovery import publish_trigger_discovery
 
-from pv_ml_learner.config import ArrayConfig, PvLearnerConfig, load_config
+from pv_ml_learner.config import ArrayConfig, PvLearnerConfig
 from pv_ml_learner.dataset_builder import build_training_rows
 from pv_ml_learner.formspec import PV_LEARNER_CONFIG_FORM_SPEC
 from pv_ml_learner.ha_actuals import build_ha_engine, compute_hourly_kwh
@@ -715,7 +716,15 @@ def main() -> None:
     # Meteoserver API key in log files.  Suppress it to WARNING.
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
-    PvLearnerDaemon(load_config(args.config), Path(args.config)).run()
+    config = load_helper_config(
+        args.config,
+        PvLearnerConfig,
+        logger,
+        owner_id=CONFIG_OWNER_ID,
+        display_name=CONFIG_OWNER_DISPLAY_NAME,
+        form_spec=PV_LEARNER_CONFIG_FORM_SPEC,
+    )
+    PvLearnerDaemon(config, Path(args.config)).run()
 
 
 if __name__ == "__main__":

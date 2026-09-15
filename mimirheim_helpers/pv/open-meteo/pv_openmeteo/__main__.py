@@ -259,7 +259,15 @@ def main() -> None:
     )
 
     PvOpenMeteoDaemon(
-        load_helper_config(args.config, PvOpenMeteoConfig, logger), Path(args.config)
+        load_helper_config(
+            args.config,
+            PvOpenMeteoConfig,
+            logger,
+            owner_id=CONFIG_OWNER_ID,
+            display_name=CONFIG_OWNER_DISPLAY_NAME,
+            form_spec=PV_OPENMETEO_CONFIG_FORM_SPEC,
+        ),
+        Path(args.config),
     ).run()
 
 

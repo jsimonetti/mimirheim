@@ -19,11 +19,17 @@ from mimirheim_shared.config_service import (
     Descriptor,
     GetCurrentValuesRequest,
     GetCurrentValuesResult,
+    OperationalState,
+    RestartRequest,
+    RestartResponse,
     ValidateAndWriteRequest,
     ValidateAndWriteResult,
     descriptor_topic,
     get_current_values_request_topic,
     get_current_values_response_topic,
+    restart_request_topic,
+    restart_response_topic,
+    state_topic,
     validate_and_write_request_topic,
     validate_and_write_response_topic,
 )
@@ -45,13 +51,16 @@ _TOY_FORM_SPEC = FormSpec(
 )
 
 
-def _support(config_path: Path) -> ConfigOwnerSupport:
+def _support(
+    config_path: Path, *, awaiting_configuration_detail: str | None = None
+) -> ConfigOwnerSupport:
     return ConfigOwnerSupport(
         owner_id="toy-helper",
         display_name="Toy Helper",
         model=_ToyHelperConfig,
         form_spec=_TOY_FORM_SPEC,
         config_path=config_path,
+        awaiting_configuration_detail=awaiting_configuration_detail,
     )
 
 
@@ -84,14 +93,41 @@ class TestOnConnect:
 
         client.subscribe.assert_any_call(validate_and_write_request_topic("toy-helper"), qos=1)
         client.subscribe.assert_any_call(get_current_values_request_topic("toy-helper"), qos=1)
-        publish_call = client.publish.call_args
-        assert publish_call.args[0] == descriptor_topic("toy-helper")
-        assert publish_call.kwargs["retain"] is True
-        descriptor = Descriptor.model_validate_json(publish_call.kwargs["payload"])
+        client.subscribe.assert_any_call(restart_request_topic("toy-helper"), qos=1)
+        publish_calls = {c.args[0]: c for c in client.publish.call_args_list}
+        descriptor_call = publish_calls[descriptor_topic("toy-helper")]
+        assert descriptor_call.kwargs["retain"] is True
+        descriptor = Descriptor.model_validate_json(descriptor_call.kwargs["payload"])
         assert descriptor.owner_id == "toy-helper"
         assert descriptor.display_name == "Toy Helper"
         assert descriptor.json_schema == _ToyHelperConfig.model_json_schema()
         assert descriptor.form_spec == resolve_field_shapes(_ToyHelperConfig, _TOY_FORM_SPEC)
+
+    def test_publishes_operational_state_by_default(self, tmp_path: Path) -> None:
+        support = _support(tmp_path / "config.yaml")
+        client = MagicMock()
+
+        support.on_connect(client)
+
+        publish_calls = {c.args[0]: c for c in client.publish.call_args_list}
+        state_call = publish_calls[state_topic("toy-helper")]
+        assert state_call.kwargs["retain"] is True
+        state = OperationalState.model_validate_json(state_call.kwargs["payload"])
+        assert state == OperationalState(state="operational")
+
+    def test_publishes_awaiting_configuration_state_with_detail_when_constructed_that_way(
+        self, tmp_path: Path
+    ) -> None:
+        support = _support(tmp_path / "config.yaml", awaiting_configuration_detail="bad field")
+        client = MagicMock()
+
+        support.on_connect(client)
+
+        publish_calls = {c.args[0]: c for c in client.publish.call_args_list}
+        state = OperationalState.model_validate_json(
+            publish_calls[state_topic("toy-helper")].kwargs["payload"]
+        )
+        assert state == OperationalState(state="awaiting_configuration", detail="bad field")
 
 
 class TestHandleMessage:
@@ -216,6 +252,47 @@ class TestHandleMessage:
         assert "Failed to handle get_current_values request" in caplog.text
 
 
+class TestRestartRequest:
+    def test_acknowledges_and_sets_restart_requested(self, tmp_path: Path) -> None:
+        support = _support(tmp_path / "config.yaml")
+        client = MagicMock()
+        request = RestartRequest(request_id="req-9")
+
+        handled = support.handle_message(
+            client,
+            _message(restart_request_topic("toy-helper"), request.model_dump_json().encode("utf-8")),
+        )
+
+        assert handled is True
+        assert support.restart_requested.is_set()
+        client.publish.assert_called_once()
+        publish_call = client.publish.call_args
+        assert publish_call.args[0] == restart_response_topic("toy-helper")
+        assert publish_call.kwargs["retain"] is False
+        response = RestartResponse.model_validate_json(publish_call.kwargs["payload"])
+        assert response == RestartResponse(request_id="req-9")
+
+    def test_a_malformed_request_envelope_is_logged_and_dropped(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        support = _support(tmp_path / "config.yaml")
+        client = MagicMock()
+
+        handled = support.handle_message(
+            client, _message(restart_request_topic("toy-helper"), b"not json")
+        )
+
+        assert handled is True
+        assert not support.restart_requested.is_set()
+        client.publish.assert_not_called()
+        assert "Failed to handle restart_request" in caplog.text
+
+    def test_restart_requested_starts_unset(self, tmp_path: Path) -> None:
+        support = _support(tmp_path / "config.yaml")
+
+        assert not support.restart_requested.is_set()
+
+
 class TestClearDescriptor:
     def test_publishes_a_retained_empty_payload_to_the_descriptor_topic(
         self, tmp_path: Path
@@ -225,6 +302,16 @@ class TestClearDescriptor:
 
         support.clear_descriptor(client)
 
-        client.publish.assert_called_once_with(
+        client.publish.assert_any_call(
             descriptor_topic("toy-helper"), payload=CLEARING_PAYLOAD, qos=1, retain=True
+        )
+
+    def test_also_clears_the_operational_state_topic(self, tmp_path: Path) -> None:
+        support = _support(tmp_path / "config.yaml")
+        client = MagicMock()
+
+        support.clear_descriptor(client)
+
+        client.publish.assert_any_call(
+            state_topic("toy-helper"), payload=CLEARING_PAYLOAD, qos=1, retain=True
         )

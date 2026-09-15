@@ -168,7 +168,14 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    config = load_helper_config(args.config, EpexPredictorPricesConfig, logger)
+    config = load_helper_config(
+        args.config,
+        EpexPredictorPricesConfig,
+        logger,
+        owner_id=CONFIG_OWNER_ID,
+        display_name=CONFIG_OWNER_DISPLAY_NAME,
+        form_spec=EPEXPREDICTOR_PRICES_CONFIG_FORM_SPEC,
+    )
     EpexPredictorPricesDaemon(config, Path(args.config)).run()
 
 

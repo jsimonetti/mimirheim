@@ -178,7 +178,17 @@ def main() -> None:
     # this.
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
-    HaBaseloadDaemon(load_helper_config(args.config, BaseloadConfig, logger), Path(args.config)).run()
+    HaBaseloadDaemon(
+        load_helper_config(
+            args.config,
+            BaseloadConfig,
+            logger,
+            owner_id=CONFIG_OWNER_ID,
+            display_name=CONFIG_OWNER_DISPLAY_NAME,
+            form_spec=BASELOAD_CONFIG_FORM_SPEC,
+        ),
+        Path(args.config),
+    ).run()
 
 
 if __name__ == "__main__":

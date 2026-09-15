@@ -6,9 +6,4 @@ if [ "${ENABLE_BASELOAD_HA:-true}" != "true" ]; then
     exit 0
 fi
 CONFIG=/config/baseload-ha.yaml
-if [ ! -f "$CONFIG" ]; then
-    echo "baseload-ha: $CONFIG not found — service disabled"
-    /command/s6-svc -d /run/service/baseload-ha
-    exit 0
-fi
 exec /app/.venv/bin/python -m baseload_ha --config "$CONFIG"

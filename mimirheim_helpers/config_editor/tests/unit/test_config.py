@@ -5,10 +5,11 @@ Tests verify:
 - Custom values for port, log_level, allowed_ip and disabled are accepted.
 - port values outside the valid range (1024-65535) are rejected.
 - Unknown top-level fields are rejected (extra="forbid").
-- load_config() returns defaults when the config file does not exist, as long
-  as a valid mqtt section is available from the environment.
-- load_config() still requires an mqtt section from somewhere (file or
-  environment); MQTT is a hard requirement, not an optional feature.
+- load_config() delegates to helper_common.config.load_helper_config
+  (config-owner-startup-resilience ticket 03): a missing file or a
+  full-validation failure enters Awaiting Configuration instead of exiting,
+  same as every other helper; only a missing/invalid mqtt: section remains
+  immediately fatal.
 - load_config() applies the CONFIG_EDITOR_ALLOWED_IP environment variable
   override after Pydantic validation.
 - load_config() clears allowed_ip when CONFIG_EDITOR_ALLOWED_IP is unset,
@@ -21,6 +22,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
@@ -29,6 +31,19 @@ from pydantic import ValidationError
 from config_editor.config import ConfigEditorConfig, load_config
 
 _logger = logging.getLogger("test-config-editor")
+
+
+@pytest.fixture
+def mock_awaiting_configuration() -> MagicMock:
+    """Patch out the blocking Awaiting Configuration loop.
+
+    ``run_awaiting_configuration`` opens a real MQTT connection and blocks
+    until a Restart Request or termination signal; it must never actually
+    run inside a unit test. Patched where ``load_helper_config`` imports it
+    from (locally, at call time, to avoid a circular import).
+    """
+    with patch("helper_common.awaiting_configuration.run_awaiting_configuration") as mock:
+        yield mock
 
 
 # ---------------------------------------------------------------------------
@@ -124,14 +139,24 @@ def test_load_config_custom_port(tmp_path: Path) -> None:
     assert cfg.port == 9000
 
 
-def test_load_config_missing_file_uses_mqtt_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """load_config() tolerates a missing file: the Config Editor is the one tool a
-    first-time user relies on to create every other config file, so it must be
-    able to start before its own file exists."""
+def test_load_config_missing_file_with_mqtt_env_enters_awaiting_configuration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mock_awaiting_configuration: MagicMock
+) -> None:
+    """A missing file is no longer silently filled in with defaults: the Config
+    Editor connects to MQTT (Broker Settings validate fine from the
+    environment) and shows up as Awaiting Configuration, exactly like every
+    other helper with a missing file (config-owner-startup-resilience ticket
+    03) -- including that it, too, is the tool a first-time user relies on to
+    create every other config file, so it must still be reachable before its
+    own file exists."""
     monkeypatch.setenv("MQTT_HOST", "broker.local")
-    cfg = load_config(str(tmp_path / "nonexistent.yaml"), _logger)
-    assert cfg.port == 8099
-    assert cfg.mqtt.host == "broker.local"
+
+    with pytest.raises(SystemExit) as exc_info:
+        load_config(str(tmp_path / "nonexistent.yaml"), _logger)
+
+    assert exc_info.value.code == 0
+    kwargs = mock_awaiting_configuration.call_args.kwargs
+    assert "Cannot read config file" in kwargs["detail"]
 
 
 def test_load_config_missing_file_and_no_mqtt_source_exits(
@@ -146,13 +171,21 @@ def test_load_config_missing_file_and_no_mqtt_source_exits(
     assert exc_info.value.code == 1
 
 
-def test_load_config_invalid_config_exits(tmp_path: Path) -> None:
-    """load_config() exits with code 1 when Pydantic validation fails."""
+def test_load_config_invalid_config_enters_awaiting_configuration(
+    tmp_path: Path, mock_awaiting_configuration: MagicMock
+) -> None:
+    """A full-validation failure (here, port below the valid range) enters
+    Awaiting Configuration instead of exiting 1, same as every other helper.
+    Only a missing/invalid mqtt: section remains immediately fatal."""
     cfg_file = tmp_path / "config-editor.yaml"
     cfg_file.write_text(yaml.dump({"mqtt": {"host": "localhost"}, "port": 80}))  # port below minimum
+
     with pytest.raises(SystemExit) as exc_info:
         load_config(str(cfg_file), _logger)
-    assert exc_info.value.code == 1
+
+    assert exc_info.value.code == 0
+    kwargs = mock_awaiting_configuration.call_args.kwargs
+    assert "port" in kwargs["detail"]
 
 
 # ---------------------------------------------------------------------------

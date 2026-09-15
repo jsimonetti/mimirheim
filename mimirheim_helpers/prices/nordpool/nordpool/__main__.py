@@ -153,7 +153,14 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    config = load_helper_config(args.config, NordpoolConfig, logger)
+    config = load_helper_config(
+        args.config,
+        NordpoolConfig,
+        logger,
+        owner_id=CONFIG_OWNER_ID,
+        display_name=CONFIG_OWNER_DISPLAY_NAME,
+        form_spec=NORDPOOL_CONFIG_FORM_SPEC,
+    )
     NordpoolDaemon(config, Path(args.config)).run()
 
 

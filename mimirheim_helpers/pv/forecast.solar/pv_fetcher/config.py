@@ -12,14 +12,9 @@ What this module does not do:
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from pydantic import ValidationError as PydanticValidationError
 
-from helper_common.config import HomeAssistantConfig, MqttConfig, apply_mqtt_env_overrides
+from helper_common.config import HomeAssistantConfig, MqttConfig
 import helper_common.topics as _topics
 
 
@@ -200,35 +195,3 @@ class PvFetcherConfig(BaseModel):
         if not self.mqtt.client_id:
             self.mqtt.client_id = "mimir-pv-forecast"
         return self
-
-
-def load_config(path: str) -> PvFetcherConfig:
-    """Load and validate the YAML configuration file.
-
-    Reads the YAML file at ``path``, parses it, and validates it against
-    ``PvFetcherConfig``. On failure, prints a human-readable error and exits.
-
-    Args:
-        path: Path to the YAML configuration file.
-
-    Returns:
-        The validated ``PvFetcherConfig`` instance.
-
-    Raises:
-        SystemExit: With exit code 1 if the file cannot be read or the
-            configuration fails Pydantic validation.
-    """
-    try:
-        with Path(path).open() as fh:
-            raw = yaml.safe_load(fh)
-    except OSError as exc:
-        print(f"ERROR: Cannot read config file {path!r}: {exc}", file=sys.stderr)
-        sys.exit(1)
-
-    apply_mqtt_env_overrides(raw)
-
-    try:
-        return PvFetcherConfig.model_validate(raw)
-    except PydanticValidationError as exc:
-        print(f"ERROR: Invalid configuration in {path!r}:\n{exc}", file=sys.stderr)
-        sys.exit(1)

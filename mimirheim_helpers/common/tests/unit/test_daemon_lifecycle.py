@@ -214,6 +214,49 @@ class TestRun:
         assert not thread.is_alive()
 
 
+class TestRestartRequestPolling:
+    """A Config Owner has no OS signal for a Restart Request — only a message
+    on its own MQTT connection (ADR-0012). run() must notice
+    ``self._config_owner.restart_requested`` being set and shut down exactly
+    as it does for SIGTERM, for every daemon that stores its
+    ``ConfigOwnerSupport`` as ``self._config_owner`` (the convention every
+    helper daemon uses; see ``helper_common.config_owner``).
+    """
+
+    def test_a_set_restart_requested_event_ends_run(self) -> None:
+        with patch("helper_common.daemon.mqtt.Client"):
+            daemon = MqttDaemon(_config())
+        daemon._config_owner = SimpleNamespace(restart_requested=_RealEvent())
+        finished = _RealEvent()
+
+        def _run() -> None:
+            daemon.run()
+            finished.set()
+
+        with patch("helper_common.daemon.signal.signal"):
+            thread = threading.Thread(target=_run, daemon=True)
+            thread.start()
+            daemon._config_owner.restart_requested.set()
+
+            assert finished.wait(timeout=5.0), "run() did not return after restart_requested was set"
+            thread.join(timeout=5.0)
+
+        assert not thread.is_alive()
+        daemon._client.disconnect.assert_called_once()
+
+    def test_no_config_owner_attribute_falls_back_to_plain_signal_wait(self) -> None:
+        """A daemon with no ConfigOwnerSupport (e.g. a plain MqttDaemon in these
+        tests) must not be affected by the polling loop at all."""
+        with patch("helper_common.daemon.mqtt.Client"):
+            daemon = MqttDaemon(_config())
+        assert not hasattr(daemon, "_config_owner")
+
+        with patch("helper_common.daemon.threading.Event", _set_event):
+            daemon.run()
+
+        daemon._client.disconnect.assert_called_once()
+
+
 # ---------------------------------------------------------------------------
 # Connect and disconnect logging
 # ---------------------------------------------------------------------------

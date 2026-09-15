@@ -6,9 +6,4 @@ if [ "${ENABLE_SCHEDULER:-true}" != "true" ]; then
     exit 0
 fi
 CONFIG=/config/scheduler.yaml
-if [ ! -f "$CONFIG" ]; then
-    echo "scheduler: $CONFIG not found — service disabled"
-    /command/s6-svc -d /run/service/scheduler
-    exit 0
-fi
 exec /app/.venv/bin/python -m scheduler --config "$CONFIG"

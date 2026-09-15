@@ -10,12 +10,24 @@ existing ``MqttDaemon``/``HelperDaemon`` callbacks:
 - ``on_connect``: call from the daemon's own ``_on_connect``, after
   confirming the connection succeeded.
 - ``handle_message``: call from the daemon's own ``_on_message``, before its
-  own topic dispatch. Returns True if the message was this Config Owner's
-  ``validate_and_write`` request (handled, regardless of outcome), so the
-  caller knows whether to fall through to its own handling.
+  own topic dispatch. Returns True if the message was one of this Config
+  Owner's own requests — ``validate_and_write``, ``get_current_values``, or
+  ``restart_request`` (handled, regardless of outcome) — so the caller
+  knows whether to fall through to its own handling.
 - ``clear_descriptor``: call from the daemon's own ``_on_shutdown`` (see
   ``helper_common.daemon.MqttDaemon._on_shutdown``), before the connection
-  is closed.
+  is closed. Also clears the Operational State topic.
+
+``on_connect`` also publishes this Config Owner's Operational State
+(``operational``, or ``awaiting_configuration`` with a detail if
+constructed with ``awaiting_configuration_detail`` set), and a Restart
+Request received via ``handle_message`` is acknowledged and recorded on the
+public ``restart_requested`` event — see ``mimirheim_shared/CONTEXT.md``'s
+Operational State and Restart Request entries and ADR-0010/ADR-0012. Acting
+on a Restart Request (actually stopping and exiting) is the owning daemon's
+own responsibility; ``helper_common.daemon.MqttDaemon.run()`` polls
+``restart_requested`` for every daemon that stores this object as
+``self._config_owner``.
 
 This is built entirely on ``mimirheim_shared`` (topic naming, the
 Descriptor/request/result shapes, and the generic
@@ -34,6 +46,7 @@ last-will here, rather than the graceful-shutdown-only fallback core uses.
 from __future__ import annotations
 
 import logging
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +54,9 @@ from pydantic import BaseModel
 
 from mimirheim_shared.config_service import (
     CLEARING_PAYLOAD,
+    OperationalState,
+    RestartRequest,
+    RestartResponse,
     build_descriptor,
     descriptor_payload,
     descriptor_topic,
@@ -48,6 +64,11 @@ from mimirheim_shared.config_service import (
     get_current_values_response_topic,
     handle_get_current_values,
     handle_validate_and_write,
+    operational_state_payload,
+    restart_request_topic,
+    restart_response_payload,
+    restart_response_topic,
+    state_topic,
     validate_and_write_request_topic,
     validate_and_write_response_topic,
 )
@@ -70,6 +91,7 @@ class ConfigOwnerSupport:
         model: type[BaseModel],
         form_spec: FormSpec,
         config_path: Path,
+        awaiting_configuration_detail: str | None = None,
     ) -> None:
         """Build the Descriptor and precompute this Config Owner's topics.
 
@@ -86,18 +108,36 @@ class ConfigOwnerSupport:
             config_path: Path to the helper's own YAML configuration file,
                 the one it was started with and the target of a successful
                 ``validate_and_write``.
+            awaiting_configuration_detail: When set, this Config Owner is in
+                the Awaiting Configuration Operational State (its own
+                configuration does not currently validate, or does not
+                exist); this is the human-readable reason, published on the
+                Operational State topic instead of ``"operational"``. See
+                ``mimirheim_shared/CONTEXT.md``'s Awaiting Configuration
+                entry and ADR-0009/ADR-0011. ``None`` (the default) means
+                this Config Owner is running its own function normally.
         """
         self.owner_id = owner_id
         self._model = model
         self._config_path = config_path
+        self._awaiting_configuration_detail = awaiting_configuration_detail
         self._descriptor_topic = descriptor_topic(owner_id)
         self._request_topic = validate_and_write_request_topic(owner_id)
         self._response_topic = validate_and_write_response_topic(owner_id)
         self._get_current_values_request_topic = get_current_values_request_topic(owner_id)
         self._get_current_values_response_topic = get_current_values_response_topic(owner_id)
+        self._state_topic = state_topic(owner_id)
+        self._restart_request_topic = restart_request_topic(owner_id)
+        self._restart_response_topic = restart_response_topic(owner_id)
         self._descriptor_payload = descriptor_payload(
             build_descriptor(owner_id, display_name, model, form_spec)
         )
+        # Set by handle_message once a Restart Request has been acknowledged
+        # (ADR-0012). The owning daemon's run loop (helper_common.daemon.
+        # MqttDaemon.run, or a manually-driven daemon's own loop) waits on
+        # this alongside its own shutdown-signal event so a Restart Request
+        # ends the process the same way SIGTERM does.
+        self.restart_requested = threading.Event()
 
     def register_last_will(self, client: Any) -> None:
         """Register a crash-safe last-will that clears the retained Descriptor.
@@ -111,7 +151,7 @@ class ConfigOwnerSupport:
         client.will_set(self._descriptor_topic, payload=CLEARING_PAYLOAD, qos=1, retain=True)
 
     def on_connect(self, client: Any) -> None:
-        """Subscribe for validate_and_write requests and publish the Descriptor.
+        """Subscribe for Config Service requests and publish the Descriptor and Operational State.
 
         Call from the helper's own ``_on_connect``, after confirming the
         connection succeeded (a refused connection has nothing to subscribe
@@ -122,15 +162,20 @@ class ConfigOwnerSupport:
         """
         client.subscribe(self._request_topic, qos=1)
         client.subscribe(self._get_current_values_request_topic, qos=1)
+        client.subscribe(self._restart_request_topic, qos=1)
         client.publish(
             self._descriptor_topic, payload=self._descriptor_payload, qos=1, retain=True
         )
+        client.publish(
+            self._state_topic, payload=self._state_payload(), qos=1, retain=True
+        )
 
     def handle_message(self, client: Any, message: Any) -> bool:
-        """Handle ``message`` if it is this Config Owner's validate_and_write or get_current_values request.
+        """Handle ``message`` if it is one of this Config Owner's own request topics.
 
         Call from the helper's own ``_on_message`` before its own topic
-        dispatch.
+        dispatch. Recognises validate_and_write, get_current_values, and
+        restart_request requests.
 
         Args:
             client: The connected paho client, used to publish the result.
@@ -141,6 +186,10 @@ class ConfigOwnerSupport:
             topics (handled, regardless of outcome), so the caller should
             not also try its own dispatch. False otherwise.
         """
+        if message.topic == self._restart_request_topic:
+            self._handle_restart_request(client, message)
+            return True
+
         if message.topic == self._get_current_values_request_topic:
             try:
                 response_payload = handle_get_current_values(message.payload, self._config_path)
@@ -182,8 +231,57 @@ class ConfigOwnerSupport:
         client.publish(self._response_topic, payload=response_payload, qos=1, retain=False)
         return True
 
+    def _handle_restart_request(self, client: Any, message: Any) -> None:
+        """Acknowledge a Restart Request and record that one arrived.
+
+        Acting on the request (clearing the Descriptor and Operational
+        State, disconnecting, exiting) is orchestration only the owning
+        daemon's run loop can perform (ADR-0012); this only publishes the
+        acknowledgement and sets ``restart_requested`` for that loop to
+        notice.
+
+        Args:
+            client: The connected paho client, used to publish the ack.
+            message: The paho ``MQTTMessage`` received on the restart
+                request topic.
+        """
+        try:
+            request = RestartRequest.model_validate_json(message.payload)
+        except Exception:
+            # Deliberately broad, same reason as validate_and_write's own
+            # handler: a malformed request envelope has no request_id to
+            # reply with, so it is logged and dropped rather than answered.
+            logger.exception(
+                "Failed to handle restart_request for %r on %r.",
+                self.owner_id,
+                message.topic,
+            )
+            return
+        client.publish(
+            self._restart_response_topic,
+            payload=restart_response_payload(RestartResponse(request_id=request.request_id)),
+            qos=1,
+            retain=False,
+        )
+        self.restart_requested.set()
+
+    def _state_payload(self) -> bytes:
+        """Serialise this Config Owner's current Operational State.
+
+        Returns:
+            Awaiting Configuration (with its detail) if constructed with
+            ``awaiting_configuration_detail`` set, Operational otherwise.
+        """
+        if self._awaiting_configuration_detail is not None:
+            state = OperationalState(
+                state="awaiting_configuration", detail=self._awaiting_configuration_detail
+            )
+        else:
+            state = OperationalState(state="operational")
+        return operational_state_payload(state)
+
     def clear_descriptor(self, client: Any) -> None:
-        """Explicitly clear the retained Descriptor on a graceful shutdown.
+        """Explicitly clear the retained Descriptor and Operational State on a graceful shutdown.
 
         The native last-will registered by ``register_last_will`` only fires
         on an ungraceful disconnect: a clean shutdown sends MQTT's own
@@ -195,3 +293,4 @@ class ConfigOwnerSupport:
             client: The still-connected paho client.
         """
         client.publish(self._descriptor_topic, payload=CLEARING_PAYLOAD, qos=1, retain=True)
+        client.publish(self._state_topic, payload=CLEARING_PAYLOAD, qos=1, retain=True)

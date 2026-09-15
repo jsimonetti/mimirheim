@@ -31,13 +31,16 @@ separation for the Config Owner under test (nordpool).
 from __future__ import annotations
 
 import asyncio
+import os
 import subprocess
 import sys
+import threading
 import time
 import urllib.parse
 import uuid
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import paho.mqtt.client as paho
 import pytest
@@ -58,6 +61,17 @@ from config_editor.mqtt_client import ConfigEditorMqttClient
 from config_editor.registry import ConfigOwnerRegistry
 from config_editor.render import RenderedGroup, build_groups
 from config_editor.server import ConfigEditorServer
+from mimirheim_shared.config_service import (
+    OperationalState,
+    RestartRequest,
+    ValidateAndWriteRequest,
+    ValidateAndWriteResult,
+    descriptor_topic,
+    restart_request_topic,
+    state_topic,
+    validate_and_write_request_topic,
+    validate_and_write_response_topic,
+)
 from mimirheim_shared.formspec import FieldSpec, FormSpec
 
 _NORDPOOL_OWNER_ID = "nordpool"
@@ -193,7 +207,9 @@ async def test_out_of_process_config_owner_round_trips_and_degrades_gracefully(
 
     # --- the Config Editor itself, in-process. ---
     registry = ConfigOwnerRegistry()
-    editor_mqtt_client = ConfigEditorMqttClient(_EditorConfig(port), registry)
+    editor_mqtt_client = ConfigEditorMqttClient(
+        _EditorConfig(port), registry, tmp_path / "config-editor.yaml"
+    )
     server = ConfigEditorServer(registry, editor_mqtt_client)
 
     # --- a third, unrelated in-process Config Owner, wired up the same way
@@ -315,3 +331,119 @@ async def test_out_of_process_config_owner_round_trips_and_degrades_gracefully(
         third_owner_client.loop_stop()
         third_owner_client.disconnect()
         server._httpd.server_close()
+
+
+async def test_out_of_process_helper_with_missing_config_awaits_configuration_and_restarts(
+    mqtt_broker: str, tmp_path: Path
+) -> None:
+    """A helper started against a config file that does not exist yet still
+    shows up, connects to MQTT, and stays reachable (config-owner-startup-
+    resilience ticket 03), instead of exiting immediately or idling with no
+    way to reach it.
+
+    Runs nordpool as a genuinely separate OS process, with `--config`
+    pointing at a file that is never created ahead of time; Broker Settings
+    are supplied by the environment instead (the only way a process with no
+    config file can know where to connect, mirroring how the HA Supervisor
+    injects them in production). Talks to it with a single bare paho client
+    speaking the Config Service protocol directly -- deliberately not the
+    Config Editor, which is not what this ticket's resilience is about and
+    would only add unrelated moving parts. Confirms the process is
+    discovered with `state=awaiting_configuration` and a populated `detail`,
+    fixes it via `validate_and_write` -- writing the file for the first time
+    -- sends a `restart_request`, and confirms the process exits so its
+    supervisor can start a fresh one against the now valid file.
+    """
+    port = int(mqtt_broker.split(":")[-1])
+
+    discovered = threading.Event()
+    state: dict[str, Any] = {}
+    write_result: dict[str, Any] = {}
+    write_done = threading.Event()
+
+    def _on_message(client: paho.Client, _userdata: object, message: Any) -> None:
+        if message.topic == descriptor_topic(_NORDPOOL_OWNER_ID):
+            discovered.set()
+        elif message.topic == state_topic(_NORDPOOL_OWNER_ID):
+            state.update(OperationalState.model_validate_json(message.payload).model_dump())
+        elif message.topic == validate_and_write_response_topic(_NORDPOOL_OWNER_ID):
+            write_result.update(ValidateAndWriteResult.model_validate_json(message.payload).model_dump())
+            write_done.set()
+
+    def _on_connect(client: paho.Client, _userdata: object, _flags: object, reason_code: Any, _properties: object) -> None:
+        if reason_code.is_failure:
+            return
+        client.subscribe(descriptor_topic(_NORDPOOL_OWNER_ID), qos=1)
+        client.subscribe(state_topic(_NORDPOOL_OWNER_ID), qos=1)
+        client.subscribe(validate_and_write_response_topic(_NORDPOOL_OWNER_ID), qos=1)
+
+    driver = paho.Client(paho.CallbackAPIVersion.VERSION2, client_id=f"test-driver-{uuid.uuid4().hex[:8]}")
+    driver.on_connect = _on_connect
+    driver.on_message = _on_message
+    driver.connect("127.0.0.1", port)
+    driver.loop_start()
+
+    # --- nordpool, started against a config file that does not exist,
+    # relying on the environment for Broker Settings the way the HA
+    # Supervisor injects them in production. ---
+    nordpool_config_path = tmp_path / "nordpool.yaml"
+    nordpool_log_path = tmp_path / "nordpool.log"
+    nordpool_env = dict(os.environ, MQTT_HOST="127.0.0.1", MQTT_PORT=str(port))
+    nordpool_process = subprocess.Popen(
+        [sys.executable, "-m", "nordpool", "--config", str(nordpool_config_path)],
+        stdout=nordpool_log_path.open("w"),
+        stderr=subprocess.STDOUT,
+        env=nordpool_env,
+    )
+
+    try:
+        assert await _wait_for(lambda: discovered.is_set()), (
+            f"nordpool subprocess was never discovered. Log:\n{nordpool_log_path.read_text()}"
+        )
+        assert await _wait_for(lambda: state.get("state") == "awaiting_configuration"), (
+            f"nordpool never reported awaiting_configuration. State so far: {state}. "
+            f"Log:\n{nordpool_log_path.read_text()}"
+        )
+        assert state.get("detail")
+        assert not nordpool_config_path.exists()
+
+        # --- Fix: validate_and_write creates the file for the first time,
+        # nordpool has no on-disk configuration to merge Candidate Values
+        # onto (mimirheim_shared.config_service.handle_validate_and_write
+        # treats a missing file the same as an empty one), so the full
+        # configuration is submitted rather than a partial update. ---
+        driver.publish(
+            validate_and_write_request_topic(_NORDPOOL_OWNER_ID),
+            ValidateAndWriteRequest(
+                request_id=uuid.uuid4().hex,
+                values={
+                    "mqtt": {"host": "127.0.0.1", "port": port},
+                    "trigger_topic": "mimir/input/tools/prices/trigger",
+                    "nordpool": {"area": "NL"},
+                },
+            ).model_dump_json().encode("utf-8"),
+            qos=1,
+        )
+        assert await _wait_for(lambda: write_done.is_set()), "nordpool never responded to validate_and_write."
+        assert write_result.get("success"), write_result.get("errors")
+        written = yaml.safe_load(nordpool_config_path.read_text())
+        assert written["nordpool"]["area"] == "NL"
+
+        # --- restart_request: acted on the same way whether awaiting
+        # configuration or fully operational (ADR-0012); confirms the
+        # process actually exits so its supervisor can start a fresh one
+        # against the now-valid file. ---
+        driver.publish(
+            restart_request_topic(_NORDPOOL_OWNER_ID),
+            RestartRequest(request_id=uuid.uuid4().hex).model_dump_json().encode("utf-8"),
+            qos=1,
+        )
+
+        exit_code = await asyncio.to_thread(nordpool_process.wait, 10.0)
+        assert exit_code == 0
+    finally:
+        if nordpool_process.poll() is None:
+            nordpool_process.kill()
+            nordpool_process.wait(timeout=10.0)
+        driver.loop_stop()
+        driver.disconnect()

@@ -43,12 +43,19 @@ class TestReporterMain:
         monkeypatch.setattr(sys, "argv", _argv("reporter", config_path))
 
         with (
-            patch.object(reporter_main, "load_config", return_value=loaded) as load,
+            patch.object(reporter_main, "load_helper_config", return_value=loaded) as load,
             patch.object(reporter_main, "ReporterDaemon") as daemon_cls,
         ):
             reporter_main.main()
 
-        load.assert_called_once_with(str(config_path))
+        load.assert_called_once_with(
+            str(config_path),
+            reporter_main.ReporterConfig,
+            reporter_main.logger,
+            owner_id=reporter_main.CONFIG_OWNER_ID,
+            display_name=reporter_main.CONFIG_OWNER_DISPLAY_NAME,
+            form_spec=reporter_main.REPORTER_CONFIG_FORM_SPEC,
+        )
         daemon_cls.assert_called_once_with(loaded, config_path)
         daemon_cls.return_value.run.assert_called_once()
 
@@ -78,7 +85,9 @@ class TestReporterMain:
                 side_effect=lambda **_kw: order.append("basicConfig"),
             ),
             patch.object(
-                reporter_main, "load_config", side_effect=lambda _p: order.append("load")
+                reporter_main,
+                "load_helper_config",
+                side_effect=lambda *_a, **_kw: order.append("load"),
             ),
             patch.object(
                 reporter_main,

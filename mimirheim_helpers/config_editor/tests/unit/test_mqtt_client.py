@@ -8,6 +8,7 @@ resulting `ConfigOwnerRegistry` state, with no real broker connection.
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -30,6 +31,12 @@ from pydantic import BaseModel, ConfigDict
 
 from config_editor.mqtt_client import ConfigEditorMqttClient
 from config_editor.registry import ConfigOwnerRegistry
+
+# Never actually read in these tests: none of them exercise the Config
+# Editor's own Config Owner behaviour (config_editor as a Config Owner of
+# itself, see test_config_owner_wiring.py), only its role discovering and
+# proxying requests to other helpers' owners.
+_CONFIG_PATH = Path("config-editor-test.yaml")
 
 
 class _FakeOwnerConfig(BaseModel):
@@ -57,7 +64,7 @@ def _message(topic: str, payload: bytes) -> MagicMock:
 
 def test_on_message_registers_a_valid_descriptor() -> None:
     registry = ConfigOwnerRegistry()
-    client = ConfigEditorMqttClient(_make_config(), registry)
+    client = ConfigEditorMqttClient(_make_config(), registry, _CONFIG_PATH)
     descriptor = build_descriptor("nordpool", "Nordpool prices", _FakeOwnerConfig, _FAKE_FORM_SPEC)
     payload = descriptor_payload(descriptor)
 
@@ -68,7 +75,7 @@ def test_on_message_registers_a_valid_descriptor() -> None:
 
 def test_on_message_removes_owner_on_clearing_payload() -> None:
     registry = ConfigOwnerRegistry()
-    client = ConfigEditorMqttClient(_make_config(), registry)
+    client = ConfigEditorMqttClient(_make_config(), registry, _CONFIG_PATH)
     descriptor = build_descriptor("nordpool", "Nordpool prices", _FakeOwnerConfig, _FAKE_FORM_SPEC)
     registry.update(descriptor)
 
@@ -81,7 +88,7 @@ def test_on_message_removes_owner_on_clearing_payload() -> None:
 
 def test_on_message_discards_malformed_payload_without_raising() -> None:
     registry = ConfigOwnerRegistry()
-    client = ConfigEditorMqttClient(_make_config(), registry)
+    client = ConfigEditorMqttClient(_make_config(), registry, _CONFIG_PATH)
 
     client._on_message(
         MagicMock(), None, _message("mimirheim/config-service/nordpool/descriptor", b"not json")
@@ -115,7 +122,7 @@ def _fake_publish_replying_with(
 
 def test_submit_validate_and_write_returns_the_owners_result() -> None:
     registry = ConfigOwnerRegistry()
-    client = ConfigEditorMqttClient(_make_config(), registry)
+    client = ConfigEditorMqttClient(_make_config(), registry, _CONFIG_PATH)
     client._client.publish = MagicMock(side_effect=_fake_publish_replying_with(client, success=True))
 
     result = client.submit_validate_and_write("mimirheim-core", {"grid": {"import_limit_kw": 17}})
@@ -126,7 +133,7 @@ def test_submit_validate_and_write_returns_the_owners_result() -> None:
 
 def test_submit_validate_and_write_surfaces_validation_errors() -> None:
     registry = ConfigOwnerRegistry()
-    client = ConfigEditorMqttClient(_make_config(), registry)
+    client = ConfigEditorMqttClient(_make_config(), registry, _CONFIG_PATH)
     client._client.publish = MagicMock(
         side_effect=_fake_publish_replying_with(client, success=False, errors=["grid: field required"])
     )
@@ -139,7 +146,7 @@ def test_submit_validate_and_write_surfaces_validation_errors() -> None:
 
 def test_submit_validate_and_write_times_out_when_no_response_arrives() -> None:
     registry = ConfigOwnerRegistry()
-    client = ConfigEditorMqttClient(_make_config(), registry)
+    client = ConfigEditorMqttClient(_make_config(), registry, _CONFIG_PATH)
     client._client.publish = MagicMock()
 
     with pytest.raises(TimeoutError):
@@ -150,7 +157,7 @@ def test_submit_validate_and_write_times_out_when_no_response_arrives() -> None:
 
 def test_on_message_discards_malformed_validate_and_write_response_without_raising() -> None:
     registry = ConfigOwnerRegistry()
-    client = ConfigEditorMqttClient(_make_config(), registry)
+    client = ConfigEditorMqttClient(_make_config(), registry, _CONFIG_PATH)
 
     client._on_message(
         MagicMock(),
@@ -163,7 +170,7 @@ def test_on_message_discards_malformed_validate_and_write_response_without_raisi
 
 def test_on_message_ignores_response_for_unknown_request_id() -> None:
     registry = ConfigOwnerRegistry()
-    client = ConfigEditorMqttClient(_make_config(), registry)
+    client = ConfigEditorMqttClient(_make_config(), registry, _CONFIG_PATH)
     response = ValidateAndWriteResult(request_id="unknown-request-id", success=True)
 
     client._on_message(
@@ -195,7 +202,7 @@ def _fake_publish_replying_with_current_values(
 
 def test_get_current_values_returns_the_owners_current_values() -> None:
     registry = ConfigOwnerRegistry()
-    client = ConfigEditorMqttClient(_make_config(), registry)
+    client = ConfigEditorMqttClient(_make_config(), registry, _CONFIG_PATH)
     client._client.publish = MagicMock(
         side_effect=_fake_publish_replying_with_current_values(client, {"grid": {"import_limit_kw": 17}})
     )
@@ -208,7 +215,7 @@ def test_get_current_values_returns_the_owners_current_values() -> None:
 
 def test_get_current_values_times_out_when_no_response_arrives() -> None:
     registry = ConfigOwnerRegistry()
-    client = ConfigEditorMqttClient(_make_config(), registry)
+    client = ConfigEditorMqttClient(_make_config(), registry, _CONFIG_PATH)
     client._client.publish = MagicMock()
 
     with pytest.raises(TimeoutError):
@@ -219,7 +226,7 @@ def test_get_current_values_times_out_when_no_response_arrives() -> None:
 
 def test_on_message_discards_malformed_get_current_values_response_without_raising() -> None:
     registry = ConfigOwnerRegistry()
-    client = ConfigEditorMqttClient(_make_config(), registry)
+    client = ConfigEditorMqttClient(_make_config(), registry, _CONFIG_PATH)
 
     client._on_message(
         MagicMock(),
@@ -232,7 +239,7 @@ def test_on_message_discards_malformed_get_current_values_response_without_raisi
 
 def test_on_message_ignores_get_current_values_response_for_unknown_request_id() -> None:
     registry = ConfigOwnerRegistry()
-    client = ConfigEditorMqttClient(_make_config(), registry)
+    client = ConfigEditorMqttClient(_make_config(), registry, _CONFIG_PATH)
     response = GetCurrentValuesResult(request_id="unknown-request-id", values={})
 
     client._on_message(

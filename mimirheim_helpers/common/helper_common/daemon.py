@@ -54,6 +54,13 @@ logger = logging.getLogger(__name__)
 # discovery payload so HA restores the trigger button without a full restart.
 _HA_STATUS_TOPIC = "homeassistant/status"
 
+# How often run() checks a Config Owner's restart_requested event while
+# waiting for a shutdown signal. A Restart Request arrives over MQTT, not as
+# an OS signal (ADR-0012), so there is nothing to interrupt a plain
+# stop_event.wait() with; this bounds how long a Restart Request can sit
+# unnoticed to a small, human-imperceptible delay.
+_RESTART_POLL_INTERVAL_S = 0.5
+
 
 class MqttDaemon:
     """MQTT lifecycle base class for mimirheim helper daemons.
@@ -100,11 +107,18 @@ class MqttDaemon:
     # ------------------------------------------------------------------
 
     def run(self) -> None:
-        """Connect to the broker and run until SIGTERM or SIGINT.
+        """Connect to the broker and run until SIGTERM, SIGINT, or a Restart Request.
 
         Connects the paho client, starts the network loop in a background
         thread, then blocks on a stop event. On signal, stops the loop and
-        disconnects cleanly.
+        disconnects cleanly. A subclass that stores its
+        ``helper_common.config_owner.ConfigOwnerSupport`` as
+        ``self._config_owner`` (the convention every helper daemon uses)
+        also shuts down when a Restart Request is acknowledged on that
+        object's ``restart_requested`` event (ADR-0012) — there is no OS
+        signal for that, only a message on this daemon's own MQTT
+        connection, so it is polled alongside the stop event rather than
+        waited on directly.
         """
         cfg: MqttConfig = self._config.mqtt
         stop_event = threading.Event()
@@ -126,7 +140,16 @@ class MqttDaemon:
             cfg.port,
         )
 
-        stop_event.wait()
+        config_owner = getattr(self, "_config_owner", None)
+        if config_owner is None:
+            stop_event.wait()
+        else:
+            while not stop_event.is_set():
+                if config_owner.restart_requested.is_set():
+                    self._logger.info("Restart requested; shutting down.")
+                    stop_event.set()
+                    break
+                stop_event.wait(timeout=_RESTART_POLL_INTERVAL_S)
 
         self._on_shutdown()
         self._client.loop_stop()

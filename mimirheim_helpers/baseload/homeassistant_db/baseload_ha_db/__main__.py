@@ -184,7 +184,17 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    HaDbBaseloadDaemon(load_helper_config(args.config, BaseloadConfig, logger), Path(args.config)).run()
+    HaDbBaseloadDaemon(
+        load_helper_config(
+            args.config,
+            BaseloadConfig,
+            logger,
+            owner_id=CONFIG_OWNER_ID,
+            display_name=CONFIG_OWNER_DISPLAY_NAME,
+            form_spec=BASELOAD_CONFIG_FORM_SPEC,
+        ),
+        Path(args.config),
+    ).run()
 
 
 if __name__ == "__main__":

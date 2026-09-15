@@ -18,6 +18,7 @@ from helper_common.config_owner import ConfigOwnerSupport
 from mimirheim_shared.config_service import (
     CLEARING_PAYLOAD,
     descriptor_topic,
+    state_topic,
     get_current_values_request_topic,
     validate_and_write_request_topic,
 )
@@ -130,6 +131,9 @@ class TestClearDescriptor:
 
         config_owner.clear_descriptor(client)
 
-        client.publish.assert_called_once_with(
+        client.publish.assert_any_call(
             descriptor_topic(CONFIG_OWNER_ID), payload=CLEARING_PAYLOAD, qos=1, retain=True
+        )
+        client.publish.assert_any_call(
+            state_topic(CONFIG_OWNER_ID), payload=CLEARING_PAYLOAD, qos=1, retain=True
         )

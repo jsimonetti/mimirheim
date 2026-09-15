@@ -18,9 +18,11 @@ import logging
 import threading
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import paho.mqtt.client as mqtt
+from helper_common.config_owner import ConfigOwnerSupport
 from helper_common.daemon import MqttDaemon
 from mimirheim_shared.config_service import (
     Descriptor,
@@ -36,6 +38,8 @@ from mimirheim_shared.config_service import (
 )
 from pydantic import ValidationError
 
+from config_editor.config import CONFIG_OWNER_DISPLAY_NAME, CONFIG_OWNER_ID, ConfigEditorConfig
+from config_editor.formspec import CONFIG_EDITOR_CONFIG_FORM_SPEC
 from config_editor.registry import ConfigOwnerRegistry
 
 logger = logging.getLogger(__name__)
@@ -87,9 +91,15 @@ class ConfigEditorMqttClient(MqttDaemon):
         config: Validated configuration with a `.mqtt` attribute (see
             `helper_common.config.MqttConfig`), per `MqttDaemon`'s own contract.
         registry: The registry to update as Descriptors arrive or are cleared.
+        config_path: Path to the Config Editor's own YAML configuration file,
+            the one it was started with and the target of a successful
+            validate_and_write against its own owner_id (see
+            `helper_common.config_owner.ConfigOwnerSupport`; the Config
+            Editor is a Config Owner of its own configuration the same way
+            every other helper is).
     """
 
-    def __init__(self, config: Any, registry: ConfigOwnerRegistry) -> None:
+    def __init__(self, config: Any, registry: ConfigOwnerRegistry, config_path: Path) -> None:
         self._registry = registry
         # Guards _pending. Written from HTTP request-handling threads
         # (submit_validate_and_write registers a pending request and later
@@ -99,6 +109,28 @@ class ConfigEditorMqttClient(MqttDaemon):
         self._pending_lock = threading.Lock()
         self._pending: dict[str, _PendingRequest] = {}
         super().__init__(config)
+        self._config_owner = ConfigOwnerSupport(
+            owner_id=CONFIG_OWNER_ID,
+            display_name=CONFIG_OWNER_DISPLAY_NAME,
+            model=ConfigEditorConfig,
+            form_spec=CONFIG_EDITOR_CONFIG_FORM_SPEC,
+            config_path=config_path,
+        )
+        # Must be registered before self._client.connect() (called by start()).
+        self._config_owner.register_last_will(self._client)
+
+    @property
+    def restart_requested(self) -> threading.Event:
+        """Set once a Restart Request for this process's own owner_id is acknowledged.
+
+        `config_editor.__main__.main` polls this alongside its own
+        stop-signal event (ADR-0012), the same way
+        `helper_common.daemon.MqttDaemon.run` polls a subclass's
+        `self._config_owner.restart_requested` -- this process drives its
+        own run loop instead of using `MqttDaemon.run()`, so that polling
+        happens in `__main__.py` rather than here.
+        """
+        return self._config_owner.restart_requested
 
     def start(self) -> None:
         """Connects to the broker and starts the network loop in a background thread."""
@@ -107,7 +139,8 @@ class ConfigEditorMqttClient(MqttDaemon):
         self._client.loop_start()
 
     def stop(self) -> None:
-        """Stops the network loop and disconnects cleanly."""
+        """Clears this owner's retained state and disconnects cleanly."""
+        self._config_owner.clear_descriptor(self._client)
         self._client.loop_stop()
         self._client.disconnect()
 
@@ -125,9 +158,16 @@ class ConfigEditorMqttClient(MqttDaemon):
         client.subscribe(_DESCRIPTOR_TOPIC_WILDCARD, qos=1)
         client.subscribe(_VALIDATE_AND_WRITE_RESPONSE_WILDCARD, qos=1)
         client.subscribe(_GET_CURRENT_VALUES_RESPONSE_WILDCARD, qos=1)
+        self._config_owner.on_connect(client)
 
     def _on_message(self, client: mqtt.Client, userdata: Any, message: Any) -> None:
         """Dispatches an incoming message to the Descriptor or validate_and_write handler.
+
+        Checks this process's own Config Owner requests first (a request the
+        Config Editor's own Config Service Descriptor advertises, e.g. its
+        own `validate_and_write` or `restart_request` topic): those topics
+        do not fit the Descriptor/response dispatch below and would
+        otherwise be discarded as malformed Descriptors.
 
         Both Descriptor and validate_and_write response topics share the
         `mimirheim/config-service/<owner_id>/...` prefix and owner_id
@@ -141,6 +181,8 @@ class ConfigEditorMqttClient(MqttDaemon):
             userdata: Unused; part of the paho callback signature.
             message: The paho `MQTTMessage`.
         """
+        if self._config_owner.handle_message(client, message):
+            return
         owner_id = message.topic.split("/")[_OWNER_ID_TOPIC_INDEX]
         if message.topic == validate_and_write_response_topic(owner_id):
             self._handle_validate_and_write_response(message)
