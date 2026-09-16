@@ -213,3 +213,143 @@ class TestBuildForecast:
         )
         # The first step is at hour 14 (same as _NOW's hour).
         assert steps[0]["kw"] == pytest.approx(0.18)
+
+
+class TestBuildForecastMergesPerTimestamp:
+    """Entities are combined per timestamp before the hour-of-day average.
+
+    These tests pin the semantics that make a sensor handover work: when an
+    old entity stops recording and a new entity starts, the two together must
+    read as one continuous series, not as two full-strength profiles added
+    together.
+    """
+
+    @staticmethod
+    def _readings_for_days(
+        base_now: datetime,
+        lookback_days: int,
+        day_offsets: list[int],
+        hour: int,
+        value: float,
+    ) -> list[dict]:
+        """Hourly readings at ``hour`` for the given day offsets only."""
+        start = (base_now - timedelta(days=lookback_days)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        return [
+            {
+                "start": (start + timedelta(days=d, hours=hour)).isoformat(),
+                "mean": value,
+            }
+            for d in day_offsets
+        ]
+
+    def test_sensor_handover_is_not_double_counted(self) -> None:
+        # Old entity recorded 4.0 kWh/h at hour 14 on days 0-10, then stopped.
+        # New entity recorded 4.0 kWh/h at hour 14 on days 11-13. Together they
+        # describe one sensor at 4.0 kWh/h every day; the forecast must be 4.0,
+        # not 8.0.
+        old = self._readings_for_days(_NOW, 14, list(range(0, 11)), 14, 4.0)
+        new = self._readings_for_days(_NOW, 14, list(range(11, 14)), 14, 4.0)
+        steps = build_forecast(
+            sum_readings={"s.envoy_old": old, "s.envoy_new": new},
+            subtract_readings={},
+            now=_NOW,
+            horizon_hours=1,
+            lookback_days=14,
+        )
+        assert steps[0]["kw"] == pytest.approx(4.0)
+
+    def test_missing_sum_entity_at_a_timestamp_counts_as_zero(self) -> None:
+        # Entity A is present on both days at 1.0. Entity B is present on day 0
+        # only at 1.0 and missing on day 1. Per-timestamp merge gives
+        # day 0: 2.0, day 1: 1.0, mean 1.5. Per-entity averaging would give 2.0.
+        a = self._readings_for_days(_NOW, 2, [0, 1], 14, 1.0)
+        b = self._readings_for_days(_NOW, 2, [0], 14, 1.0)
+        steps = build_forecast(
+            sum_readings={"s.a": a, "s.b": b},
+            subtract_readings={},
+            now=_NOW,
+            horizon_hours=1,
+            lookback_days=2,
+        )
+        assert steps[0]["kw"] == pytest.approx(1.5)
+
+    def test_missing_subtract_entity_at_a_timestamp_counts_as_zero(self) -> None:
+        # Sum entity 1.0 on both days. Subtract entity 0.4 on day 0 only.
+        # day 0: 0.6, day 1: 1.0, mean 0.8. Per-entity averaging would give 0.6.
+        load = self._readings_for_days(_NOW, 2, [0, 1], 14, 1.0)
+        ev = self._readings_for_days(_NOW, 2, [0], 14, 0.4)
+        steps = build_forecast(
+            sum_readings={"s.load": load},
+            subtract_readings={"s.ev": ev},
+            now=_NOW,
+            horizon_hours=1,
+            lookback_days=2,
+        )
+        assert steps[0]["kw"] == pytest.approx(0.8)
+
+    def test_subtract_only_timestamp_is_ignored(self) -> None:
+        # The sum entity has hour 14 on day 0 only. The subtract entity has
+        # hour 14 on both days. Day 1 has nothing to subtract from, so it must
+        # not enter the average as a negative hour. Expected: 1.0 - 0.3 = 0.7.
+        load = self._readings_for_days(_NOW, 2, [0], 14, 1.0)
+        ev = self._readings_for_days(_NOW, 2, [0, 1], 14, 0.3)
+        steps = build_forecast(
+            sum_readings={"s.load": load},
+            subtract_readings={"s.ev": ev},
+            now=_NOW,
+            horizon_hours=1,
+            lookback_days=2,
+        )
+        assert steps[0]["kw"] == pytest.approx(0.7)
+
+    def test_negative_hours_are_averaged_before_clamping(self) -> None:
+        # day 0: 1.0 - 0.0 = 1.0; day 1: 0.0 - 0.6 = -0.6 (sum entity reads
+        # zero, subtract reads 0.6). Mean = 0.2. Clamping each timestamp first
+        # would give (1.0 + 0.0) / 2 = 0.5 and bias the forecast upward.
+        load = [
+            *self._readings_for_days(_NOW, 2, [0], 14, 1.0),
+            *self._readings_for_days(_NOW, 2, [1], 14, 0.0),
+        ]
+        ev = self._readings_for_days(_NOW, 2, [1], 14, 0.6)
+        steps = build_forecast(
+            sum_readings={"s.load": load},
+            subtract_readings={"s.ev": ev},
+            now=_NOW,
+            horizon_hours=1,
+            lookback_days=2,
+        )
+        assert steps[0]["kw"] == pytest.approx(0.2)
+
+    def test_decay_weights_apply_to_merged_series(self) -> None:
+        # Handover across two days with decay 4.0: old entity day 0 = 0.1,
+        # new entity day 1 = 0.2. Weighted mean = (0.1*1 + 0.2*4) / 5 = 0.18.
+        old = self._readings_for_days(_NOW, 2, [0], 14, 0.1)
+        new = self._readings_for_days(_NOW, 2, [1], 14, 0.2)
+        steps = build_forecast(
+            sum_readings={"s.old": old, "s.new": new},
+            subtract_readings={},
+            now=_NOW,
+            horizon_hours=1,
+            lookback_days=2,
+            lookback_decay=4.0,
+        )
+        assert steps[0]["kw"] == pytest.approx(0.18)
+
+    def test_merge_keys_on_instant_not_string(self) -> None:
+        # The same instant written two ways ("+00:00" offset and "Z" suffix)
+        # must merge into one timestamp. Keying on the raw string would keep
+        # them apart and average 1.0 instead of summing to 2.0.
+        ts = (_NOW - timedelta(days=1)).replace(hour=14, minute=0, second=0, microsecond=0)
+        a = [{"start": ts.isoformat(), "mean": 1.0}]
+        b = [{"start": ts.strftime("%Y-%m-%dT%H:%M:%SZ"), "mean": 1.0}]
+        assert a[0]["start"] != b[0]["start"]
+        steps = build_forecast(
+            sum_readings={"s.a": a, "s.b": b},
+            subtract_readings={},
+            now=_NOW,
+            horizon_hours=1,
+            lookback_days=1,
+        )
+        assert steps[0]["kw"] == pytest.approx(2.0)

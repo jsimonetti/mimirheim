@@ -36,11 +36,11 @@ The tool subscribes to a single MQTT trigger topic and acts on every message. It
 The tool uses a **same-hour average over recent days** as the base load forecast for each future hour:
 
 1. It queries HA's statistics API for hourly mean values of all configured entities over the last `lookback_days` days.
-2. For each configured entity in `sum_entities`, it computes the mean power across all available same-hour readings in the lookback window. It does the same for each entity in `subtract_entities`.
-3. For each hour of the day (0–23) it computes:
-   `net_kw[h] = sum(mean(sum_entities[h])) - sum(mean(subtract_entities[h]))`
-   The result is clamped to zero — baseload is never negative.
+2. It converts every reading to kW and merges all entities into one net series per timestamp: `net(t) = sum(sum_entities at t) - sum(subtract_entities at t)`. An entity with no reading at `t` contributes zero at `t`. Timestamps at which no `sum_entities` entry has a reading are skipped, so a subtract entity never produces a purely negative hour on its own.
+3. For each hour of the day (0–23) it computes the mean of `net(t)` across all same-hour timestamps in the lookback window and clamps it to zero — baseload is never negative.
 4. This 24-hour profile is then repeated to fill the full `horizon_hours` window, starting from the current wall-clock hour.
+
+Merging before averaging is what makes a sensor handover work. When a sensor is renamed or replaced, list both the old and the new entity in `sum_entities`: the old one carries the early part of the lookback window, the new one the recent part, and together they read as one continuous series. Averaging each entity on its own over the days it has data and then summing would count both at full strength even though they never overlapped.
 
 This is a simple but robust approach. It produces reasonable forecasts without requiring machine learning, handles seasonal variation only coarsely (a longer `lookback_days` averages it out), and degrades gracefully when some historical data is missing.
 
@@ -163,7 +163,7 @@ WantedBy=multi-user.target
 
 - **HTTP failure**: If the HA REST API returns an error (network failure, 401, 500), the cycle is aborted and the error is logged. The last retained payload on `output_topic` remains unchanged.
 - **Insufficient history**: If fewer than `lookback_days` days of data are available (e.g. on first run), the tool computes the average over however many days are available. If no history exists at all for a given hour, the tool falls back to the mean across all available readings. This fallback is logged at `WARNING` level.
-- **Missing hours**: HA statistics can have gaps. The tool fills missing hours using linear interpolation from the nearest available readings. If an entire day has no data, that day is excluded from the average.
+- **Missing hours**: HA statistics can have gaps. An hour at which no `sum_entities` entry has a reading is absent from the average. An hour at which some entities have a reading and others do not is kept, with the missing entities counted as zero for that hour.
 - **MQTT disconnect**: Reconnects automatically.
 
 ---

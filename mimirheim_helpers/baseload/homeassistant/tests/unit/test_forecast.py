@@ -227,3 +227,114 @@ class TestBuildForecast:
         # The first step is at hour 14 (same as _NOW's hour), which has
         # the weighted readings above.
         assert steps[0]["kw"] == pytest.approx(0.18)
+
+
+class TestBuildForecastMergesPerTimestamp:
+    """Entities are combined per timestamp before the hour-of-day average.
+
+    A sensor that was renamed or replaced mid-window appears as two entities
+    that hand over to each other. They must read as one continuous series,
+    not as two full-strength profiles added together.
+    """
+
+    @staticmethod
+    def _readings_for_days(
+        base_now: datetime,
+        lookback_days: int,
+        day_offsets: list[int],
+        hour: int,
+        value: float,
+    ) -> list[dict]:
+        """Hourly readings at ``hour`` for the given day offsets only."""
+        start = (base_now - timedelta(days=lookback_days)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        return [
+            {
+                "start": (start + timedelta(days=d, hours=hour)).isoformat(),
+                "mean": value,
+            }
+            for d in day_offsets
+        ]
+
+    def test_sensor_handover_is_not_double_counted(self) -> None:
+        # Old entity: 4.0 kW at hour 14 on days 0-10, then stopped. New entity:
+        # 4000 W at hour 14 on days 11-13. One sensor at 4.0 kW every day.
+        old = self._readings_for_days(_NOW, 14, list(range(0, 11)), 14, 4.0)
+        new = self._readings_for_days(_NOW, 14, list(range(11, 14)), 14, 4000.0)
+        steps = build_forecast(
+            sum_readings={"s.old": old, "s.new": new},
+            subtract_readings={},
+            sum_units={"s.old": "kW", "s.new": "W"},
+            subtract_units={},
+            now=_NOW,
+            horizon_hours=1,
+            lookback_days=14,
+        )
+        assert steps[0]["kw"] == pytest.approx(4.0)
+
+    def test_missing_entity_at_a_timestamp_counts_as_zero(self) -> None:
+        # A present both days at 1.0 kW; B present day 0 only at 1.0 kW.
+        # day 0: 2.0, day 1: 1.0, mean 1.5.
+        a = self._readings_for_days(_NOW, 2, [0, 1], 14, 1.0)
+        b = self._readings_for_days(_NOW, 2, [0], 14, 1.0)
+        steps = build_forecast(
+            sum_readings={"s.a": a, "s.b": b},
+            subtract_readings={},
+            sum_units={"s.a": "kW", "s.b": "kW"},
+            subtract_units={},
+            now=_NOW,
+            horizon_hours=1,
+            lookback_days=2,
+        )
+        assert steps[0]["kw"] == pytest.approx(1.5)
+
+    def test_subtract_only_timestamp_is_ignored(self) -> None:
+        # Sum entity has hour 14 on day 0 only; subtract entity has both days.
+        # Day 1 has nothing to subtract from and must not enter the average.
+        load = self._readings_for_days(_NOW, 2, [0], 14, 1.0)
+        ev = self._readings_for_days(_NOW, 2, [0, 1], 14, 300.0)
+        steps = build_forecast(
+            sum_readings={"s.load": load},
+            subtract_readings={"s.ev": ev},
+            sum_units={"s.load": "kW"},
+            subtract_units={"s.ev": "W"},
+            now=_NOW,
+            horizon_hours=1,
+            lookback_days=2,
+        )
+        assert steps[0]["kw"] == pytest.approx(0.7)
+
+    def test_negative_hours_are_averaged_before_clamping(self) -> None:
+        # day 0: 1.0 - 0 = 1.0; day 1: 0.0 - 0.6 = -0.6. Mean 0.2, then clamp.
+        load = [
+            *self._readings_for_days(_NOW, 2, [0], 14, 1.0),
+            *self._readings_for_days(_NOW, 2, [1], 14, 0.0),
+        ]
+        ev = self._readings_for_days(_NOW, 2, [1], 14, 0.6)
+        steps = build_forecast(
+            sum_readings={"s.load": load},
+            subtract_readings={"s.ev": ev},
+            sum_units={"s.load": "kW"},
+            subtract_units={"s.ev": "kW"},
+            now=_NOW,
+            horizon_hours=1,
+            lookback_days=2,
+        )
+        assert steps[0]["kw"] == pytest.approx(0.2)
+
+    def test_decay_weights_apply_to_merged_series(self) -> None:
+        # Handover over two days, decay 4.0: (0.1*1 + 0.2*4) / 5 = 0.18.
+        old = self._readings_for_days(_NOW, 2, [0], 14, 0.1)
+        new = self._readings_for_days(_NOW, 2, [1], 14, 200.0)
+        steps = build_forecast(
+            sum_readings={"s.old": old, "s.new": new},
+            subtract_readings={},
+            sum_units={"s.old": "kW", "s.new": "W"},
+            subtract_units={},
+            now=_NOW,
+            horizon_hours=1,
+            lookback_days=2,
+            lookback_decay=4.0,
+        )
+        assert steps[0]["kw"] == pytest.approx(0.18)

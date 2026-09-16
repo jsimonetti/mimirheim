@@ -6,11 +6,20 @@ covering a configurable horizon. It has no HTTP, config, or MQTT dependencies.
 The forecasting method is a same-hour-of-day average with optional recency
 weighting:
 
-1. For each entity, group its historical readings by hour-of-day (0-23).
-2. Compute the weighted mean power at each hour, giving more recent days a
-   higher weight when ``lookback_decay > 1.0``.
-3. Compute the net load: sum(sum_entities) - sum(subtract_entities), clamped to zero.
+1. Convert every entity's readings to kW and merge them into one net series
+   per timestamp: net(t) = sum(sum_entities at t) - sum(subtract_entities at t).
+   An entity without a reading at t contributes zero at t. Timestamps where
+   no sum entity has a reading are skipped.
+2. Group the net series by hour-of-day (0-23) and compute the weighted mean
+   power at each hour, giving more recent days a higher weight when
+   ``lookback_decay > 1.0``.
+3. Clamp each hourly mean to zero.
 4. Tile the resulting 24-hour profile to fill horizon_hours steps starting from now.
+
+Merging before averaging is what lets two entities that hand over to each
+other (a renamed or replaced sensor) read as one continuous series. Averaging
+each entity separately and then summing would count both at full strength
+even though they never overlapped in time.
 """
 from __future__ import annotations
 
@@ -18,7 +27,7 @@ import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
-from typing import Any
+from typing import Any, Iterator
 
 logger = logging.getLogger(__name__)
 
@@ -157,6 +166,70 @@ class HourlyProfile:
         return cls(_kw_by_hour=kw_by_hour, _global_mean=global_mean)
 
 
+def _merge_net_readings(
+    sum_readings: dict[str, list[dict[str, Any]]],
+    subtract_readings: dict[str, list[dict[str, Any]]],
+    sum_units: dict[str, str],
+    subtract_units: dict[str, str],
+) -> list[dict[str, Any]]:
+    """Combine per-entity readings into one net kW series keyed by timestamp.
+
+    Each entity's values are converted to kW using its own unit first. Then,
+    for every timestamp at which at least one sum entity has a reading:
+
+        net = sum(sum entity kW) - sum(subtract entity kW)
+
+    where an entity with no reading at that timestamp contributes zero.
+    Timestamps carried only by subtract entities are dropped: there is nothing
+    to subtract from, and keeping them would inject purely negative hours into
+    the average.
+
+    The merge is keyed on the parsed instant, not the raw ``"start"`` string,
+    so two spellings of the same moment collapse into one timestamp.
+
+    Args:
+        sum_readings: Per-entity hourly readings for entities to sum.
+        subtract_readings: Per-entity hourly readings for entities to subtract.
+        sum_units: Maps each sum entity ID to ``"W"`` or ``"kW"``.
+        subtract_units: Maps each subtract entity ID to ``"W"`` or ``"kW"``.
+
+    Returns:
+        List of reading dicts with ``"start"`` (UTC ISO 8601 string) and
+        ``"mean"`` (net kW, may be negative), sorted by timestamp.
+    """
+    net_by_ts: dict[datetime, float] = {}
+    seen_in_sum: set[datetime] = set()
+
+    def _iter(
+        readings: list[dict[str, Any]], unit: str
+    ) -> Iterator[tuple[datetime, float]]:
+        divisor = 1000.0 if unit == "W" else 1.0
+        for reading in readings:
+            try:
+                ts = datetime.fromisoformat(reading["start"])
+                kw = float(reading["mean"]) / divisor
+            except (KeyError, ValueError, TypeError):
+                logger.warning("Skipping malformed HA reading: %r", reading)
+                continue
+            yield ts, kw
+
+    for eid, readings in sum_readings.items():
+        for ts, kw in _iter(readings, sum_units[eid]):
+            net_by_ts[ts] = net_by_ts.get(ts, 0.0) + kw
+            seen_in_sum.add(ts)
+
+    for eid, readings in subtract_readings.items():
+        for ts, kw in _iter(readings, subtract_units[eid]):
+            if ts not in seen_in_sum:
+                continue
+            net_by_ts[ts] -= kw
+
+    return [
+        {"start": ts.isoformat(), "mean": kw}
+        for ts, kw in sorted(net_by_ts.items())
+    ]
+
+
 def build_forecast(
     *,
     sum_readings: dict[str, list[dict[str, Any]]],
@@ -170,9 +243,11 @@ def build_forecast(
 ) -> list[dict[str, Any]]:
     """Build a timestamped base load forecast covering horizon_hours steps.
 
-    For each future hour slot the net kW is:
+    Entities are first merged into one net kW series per timestamp (see
+    ``_merge_net_readings``), that series is averaged per hour-of-day with the
+    recency weights, and each hourly mean is clamped to zero:
 
-        net_kw = max(0, sum(sum_profiles[h]) - sum(subtract_profiles[h]))
+        net_kw[h] = max(0, weighted_mean_over_days(net(t) for t at hour h))
 
     The 24-hour day profile is tiled to fill horizon_hours steps. If
     horizon_hours = 48, each hour-of-day appears twice.
@@ -206,16 +281,13 @@ def build_forecast(
         now=now, lookback_days=lookback_days, decay=lookback_decay
     )
 
-    # Build a per-entity HourlyProfile for each group, applying the per-day
-    # weights and using the unit specific to each entity.
-    sum_profiles = [
-        HourlyProfile.from_readings(readings, sum_units[eid], day_weights)
-        for eid, readings in sum_readings.items()
-    ]
-    subtract_profiles = [
-        HourlyProfile.from_readings(readings, subtract_units[eid], day_weights)
-        for eid, readings in subtract_readings.items()
-    ]
+    # Merge every entity into one net kW series first, then build a single
+    # hour-of-day profile from it. Averaging per entity and summing afterwards
+    # would double count a sensor that was renamed or replaced mid-window.
+    merged = _merge_net_readings(
+        sum_readings, subtract_readings, sum_units, subtract_units
+    )
+    net_profile = HourlyProfile.from_readings(merged, "kW", day_weights)
 
     # Round down to the current hour so the first step is aligned.
     start = now.replace(minute=0, second=0, microsecond=0)
@@ -225,9 +297,9 @@ def build_forecast(
         ts = start + timedelta(hours=offset)
         hour = ts.hour
 
-        gross_kw = sum(p.kw_for_hour(hour) for p in sum_profiles)
-        subtract_kw = sum(p.kw_for_hour(hour) for p in subtract_profiles)
-        net_kw = max(0.0, gross_kw - subtract_kw)
+        # Clamp after averaging: an hour where subtract entities exceeded the
+        # sum entities lowers the mean but the published load is never negative.
+        net_kw = max(0.0, net_profile.kw_for_hour(hour))
 
         steps.append(
             {
