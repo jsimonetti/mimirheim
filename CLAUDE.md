@@ -24,24 +24,21 @@ The `wiki/` directory contains user-facing and developer documentation derived f
 
 ---
 
-## Implementation plan
+## Implementation tracking
 
-The `plans/` directory contains numbered step files that define the implementation sequence. Each file is self-contained: it lists the relevant IMPLEMENTATION_DETAILS sections, the tests to write first, the files to create or edit, and explicit acceptance criteria.
+`plans/` is retired. Files under `plans/done/` remain for historical reference only; do not add new files there.
+
+Implementation work is tracked as tickets per `docs/agents/issue-tracker.md`: one file per ticket at `.scratch/<feature-slug>/issues/NN-slug.md`, numbering restarting at `01` per feature. A feature's tickets are normally produced by a grilling session.
 
 Before starting any implementation work:
 
-1. Run `ls plans/` to find the lowest-numbered step file.
-2. Read that file in full before writing any code.
-3. Follow the TDD workflow it prescribes: write the tests first, confirm they fail, then implement.
-4. When all acceptance criteria pass, move the file:
+1. Find the feature's ticket directory under `.scratch/`.
+2. Scan `.scratch/<feature-slug>/issues/` for the frontier: tickets that are open, unblocked (every `Blocked by:` entry resolved), and unclaimed. Lowest number wins.
+3. Set `Status: claimed` on that ticket before starting work.
+4. Read the ticket in full before writing any code.
+5. When finished, resolve it: append the outcome under `## Answer`, set `Status: resolved`, and append a context pointer to the feature's `map.md` Decisions-so-far.
 
-```bash
-mv plans/NN_step_name.md plans/done/
-```
-
-5. Then read the next step file.
-
-Do not read ahead into future step files during implementation. Each step is designed to be approached without assumptions about how later steps will be structured. Do not begin a new step until the current step's tests are green and its file has been moved to `plans/done/`.
+Do not read ahead into later tickets during implementation. Do not begin a new ticket until the current one is resolved.
 
 ---
 
@@ -310,11 +307,14 @@ pyproject.toml
 README.md
 IMPLEMENTATION_DETAILS.md
 AGENTS.md
-plans/
-  01_project_scaffold.md
-  02_config_schema.md
-  ...etc
+plans/            # retired; historical step files only, see plans/done/
   done/
+.scratch/         # active implementation tracking, see docs/agents/issue-tracker.md
+  <feature-slug>/
+    spec.md
+    map.md
+    issues/
+      NN-slug.md
 ```
 
 Device modules must not import from `mimirheim/io/`. Config models must not import from `mimirheim/core/` or `mimirheim/io/`. See IMPLEMENTATION_DETAILS §6 and §7 for the full boundary rules, and §8 for the device method contract.
