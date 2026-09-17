@@ -192,37 +192,6 @@ TRAINING_CONFIG_FORM_SPEC = FormSpec(
 
 PV_LEARNER_CONFIG_FORM_SPEC = FormSpec(
     fields={
-        "mqtt": FieldSpec(
-            label="MQTT",
-            description="MQTT broker connection parameters.",
-            tier=Tier.BASIC,
-            tab="MQTT",
-            nested_form_spec=MQTT_CONFIG_FORM_SPEC,
-        ),
-        "mimir_topic_prefix": FieldSpec(
-            label="mimirheim topic prefix",
-            description=(
-                "The mqtt.topic_prefix configured in mimirheim core. Used to derive "
-                "default array output and trigger topics."
-            ),
-            tab="MQTT",
-            tier=Tier.EXPERT,
-        ),
-        "signal_mimir": FieldSpec(
-            label="Signal mimirheim",
-            description="Publish an empty trigger message to mimirheim after each forecast cycle, so it solves immediately.",
-            tab="MQTT",
-            tier=Tier.BASIC,
-        ),
-        "mimir_trigger_topic": FieldSpec(
-            label="mimirheim trigger topic",
-            description="The trigger topic to signal after each forecast cycle.",
-            tab="MQTT",
-            tier=Tier.EXPERT,
-            visible_if=Comparison(
-                field="signal_mimir", operator=ComparisonOperator.EQ, value=True
-            ),
-        ),
         "knmi": FieldSpec(
             label="KNMI",
             description="KNMI weather station configuration.",
@@ -267,6 +236,37 @@ PV_LEARNER_CONFIG_FORM_SPEC = FormSpec(
             tab="Training",
             tier=Tier.BASIC,
             nested_form_spec=TRAINING_CONFIG_FORM_SPEC,
+        ),
+        "mqtt": FieldSpec(
+            label="MQTT",
+            description="MQTT broker connection parameters.",
+            tier=Tier.BASIC,
+            tab="MQTT",
+            nested_form_spec=MQTT_CONFIG_FORM_SPEC,
+        ),
+        "mimir_topic_prefix": FieldSpec(
+            label="mimirheim topic prefix",
+            description=(
+                "The mqtt.topic_prefix configured in mimirheim core. Used to derive "
+                "default array output and trigger topics."
+            ),
+            tab="MQTT",
+            tier=Tier.EXPERT,
+        ),
+        "signal_mimir": FieldSpec(
+            label="Signal mimirheim",
+            description="Publish an empty trigger message to mimirheim after each forecast cycle, so it solves immediately.",
+            tab="MQTT",
+            tier=Tier.BASIC,
+        ),
+        "mimir_trigger_topic": FieldSpec(
+            label="mimirheim trigger topic",
+            description="The trigger topic to signal after each forecast cycle.",
+            tab="MQTT",
+            tier=Tier.EXPERT,
+            visible_if=Comparison(
+                field="signal_mimir", operator=ComparisonOperator.EQ, value=True
+            ),
         ),
         "ha_discovery": FieldSpec(
             label="Home Assistant discovery",

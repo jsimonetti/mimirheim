@@ -48,6 +48,13 @@ REPORTER_REPORTING_SECTION_FORM_SPEC = FormSpec(
 
 REPORTER_CONFIG_FORM_SPEC = FormSpec(
     fields={
+        "reporting": FieldSpec(
+            label="Reporting",
+            description="Reporting paths and retention settings.",
+            tab="Reporting",
+            tier=Tier.BASIC,
+            nested_form_spec=REPORTER_REPORTING_SECTION_FORM_SPEC,
+        ),
         "mqtt": FieldSpec(
             label="MQTT",
             description="MQTT broker connection parameters.",
@@ -63,13 +70,6 @@ REPORTER_CONFIG_FORM_SPEC = FormSpec(
             ),
             tab="MQTT",
             tier=Tier.EXPERT,
-        ),
-        "reporting": FieldSpec(
-            label="Reporting",
-            description="Reporting paths and retention settings.",
-            tab="Reporting",
-            tier=Tier.BASIC,
-            nested_form_spec=REPORTER_REPORTING_SECTION_FORM_SPEC,
         ),
     }
 )

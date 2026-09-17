@@ -220,28 +220,6 @@ CONFIDENCE_DECAY_CONFIG_FORM_SPEC = FormSpec(
 
 PV_OPENMETEO_CONFIG_FORM_SPEC = FormSpec(
     fields={
-        "mqtt": FieldSpec(
-            label="MQTT",
-            description="MQTT broker connection parameters.",
-            tier=Tier.BASIC,
-            tab="MQTT",
-            nested_form_spec=MQTT_CONFIG_FORM_SPEC,
-        ),
-        "mimir_topic_prefix": FieldSpec(
-            label="mimirheim topic prefix",
-            description=(
-                "The mqtt.topic_prefix configured in mimirheim core. Used to derive "
-                "default array and trigger topics."
-            ),
-            tab="MQTT",
-            tier=Tier.EXPERT,
-        ),
-        "trigger_topic": FieldSpec(
-            label="Trigger topic",
-            description="MQTT topic that triggers one fetch-and-publish cycle.",
-            tab="MQTT",
-            tier=Tier.EXPERT,
-        ),
         "open_meteo": FieldSpec(
             label="Open-Meteo API",
             description="Open-Meteo API configuration shared by every array.",
@@ -273,6 +251,28 @@ PV_OPENMETEO_CONFIG_FORM_SPEC = FormSpec(
             tab="Open-Meteo",
             tier=Tier.EXPERT,
             nested_form_spec=CONFIDENCE_DECAY_CONFIG_FORM_SPEC,
+        ),
+        "mqtt": FieldSpec(
+            label="MQTT",
+            description="MQTT broker connection parameters.",
+            tier=Tier.BASIC,
+            tab="MQTT",
+            nested_form_spec=MQTT_CONFIG_FORM_SPEC,
+        ),
+        "mimir_topic_prefix": FieldSpec(
+            label="mimirheim topic prefix",
+            description=(
+                "The mqtt.topic_prefix configured in mimirheim core. Used to derive "
+                "default array and trigger topics."
+            ),
+            tab="MQTT",
+            tier=Tier.EXPERT,
+        ),
+        "trigger_topic": FieldSpec(
+            label="Trigger topic",
+            description="MQTT topic that triggers one fetch-and-publish cycle.",
+            tab="MQTT",
+            tier=Tier.EXPERT,
         ),
         "signal_mimir": FieldSpec(
             label="Signal mimirheim",

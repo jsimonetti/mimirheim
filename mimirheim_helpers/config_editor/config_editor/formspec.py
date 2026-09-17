@@ -25,13 +25,6 @@ from mimirheim_shared.formspec import FieldSpec, FormSpec, Tier
 
 CONFIG_EDITOR_CONFIG_FORM_SPEC = FormSpec(
     fields={
-        "mqtt": FieldSpec(
-            label="MQTT",
-            description="Broker connection parameters used to discover Config Owners.",
-            tier=Tier.BASIC,
-            tab="MQTT",
-            nested_form_spec=MQTT_CONFIG_FORM_SPEC,
-        ),
         "port": FieldSpec(
             label="HTTP port",
             description="TCP port the editor's own HTTP server listens on.",
@@ -50,6 +43,13 @@ CONFIG_EDITOR_CONFIG_FORM_SPEC = FormSpec(
                 "when running as a Home Assistant add-on."
             ),
             tier=Tier.EXPERT,
+        ),
+        "mqtt": FieldSpec(
+            label="MQTT",
+            description="Broker connection parameters used to discover Config Owners.",
+            tier=Tier.BASIC,
+            tab="MQTT",
+            nested_form_spec=MQTT_CONFIG_FORM_SPEC,
         ),
     }
 )
