@@ -8,7 +8,7 @@ updates:
   groups:
     # Specify a name for the group, which will be used in pull request titles
     # and branch names
-    action-bumps:
+    action-deps:
       applies-to: version-updates # Applies the group rule to version updates
       patterns:
         - "*"       # A wildcard that matches all dependencies in the package
@@ -26,7 +26,7 @@ updates:
   groups:
     # Specify a name for the group, which will be used in pull request titles
     # and branch names
-    docker-bumps:
+    docker-deps:
       applies-to: version-updates # Applies the group rule to version updates
       patterns:
         - "*"       # A wildcard that matches all dependencies in the package
@@ -52,7 +52,7 @@ updates:
   groups:
     # Specify a name for the group, which will be used in pull request titles
     # and branch names
-    uv-bumps:
+    uv-deps:
       applies-to: version-updates # Applies the group rule to version updates
       patterns:
         - "*"       # A wildcard that matches all dependencies in the package
