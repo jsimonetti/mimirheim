@@ -72,10 +72,12 @@ After extracting values, each entity's readings are passed through a **P99-based
 
 After outlier filtering, all readings are in kWh/h regardless of the original sensor type. The tool computes a **same-hour-of-day average over recent days** as the base load forecast:
 
-1. For each configured entity, group its clean hourly kWh/h readings by hour-of-day (0–23).
-2. Compute the weighted mean kWh/h at each hour across the lookback window. When `lookback_decay > 1.0`, more recent days contribute more weight.
-3. For each hour compute: `net_kw[h] = sum(sum_entities[h]) − sum(subtract_entities[h])`, clamped to zero.
+1. Merge all entities into one net series per timestamp: `net(t) = sum(sum_entities at t) − sum(subtract_entities at t)`. An entity with no reading at `t` contributes zero at `t`. Timestamps at which no `sum_entities` entry has a reading are skipped, so a subtract entity never produces a purely negative hour on its own.
+2. Group the net series by hour-of-day (0–23) and compute the weighted mean kWh/h at each hour across the lookback window. When `lookback_decay > 1.0`, more recent days contribute more weight.
+3. Clamp each hourly mean to zero: `net_kw[h] = max(0, mean(net(t) for t at hour h))`.
 4. Tile the 24-hour profile to fill the full `horizon_hours` window starting from the current wall-clock hour.
+
+Merging before averaging is what makes a sensor handover work. When a sensor is renamed or replaced, list both the old and the new entity in `sum_entities`: the old one carries the early part of the lookback window, the new one the recent part, and together they read as one continuous series. Averaging each entity on its own over the days it has data and then summing would count both at full strength even though they never overlapped.
 
 This is a simple but robust approach. It produces reasonable forecasts without requiring machine learning and degrades gracefully when some historical data is missing.
 
@@ -212,7 +214,7 @@ uv pip install "mimirheim[baseload-ha-db-mysql]"      # MariaDB/MySQL
 
 - **Database unreachable**: If the database file does not exist, the connection is refused, or a SQL error occurs, the cycle is aborted and the error is logged at `ERROR` level with full traceback. The last retained payload on `output_topic` remains unchanged.
 - **Insufficient history**: If fewer than `lookback_days` days of data are available (e.g. on first run), the tool computes the average over however many days are available. If no history exists at all for a given hour, it falls back to the mean across all available readings.
-- **Missing hours**: HA statistics can have gaps. Individual missing hours within the lookback window are simply absent from the average; they do not prevent the forecast from being built.
+- **Missing hours**: HA statistics can have gaps. An hour at which no `sum_entities` entry has a reading is absent from the average. An hour at which some entities have a reading and others do not is kept, with the missing entities counted as zero for that hour. This also applies to readings removed by the outlier filter.
 - **MQTT disconnect**: Reconnects automatically.
 
 ---
