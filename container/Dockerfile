@@ -101,11 +101,16 @@ COPY mimirheim_shared/ ./mimirheim_shared/
 # without it a base image bump that forgets this line would quietly produce an
 # image whose base Python is unused and whose venv runs a downloaded one. With
 # it, that mistake fails the build.
+# --no-editable matters too: uv's default for a workspace member like
+# mimirheim_shared is an editable install, which is just a finder that points
+# back at this stage's /build/mimirheim_shared source tree. Only /app/.venv
+# survives into later stages, so an editable install becomes a
+# ModuleNotFoundError for mimirheim_shared at container runtime.
 ENV UV_PYTHON_DOWNLOADS=never
 RUN --mount=from=uvbin,source=/uv,target=/usr/local/bin/uv \
     --mount=type=cache,target=/root/.cache/uv \
     uv venv /app/.venv --python python3.14 && \
-    UV_PROJECT_ENVIRONMENT=/app/.venv uv sync --all-extras --no-dev --frozen --no-install-project && \
+    UV_PROJECT_ENVIRONMENT=/app/.venv uv sync --all-extras --no-dev --frozen --no-install-project --no-editable && \
     rm -rf /app/.venv/lib/python*/site-packages/cbcbox/cbc_dist_debug*
 
 # ---------------------------------------------------------------------------
