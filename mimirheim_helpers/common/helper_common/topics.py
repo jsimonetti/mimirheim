@@ -53,6 +53,28 @@ def trigger_topic(prefix: str) -> str:
     return f"{prefix}/input/trigger"
 
 
+def helper_trigger_topic(prefix: str, helper_name: str, action: str = "trigger") -> str:
+    """Return the topic that triggers a helper daemon's own run cycle.
+
+    This is distinct from ``trigger_topic(prefix)`` above, which is
+    mimirheim's own solve trigger. This one is what a helper tool (baseload,
+    prices, pv, ...) itself subscribes to for its ``trigger_topic`` (or
+    ``train_trigger_topic`` / ``inference_trigger_topic``) config field.
+
+    Args:
+        prefix: The ``mqtt.topic_prefix`` value from mimirheim config.
+        helper_name: The helper family slug, e.g. ``"baseload"``, ``"prices"``,
+            ``"pv"``, or ``"pv_ml_learner"``.
+        action: The action the topic triggers. Defaults to ``"trigger"``;
+            pv_ml_learner uses ``"train"`` and ``"infer"`` for its two triggers.
+
+    Returns:
+        e.g. ``"mimir/input/tools/baseload/trigger"`` when prefix is ``"mimir"``
+        and helper_name is ``"baseload"``.
+    """
+    return f"{prefix}/input/tools/{helper_name}/{action}"
+
+
 def strategy_topic(prefix: str) -> str:
     """Return the topic for runtime strategy selection.
 

@@ -1,0 +1,754 @@
+{% import "_theme_toggle.html" as theme_toggle %}
+{% import "_mode_nav.html" as mode_nav %}
+<!DOCTYPE html>
+<html lang="en"{% if theme %} data-bs-theme="{{ theme }}"{% endif %}>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ descriptor.display_name }} configuration</title>
+  <link href="/static/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/static/theme.css" rel="stylesheet">
+</head>
+<body>
+  <nav class="navbar navbar-expand navbar-dark bg-dark mb-4">
+    <div class="container d-flex justify-content-between align-items-center">
+      <a class="navbar-brand mb-0 h1" href="/">Mimirheim Config Editor</a>
+      <div class="d-flex align-items-center">
+        {{ mode_nav.render() }}
+        {{ theme_toggle.render(theme, current_path) }}
+      </div>
+    </div>
+  </nav>
+  <div id="reports-pane" class="d-none"></div>
+  <main class="container pb-5" id="config-pane">
+    {# Two-level Tab/Subtab nav (ticket 04), orthogonal to the flat `group`
+       headings render_groups already renders within whichever pane a field
+       lands in. A Tab/Subtab nav is only rendered when there is more than
+       one pane to switch between, so a FormSpec with no `tab`/`subtab` set
+       renders its single implicit "General" tab/subtab with no nav at all,
+       identically to pre-ticket-04 behavior. No Bootstrap JS is vendored
+       (see the comment on the script below), so switching panes uses the
+       same minimal-vanilla-JS allowance as the Presence Toggle: a nav's
+       buttons and its `data-tab-content` panes are matched purely by list
+       position, not by id, so the one script below drives both the Tab and
+       the Subtab level with no per-instance wiring.
+
+       The top-level Tab nav (render_tab_nav) is split out from its own
+       content (render_tab_content, ticket 05) so the nav can be pinned
+       inside the fixed header below while its panes scroll beneath it; the
+       nav therefore carries an explicit data-tab-content-ref id rather than
+       relying on the content being its next sibling, unlike the Subtab
+       level, which stays adjacent and keeps using that sibling lookup. #}
+    {% macro render_tab_nav(tabs) %}
+      {% if tabs|length > 1 %}
+      <ul class="nav nav-tabs" data-tab-nav data-tab-content-ref="top-level-tab-content" role="tablist">
+        {% for tab in tabs %}
+        <li class="nav-item" role="presentation">
+          <button class="nav-link{% if loop.first %} active{% endif %}" type="button" data-tab-toggle>{{ tab.label }}</button>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    {% endmacro %}
+
+    {% macro render_tab_content(tabs) %}
+      <div class="tab-content" data-tab-content id="top-level-tab-content">
+        {% for tab in tabs %}
+        <div class="tab-pane{% if loop.first or tabs|length == 1 %} active{% else %} d-none{% endif %}" data-tab-pane>
+          {{ render_subtabs(tab) }}
+        </div>
+        {% endfor %}
+      </div>
+    {% endmacro %}
+
+    {% macro render_subtabs(tab) %}
+      {% if tab.has_subtab_nav %}
+      <ul class="nav nav-pills mb-3" data-tab-nav role="tablist">
+        {% for subtab in tab.subtabs %}
+        <li class="nav-item" role="presentation">
+          <button class="nav-link{% if loop.first %} active{% endif %}" type="button" data-tab-toggle>{{ subtab.label }}</button>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      <div class="tab-content" data-tab-content>
+        {% for subtab in tab.subtabs %}
+        <div class="tab-pane{% if loop.first or not tab.has_subtab_nav %} active{% else %} d-none{% endif %}" data-tab-pane>
+          {{ render_groups(subtab.groups) }}
+        </div>
+        {% endfor %}
+      </div>
+    {% endmacro %}
+
+    {% macro render_groups(groups) %}
+      {% for group in groups %}
+      <section class="mb-4" data-group="{{ group.label }}">
+        {# Same "no chrome for a single implicit bucket" rule as the
+           Tab/Subtab nav above: a field with no `group` set falls under the
+           UNGROUPED_LABEL fallback, and a heading naming that fallback is
+           noise when it is the section's only group. This check re-applies
+           at every nesting depth, since render_groups also renders a nested
+           object's/collection entry's own `groups` list further down. #}
+        {% if not (groups|length == 1 and group.label == UNGROUPED_LABEL) %}
+        <h2 class="h5 border-bottom pb-2 mb-3">{{ group.label }}</h2>
+        {% endif %}
+        {% for f in group.basic_fields %}
+          {{ render_conditional_field(f) }}
+        {% endfor %}
+        {% if group.has_expert_fields %}
+        <details class="advanced mt-2{% if not group.has_visible_expert_field %} d-none{% endif %}" data-advanced-group>
+          <summary class="text-primary">Advanced</summary>
+          <div class="mt-3" data-expert-fields>
+            {% for f in group.expert_fields %}
+              {{ render_conditional_field(f) }}
+            {% endfor %}
+          </div>
+        </details>
+        {% endif %}
+      </section>
+      {% endfor %}
+    {% endmacro %}
+
+    {% macro render_conditional_field(f) %}
+      {% if f.spec.visible_if is none %}
+        {{ render_field(f) }}
+      {% else %}
+      {# Conditional Visibility (ADR-0003's "minimal JS for interactivity"):
+         the field is always built (render.py) regardless of whether its
+         condition currently holds, so it can be revealed live on change
+         without a page reload. A currently-hidden field's <fieldset disabled>
+         relies on the same native-HTML guarantee the Presence Toggle's own
+         fieldset already does: a disabled fieldset's descendant controls are
+         never submitted, however deeply nested. visibility.js (below) keeps
+         data-visible-if's condition and this disabled/d-none state in sync
+         with data-conditional-field's sibling value on every change. #}
+      <fieldset class="field-conditional{% if not f.visible %} d-none{% endif %}"
+                data-visible-if="{{ visible_if_json(f.spec) }}" data-conditional-field="{{ f.name }}"
+                {% if not f.visible %}disabled{% endif %}>
+        {{ render_field(f) }}
+      </fieldset>
+      {% endif %}
+    {% endmacro %}
+
+    {% macro form_switch(name, label, checked, presence_toggle=False) %}
+      {# Shared by the Presence Toggle and a plain boolean field: both render
+         as the same Bootstrap form-switch control, differing only in
+         whether the checkbox carries data-presence-toggle (which
+         presence-toggle.js below keys off of) and what drives `checked`. #}
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" role="switch" id="field-{{ name }}"
+               name="{{ name }}" value="on"{% if presence_toggle %} data-presence-toggle{% endif %}
+               {% if checked %}checked{% endif %}>
+        <label class="form-check-label fw-semibold" for="field-{{ name }}">{{ label }}</label>
+      </div>
+    {% endmacro %}
+
+    {% macro render_collection_entry(field, entry) %}
+      {# One Named Collection (keyed) or Ordered Collection (indexed) entry.
+         A Named Collection entry's identifying name is an editable input
+         (collections.js's rename handler rewrites every one of the entry's
+         own descendant name/id/for attributes when it changes); an Ordered
+         Collection entry keeps its static "#N" legend instead, since
+         position -- not name -- identifies it, and gets Move up/down
+         controls instead (ticket 07) that swap its index prefix -- and its
+         "#N" legend text -- with an adjacent sibling's. Both shapes get a
+         Remove control. #}
+      <fieldset class="collection-entry card p-3 mb-3" data-entry="{{ entry.key }}">
+        <div class="d-flex justify-content-between align-items-start gap-2 mb-2" data-entry-header>
+          {% if field.spec.shape == "named_collection" %}
+          <div class="flex-grow-1">
+            <label class="form-label fw-semibold h6 mb-1" for="entry-name-{{ field.name }}.{{ entry.key }}">Name</label>
+            <input class="form-control" type="text" id="entry-name-{{ field.name }}.{{ entry.key }}"
+                   value="{{ entry.key }}" data-entry-name-input data-collection-name="{{ field.name }}">
+          </div>
+          {% else %}
+          <legend class="fw-semibold h6 mb-0">{{ entry.label }}</legend>
+          {% endif %}
+          <div class="d-flex gap-2 flex-shrink-0">
+            {% if field.spec.shape == "ordered_collection" %}
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-move-entry="up"
+                    data-collection-name="{{ field.name }}" aria-label="Move entry up">&uarr;</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-move-entry="down"
+                    data-collection-name="{{ field.name }}" aria-label="Move entry down">&darr;</button>
+            {% endif %}
+            <button type="button" class="btn btn-outline-danger btn-sm" data-remove-entry>Remove</button>
+          </div>
+        </div>
+        {{ render_groups(entry.groups) }}
+      </fieldset>
+    {% endmacro %}
+
+    {% macro render_scalar_list_entry(field, entry) %}
+      {# One Scalar List (e.g. list[float]) entry: a bare value, no nested
+         FormSpec, so unlike render_collection_entry there is no Name input
+         and no render_groups recursion -- just the one widget itself, plus
+         the same Move up/down and Remove controls an Ordered Collection
+         entry gets, since order matters here too. collections.js's Add,
+         Remove, and Move handlers key off data-entry/data-collection-name
+         alone, so they need no changes to support this shape. #}
+      <fieldset class="collection-entry card p-3 mb-3 d-flex flex-row align-items-center gap-2" data-entry="{{ entry.key }}">
+        {% if field.input_type == "number" %}
+        <input class="form-control" type="number" name="{{ field.name }}.{{ entry.key }}" step="{{ field.step }}"
+               {% if field.min_value is not none %}min="{{ field.min_value }}"{% endif %}
+               {% if field.max_value is not none %}max="{{ field.max_value }}"{% endif %}
+               value="{{ entry.value if entry.value is not none else '' }}">
+        {% else %}
+        <input class="form-control" type="text" name="{{ field.name }}.{{ entry.key }}"
+               value="{{ entry.value if entry.value is not none else '' }}">
+        {% endif %}
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-move-entry="up"
+                data-collection-name="{{ field.name }}" aria-label="Move entry up">&uarr;</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-move-entry="down"
+                data-collection-name="{{ field.name }}" aria-label="Move entry down">&darr;</button>
+        <button type="button" class="btn btn-outline-danger btn-sm" data-remove-entry>Remove</button>
+      </fieldset>
+    {% endmacro %}
+
+    {% macro render_field(field) %}
+    {% if field.entries is not none %}
+      {# Named Collection (keyed), Ordered Collection (indexed), or Scalar
+         List: one fieldset per existing entry, an Add control that appends
+         a new one (client-side JS only, ticket 06), and a Remove control on
+         every entry. `entry_template` is rendered inert inside a <template>,
+         which the Add control clones and keys with a freshly generated
+         name. #}
+      <div class="field field-collection mb-3" data-field="{{ field.name }}">
+        <p class="fw-semibold mb-1">{{ field.spec.label }}</p>
+        <p class="text-muted small">{{ field.spec.description }}</p>
+        <div data-entries>
+          {% for entry in field.entries %}
+            {% if field.spec.shape == "scalar_list" %}
+              {{ render_scalar_list_entry(field, entry) }}
+            {% else %}
+              {{ render_collection_entry(field, entry) }}
+            {% endif %}
+          {% endfor %}
+        </div>
+        <button type="button" class="btn btn-outline-primary btn-sm" data-add-entry
+                data-collection-name="{{ field.name }}" data-collection-shape="{{ field.spec.shape.value }}">
+          Add {{ field.spec.label }} entry
+        </button>
+        {% if field.entry_template is not none %}
+        <template data-entry-template>
+          {% if field.spec.shape == "scalar_list" %}
+            {{ render_scalar_list_entry(field, field.entry_template) }}
+          {% else %}
+            {{ render_collection_entry(field, field.entry_template) }}
+          {% endif %}
+        </template>
+        {% endif %}
+      </div>
+    {% elif field.spec.shape == "optional_object" %}
+      {# Presence Toggle: nested fields always render, inside a <fieldset
+         disabled> when currently absent -- a disabled fieldset's controls are
+         never submitted (native HTML), so an unchecked toggle still keeps
+         them out of the submission. presence-toggle.js enables/hides that
+         fieldset live when the checkbox is (un)checked, so a user can
+         populate a currently-absent section, or clear an existing one,
+         without a page reload. #}
+      <div class="field field-optional-object mb-3" data-field="{{ field.name }}">
+        {{ form_switch(field.name, field.spec.label, field.present, presence_toggle=True) }}
+        <p class="text-muted small">{{ field.spec.description }}</p>
+        <fieldset class="border rounded p-3 ms-4" {% if not field.present %}hidden disabled{% endif %}>
+          {{ render_groups(field.nested_groups) }}
+        </fieldset>
+      </div>
+    {% elif field.nested_groups is not none %}
+      <fieldset class="field-nested-object border rounded p-3 mb-3">
+        <legend class="fw-semibold h6">{{ field.spec.label }}</legend>
+        <p class="text-muted small">{{ field.spec.description }}</p>
+        {{ render_groups(field.nested_groups) }}
+      </fieldset>
+    {% elif field.options is not none %}
+      <div class="field mb-3" data-field="{{ field.name }}">
+        <label class="form-label" for="field-{{ field.name }}">{{ field.spec.label }}</label>
+        <p class="text-muted small">{{ field.spec.description }}</p>
+        {% if field.spec.help_text %}<p class="form-text">{{ field.spec.help_text }}</p>{% endif %}
+        {% if field.spec.suggested_value is not none %}<p class="form-text suggested-value">Suggested: {{ field.spec.suggested_value }}</p>{% endif %}
+        {% if field.spec.doc_link %}<a class="d-inline-block mb-2" href="{{ field.spec.doc_link }}">Learn more</a>{% endif %}
+        <select class="form-select" id="field-{{ field.name }}" name="{{ field.name }}">
+          {% for option in field.options %}
+          <option value="{{ option }}" {% if field.value == option %}selected{% endif %}>{{ option_label(field.spec, option) }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    {% elif field.input_type == "checkbox" %}
+      <div class="field mb-3" data-field="{{ field.name }}">
+        {% if field.spec.help_text %}<p class="form-text">{{ field.spec.help_text }}</p>{% endif %}
+        {% if field.spec.suggested_value is not none %}<p class="form-text suggested-value">Suggested: {{ field.spec.suggested_value }}</p>{% endif %}
+        {% if field.spec.doc_link %}<a class="d-inline-block mb-2" href="{{ field.spec.doc_link }}">Learn more</a>{% endif %}
+        {{ form_switch(field.name, field.spec.label, field.value) }}
+        {# An unchecked checkbox submits nothing at all, so with no fallback
+           this field would simply be missing from the submission rather
+           than explicitly false. _parse_form_body (server.py) keeps only
+           the first submitted value per name, and the checkbox above is
+           rendered before this hidden input, so an "on" from a checked box
+           is submitted first and wins; when unchecked, only this hidden
+           "false" is submitted. #}
+        <input type="hidden" name="{{ field.name }}" value="false">
+        <p class="text-muted small">{{ field.spec.description }}</p>
+      </div>
+    {% elif field.input_type == "number" %}
+      <div class="field mb-3" data-field="{{ field.name }}">
+        <label class="form-label" for="field-{{ field.name }}">{{ field.spec.label }}</label>
+        <p class="text-muted small">{{ field.spec.description }}</p>
+        {% if field.spec.help_text %}<p class="form-text">{{ field.spec.help_text }}</p>{% endif %}
+        {% if field.spec.suggested_value is not none %}<p class="form-text suggested-value">Suggested: {{ field.spec.suggested_value }}</p>{% endif %}
+        {% if field.spec.doc_link %}<a class="d-inline-block mb-2" href="{{ field.spec.doc_link }}">Learn more</a>{% endif %}
+        <input class="form-control" id="field-{{ field.name }}" name="{{ field.name }}" type="number"
+               step="{{ field.step }}"
+               {% if field.min_value is not none %}min="{{ field.min_value }}"{% endif %}
+               {% if field.max_value is not none %}max="{{ field.max_value }}"{% endif %}
+               value="{{ field.value if field.value is not none else '' }}">
+      </div>
+    {% else %}
+      <div class="field mb-3" data-field="{{ field.name }}">
+        <label class="form-label" for="field-{{ field.name }}">{{ field.spec.label }}</label>
+        <p class="text-muted small">{{ field.spec.description }}</p>
+        {% if field.spec.help_text %}<p class="form-text">{{ field.spec.help_text }}</p>{% endif %}
+        {% if field.spec.suggested_value is not none %}<p class="form-text suggested-value">Suggested: {{ field.spec.suggested_value }}</p>{% endif %}
+        {% if field.spec.doc_link %}<a class="d-inline-block mb-2" href="{{ field.spec.doc_link }}">Learn more</a>{% endif %}
+        <input class="form-control" id="field-{{ field.name }}" name="{{ field.name }}" type="text" value="{{ field.value if field.value is not none else '' }}">
+      </div>
+    {% endif %}
+    {% endmacro %}
+
+    {# Fixed header (ticket 05): back link, Owner title, action bar, and the
+       top-level Tab nav all stay pinned via `sticky-top` while the Subtab
+       nav (rendered by render_subtabs, part of render_tab_content below) and
+       every field scroll normally beneath it. The header sits outside
+       <form>, so its Save button targets the form by id (the `form`
+       attribute) rather than nesting the whole scrollable body inside the
+       pinned element. #}
+    <header class="config-editor-header sticky-top bg-body border-bottom pb-3 mb-3">
+      <p class="mb-2"><a href="/">&laquo; Back to Config Owners</a></p>
+      <h1 class="h3 mb-3">{{ descriptor.display_name }}</h1>
+      <div class="action-bar d-flex flex-wrap gap-2 mb-3">
+        <button type="submit" form="owner-form" class="btn btn-primary">Save</button>
+        <button type="button" class="btn btn-outline-secondary" disabled title="Not yet implemented">Diff</button>
+        <button type="button" class="btn btn-outline-secondary" disabled title="Not yet implemented">Validate</button>
+        <button type="button" class="btn btn-outline-secondary" disabled title="Not yet implemented">Commit</button>
+        <button type="button" class="btn btn-outline-danger" data-restart-trigger>Restart</button>
+      </div>
+      {{ render_tab_nav(tabs) }}
+    </header>
+
+    {% if success %}<div class="alert alert-success">Saved. A restart is required for this change to take effect.</div>{% endif %}
+    {% if restart_requested %}<div class="alert alert-success">Restart requested.</div>{% endif %}
+    {% if errors %}
+    <div class="alert alert-danger">
+      <ul class="mb-0">
+        {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <form id="owner-form" method="post" action="/owners/{{ descriptor.owner_id }}">
+      {{ render_tab_content(tabs) }}
+      <button type="submit" class="btn btn-primary">Save</button>
+    </form>
+  </main>
+
+  {# One reusable Remove confirmation modal (ticket 06) for every collection
+     entry's Remove control, rather than one per entry: collections.js shows
+     it, remembers which entry is pending removal, and only removes that
+     entry from the DOM on confirmation. No Bootstrap JS is vendored (see the
+     script below), so its show/hide state is driven entirely by
+     collections.js toggling the classes/attributes Bootstrap's own CSS
+     already keys off of. #}
+  <div class="modal" tabindex="-1" data-remove-entry-modal aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Remove entry?</h5>
+          <button type="button" class="btn-close" data-remove-entry-cancel aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-0">This removes the entry from the form. It is not written to disk unless you Save afterwards.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-remove-entry-cancel>Cancel</button>
+          <button type="button" class="btn btn-danger" data-remove-entry-confirm>Remove</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop" data-remove-entry-backdrop hidden></div>
+
+  {# Restart confirmation modal: a Restart is a conscious, separate action
+     from Save (see server.py's own docstring and ADR-0012) -- it exits the
+     Config Owner's process for its supervisor to start a fresh one, losing
+     any unsaved form changes -- so it never fires without this confirmation
+     step in between, mirroring the Remove confirmation modal above. The
+     actual request is a plain POST (submitted by restart.js below once
+     confirmed), not client-side DOM manipulation, since unlike Remove there
+     is a real server-side effect to await and report back. #}
+  <div class="modal" tabindex="-1" data-restart-modal aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Restart {{ descriptor.display_name }}?</h5>
+          <button type="button" class="btn-close" data-restart-cancel aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-0">This exits the running process so its supervisor can start a fresh one. Any unsaved changes on this page are lost.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-restart-cancel>Cancel</button>
+          <form id="restart-form" method="post" action="/owners/{{ descriptor.owner_id }}/restart">
+            <button type="submit" class="btn btn-danger">Restart</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop" data-restart-backdrop hidden></div>
+
+  {# Only interactivity in the whole editor (ADR-0003 allows "minimal
+     client-side JS for interactivity ... such as conditional visibility and
+     add/remove rows"): a Presence Toggle checkbox's own .field-optional-object
+     wrapper holds exactly one <fieldset>, so toggling its hidden/disabled
+     state needs no id or bookkeeping beyond that; a Conditional Visibility
+     field's own data-visible-if condition is likewise re-evaluated against
+     its sibling's live value on every change (see visibility.js below), no
+     id or bookkeeping either. No Bootstrap JS is loaded: the Advanced
+     disclosure stays a plain <details>/<summary> element, which needs none,
+     the Tab/Subtab nav below (ticket 04) is switched by plain
+     position-matching rather than Bootstrap's own JS tab component, and the
+     collection Add/Remove/rename (ticket 06) and Move up/down (ticket 07)
+     handlers below drive the Remove confirmation modal's classes and the
+     entries container's DOM order directly rather than loading Bootstrap's
+     JS modal component or a drag-and-drop library. #}
+  <script>
+    // --- Conditional Visibility (ticket 09) ---------------------------------
+    //
+    // Mirrors mimirheim_shared.visibility.evaluate_condition in JS: a
+    // data-visible-if condition's "field" always names a sibling within the
+    // same object as the field it guards (see _build_groups, render.py),
+    // so it is resolved by swapping the last dotted segment of the guarded
+    // field's own data-conditional-field name, never by an absolute path.
+    function siblingFieldName(ownName, siblingField) {
+      var parts = ownName.split(".");
+      parts[parts.length - 1] = siblingField;
+      return parts.join(".");
+    }
+
+    // Reads a sibling field's current Candidate Value straight from the DOM,
+    // typed to match what evaluate_condition would see server-side: a
+    // checkbox's boolean, a Presence Toggle's present/absent, a collection's
+    // empty/non-empty, or a plain control's own value.
+    function readFieldValue(name) {
+      var collectionField = document.querySelector('.field-collection[data-field="' + name + '"]');
+      if (collectionField) {
+        var entries = collectionField.querySelector(":scope > [data-entries]");
+        return entries.children.length > 0 ? [] : null;
+      }
+      var optionalObjectField = document.querySelector('.field-optional-object[data-field="' + name + '"]');
+      if (optionalObjectField) {
+        var presenceToggle = optionalObjectField.querySelector("[data-presence-toggle]");
+        return presenceToggle.checked ? {} : null;
+      }
+      var control = document.querySelector('[name="' + name + '"]');
+      if (!control) return null;
+      if (control.type === "checkbox") return control.checked;
+      if (control.type === "number") return control.value === "" ? null : Number(control.value);
+      return control.value;
+    }
+
+    function evaluateCondition(condition, ownName) {
+      if (condition.kind === "group") {
+        var results = condition.conditions.map(function (nested) {
+          return evaluateCondition(nested, ownName);
+        });
+        return condition.operator === "and" ? results.every(Boolean) : results.some(Boolean);
+      }
+      var actual = readFieldValue(siblingFieldName(ownName, condition.field));
+      if (condition.operator === "eq") return actual === condition.value;
+      if (condition.operator === "ne") return actual !== condition.value;
+      return false;
+    }
+
+    function updateConditionalVisibility() {
+      document.querySelectorAll("[data-visible-if]").forEach(function (fieldset) {
+        var condition = JSON.parse(fieldset.getAttribute("data-visible-if"));
+        var ownName = fieldset.getAttribute("data-conditional-field");
+        var visible = evaluateCondition(condition, ownName);
+        fieldset.classList.toggle("d-none", !visible);
+        fieldset.disabled = !visible;
+      });
+      // An Advanced disclosure (render_groups, owner.html) starts hidden when
+      // every one of its Expert fields is conditionally hidden; re-derive
+      // that after the pass above, since it must run after each field's own
+      // d-none state is up to date. A child with no data-visible-if has no
+      // condition to fail, so it always counts as visible.
+      document.querySelectorAll("[data-advanced-group]").forEach(function (details) {
+        var expertFields = details.querySelector("[data-expert-fields]");
+        var anyVisible = Array.prototype.some.call(expertFields.children, function (child) {
+          return !child.hasAttribute("data-visible-if") || !child.classList.contains("d-none");
+        });
+        details.classList.toggle("d-none", !anyVisible);
+      });
+    }
+
+    document.addEventListener("change", updateConditionalVisibility);
+
+    document.addEventListener("change", function (event) {
+      if (!event.target.matches("input[data-presence-toggle]")) return;
+      var fieldset = event.target.closest(".field-optional-object").querySelector("fieldset");
+      fieldset.hidden = !event.target.checked;
+      fieldset.disabled = !event.target.checked;
+    });
+
+    document.addEventListener("click", function (event) {
+      var toggle = event.target.closest("[data-tab-toggle]");
+      if (!toggle) return;
+      var nav = toggle.closest("[data-tab-nav]");
+      // The top-level nav's content lives in <header>'s sibling further down
+      // the page (ticket 05), not immediately after the nav itself, so it is
+      // looked up by id; the Subtab nav's content is still its next sibling.
+      var contentRef = nav.getAttribute("data-tab-content-ref");
+      var content = contentRef ? document.getElementById(contentRef) : nav.nextElementSibling;
+      var buttons = nav.querySelectorAll("[data-tab-toggle]");
+      var panes = content.querySelectorAll(":scope > [data-tab-pane]");
+      var index = Array.prototype.indexOf.call(buttons, toggle);
+      buttons.forEach(function (button, i) {
+        button.classList.toggle("active", i === index);
+      });
+      panes.forEach(function (pane, i) {
+        pane.classList.toggle("active", i === index);
+        pane.classList.toggle("d-none", i !== index);
+      });
+    });
+
+    // --- Collection Add/Remove/rename (ticket 06) ---------------------------
+    //
+    // A collection entry's own DOM identity is entirely carried by the
+    // "{collectionName}.{entryKey}" prefix embedded in every one of its
+    // descendant name/id/for attributes (see render.py's RenderedField/
+    // RenderedEntry): parse_submission (submission.py) derives a Named
+    // Collection's keys, and an Ordered Collection's indices, purely from
+    // whatever prefixes are present in the submitted form at Save time. So
+    // Add, Remove, and rename never need a new server endpoint: they only
+    // ever rewrite that prefix client-side, on the already-rendered DOM, and
+    // the existing Save POST does the rest.
+
+    // Named Collections auto-generate a new entry's name from the shape's
+    // own base name -- the collection field's last dotted segment,
+    // singularized -- plus the lowest free integer suffix among current
+    // sibling names (e.g. "batteries" -> "battery_2"). An Ordered
+    // Collection has no name to generate; a new entry is simply appended at
+    // the next index.
+    function singularizeBaseName(fieldName) {
+      var lastSegment = fieldName.split(".").pop();
+      if (lastSegment.endsWith("ies")) return lastSegment.slice(0, -3) + "y";
+      if (lastSegment.endsWith("s") && !lastSegment.endsWith("ss")) return lastSegment.slice(0, -1);
+      return lastSegment;
+    }
+
+    function nextUniqueEntryName(fieldName, siblingKeys) {
+      var base = singularizeBaseName(fieldName);
+      var usedSuffixes = {};
+      siblingKeys.forEach(function (key) {
+        var match = /^(.*)_(\d+)$/.exec(key);
+        if (match && match[1] === base) usedSuffixes[match[2]] = true;
+      });
+      var suffix = 1;
+      while (usedSuffixes[String(suffix)]) suffix++;
+      return base + "_" + suffix;
+    }
+
+    function siblingEntryKeys(entriesContainer) {
+      return Array.prototype.map.call(
+        entriesContainer.querySelectorAll(":scope > [data-entry]"),
+        function (entryElement) { return entryElement.getAttribute("data-entry"); }
+      );
+    }
+
+    // Rewrites every occurrence of oldPrefix (e.g. "batteries.__new__", or
+    // "batteries.battery_main" on rename) to newPrefix across `root`'s own
+    // descendants' name/id/for/data-collection-name attributes. A nested
+    // collection field's own Add button and entry-name input carry
+    // data-collection-name values built from the same dotted prefix, so
+    // renaming or keying an outer entry must also rewrite those, not only
+    // the leaf name/id/for attributes parse_submission actually reads.
+    function rewriteEntryPrefix(root, oldPrefix, newPrefix) {
+      var attributesToRewrite = ["name", "id", "for", "data-collection-name"];
+      root.querySelectorAll("*").forEach(function (element) {
+        attributesToRewrite.forEach(function (attribute) {
+          if (!element.hasAttribute(attribute)) return;
+          element.setAttribute(attribute, element.getAttribute(attribute).split(oldPrefix).join(newPrefix));
+        });
+      });
+    }
+
+    document.addEventListener("click", function (event) {
+      var addButton = event.target.closest("[data-add-entry]");
+      if (!addButton) return;
+
+      var wrapper = addButton.closest(".field-collection");
+      var entriesContainer = wrapper.querySelector(":scope > [data-entries]");
+      var template = wrapper.querySelector(":scope > template[data-entry-template]");
+      var collectionName = addButton.getAttribute("data-collection-name");
+      var shape = addButton.getAttribute("data-collection-shape");
+
+      var siblingKeys = siblingEntryKeys(entriesContainer);
+      var newKey = shape === "named_collection"
+        ? nextUniqueEntryName(collectionName, siblingKeys)
+        : String(siblingKeys.length);
+
+      var clone = template.content.cloneNode(true);
+      var newEntryFieldset = clone.querySelector("[data-entry]");
+      newEntryFieldset.setAttribute("data-entry", newKey);
+      rewriteEntryPrefix(clone, collectionName + ".__new__", collectionName + "." + newKey);
+      var nameInput = newEntryFieldset.querySelector("[data-entry-name-input]");
+      if (nameInput) nameInput.value = newKey;
+
+      entriesContainer.appendChild(clone);
+
+      var addedEntry = entriesContainer.lastElementChild;
+      var focusTarget = addedEntry.querySelector("[data-entry-name-input]") ||
+        addedEntry.querySelector("input, select, textarea");
+      if (focusTarget) focusTarget.focus();
+    });
+
+    // Remove: a single reusable confirmation modal (see the markup after
+    // <main>) shared by every entry's Remove control, rather than one modal
+    // instance per entry.
+    var pendingRemoveEntry = null;
+
+    function showRemoveEntryModal() {
+      document.querySelector("[data-remove-entry-modal]").style.display = "block";
+      document.querySelector("[data-remove-entry-modal]").classList.add("show");
+      document.querySelector("[data-remove-entry-backdrop]").hidden = false;
+      document.querySelector("[data-remove-entry-backdrop]").classList.add("show");
+    }
+
+    function hideRemoveEntryModal() {
+      document.querySelector("[data-remove-entry-modal]").style.display = "none";
+      document.querySelector("[data-remove-entry-modal]").classList.remove("show");
+      document.querySelector("[data-remove-entry-backdrop]").hidden = true;
+      document.querySelector("[data-remove-entry-backdrop]").classList.remove("show");
+    }
+
+    document.addEventListener("click", function (event) {
+      if (event.target.closest("[data-remove-entry]")) {
+        pendingRemoveEntry = event.target.closest("[data-entry]");
+        showRemoveEntryModal();
+        return;
+      }
+      if (event.target.closest("[data-remove-entry-confirm]")) {
+        if (pendingRemoveEntry) pendingRemoveEntry.remove();
+        pendingRemoveEntry = null;
+        hideRemoveEntryModal();
+        return;
+      }
+      if (event.target.closest("[data-remove-entry-cancel]") || event.target.matches("[data-remove-entry-backdrop]")) {
+        pendingRemoveEntry = null;
+        hideRemoveEntryModal();
+      }
+    });
+
+    // --- Restart confirmation (see the modal markup after <main>) ----------
+    //
+    // The Restart button never submits the request directly: it only opens
+    // this confirmation modal, and the request itself is a plain form POST
+    // (to /owners/<owner_id>/restart, handled by server.py's
+    // _request_restart), submitted only once the modal's own Restart button
+    // is clicked. This is the one place in the editor a confirmation modal's
+    // own action button is a real form submission rather than DOM
+    // manipulation, since restarting has a server-side effect to await and
+    // report back, unlike Remove.
+    function showRestartModal() {
+      document.querySelector("[data-restart-modal]").style.display = "block";
+      document.querySelector("[data-restart-modal]").classList.add("show");
+      document.querySelector("[data-restart-backdrop]").hidden = false;
+      document.querySelector("[data-restart-backdrop]").classList.add("show");
+    }
+
+    function hideRestartModal() {
+      document.querySelector("[data-restart-modal]").style.display = "none";
+      document.querySelector("[data-restart-modal]").classList.remove("show");
+      document.querySelector("[data-restart-backdrop]").hidden = true;
+      document.querySelector("[data-restart-backdrop]").classList.remove("show");
+    }
+
+    document.addEventListener("click", function (event) {
+      if (event.target.closest("[data-restart-trigger]")) {
+        showRestartModal();
+        return;
+      }
+      if (event.target.closest("[data-restart-cancel]") || event.target.matches("[data-restart-backdrop]")) {
+        hideRestartModal();
+      }
+    });
+
+    // Rename: a Named Collection entry's own name input rewrites its
+    // fieldset's data-entry attribute plus every one of its own descendant
+    // name/id/for/data-collection-name attributes to the new key, after
+    // checking the new name does not collide with a sibling entry.
+    document.addEventListener("change", function (event) {
+      var nameInput = event.target.closest("[data-entry-name-input]");
+      if (!nameInput) return;
+
+      var entryFieldset = nameInput.closest("[data-entry]");
+      var entriesContainer = entryFieldset.parentElement;
+      var collectionName = nameInput.getAttribute("data-collection-name");
+      var oldKey = entryFieldset.getAttribute("data-entry");
+      var newKey = nameInput.value.trim();
+
+      var siblingKeys = siblingEntryKeys(entriesContainer).filter(function (key) { return key !== oldKey; });
+      if (!newKey || siblingKeys.indexOf(newKey) !== -1) {
+        nameInput.value = oldKey;
+        return;
+      }
+
+      entryFieldset.setAttribute("data-entry", newKey);
+      rewriteEntryPrefix(entryFieldset, collectionName + "." + oldKey, collectionName + "." + newKey);
+    });
+
+    // --- Ordered Collection reorder (ticket 07) -----------------------------
+    //
+    // parse_submission (submission.py) reconstructs an Ordered Collection's
+    // list order purely by sorting its entries' index values -- it never
+    // looks at DOM order -- so moving an entry only needs to swap its index
+    // prefix (and matching "#N" legend text) with the adjacent sibling it is
+    // passing, not renumber every entry in the collection. Named Collection
+    // entries never get Move controls (see render_collection_entry), so this
+    // handler only ever runs for an Ordered Collection.
+    function swapEntryIndices(entryA, entryB, collectionName) {
+      var indexA = entryA.getAttribute("data-entry");
+      var indexB = entryB.getAttribute("data-entry");
+
+      rewriteEntryPrefix(entryA, collectionName + "." + indexA, collectionName + "." + indexB);
+      entryA.setAttribute("data-entry", indexB);
+      var legendA = entryA.querySelector(":scope > [data-entry-header] > legend");
+      if (legendA) legendA.textContent = "#" + (parseInt(indexB, 10) + 1);
+
+      rewriteEntryPrefix(entryB, collectionName + "." + indexB, collectionName + "." + indexA);
+      entryB.setAttribute("data-entry", indexA);
+      var legendB = entryB.querySelector(":scope > [data-entry-header] > legend");
+      if (legendB) legendB.textContent = "#" + (parseInt(indexA, 10) + 1);
+    }
+
+    document.addEventListener("click", function (event) {
+      var moveButton = event.target.closest("[data-move-entry]");
+      if (!moveButton) return;
+
+      var entryFieldset = moveButton.closest("[data-entry]");
+      var direction = moveButton.getAttribute("data-move-entry");
+      var adjacent = direction === "up" ? entryFieldset.previousElementSibling : entryFieldset.nextElementSibling;
+      // No-op at either end of the list: there is no sibling to swap with.
+      if (!adjacent || !adjacent.hasAttribute("data-entry")) return;
+
+      swapEntryIndices(entryFieldset, adjacent, moveButton.getAttribute("data-collection-name"));
+      if (direction === "up") {
+        entryFieldset.parentElement.insertBefore(entryFieldset, adjacent);
+      } else {
+        entryFieldset.parentElement.insertBefore(adjacent, entryFieldset);
+      }
+    });
+  </script>
+  <script src="/static/mode-toggle.js"></script>
+</body>
+</html>
+

@@ -20,7 +20,9 @@ from pathlib import Path
 from typing import TypeVar
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from mimirheim_shared.formspec import FormSpec
 
 _ConfigT = TypeVar("_ConfigT", bound=BaseModel)
 
@@ -45,20 +47,18 @@ class MqttConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    host: str = Field(description="Broker hostname or IP address.", json_schema_extra={"ui_label": "Broker host", "ui_group": "basic"})
-    port: int = Field(default=1883, ge=1, le=65535, description="Broker TCP port.", json_schema_extra={"ui_label": "Broker port", "ui_group": "advanced"})
-    client_id: str | None = Field(default=None, description="MQTT client identifier. Defaults to a tool-specific value when not set.", json_schema_extra={"ui_label": "Client ID", "ui_group": "basic"})
-    username: str | None = Field(default=None, description="Broker username.", json_schema_extra={"ui_label": "Username", "ui_group": "advanced"})
-    password: str | None = Field(default=None, description="Broker password.", json_schema_extra={"ui_label": "Password", "ui_group": "advanced"})
+    host: str = Field(description="Broker hostname or IP address.")
+    port: int = Field(default=1883, ge=1, le=65535, description="Broker TCP port.")
+    client_id: str | None = Field(default=None, description="MQTT client identifier. Defaults to a tool-specific value when not set.")
+    username: str | None = Field(default=None, description="Broker username.")
+    password: str | None = Field(default=None, description="Broker password.")
     tls: bool = Field(
         default=False,
-        description="Enable TLS for the broker connection. Set to true when the broker listens on an encrypted port (typically 8883).",
-        json_schema_extra={"ui_label": "Enable TLS", "ui_group": "advanced"},
+        description="Enable TLS for the broker connection. Set to true when the broker listens on an encrypted port (typically 8883)."
     )
     tls_allow_insecure: bool = Field(
         default=False,
-        description="Skip broker certificate verification when TLS is enabled. Has no effect when tls is false.",
-        json_schema_extra={"ui_label": "Allow insecure TLS", "ui_group": "advanced"},
+        description="Skip broker certificate verification when TLS is enabled. Has no effect when tls is false."
     )
 
 
@@ -81,21 +81,18 @@ class HomeAssistantConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    enabled: bool = Field(default=False, description="Enable HA MQTT discovery.", json_schema_extra={"ui_label": "Enable HA discovery", "ui_group": "advanced"})
+    enabled: bool = Field(default=False, description="Enable HA MQTT discovery.")
     discovery_prefix: str = Field(
         default="homeassistant",
-        description="HA MQTT discovery topic prefix.",
-        json_schema_extra={"ui_label": "Discovery prefix", "ui_group": "advanced"},
+        description="HA MQTT discovery topic prefix."
     )
     device_name: str = Field(
         default="",
-        description="Display name for the HA device. Defaults to tool name.",
-        json_schema_extra={"ui_label": "HA device name", "ui_group": "advanced"},
+        description="Display name for the HA device. Defaults to tool name."
     )
     forecast_sensor: bool = Field(
         default=True,
-        description="Publish an additional HA sensor entity for the helper's forecast output topic.",
-        json_schema_extra={"ui_label": "Enable forecast sensor", "ui_group": "advanced"},
+        description="Publish an additional HA sensor entity for the helper's forecast output topic."
     )
 
 
@@ -205,40 +202,137 @@ def apply_mqtt_env_overrides(raw: dict) -> dict:
     return raw
 
 
+def _read_raw_config(path: str) -> tuple[dict, str | None]:
+    """Read and parse a helper's YAML file, never raising.
+
+    A missing file, an unreadable file, and a file that is not valid YAML are
+    all reported the same way: as an error string paired with an empty dict,
+    rather than an exception. This is what lets ``load_helper_config`` treat
+    "no usable file yet" as just another shape of "the configuration does not
+    currently validate", the same non-fatal outcome as a file that parses but
+    fails the helper's own schema (see ADR-0009 and
+    ``mimirheim/io/config_service.py``'s ``_read_raw_config``, the mimirheim
+    core counterpart this mirrors).
+
+    Args:
+        path: Filesystem path to the YAML configuration file.
+
+    Returns:
+        A ``(raw, error)`` pair. ``error`` is ``None`` on success, in which
+        case ``raw`` is the parsed mapping (or ``{}`` for an empty or
+        comment-only file). On failure ``raw`` is always ``{}`` and ``error``
+        is a human-readable description suitable for the Operational State
+        topic's ``detail`` field.
+    """
+    try:
+        text = Path(path).read_text()
+    except OSError as exc:
+        return {}, f"Cannot read config file {path!r}: {exc}"
+    try:
+        raw = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        return {}, f"Cannot parse config file {path!r}: {exc}"
+    return raw or {}, None
+
+
 def load_helper_config(
     path: str,
     model_cls: type[_ConfigT],
     logger: logging.Logger,
+    *,
+    owner_id: str,
+    display_name: str,
+    form_spec: FormSpec,
 ) -> _ConfigT:
     """Load, env-override and validate a helper's YAML configuration file.
 
     Every helper daemon starts the same way: read the YAML, let the HA
     Supervisor environment override the ``mqtt`` section, validate against the
-    helper's own Pydantic model, and abort the process if any of that fails.
-    This function is that sequence, shared so the five helpers that used to
-    carry an identical private copy stay in step.
+    helper's own Pydantic model, and either return the result or enter
+    Awaiting Configuration mode. This function is that sequence, shared so
+    every helper stays in step.
 
-    Failure is terminal by design. A daemon cannot do useful work with a
-    configuration it could not read, and exiting lets the supervisor restart it
-    once the operator fixes the file.
+    Validation happens in two stages, mirroring mimirheim core's own startup
+    (``mimirheim/__main__.py``, ADR-0009/ADR-0011):
+
+    1. Broker Settings (the ``mqtt:`` section, validated against
+       ``MqttConfig`` alone). A daemon with no usable broker settings cannot
+       connect to MQTT at all, so it cannot serve the Config Service protocol
+       either; this failure remains immediately fatal, exactly as before this
+       function supported Awaiting Configuration.
+    2. The full configuration model. A failure here — including the file not
+       existing or not parsing as YAML — is no longer fatal. Instead this
+       function connects using the now-known-valid Broker Settings and serves
+       only the Config Service protocol (Descriptor, get_current_values,
+       validate_and_write, restart_request) until a Restart Request or
+       termination signal, then returns control to the supervisor via
+       ``sys.exit(0)`` so it can restart the process against a fixed file.
 
     Args:
         path: Filesystem path to the YAML configuration file.
         model_cls: The helper's Pydantic config model.
         logger: The calling helper's logger, so the failure record carries the
             helper's name rather than this module's.
+        owner_id: This helper's stable Config Owner identifier, used to build
+            its Descriptor and every Config Service topic if the full
+            configuration does not currently validate.
+        display_name: Human-readable name shown by the Config Editor.
+        form_spec: The FormSpec paired with ``model_cls``.
 
     Returns:
-        A validated instance of ``model_cls``.
+        A validated instance of ``model_cls``. Only returns on success; every
+        failure path exits the process (see Raises).
 
     Raises:
-        SystemExit: With code 1 if the file cannot be read or parsed, or if it
-            fails validation. The full traceback is logged first.
+        SystemExit: With code 1 if the ``mqtt:`` section does not validate on
+            its own (from the file or the environment). With code 0 after
+            Awaiting Configuration mode ends (Restart Request or termination
+            signal) if the rest of the configuration did not validate.
     """
+    raw, load_error = _read_raw_config(path)
+
     try:
-        raw = yaml.safe_load(Path(path).read_text())
         apply_mqtt_env_overrides(raw)
-        return model_cls.model_validate(raw)
-    except Exception:
+    except ValueError:
         logger.exception("Failed to load configuration from %s", path)
         sys.exit(1)
+
+    try:
+        broker_settings = MqttConfig.model_validate(raw.get("mqtt") or {})
+    except ValidationError:
+        logger.exception("Invalid Broker Settings (mqtt: section) in %s", path)
+        sys.exit(1)
+
+    if load_error is None:
+        try:
+            return model_cls.model_validate(raw)
+        except ValidationError as exc:
+            logger.warning(
+                "Configuration in %s does not validate; awaiting a corrected "
+                "configuration over MQTT: %s",
+                path,
+                exc,
+            )
+            detail = str(exc)
+    else:
+        logger.warning(
+            "%s; awaiting a corrected configuration over MQTT.", load_error
+        )
+        detail = load_error
+
+    # Imported here, not at module level: helper_common.awaiting_configuration
+    # imports MqttConfig from this module, so a top-level import would be
+    # circular.
+    from helper_common.awaiting_configuration import run_awaiting_configuration
+
+    run_awaiting_configuration(
+        mqtt_config=broker_settings,
+        config_path=Path(path),
+        detail=detail,
+        owner_id=owner_id,
+        display_name=display_name,
+        model_cls=model_cls,
+        form_spec=form_spec,
+        logger=logger,
+    )
+    sys.exit(0)

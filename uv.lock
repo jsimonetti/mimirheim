@@ -7,6 +7,12 @@ resolution-markers = [
     "sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
+[manifest]
+members = [
+    "mimirheim",
+    "mimirheim-shared",
+]
+
 [[package]]
 name = "aiohappyeyeballs"
 version = "2.6.1"
@@ -572,6 +578,7 @@ name = "mimirheim"
 version = "0.1.10"
 source = { editable = "." }
 dependencies = [
+    { name = "mimirheim-shared" },
     { name = "mip" },
     { name = "paho-mqtt" },
     { name = "pydantic" },
@@ -592,7 +599,7 @@ baseload-ha-db-postgres = [
     { name = "psycopg2-binary" },
 ]
 config-editor = [
-    { name = "ruamel-yaml" },
+    { name = "jinja2" },
 ]
 epexpredictor = [
     { name = "requests" },
@@ -668,10 +675,12 @@ requires-dist = [
     { name = "httpx", marker = "extra == 'baseload-ha'", specifier = ">=0.27" },
     { name = "httpx", marker = "extra == 'helpers'", specifier = ">=0.27" },
     { name = "httpx", marker = "extra == 'pv-ml-learner'", specifier = ">=0.27" },
+    { name = "jinja2", marker = "extra == 'config-editor'", specifier = ">=3.0" },
     { name = "joblib", marker = "extra == 'helpers'", specifier = ">=1.6.0" },
     { name = "joblib", marker = "extra == 'pv-ml-learner'", specifier = ">=1.6.0" },
     { name = "knmi-py", marker = "extra == 'helpers'", specifier = ">=0.2" },
     { name = "knmi-py", marker = "extra == 'pv-ml-learner'", specifier = ">=0.2" },
+    { name = "mimirheim-shared", editable = "mimirheim_shared" },
     { name = "mip", specifier = ">=1.14" },
     { name = "open-meteo-solar-forecast", marker = "extra == 'helpers'", specifier = ">=0.1.32" },
     { name = "open-meteo-solar-forecast", marker = "extra == 'pv-openmeteo'", specifier = ">=0.1.32" },
@@ -691,7 +700,6 @@ requires-dist = [
     { name = "requests", marker = "extra == 'epexpredictor'", specifier = ">=2.34.2" },
     { name = "requests", marker = "extra == 'helpers'", specifier = ">=2.34.2" },
     { name = "requests", marker = "extra == 'zonneplan'", specifier = ">=2.34.2" },
-    { name = "ruamel-yaml", marker = "extra == 'config-editor'", specifier = ">=0.18" },
     { name = "scikit-learn", marker = "extra == 'helpers'", specifier = ">=1.9.0" },
     { name = "scikit-learn", marker = "extra == 'pv-ml-learner'", specifier = ">=1.9.0" },
     { name = "sqlalchemy", marker = "extra == 'baseload-ha-db'", specifier = ">=2.0.52" },
@@ -714,6 +722,31 @@ dev = [
     { name = "respx", specifier = ">=0.23.1" },
     { name = "ruff", specifier = ">=0.16.6" },
 ]
+
+[[package]]
+name = "mimirheim-shared"
+version = "0.1.0"
+source = { editable = "mimirheim_shared" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "pyyaml" },
+    { name = "ruamel-yaml" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.13.5" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "ruamel-yaml", specifier = ">=0.18" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.1.1" }]
 
 [[package]]
 name = "mip"

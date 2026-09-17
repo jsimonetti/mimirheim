@@ -8,11 +8,14 @@ step per hour and reports the count unchanged.
 """
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from nordpool.__main__ import NordpoolDaemon
 from nordpool.config import MqttConfig, NordpoolApiConfig, NordpoolConfig
 from nordpool.fetcher import FetchError
+
+_CONFIG_PATH = Path("/tmp/nordpool-test-config.yaml")
 
 
 def _make_daemon(price_interval: str) -> NordpoolDaemon:
@@ -21,7 +24,7 @@ def _make_daemon(price_interval: str) -> NordpoolDaemon:
         trigger_topic="mimir/input/tools/prices/trigger",
         nordpool=NordpoolApiConfig(area="NL", price_interval=price_interval),
     )
-    return NordpoolDaemon(config)
+    return NordpoolDaemon(config, _CONFIG_PATH)
 
 
 def _run_cycle_with_n_steps(daemon: NordpoolDaemon, n_steps: int):

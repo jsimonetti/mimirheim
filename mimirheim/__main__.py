@@ -3,39 +3,52 @@
 This module is the application's main entry point. It is responsible for:
 
 1. Parsing the ``--config`` command-line argument.
-2. Loading and validating the YAML configuration file.
-3. Constructing all application components (ReadinessState, MqttClient,
-   MqttPublisher) and wiring them together.
-4. Starting the MQTT network loop.
-5. Running the solve loop on the main thread until SIGTERM or SIGINT.
-6. Exiting cleanly.
+2. Validating Broker Settings (the ``mqtt:`` section) on their own, first;
+   only a Broker Settings failure is fatal (ADR-0009).
+3. Attempting full validation of the rest of the configuration file. On
+   failure (or a missing file), running ``_run_awaiting_configuration``
+   instead of exiting: connected to MQTT, serving only the Config Service
+   protocol, running none of mimirheim's own function (ADR-0009, ADR-0011).
+4. On full success, constructing all application components (ReadinessState,
+   MqttClient, MqttPublisher) and wiring them together.
+5. Starting the MQTT network loop.
+6. Running the solve loop on the main thread until SIGTERM, SIGINT, or a
+   Restart Request (ADR-0012).
+7. Exiting cleanly.
 
 What this module does not do:
 - Solving: delegated to ``model_builder.build_and_solve``.
 - Parsing MQTT payloads: delegated to ``io.input_parser``.
 - Publishing results: delegated to ``io.mqtt_publisher``.
 - Tracking readiness: delegated to ``core.readiness``.
+- Building the Config Service Descriptor: delegated to ``io.config_service``,
+  published/cleared by ``MqttClient`` (Operational) or
+  ``io.awaiting_configuration.AwaitingConfigurationClient`` (Awaiting
+  Configuration) on their one connection (see
+  ``mimirheim_shared/docs/adr/0005``).
 """
 
 import argparse
 import json
 import logging
-import os
 import queue
 import signal
 import sys
+import threading
 from pathlib import Path
 
 import paho.mqtt.client as paho
 import yaml
 from pydantic import ValidationError
 
-from mimirheim.config.schema import MimirheimConfig
+from mimirheim.config.schema import MimirheimConfig, MqttConfig
 from mimirheim.core.bundle import SolveBundle, SolveResult
 from mimirheim.core.model_builder import debug_dump, build_and_solve
 from mimirheim.core.post_process import apply_gain_threshold
 from mimirheim.core.control_arbitration import assign_control_authority
 from mimirheim.core.readiness import ReadinessState
+from mimirheim.io.awaiting_configuration import AwaitingConfigurationClient
+from mimirheim.io.config_service import apply_mqtt_env_overrides
 from mimirheim.io.mqtt_client import MqttClient
 from mimirheim.io.mqtt_publisher import MqttPublisher
 
@@ -178,79 +191,177 @@ def _publish_reporting_notification(
     )
 
 
-def _apply_mqtt_env_overrides(raw: dict) -> None:
-    """Override the mqtt: section of the raw config dict from environment variables.
+def _read_raw_config(path: str) -> tuple[dict, str | None]:
+    """Read and parse the YAML configuration file.
 
-    When running as a HA add-on, the Supervisor injects MQTT broker credentials
-    as environment variables (written by container/etc/cont-init.d/01-mqtt-env.sh
-    before any s6 service starts). These take precedence over whatever appears in
-    the YAML config file so users do not need to copy broker credentials into
-    mimirheim.yaml.
-
-    When the environment variables are absent (plain Docker, no Supervisor) this
-    function is a no-op and the YAML values are used as-is.
-
-    Args:
-        raw: The raw dict parsed from the YAML config file. Modified in-place.
-    """
-    overrides: dict = {}
-    if host := os.environ.get("MQTT_HOST"):
-        overrides["host"] = host
-    if port_str := os.environ.get("MQTT_PORT"):
-        overrides["port"] = int(port_str)
-    if username := os.environ.get("MQTT_USERNAME"):
-        overrides["username"] = username
-    if password := os.environ.get("MQTT_PASSWORD"):
-        overrides["password"] = password
-    if ssl_str := os.environ.get("MQTT_SSL"):
-        overrides["tls"] = ssl_str.lower() == "true"
-    if overrides:
-        raw.setdefault("mqtt", {})
-        raw["mqtt"].update(overrides)
-
-
-def _load_config(path: str) -> MimirheimConfig:
-    """Load and validate the YAML configuration file.
-
-    Reads the YAML file at ``path``, parses it, and validates it against
-    ``MimirheimConfig``. On failure, prints a human-readable error message and
-    raises ``SystemExit(1)``.
+    A missing file, an unreadable one, or one that is not valid YAML no
+    longer exits the process by itself (ADR-0009, ADR-0011): Broker Settings
+    may still come entirely from the environment, in which case mimirheim
+    core connects and enters Awaiting Configuration instead of exiting. This
+    function reports what went wrong rather than deciding what to do about
+    it; ``_load_broker_settings`` (fatal) and ``_try_load_full_config``
+    (not fatal) do that.
 
     Args:
         path: Path to the YAML configuration file.
 
     Returns:
-        The validated ``MimirheimConfig`` instance.
-
-    Raises:
-        SystemExit: With exit code 1 if the file cannot be read or the
-            configuration fails Pydantic validation.
+        A tuple of the parsed dict (``{}`` if the file could not be read or
+        parsed) and either ``None`` (read and parsed successfully) or a
+        human-readable description of what went wrong.
     """
     try:
-        with Path(path).open() as fh:
-            raw = yaml.safe_load(fh)
+        text = Path(path).read_text()
     except OSError as exc:
-        print(f"ERROR: Cannot read config file {path!r}: {exc}", file=sys.stderr)
-        sys.exit(1)
-
-    # When running as a HA add-on, the Supervisor writes MQTT broker
-    # credentials to the s6 container environment via cont-init.d/01-mqtt-env.sh.
-    # These override any mqtt: values in the YAML file so users do not need to
-    # copy broker credentials into mimirheim.yaml.
-    _apply_mqtt_env_overrides(raw)
-
+        return {}, f"Cannot read config file {path!r}: {exc}"
     try:
-        return MimirheimConfig.model_validate(raw)
+        return yaml.safe_load(text) or {}, None
+    except yaml.YAMLError as exc:
+        return {}, f"Cannot parse config file {path!r}: {exc}"
+
+
+def _load_broker_settings(raw: dict, path: str) -> MqttConfig:
+    """Validate Broker Settings (the mqtt: section) on its own, before anything else.
+
+    Broker Settings failure is always fatal (ADR-0009): without a broker
+    connection mimirheim core cannot become reachable over the Config
+    Service protocol, so there is no recovery path to wait in place for.
+
+    Args:
+        raw: The raw dict parsed from the YAML config file, with
+            ``apply_mqtt_env_overrides`` already applied.
+        path: Path to the YAML configuration file, for the error message.
+
+    Returns:
+        The validated ``MqttConfig`` instance.
+
+    Raises:
+        SystemExit: With exit code 1 if the ``mqtt:`` section fails
+            validation.
+    """
+    try:
+        return MqttConfig.model_validate(raw.get("mqtt") or {})
     except ValidationError as exc:
-        print(f"ERROR: Invalid configuration in {path!r}:\n{exc}", file=sys.stderr)
+        print(
+            f"ERROR: Invalid Broker Settings (mqtt: section) in {path!r}:\n{exc}",
+            file=sys.stderr,
+        )
         sys.exit(1)
+
+
+def _try_load_full_config(
+    raw: dict, load_error: str | None
+) -> tuple[MimirheimConfig | None, str | None]:
+    """Attempt full validation of the configuration file.
+
+    Unlike Broker Settings, a failure here is never fatal (ADR-0009,
+    ADR-0011): the caller uses the returned detail to enter Awaiting
+    Configuration instead of exiting.
+
+    Args:
+        raw: The raw dict parsed from the YAML config file, with
+            ``apply_mqtt_env_overrides`` already applied.
+        load_error: The error from ``_read_raw_config``, if reading or
+            parsing the file itself failed; validation is not attempted
+            when this is set.
+
+    Returns:
+        ``(config, None)`` if the file validates in full. ``(None, detail)``
+        otherwise, where ``detail`` is ``load_error`` when set, or a
+        human-readable summary of the Pydantic ``ValidationError``.
+    """
+    if load_error is not None:
+        return None, load_error
+    try:
+        return MimirheimConfig.model_validate(raw), None
+    except ValidationError as exc:
+        return None, str(exc)
+
+
+def _build_paho_client(mqtt: MqttConfig) -> paho.Client:
+    """Construct a paho client from Broker Settings, applying TLS and credentials.
+
+    Shared by the Operational and Awaiting Configuration startup paths: both
+    connect using the same validated Broker Settings (ADR-0009), before
+    either knows whether the rest of the configuration validates.
+
+    Args:
+        mqtt: The validated Broker Settings to connect with.
+
+    Returns:
+        A paho ``Client``, not yet connected.
+    """
+    client = paho.Client(
+        paho.CallbackAPIVersion.VERSION2,
+        client_id=mqtt.client_id or "mimir",
+    )
+    if mqtt.tls:
+        import ssl
+        cert_reqs = ssl.CERT_NONE if mqtt.tls_allow_insecure else ssl.CERT_REQUIRED
+        client.tls_set(cert_reqs=cert_reqs)
+        if mqtt.tls_allow_insecure:
+            client.tls_insecure_set(True)
+    if mqtt.username is not None:
+        client.username_pw_set(mqtt.username, mqtt.password)
+    return client
+
+
+def _run_awaiting_configuration(mqtt: MqttConfig, config_path: Path, detail: str) -> None:
+    """Serve the Config Service protocol without running mimirheim's own function.
+
+    See ``mimirheim_shared/CONTEXT.md``'s Awaiting Configuration entry and
+    ADR-0009/ADR-0011: no solve loop, no data topics, no schedule — only
+    Descriptor discovery, Operational State, ``get_current_values``,
+    ``validate_and_write``, and ``restart_request`` over a connection built
+    from Broker Settings alone, until a Restart Request or a termination
+    signal exits the process.
+
+    Args:
+        mqtt: The validated Broker Settings to connect with.
+        config_path: Path to mimirheim core's own YAML configuration file,
+            the target of a successful validate_and_write request.
+        detail: A human-readable summary of why the configuration does not
+            currently validate, published on the Operational State topic.
+    """
+    paho_client = _build_paho_client(mqtt)
+
+    # A single Event, set from either the signal handler or a Restart
+    # Request acknowledged on the paho network thread, replaces the solve
+    # loop's polling `running` flag: there is no queue to poll here, so a
+    # blocking wait is simpler and avoids a busy loop.
+    shutdown_event = threading.Event()
+
+    def _request_shutdown(signum: int, frame: object) -> None:
+        logger.info("Received signal %d; shutting down.", signum)
+        shutdown_event.set()
+
+    signal.signal(signal.SIGTERM, _request_shutdown)
+    signal.signal(signal.SIGINT, _request_shutdown)
+
+    client = AwaitingConfigurationClient(
+        paho_client=paho_client,
+        mqtt=mqtt,
+        config_path=config_path,
+        detail=detail,
+        on_restart_requested=shutdown_event.set,
+    )
+    client.start()
+    logger.warning("mimirheim is awaiting configuration: %s", detail)
+
+    shutdown_event.wait()
+    client.stop()
+    logger.info("mimirheim stopped (awaiting configuration).")
 
 
 def main() -> None:
-    """Run the mimirheim optimiser until SIGTERM or SIGINT.
+    """Run the mimirheim optimiser until SIGTERM, SIGINT, or a Restart Request.
 
-    Parses the ``--config`` argument, loads the configuration, constructs all
-    application components, starts the MQTT network loop, and then enters the
+    Parses the ``--config`` argument, validates Broker Settings first
+    (always fatal on failure, ADR-0009), then attempts full validation of
+    the rest of the configuration file. If that fails or the file is
+    missing, hands off to ``_run_awaiting_configuration`` and returns
+    instead of exiting (ADR-0009, ADR-0011). Otherwise constructs all
+    application components, starts the MQTT network loop, and enters the
     solve loop. The loop blocks on a queue that is populated by the MQTT
     ``on_message`` callback whenever all required inputs are present and fresh.
 
@@ -272,7 +383,24 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    config = _load_config(args.config)
+    raw, load_error = _read_raw_config(args.config)
+
+    # When running as a HA add-on, the Supervisor writes MQTT broker
+    # credentials to the s6 container environment via cont-init.d/01-mqtt-env.sh.
+    # These override any mqtt: values in the YAML file so users do not need to
+    # copy broker credentials into mimirheim.yaml.
+    apply_mqtt_env_overrides(raw)
+
+    broker_settings = _load_broker_settings(raw, args.config)
+    config, config_error = _try_load_full_config(raw, load_error)
+
+    if config is None:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        )
+        _run_awaiting_configuration(broker_settings, Path(args.config), config_error)
+        return
 
     logging.basicConfig(
         level=logging.DEBUG if config.debug.enabled else logging.INFO,
@@ -288,29 +416,13 @@ def main() -> None:
     solve_queue: queue.Queue = queue.Queue(maxsize=1)
 
     readiness = ReadinessState(config)
-    paho_client = paho.Client(
-        paho.CallbackAPIVersion.VERSION2,
-        client_id=config.mqtt.client_id,
-    )
-    if config.mqtt.tls:
-        import ssl
-        cert_reqs = ssl.CERT_NONE if config.mqtt.tls_allow_insecure else ssl.CERT_REQUIRED
-        paho_client.tls_set(cert_reqs=cert_reqs)
-        if config.mqtt.tls_allow_insecure:
-            paho_client.tls_insecure_set(True)
-    if config.mqtt.username is not None:
-        paho_client.username_pw_set(config.mqtt.username, config.mqtt.password)
+    paho_client = _build_paho_client(config.mqtt)
     publisher = MqttPublisher(client=paho_client, config=config)
-    mqtt_client = MqttClient(
-        config=config,
-        readiness=readiness,
-        publisher=publisher,
-        paho_client=paho_client,
-        solve_queue=solve_queue,
-    )
 
-    # Register SIGTERM and SIGINT handlers. Both set `running` to False, which
-    # causes the solve loop to exit cleanly after the current solve completes.
+    # Register SIGTERM and SIGINT handlers, and the Restart Request callback
+    # given to MqttClient below. All three set `running` to False, which
+    # causes the solve loop to exit cleanly after the current solve completes
+    # (a Restart Request never reconstructs the loop in place, ADR-0012).
     running = True
 
     def _request_shutdown(signum: int, frame: object) -> None:
@@ -318,8 +430,23 @@ def main() -> None:
         logger.info("Received signal %d; shutting down.", signum)
         running = False
 
+    def _request_restart() -> None:
+        nonlocal running
+        logger.info("Restart requested; shutting down for supervisor restart.")
+        running = False
+
     signal.signal(signal.SIGTERM, _request_shutdown)
     signal.signal(signal.SIGINT, _request_shutdown)
+
+    mqtt_client = MqttClient(
+        config=config,
+        readiness=readiness,
+        publisher=publisher,
+        paho_client=paho_client,
+        config_path=Path(args.config),
+        solve_queue=solve_queue,
+        on_restart_requested=_request_restart,
+    )
 
     mqtt_client.start()
     logger.info(

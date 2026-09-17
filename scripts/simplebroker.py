@@ -51,12 +51,13 @@ class LoggingBroker(Broker):
         return await super().broadcast_message(session, topic, data, qos=qos, retain=retain)
 
 
-async def run_broker(host: str, port: int) -> None:
+async def run_broker(host: str, port: int, log_messages: bool = False) -> None:
     """Start the development MQTT broker and keep it running.
 
     Args:
         host: TCP bind host.
         port: TCP bind port.
+        log_messages: If True, log every published message to stdout.
     """
     config: dict[str, Any] = {
         "listeners": {
@@ -68,7 +69,7 @@ async def run_broker(host: str, port: int) -> None:
         "plugins": ["amqtt.plugins.authentication.AnonymousAuthPlugin"],
     }
 
-    broker = LoggingBroker(config)
+    broker = LoggingBroker(config) if log_messages else Broker(config)
     stop_event = asyncio.Event()
 
     loop = asyncio.get_running_loop()
@@ -89,9 +90,14 @@ def main() -> None:
     """Parse CLI arguments and run the broker."""
     parser = argparse.ArgumentParser(description="Run a simple open MQTT broker.")
     parser.add_argument("--port", type=int, default=1883, help="Bind port (default: 1883)")
+    parser.add_argument(
+        "--log-messages",
+        action="store_true",
+        help="Log every published message to stdout (for debugging)",
+    )
     args = parser.parse_args()
 
-    asyncio.run(run_broker("127.0.0.1", args.port))
+    asyncio.run(run_broker("127.0.0.1", args.port, log_messages=args.log_messages))
 
 
 if __name__ == "__main__":

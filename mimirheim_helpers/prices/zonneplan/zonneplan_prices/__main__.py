@@ -17,16 +17,24 @@ Authentication is handled entirely within ``_run_cycle``:
    email OTP flow. The user must click a link in their inbox; no CLI or exec is
    required.
 4. On successful authentication, fetch prices and publish.
+
+``ZonneplanPricesDaemon`` also opts into the Config Service protocol via
+``helper_common.config_owner.ConfigOwnerSupport``, so its configuration is
+discoverable, renderable, and editable in the same running Config Editor as
+mimirheim core's (config-editor-v3 ticket 06). This is additive: it changes
+nothing about the fetch-and-publish behavior above.
 """
 from __future__ import annotations
 
 import argparse
 import logging
 from pathlib import Path
+from typing import Any
 
 import paho.mqtt.client as mqtt
 
 from helper_common.config import load_helper_config
+from helper_common.config_owner import ConfigOwnerSupport
 from helper_common.cycle import CycleResult
 from helper_common.daemon import HelperDaemon
 from helper_common.discovery import PRICE_FORECAST_ATTRIBUTES_TEMPLATE
@@ -35,6 +43,7 @@ from zonneplan_prices.api import AuthError, FetchError, ZonneplanClient
 from zonneplan_prices.auth import attempt_auth
 from zonneplan_prices.config import ZonneplanPricesConfig
 from zonneplan_prices.fetcher import fetch_prices
+from zonneplan_prices.formspec import ZONNEPLAN_PRICES_CONFIG_FORM_SPEC
 from zonneplan_prices.publisher import publish_prices
 from zonneplan_prices.token import is_token_valid, load_token, save_token
 
@@ -42,6 +51,11 @@ from zonneplan_prices.token import is_token_valid, load_token, save_token
 # `python -m zonneplan_prices`, where __name__ is "__main__" and the records would
 # not join the ones MqttDaemon emits under the package name.
 logger = logging.getLogger("zonneplan_prices")
+
+# Stable regardless of user configuration; the Config Editor needs a fixed
+# identity for this tool across restarts and reconfiguration.
+CONFIG_OWNER_ID = "zonneplan_prices"
+CONFIG_OWNER_DISPLAY_NAME = "Zonneplan electricity prices"
 
 
 class ZonneplanPricesDaemon(HelperDaemon):
@@ -62,6 +76,46 @@ class ZonneplanPricesDaemon(HelperDaemon):
     FORECAST_UNIT = "EUR/kWh"
     FORECAST_DEVICE_CLASS = None
     FORECAST_ATTRIBUTES_TEMPLATE = PRICE_FORECAST_ATTRIBUTES_TEMPLATE
+
+    def __init__(self, config: ZonneplanPricesConfig, config_path: Path) -> None:
+        """Construct the daemon and register it as a Config Service owner.
+
+        Args:
+            config: Validated tool configuration.
+            config_path: Path to the YAML file this daemon was started with;
+                the target of a successful validate_and_write request.
+        """
+        super().__init__(config)
+        self._config_owner = ConfigOwnerSupport(
+            owner_id=CONFIG_OWNER_ID,
+            display_name=CONFIG_OWNER_DISPLAY_NAME,
+            model=ZonneplanPricesConfig,
+            form_spec=ZONNEPLAN_PRICES_CONFIG_FORM_SPEC,
+            config_path=config_path,
+        )
+        # Must be registered before self._client.connect() (called by run()).
+        self._config_owner.register_last_will(self._client)
+
+    def _on_connect(
+        self,
+        client: mqtt.Client,
+        userdata: Any,
+        flags: Any,
+        reason_code: Any,
+        properties: Any,
+    ) -> None:
+        super()._on_connect(client, userdata, flags, reason_code, properties)
+        if reason_code.is_failure:
+            return
+        self._config_owner.on_connect(client)
+
+    def _on_message(self, client: mqtt.Client, userdata: Any, message: Any) -> None:
+        if self._config_owner.handle_message(client, message):
+            return
+        super()._on_message(client, userdata, message)
+
+    def _on_shutdown(self) -> None:
+        self._config_owner.clear_descriptor(self._client)
 
     def _run_cycle(self, client: mqtt.Client) -> CycleResult | None:
         """Fetch current Zonneplan prices and publish them.
@@ -166,7 +220,15 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    ZonneplanPricesDaemon(load_helper_config(args.config, ZonneplanPricesConfig, logger)).run()
+    config = load_helper_config(
+        args.config,
+        ZonneplanPricesConfig,
+        logger,
+        owner_id=CONFIG_OWNER_ID,
+        display_name=CONFIG_OWNER_DISPLAY_NAME,
+        form_spec=ZONNEPLAN_PRICES_CONFIG_FORM_SPEC,
+    )
+    ZonneplanPricesDaemon(config, Path(args.config)).run()
 
 
 if __name__ == "__main__":

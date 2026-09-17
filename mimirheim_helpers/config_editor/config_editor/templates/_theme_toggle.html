@@ -1,0 +1,7 @@
+{% macro render(theme, current_path) %}
+{% if theme == "dark" %}
+<a href="/theme/light?next={{ current_path }}" class="btn btn-sm btn-outline-light">Light mode</a>
+{% else %}
+<a href="/theme/dark?next={{ current_path }}" class="btn btn-sm btn-outline-light">Dark mode</a>
+{% endif %}
+{% endmacro %}

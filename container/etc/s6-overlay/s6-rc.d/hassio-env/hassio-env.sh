@@ -13,10 +13,13 @@
 #   - Writes CONFIG_EDITOR_ALLOWED_IP (the container gateway) so the
 #     config editor restricts ingress to the HA ingress proxy only.
 #
-# When SUPERVISOR_TOKEN is absent (plain Docker), the script exits
-# immediately. All ENABLE_* and MQTT_* variables remain unset. Services
-# fall back to their config-file-presence gates and YAML-defined MQTT
-# settings, preserving the existing plain-Docker behaviour exactly.
+# When SUPERVISOR_TOKEN is absent (plain Docker/Compose), the script exits
+# immediately and writes nothing. Every service's ENABLE_<SERVICE> gate
+# requires the literal string "true" to start (ADR-0013, fail-closed); an
+# operator outside the HA add-on must set these variables directly in the
+# container environment, there is no config-file-presence fallback. MQTT_*
+# variables remain unset too, so YAML-defined mqtt: settings apply unless
+# the operator has set MQTT_* directly.
 
 if [ -z "${SUPERVISOR_TOKEN:-}" ]; then
     exit 0

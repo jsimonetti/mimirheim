@@ -97,16 +97,14 @@ class ZonneplanApiConfig(BaseModel):
             "Email address registered with the Zonneplan account. Required for "
             "first-time authentication. When absent and no token file exists, "
             "the daemon logs an error and skips the cycle."
-        ),
-        json_schema_extra={"ui_label": "Email address", "ui_group": "basic"},
+        )
     )
     token_file: str = Field(
         default="zonneplan_token.json",
         description=(
             "Path to the JSON file where OAuth tokens are persisted between "
             "restarts. Must be on a Docker volume to survive container restarts."
-        ),
-        json_schema_extra={"ui_label": "Token file path", "ui_group": "advanced"},
+        )
     )
     import_formula: str = Field(
         default=_DEFAULT_IMPORT_FORMULA,
@@ -114,16 +112,14 @@ class ZonneplanApiConfig(BaseModel):
             "Python expression for the all-in import price in EUR/kWh. "
             "Available variables: ``price`` (all-in incl. tax, EUR/kWh), "
             "``price_excl_tax`` (excl. tax, EUR/kWh), ``ts`` (datetime, UTC)."
-        ),
-        json_schema_extra={"ui_label": "Import price formula", "ui_group": "basic"},
+        )
     )
     export_formula: str = Field(
         default=_DEFAULT_EXPORT_FORMULA,
         description=(
             "Python expression for the net export price in EUR/kWh. "
             "Same variables available as import_formula. Defaults to price_excl_tax."
-        ),
-        json_schema_extra={"ui_label": "Export price formula", "ui_group": "basic"},
+        )
     )
     price_interval: Literal["hourly", "quarter_hourly"] = Field(
         default="hourly",
@@ -131,8 +127,7 @@ class ZonneplanApiConfig(BaseModel):
             "Price data resolution requested from Zonneplan. 'hourly' matches "
             "current dynamic pricing; 'quarter_hourly' requests 15-minute "
             "prices once available on the account."
-        ),
-        json_schema_extra={"ui_label": "Price interval", "ui_group": "basic"},
+        )
     )
 
     @field_validator("import_formula", "export_formula", mode="after")
@@ -177,7 +172,8 @@ class ZonneplanPricesConfig(BaseModel):
         mimir_topic_prefix: Topic prefix used to construct default topic paths.
             Defaults to ``"mimir"``.
         trigger_topic: Topic the daemon subscribes to. A message here triggers
-            one fetch-and-publish cycle.
+            one fetch-and-publish cycle. Defaults to the canonical helper
+            trigger topic derived from ``mimir_topic_prefix``.
         output_topic: Topic to publish the price payload to. When None the
             daemon defaults to ``{mimir_topic_prefix}/input/prices``.
         zonneplan: Zonneplan API and pricing parameters.
@@ -193,55 +189,49 @@ class ZonneplanPricesConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     mqtt: MqttConfig = Field(
-        description="MQTT broker connection settings.",
-        json_schema_extra={"ui_label": "MQTT", "ui_group": "basic"},
+        description="MQTT broker connection settings."
     )
     mimir_topic_prefix: str = Field(
         default="mimir",
-        description="mimirheim mqtt.topic_prefix. Used to derive default output and trigger topics.",
-        json_schema_extra={"ui_label": "mimirheim topic prefix", "ui_group": "advanced"},
+        description="mimirheim mqtt.topic_prefix. Used to derive default output and trigger topics."
     )
-    trigger_topic: str = Field(
-        description="MQTT topic that triggers a fetch cycle.",
-        json_schema_extra={"ui_label": "Trigger topic", "ui_group": "advanced"},
+    trigger_topic: str | None = Field(
+        default=None,
+        description="MQTT topic that triggers a fetch cycle. Defaults to '{mimir_topic_prefix}/input/tools/prices/trigger'."
     )
     output_topic: str | None = Field(
         default=None,
         description=(
             "MQTT topic for the retained price payload. "
             "Defaults to '{mimir_topic_prefix}/input/prices' when not set."
-        ),
-        json_schema_extra={"ui_label": "Output topic", "ui_group": "advanced", "ui_placeholder": "{mimir_topic_prefix}/input/prices"},
+        )
     )
     zonneplan: ZonneplanApiConfig = Field(
-        description="Zonneplan API and pricing formula parameters.",
-        json_schema_extra={"ui_label": "Zonneplan API", "ui_group": "basic"},
+        description="Zonneplan API and pricing formula parameters."
     )
     ha_discovery: HomeAssistantConfig | None = Field(
         default=None,
-        description="Optional Home Assistant MQTT discovery settings.",
-        json_schema_extra={"ui_label": "HA discovery", "ui_group": "advanced"},
+        description="Optional Home Assistant MQTT discovery settings."
     )
     stats_topic: str | None = Field(
         default=None,
-        description="MQTT topic where per-cycle run statistics are published.",
-        json_schema_extra={"ui_label": "Stats topic", "ui_group": "advanced"},
+        description="MQTT topic where per-cycle run statistics are published."
     )
     signal_mimir: bool = Field(
         default=False,
-        description="Publish to mimir_trigger_topic after publishing prices.",
-        json_schema_extra={"ui_label": "Signal mimirheim", "ui_group": "advanced"},
+        description="Publish to mimir_trigger_topic after publishing prices."
     )
     mimir_trigger_topic: str | None = Field(
         default=None,
-        description="Topic to trigger mimirheim. Derived from mimir_topic_prefix when not set.",
-        json_schema_extra={"ui_label": "mimirheim trigger topic", "ui_group": "advanced"},
+        description="Topic to trigger mimirheim. Derived from mimir_topic_prefix when not set."
     )
 
     @model_validator(mode="after")
-    def _derive_hioo_topics(self) -> "ZonneplanPricesConfig":
+    def _derive_mimir_topics(self) -> "ZonneplanPricesConfig":
         """Fill in mimirheim-side topics that were not explicitly set."""
         p = self.mimir_topic_prefix
+        if self.trigger_topic is None:
+            self.trigger_topic = _topics.helper_trigger_topic(p, "prices")
         if self.output_topic is None:
             self.output_topic = _topics.prices_topic(p)
         if self.mimir_trigger_topic is None:

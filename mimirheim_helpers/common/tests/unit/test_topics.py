@@ -32,6 +32,18 @@ def test_trigger_topic_custom_prefix() -> None:
     assert topics.trigger_topic("mymimir") == "mymimir/input/trigger"
 
 
+def test_helper_trigger_topic_default_action() -> None:
+    assert topics.helper_trigger_topic("mimir", "baseload") == "mimir/input/tools/baseload/trigger"
+
+
+def test_helper_trigger_topic_custom_action() -> None:
+    assert topics.helper_trigger_topic("mimir", "pv_ml_learner", "train") == "mimir/input/tools/pv_ml_learner/train"
+
+
+def test_helper_trigger_topic_custom_prefix() -> None:
+    assert topics.helper_trigger_topic("mymimir", "prices") == "mymimir/input/tools/prices/trigger"
+
+
 def test_strategy_topic_default_prefix() -> None:
     assert topics.strategy_topic("mimir") == "mimir/input/strategy"
 

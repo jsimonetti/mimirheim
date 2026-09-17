@@ -97,22 +97,19 @@ class EpexPredictorApiConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    area: _AREA_CODES = Field(..., json_schema_extra={"ui_label": "EPEX area", "ui_group": "basic"})
+    area: _AREA_CODES = Field(...)
     base_url: str = Field(
         default="https://epexpredictor.batzill.com",
-        description="API base URL. Change for a self-hosted EpexPredictor instance.",
-        json_schema_extra={"ui_label": "API base URL", "ui_group": "advanced"},
+        description="API base URL. Change for a self-hosted EpexPredictor instance."
     )
     horizon_hours: int = Field(
         default=_DEFAULT_HORIZON_HOURS,
-        ge=1,
-        json_schema_extra={"ui_label": "Horizon (hours)", "ui_group": "basic"},
+        ge=1
     )
-    import_formula: str = Field(default=_DEFAULT_IMPORT_FORMULA, json_schema_extra={"ui_label": "Import price formula", "ui_group": "basic"})
-    export_formula: str = Field(default=_DEFAULT_EXPORT_FORMULA, json_schema_extra={"ui_label": "Export price formula", "ui_group": "basic"})
+    import_formula: str = Field(default=_DEFAULT_IMPORT_FORMULA)
+    export_formula: str = Field(default=_DEFAULT_EXPORT_FORMULA)
     price_interval: Literal["hourly", "quarter_hourly"] = Field(
-        default=_DEFAULT_PRICE_INTERVAL,
-        json_schema_extra={"ui_label": "Price interval", "ui_group": "basic"},
+        default=_DEFAULT_PRICE_INTERVAL
     )
 
     @field_validator("import_formula", "export_formula", mode="after")
@@ -153,10 +150,10 @@ class ConfidenceDecayConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    hours_0_to_6: float = Field(default=0.90, ge=0.0, le=1.0, json_schema_extra={"ui_label": "Confidence 0-6 h", "ui_group": "advanced"})
-    hours_6_to_24: float = Field(default=0.75, ge=0.0, le=1.0, json_schema_extra={"ui_label": "Confidence 6-24 h", "ui_group": "advanced"})
-    hours_24_to_48: float = Field(default=0.55, ge=0.0, le=1.0, json_schema_extra={"ui_label": "Confidence 24-48 h", "ui_group": "advanced"})
-    hours_48_plus: float = Field(default=0.35, ge=0.0, le=1.0, json_schema_extra={"ui_label": "Confidence 48+ h", "ui_group": "advanced"})
+    hours_0_to_6: float = Field(default=0.90, ge=0.0, le=1.0)
+    hours_6_to_24: float = Field(default=0.75, ge=0.0, le=1.0)
+    hours_24_to_48: float = Field(default=0.55, ge=0.0, le=1.0)
+    hours_48_plus: float = Field(default=0.35, ge=0.0, le=1.0)
     known_until_confidence: float | None = Field(
         default=None,
         ge=0.0,
@@ -165,8 +162,7 @@ class ConfidenceDecayConfig(BaseModel):
             "Overrides the confidence of every step at or before the API's "
             "knownUntil timestamp with this fixed value. Null (default) "
             "applies the decay bands uniformly, including to real data."
-        ),
-        json_schema_extra={"ui_label": "Known-until confidence override", "ui_group": "advanced"},
+        )
     )
 
 
@@ -181,7 +177,7 @@ class EpexPredictorPricesConfig(BaseModel):
 
     mqtt: MqttConfig
     mimir_topic_prefix: str = "mimir"
-    trigger_topic: str
+    trigger_topic: str | None = None
     output_topic: str | None = None
     epexpredictor: EpexPredictorApiConfig
     confidence_decay: ConfidenceDecayConfig = Field(default_factory=ConfidenceDecayConfig)
@@ -193,6 +189,8 @@ class EpexPredictorPricesConfig(BaseModel):
     @model_validator(mode="after")
     def _derive_mimir_topics(self) -> "EpexPredictorPricesConfig":
         p = self.mimir_topic_prefix
+        if self.trigger_topic is None:
+            self.trigger_topic = _topics.helper_trigger_topic(p, "prices")
         if self.output_topic is None:
             self.output_topic = _topics.prices_topic(p)
         if self.mimir_trigger_topic is None:

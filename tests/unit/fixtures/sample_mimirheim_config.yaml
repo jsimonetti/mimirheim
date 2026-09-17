@@ -1,0 +1,7 @@
+# Top-level mimirheim configuration used by test_config_service.py.
+mqtt:
+  host: localhost  # broker address
+  port: 1883
+grid:
+  import_limit_kw: 10.0  # DNO connection agreement
+  export_limit_kw: 5.0

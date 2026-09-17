@@ -12,14 +12,9 @@ What this module does not do:
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from pydantic import ValidationError as PydanticValidationError
 
-from helper_common.config import HomeAssistantConfig as _HelperHaDiscoveryConfig, MqttConfig, apply_mqtt_env_overrides
+from helper_common.config import HomeAssistantConfig as _HelperHaDiscoveryConfig, MqttConfig
 import helper_common.topics as _topics
 
 
@@ -38,8 +33,7 @@ class KnmiConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     station_id: int = Field(
-        description="KNMI station ID. 260 = De Bilt.",
-        json_schema_extra={"ui_label": "KNMI station ID", "ui_group": "basic"},
+        description="KNMI station ID. 260 = De Bilt."
     )
 
 
@@ -59,15 +53,14 @@ class MeteoserverConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    api_key: str = Field(description="Meteoserver API key.", json_schema_extra={"ui_label": "API key", "ui_group": "basic"})
-    latitude: float = Field(description="Site latitude in decimal degrees.", json_schema_extra={"ui_label": "Latitude", "ui_group": "basic"})
-    longitude: float = Field(description="Site longitude in decimal degrees.", json_schema_extra={"ui_label": "Longitude", "ui_group": "basic"})
+    api_key: str = Field(description="Meteoserver API key.")
+    latitude: float = Field(description="Site latitude in decimal degrees.")
+    longitude: float = Field(description="Site longitude in decimal degrees.")
     forecast_horizon_hours: int = Field(
         default=48,
         ge=1,
         le=54,
-        description="Number of hourly forecast steps to use (1–54).",
-        json_schema_extra={"ui_label": "Forecast horizon (h)", "ui_group": "advanced"},
+        description="Number of hourly forecast steps to use (1–54)."
     )
 
 
@@ -103,8 +96,7 @@ class HomeAssistantConfig(BaseModel):
             "Examples: sqlite:////config/home-assistant_v2.db, "
             "postgresql+psycopg2://user:pass@host/homeassistant, "
             "mysql+pymysql://user:pass@host/homeassistant."
-        ),
-        json_schema_extra={"ui_label": "HA DB URL", "ui_group": "basic"},
+        )
     )
 
     @model_validator(mode="after")
@@ -150,31 +142,27 @@ class ArrayConfig(BaseModel):
 
     peak_power_kwp: float = Field(
         gt=0,
-        description="Installed PV peak power in kWp.",
-        json_schema_extra={"ui_label": "Peak power (kWp)", "ui_group": "basic"},
+        description="Installed PV peak power in kWp."
     )
     output_topic: str | None = Field(
         default=None,
         description=(
             "MQTT topic for the retained forecast payload. "
             "Defaults to '{mimir_topic_prefix}/input/pv/{array_key}/forecast' when not set."
-        ),
-        json_schema_extra={"ui_label": "Output topic", "ui_group": "advanced", "ui_placeholder": "{mimir_topic_prefix}/input/pv/{array_key}/forecast", "ui_source": "pv_arrays"},
+        )
     )
     sum_entity_ids: list[str] = Field(
         min_length=1,
-        description="Entity IDs to sum for hourly PV production.",
-        json_schema_extra={"ui_label": "Sum entity IDs", "ui_group": "basic"},
+        description="Entity IDs to sum for hourly PV production."
     )
-    model_path: str = Field(description="joblib model file path.", json_schema_extra={"ui_label": "Model path", "ui_group": "advanced"})
-    metadata_path: str = Field(description="JSON metadata file path.", json_schema_extra={"ui_label": "Metadata path", "ui_group": "advanced"})
+    model_path: str = Field(description="joblib model file path.")
+    metadata_path: str = Field(description="JSON metadata file path.")
     exclude_limiting_entity_ids: list[str] = Field(
         default_factory=list,
         description=(
             "Binary/numeric sensors indicating active inverter limiting. "
             "Matching training hours are excluded from the dataset."
-        ),
-        json_schema_extra={"ui_label": "Exclude limiting entities", "ui_group": "advanced"},
+        )
     )
 
 
@@ -191,7 +179,7 @@ class StorageConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    db_path: str = Field(description="SQLite database path.", json_schema_extra={"ui_label": "Storage DB path", "ui_group": "basic"})
+    db_path: str = Field(description="SQLite database path.")
 
 
 class HyperparamConfig(BaseModel):
@@ -211,11 +199,11 @@ class HyperparamConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    n_estimators: list[int] = Field(default=[200], json_schema_extra={"ui_label": "n_estimators", "ui_group": "advanced"})
-    max_depth: list[int] = Field(default=[5], json_schema_extra={"ui_label": "max_depth", "ui_group": "advanced"})
-    learning_rate: list[float] = Field(default=[0.08], json_schema_extra={"ui_label": "learning_rate", "ui_group": "advanced"})
-    subsample: list[float] = Field(default=[0.9], json_schema_extra={"ui_label": "subsample", "ui_group": "advanced"})
-    min_child_weight: list[int] = Field(default=[1], json_schema_extra={"ui_label": "min_child_weight", "ui_group": "advanced"})
+    n_estimators: list[int] = Field(default=[200])
+    max_depth: list[int] = Field(default=[5])
+    learning_rate: list[float] = Field(default=[0.08])
+    subsample: list[float] = Field(default=[0.9])
+    min_child_weight: list[int] = Field(default=[1])
 
 
 class TrainingConfig(BaseModel):
@@ -228,9 +216,12 @@ class TrainingConfig(BaseModel):
     Attributes:
         train_trigger_topic: MQTT topic that triggers a full training cycle:
             ingest new KNMI and HA data, retrain all arrays, then immediately
-            run an inference cycle.
+            run an inference cycle. Defaults to the canonical helper trigger
+            topic derived from ``mimir_topic_prefix``.
         inference_trigger_topic: MQTT topic that triggers an inference-only
             cycle: fetch a fresh Meteoserver forecast, run all arrays, publish.
+            Defaults to the canonical helper trigger topic derived from
+            ``mimir_topic_prefix``.
         min_months_required: Minimum distinct calendar months required to
             train. Default 12. Lower temporarily while data accumulates.
         hyperparams: XGBoost grid search configuration.
@@ -239,30 +230,27 @@ class TrainingConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    train_trigger_topic: str = Field(
-        description="MQTT topic that triggers a training run.",
-        json_schema_extra={"ui_label": "Train trigger topic", "ui_group": "basic"},
+    train_trigger_topic: str | None = Field(
+        default=None,
+        description="MQTT topic that triggers a training run. Defaults to '{mimir_topic_prefix}/input/tools/pv_ml_learner/train'."
     )
-    inference_trigger_topic: str = Field(
-        description="MQTT topic that triggers an inference run.",
-        json_schema_extra={"ui_label": "Inference trigger topic", "ui_group": "basic"},
+    inference_trigger_topic: str | None = Field(
+        default=None,
+        description="MQTT topic that triggers an inference run. Defaults to '{mimir_topic_prefix}/input/tools/pv_ml_learner/infer'."
     )
     min_months_required: int = Field(
         default=12,
         ge=1,
-        description="Minimum distinct calendar months required to train.",
-        json_schema_extra={"ui_label": "Min months required", "ui_group": "advanced"},
+        description="Minimum distinct calendar months required to train."
     )
     hyperparams: HyperparamConfig = Field(
         default_factory=HyperparamConfig,
-        description="XGBoost grid search configuration.",
-        json_schema_extra={"ui_label": "Hyperparameters", "ui_group": "advanced"},
+        description="XGBoost grid search configuration."
     )
     n_cv_splits: int = Field(
         default=5,
         ge=2,
-        description="Number of TimeSeriesSplit CV folds.",
-        json_schema_extra={"ui_label": "CV splits", "ui_group": "advanced"},
+        description="Number of TimeSeriesSplit CV folds."
     )
 
 
@@ -277,7 +265,7 @@ class HaDiscoveryConfig(_HelperHaDiscoveryConfig):
         device_name: Device name shown in HA. Default 'MIMIRHEIM PV Learner'.
     """
 
-    device_name: str = Field(default="MIMIRHEIM PV Learner", json_schema_extra={"ui_label": "Device name", "ui_group": "advanced"})
+    device_name: str = Field(default="MIMIRHEIM PV Learner")
 
 
 class PvLearnerConfig(BaseModel):
@@ -303,48 +291,47 @@ class PvLearnerConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    mqtt: MqttConfig = Field(description="MQTT broker connection settings.", json_schema_extra={"ui_label": "MQTT", "ui_group": "basic"})
+    mqtt: MqttConfig = Field(description="MQTT broker connection settings.")
     mimir_topic_prefix: str = Field(
         default="mimir",
-        description="mimirheim mqtt.topic_prefix. Used to derive default array output and trigger topics.",
-        json_schema_extra={"ui_label": "mimirheim topic prefix", "ui_group": "advanced"},
+        description="mimirheim mqtt.topic_prefix. Used to derive default array output and trigger topics."
     )
     signal_mimir: bool = Field(
         default=False,
-        description="Publish to mimir_trigger_topic after each forecast cycle.",
-        json_schema_extra={"ui_label": "Signal mimirheim", "ui_group": "advanced"},
+        description="Publish to mimir_trigger_topic after each forecast cycle."
     )
     mimir_trigger_topic: str | None = Field(
         default=None,
-        description="mimirheim trigger topic. Defaults to '{mimir_topic_prefix}/input/trigger'.",
-        json_schema_extra={"ui_label": "mimirheim trigger topic", "ui_group": "advanced", "ui_placeholder": "{mimir_topic_prefix}/input/trigger"},
+        description="mimirheim trigger topic. Defaults to '{mimir_topic_prefix}/input/trigger'."
     )
-    knmi: KnmiConfig = Field(description="KNMI weather station configuration.", json_schema_extra={"ui_label": "KNMI", "ui_group": "basic"})
-    meteoserver: MeteoserverConfig = Field(description="Meteoserver API configuration.", json_schema_extra={"ui_label": "Meteoserver", "ui_group": "basic"})
-    homeassistant: HomeAssistantConfig = Field(description="Home Assistant database configuration.", json_schema_extra={"ui_label": "Home Assistant", "ui_group": "basic"})
+    knmi: KnmiConfig = Field(description="KNMI weather station configuration.")
+    meteoserver: MeteoserverConfig = Field(description="Meteoserver API configuration.")
+    homeassistant: HomeAssistantConfig = Field(description="Home Assistant database configuration.")
     arrays: dict[str, ArrayConfig] = Field(
         min_length=1,
-        description="Named map of PV array configurations. The key is used as the array identifier and mimirheim device name.",
-        json_schema_extra={"ui_label": "PV arrays", "ui_group": "basic"},
+        description="Named map of PV array configurations. The key is used as the array identifier and mimirheim device name."
     )
-    storage: StorageConfig = Field(description="Shared SQLite storage configuration.", json_schema_extra={"ui_label": "Storage", "ui_group": "basic"})
-    training: TrainingConfig = Field(description="Training and inference trigger configuration.", json_schema_extra={"ui_label": "Training", "ui_group": "basic"})
-    ha_discovery: HaDiscoveryConfig = Field(default_factory=HaDiscoveryConfig, json_schema_extra={"ui_label": "HA discovery", "ui_group": "advanced"})
+    storage: StorageConfig = Field(description="Shared SQLite storage configuration.")
+    training: TrainingConfig = Field(description="Training and inference trigger configuration.")
+    ha_discovery: HaDiscoveryConfig = Field(default_factory=HaDiscoveryConfig)
     stats_topic: str | None = Field(
         default=None,
-        description="MQTT topic where per-cycle run statistics are published.",
-        json_schema_extra={"ui_label": "Stats topic", "ui_group": "advanced"},
+        description="MQTT topic where per-cycle run statistics are published."
     )
 
     @model_validator(mode="after")
-    def _derive_hioo_topics(self) -> "PvLearnerConfig":
+    def _derive_mimir_topics(self) -> "PvLearnerConfig":
         """Fill in mimirheim-side topics that were not explicitly set.
 
         Derives ``output_topic`` for each array that has not set one explicitly,
         using the ``arrays`` map key as the mimirheim ``pv_arrays`` device name.
-        Also derives the default ``mimir_trigger_topic``.
+        Also derives the default ``training`` trigger topics and ``mimir_trigger_topic``.
         """
         p = self.mimir_topic_prefix
+        if self.training.train_trigger_topic is None:
+            self.training.train_trigger_topic = _topics.helper_trigger_topic(p, "pv_ml_learner", "train")
+        if self.training.inference_trigger_topic is None:
+            self.training.inference_trigger_topic = _topics.helper_trigger_topic(p, "pv_ml_learner", "infer")
         for key, arr in self.arrays.items():
             if arr.output_topic is None:
                 arr.output_topic = _topics.pv_forecast_topic(p, key)
@@ -358,35 +345,3 @@ class PvLearnerConfig(BaseModel):
         if not self.mqtt.client_id:
             self.mqtt.client_id = "mimir-pv-forecast"
         return self
-
-
-def load_config(path: str) -> PvLearnerConfig:
-    """Load and validate the YAML configuration file.
-
-    Reads the YAML file at ``path``, parses it, and validates it against
-    ``PvLearnerConfig``. On failure, prints a human-readable error and exits.
-
-    Args:
-        path: Path to the YAML configuration file.
-
-    Returns:
-        The validated ``PvLearnerConfig`` instance.
-
-    Raises:
-        SystemExit: With exit code 1 if the file cannot be read or
-            configuration validation fails.
-    """
-    try:
-        with Path(path).open() as fh:
-            raw = yaml.safe_load(fh)
-    except OSError as exc:
-        print(f"ERROR: Cannot read config file {path!r}: {exc}", file=sys.stderr)
-        sys.exit(1)
-
-    apply_mqtt_env_overrides(raw)
-
-    try:
-        return PvLearnerConfig.model_validate(raw)
-    except PydanticValidationError as exc:
-        print(f"ERROR: Invalid configuration in {path!r}:\n{exc}", file=sys.stderr)
-        sys.exit(1)

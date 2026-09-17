@@ -7,6 +7,18 @@ This module is deliberately thin. Its only responsibilities are:
 3. Passing the parsed values to ``ReadinessState.update()``.
 4. Calling ``publisher.republish_last_result()`` from ``on_connect``.
 5. Queuing a SolveBundle on ``solve_queue`` when a trigger message arrives.
+6. Publishing mimirheim core's Config Service Descriptor and Operational
+   State on connect, and clearing both on graceful shutdown.
+7. Handling validate_and_write requests: subscribing to the request topic,
+   delegating to ``io.config_service.handle_validate_and_write`` (validation
+   plus, on success, the atomic write), and publishing its result.
+8. Handling a Restart Request: acknowledging it, then invoking an
+   ``on_restart_requested`` callback supplied by ``__main__.py`` so the solve
+   loop exits and the container supervisor restarts the process (ADR-0012).
+   This class is only used while mimirheim core is Operational (a fully
+   valid ``MimirheimConfig``, see ``mimirheim_shared/CONTEXT.md``'s
+   Operational entry); ``io.awaiting_configuration.AwaitingConfigurationClient``
+   is its counterpart while Awaiting Configuration.
 
 Solves are only triggered by messages on ``{prefix}/input/trigger``.
 Regular data topic messages (prices, PV, battery SOC, etc.) only update
@@ -19,10 +31,21 @@ All business logic lives elsewhere:
 - Freshness tracking: ``readiness.py``
 - Solving: ``model_builder.py``
 - Publishing: ``mqtt_publisher.py``
+- Config Service Descriptor content: ``io.config_service``
 
-This module imports from ``mimirheim.io`` (parser, publisher) and ``mimirheim.core``
-(readiness, bundle types) but does not import from ``mimirheim.devices`` or call
-``build_and_solve`` directly.
+This client owns mimirheim core's one and only MQTT connection. The Config
+Service Descriptor shares it rather than getting a dedicated connection of its
+own: MQTT allows exactly one last-will per connection, this connection's one
+slot is already spent clearing ``config.outputs.availability`` on ungraceful
+disconnect, and a second persistent connection was judged not worth it just to
+give the Descriptor the same crash-safety. The Descriptor is therefore cleared
+explicitly on graceful shutdown only; an ungraceful disconnect leaves it
+retained-but-stale until this process restarts and republishes it. See
+``mimirheim_shared/docs/adr/0005``.
+
+This module imports from ``mimirheim.io`` (parser, publisher, Config Service
+Descriptor content) and ``mimirheim.core`` (readiness, bundle types) but does
+not import from ``mimirheim.devices`` or call ``build_and_solve`` directly.
 """
 
 import logging
@@ -30,7 +53,8 @@ import queue
 import random
 import threading
 import time
-from typing import Any
+from pathlib import Path
+from typing import Any, Callable
 
 from mimirheim.config.schema import MimirheimConfig
 from mimirheim.core.readiness import ReadinessState
@@ -52,6 +76,8 @@ from mimirheim.io.input_parser import (
 )
 from mimirheim.io.mqtt_publisher import MqttPublisher
 from mimirheim.io.ha_discovery import publish_discovery
+from mimirheim.io import config_service
+from mimirheim_shared.config_service import CLEARING_PAYLOAD, handle_get_current_values
 
 logger = logging.getLogger("mimirheim.mqtt")
 
@@ -82,11 +108,15 @@ class MqttClient:
     Attributes:
         _client: The underlying paho ``Client``.
         _config: Static system configuration.
+        _config_path: Path to the YAML file mimirheim core was started with;
+            the target of a successful validate_and_write.
         _readiness: The shared readiness state updated by each incoming message.
         _publisher: The MQTT publisher; called from ``on_connect`` to republish.
         _solve_queue: Optional queue that receives a SolveBundle on trigger.
         _trigger_topic: The MQTT topic that requests a new solve cycle.
         _topic_handlers: Mapping from data topic string to a handler function.
+        _on_restart_requested: Called after a Restart Request is acknowledged,
+            so ``__main__.py`` can exit the solve loop (ADR-0012).
     """
 
     def __init__(
@@ -95,7 +125,9 @@ class MqttClient:
         readiness: ReadinessState,
         publisher: MqttPublisher,
         paho_client: Any,
+        config_path: Path,
         solve_queue: queue.Queue | None = None,
+        on_restart_requested: Callable[[], None] | None = None,
     ) -> None:
         """Construct the client and register callbacks.
 
@@ -104,20 +136,41 @@ class MqttClient:
             readiness: The shared readiness state.
             publisher: The MQTT publisher (for republish on connect).
             paho_client: An already-constructed paho ``Client`` instance.
+            config_path: Path to mimirheim core's own YAML configuration
+                file, the target of a successful validate_and_write request.
             solve_queue: Optional queue that receives a ``SolveBundle`` each
                 time a trigger message arrives and ``is_ready()`` is True.
                 Uses ``put_nowait``; if the queue is full the bundle is
                 discarded. Pass ``None`` to disable queuing.
+            on_restart_requested: Called once a Restart Request has been
+                acknowledged. Pass ``None`` to disable Restart Request
+                handling (e.g. in tests that do not exercise it).
         """
         self._client = paho_client
         self._config = config
+        self._config_path = config_path
         self._readiness = readiness
         self._publisher = publisher
         self._solve_queue = solve_queue
+        self._on_restart_requested = on_restart_requested
         # Monotonic timestamp of the last accepted trigger, used to enforce a
         # 5-second debounce window. Two triggers arriving closer together than
         # _DEBOUNCE_SECONDS are deduplicated: only the first is acted on.
         self._last_trigger_at: float | None = None
+
+        # Config Service Descriptor topic and payload (see io.config_service
+        # and mimirheim_shared/docs/adr/0005). Computed once here since
+        # MimirheimConfig and its FormSpec do not change over the process
+        # lifetime.
+        self._config_service_topic = config_service.TOPIC
+        self._config_service_payload = config_service.payload_bytes()
+        self._config_service_request_topic = config_service.REQUEST_TOPIC
+        self._config_service_response_topic = config_service.RESPONSE_TOPIC
+        self._get_current_values_request_topic = config_service.GET_CURRENT_VALUES_REQUEST_TOPIC
+        self._get_current_values_response_topic = config_service.GET_CURRENT_VALUES_RESPONSE_TOPIC
+        self._state_topic = config_service.STATE_TOPIC
+        self._restart_request_topic = config_service.RESTART_REQUEST_TOPIC
+        self._restart_response_topic = config_service.RESTART_RESPONSE_TOPIC
 
         prefix = config.mqtt.topic_prefix
         self._trigger_topic = f"{prefix}/input/trigger"
@@ -126,6 +179,12 @@ class MqttClient:
         # lost without a clean DISCONNECT (e.g. power cut, kernel kill), the
         # broker will publish this payload automatically so downstream
         # subscribers see the device go offline.
+        #
+        # This is the connection's one and only last-will slot (MQTT permits
+        # exactly one per connection). The Config Service Descriptor
+        # deliberately does not get its own: it is published/cleared by plain
+        # publish() calls in _on_connect/stop() instead. See
+        # mimirheim_shared/docs/adr/0005.
         self._client.will_set(
             config.outputs.availability,
             payload="offline",
@@ -149,15 +208,33 @@ class MqttClient:
         self._client.loop_start()
 
     def stop(self) -> None:
-        """Publish offline, stop the network loop, and disconnect cleanly.
+        """Publish offline, clear the Config Service Descriptor, and disconnect cleanly.
 
         Publishing ``"offline"`` before disconnecting ensures the broker retains
         the correct availability state even when the shutdown is clean (the
         last-will is only triggered on unclean disconnects).
+
+        The Config Service Descriptor has no last-will of its own (see
+        __init__ and mimirheim_shared/docs/adr/0005), so it is only cleared
+        here, on a graceful shutdown. An ungraceful disconnect (crash) leaves
+        it retained-but-stale on the broker until this process restarts and
+        republishes it — a deliberate, disclosed trade-off, not a bug.
         """
         self._client.publish(
             self._config.outputs.availability,
             payload="offline",
+            qos=1,
+            retain=True,
+        )
+        self._client.publish(
+            self._config_service_topic,
+            payload=CLEARING_PAYLOAD,
+            qos=1,
+            retain=True,
+        )
+        self._client.publish(
+            self._state_topic,
+            payload=CLEARING_PAYLOAD,
             qos=1,
             retain=True,
         )
@@ -201,6 +278,13 @@ class MqttClient:
         # discovery payloads after HA restarts or reloads its MQTT integration.
         client.subscribe(_HA_STATUS_TOPIC, qos=1)
 
+        # Subscribe to the Config Service validate_and_write,
+        # get_current_values, and restart request topics (see
+        # io.config_service). Requests are handled in _on_message.
+        client.subscribe(self._config_service_request_topic, qos=1)
+        client.subscribe(self._get_current_values_request_topic, qos=1)
+        client.subscribe(self._restart_request_topic, qos=1)
+
         # Publish the birth message retained so any subscriber that connects
         # later immediately sees the current online state without waiting for
         # the next message on this topic.
@@ -214,6 +298,26 @@ class MqttClient:
         publish_discovery(client, self._config)
         self._publisher.republish_last_result()
 
+        # Config Service Descriptor: retained, no last-will (see __init__ and
+        # mimirheim_shared/docs/adr/0005). Republished on every (re)connect so
+        # a Config Editor that connects later still sees it immediately.
+        client.publish(
+            self._config_service_topic,
+            payload=self._config_service_payload,
+            qos=1,
+            retain=True,
+        )
+
+        # Operational State: published alongside the Descriptor (ADR-0010).
+        # This class is only used while Operational (see this module's
+        # docstring), so the state is always "operational" here.
+        client.publish(
+            self._state_topic,
+            payload=config_service.operational_state_payload_bytes(),
+            qos=1,
+            retain=True,
+        )
+
     def _on_message(self, client: Any, userdata: Any, message: Any) -> None:
         """Called by paho when an MQTT message arrives.
 
@@ -222,6 +326,18 @@ class MqttClient:
         - **Trigger topic** (``{prefix}/input/trigger``): attempt to queue a
           new solve if ``ReadinessState.is_ready()`` is True. The payload is
           ignored. If not ready, log the reason and take no action.
+        - **Config Service validate_and_write request topic**: delegate to
+          ``io.config_service.handle_validate_and_write`` and publish its
+          result. A malformed request envelope cannot be correlated to a
+          response, so it is logged and dropped rather than answered.
+        - **Config Service get_current_values request topic**: delegate to
+          ``mimirheim_shared.config_service.handle_get_current_values`` and
+          publish its result. Same malformed-envelope handling as above.
+        - **Config Service restart request topic**: delegate to
+          ``io.config_service.handle_restart_request``, publish the
+          acknowledgement, then invoke ``on_restart_requested`` (ADR-0012).
+          Same malformed-envelope handling as above; the callback is not
+          invoked when the envelope is malformed.
         - **Data topics**: route to the appropriate parser, call
           ``ReadinessState.update()``. Never queue a solve. Parse errors are
           logged and swallowed — the readiness state is simply not updated,
@@ -324,6 +440,72 @@ class MqttClient:
                         # escaping exception takes down message handling
                         # entirely. A missed policy publish is not worth that.
                         logger.exception("Could not publish battery care state.")
+            return
+
+        # --- Config Service: validate_and_write request ---
+        if topic == self._config_service_request_topic:
+            try:
+                response_payload = config_service.handle_validate_and_write(
+                    message.payload, self._config_path
+                )
+            except Exception:
+                # Deliberately broad, same reason as the trigger and data
+                # topic handlers: an escaping exception here would take down
+                # MQTT message handling entirely. A malformed request
+                # envelope has no request_id to reply with, so it is logged
+                # and dropped rather than answered; a well-formed envelope
+                # carrying invalid Candidate Values is not an exception here
+                # at all — handle_validate_and_write reports that as a
+                # published failure result instead.
+                logger.exception(
+                    "Failed to handle validate_and_write request on %r.", topic
+                )
+                return
+            client.publish(
+                self._config_service_response_topic,
+                payload=response_payload,
+                qos=1,
+                retain=False,
+            )
+            return
+
+        # --- Config Service: get_current_values request ---
+        if topic == self._get_current_values_request_topic:
+            try:
+                response_payload = handle_get_current_values(message.payload, self._config_path)
+            except Exception:
+                # Deliberately broad, same reason as the validate_and_write
+                # handler above.
+                logger.exception(
+                    "Failed to handle get_current_values request on %r.", topic
+                )
+                return
+            client.publish(
+                self._get_current_values_response_topic,
+                payload=response_payload,
+                qos=1,
+                retain=False,
+            )
+            return
+
+        # --- Config Service: restart request ---
+        if topic == self._restart_request_topic:
+            try:
+                response_payload = config_service.handle_restart_request(message.payload)
+            except Exception:
+                # Deliberately broad, same reason as the validate_and_write
+                # handler above. A malformed request has no request_id to
+                # reply with, and there is nothing to restart yet either.
+                logger.exception("Failed to handle restart_request on %r.", topic)
+                return
+            client.publish(
+                self._restart_response_topic,
+                payload=response_payload,
+                qos=1,
+                retain=False,
+            )
+            if self._on_restart_requested is not None:
+                self._on_restart_requested()
             return
 
         # --- Data topics: update readiness only, never queue a solve ---

@@ -13,6 +13,7 @@ import inspect
 import json
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import paho.mqtt.client as mqtt
@@ -30,6 +31,8 @@ from pv_fetcher.config import (
     PvFetcherConfig,
 )
 from pv_fetcher.fetcher import FetchError, RatelimitError
+
+_CONFIG_PATH = Path("/tmp/pv-fetcher-test-config.yaml")
 
 
 def _make_config(signal_mimir: bool = False) -> PvFetcherConfig:
@@ -62,7 +65,7 @@ def _make_config(signal_mimir: bool = False) -> PvFetcherConfig:
 
 
 def _make_daemon(signal_mimir: bool = False) -> PvFetcherDaemon:
-    return PvFetcherDaemon(_make_config(signal_mimir=signal_mimir))
+    return PvFetcherDaemon(_make_config(signal_mimir=signal_mimir), _CONFIG_PATH)
 
 
 def _ratelimit_error() -> RatelimitError:

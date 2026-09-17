@@ -1,97 +1,158 @@
-"""HTTP server for the mimirheim config editor.
+"""HTTP server for config-editor.
 
-This module provides ConfigEditorServer, a lightweight HTTP server that serves
-the static frontend files and JSON API endpoints:
+Provides `ConfigEditorServer`, a stdlib-only HTTP server that renders the
+Config Editor's discovery page and each Config Owner's configuration page
+directly from FormSpec, via Jinja2 templates (`templates/index.html`,
+`templates/owner.html`), per ADR-0003 (no generic client-side
+schema-to-form library):
 
-    GET  /api/schema                   — MimirheimConfig JSON Schema (cached)
-    GET  /api/config                   — current mimirheim.yaml as parsed dict
-    POST /api/config                   — validate via Pydantic, write YAML
-    GET  /api/helper-configs           — enabled/config for all known helpers
-    GET  /api/helper-schemas           — JSON Schema for every helper config
-    POST /api/helper-config/<filename> — enable (write) or disable (delete) a helper
+    GET  /owners/<owner_id>           -- render one Config Owner's configuration
+    POST /owners/<owner_id>           -- submit Candidate Values for validate_and_write
+    POST /owners/<owner_id>/restart   -- request that a Config Owner exit for its supervisor to restart it
+    GET  /static/<path>               -- serve a vendored static asset (e.g. Bootstrap5)
+    GET  /theme/<dark|light>          -- record the visitor's theme choice in a cookie
+    GET  /reports                     -- proxy the reporter's report index
+    GET  /reports/<file>              -- proxy a single file from the reporter's output directory
+    GET  /reports/dumps/<file>        -- proxy a solve dump referenced by a report's download links
 
-The server uses only Python stdlib (http.server, threading, json, yaml).
-No external web framework is required.
+This module never imports a Config Owner's pydantic model, and never reads
+or writes any Config Owner's configuration file itself: it only ever
+consumes the generic `Descriptor` a Config Owner published (obtained from
+`registry.py`), fetches that owner's current values via the injected
+`ConfigServiceClient`'s `get_current_values` for a GET, and forwards a POST's
+submitted values (parsed from their dotted/indexed form field names by
+`config_editor.submission.parse_submission`) to the same client's
+`submit_validate_and_write`. A successful Save never restarts a Config
+Owner itself (ADR-0012's restart is always a conscious, separate action):
+it only renders a message that a restart is required, and a POST to the
+`/restart` route -- reached only via the owner page's own confirmation
+modal, never automatically -- forwards to `submit_restart_request` instead.
+`ConfigServiceClient` is the only thing here that touches MQTT.
 
-What this module does not do:
-- It does not authenticate users. The editor is designed for trusted private
-  networks only.
-- It does not serve files outside the static/ directory.
-- It does not parse MQTT messages or interact with the solver.
+The `/reports` routes are the one exception to "never reads another Config
+Owner's configuration file": they proxy static report files the reporter
+writes to disk (not its configuration), and they still learn *where* that
+directory is by asking the reporter for its current values over the same
+`get_current_values` protocol, never by reading reporter.yaml directly.
 """
+
 from __future__ import annotations
 
+import http.cookies
 import http.server
-import json
 import logging
 import mimetypes
 import os
-import tempfile
+import time
+import urllib.parse
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
-import yaml
-from pydantic import ValidationError as PydanticValidationError
-from ruamel.yaml import YAML
+import jinja2
 
-from helper_common.config import mqtt_env_overrides
-from mimirheim.config.schema import MimirheimConfig
+from mimirheim_shared.config_service import Descriptor, RestartResponse, ValidateAndWriteResult
+from mimirheim_shared.formspec import option_label
+
+from config_editor.registry import ConfigOwnerRegistry
+from config_editor.render import UNGROUPED_LABEL, build_tabs, visible_if_json
+from config_editor.submission import parse_submission
 
 logger = logging.getLogger(__name__)
 
-# Only these extensions are served from the static directory.
-_ALLOWED_STATIC_EXTENSIONS = {".js", ".css", ".html"}
+_TEMPLATES = jinja2.Environment(
+    loader=jinja2.PackageLoader("config_editor", "templates"),
+    autoescape=jinja2.select_autoescape(["html"]),
+)
+# ENUM_SELECT rendering (owner.html) resolves each <option>'s display label
+# via this, the same per-value-label lookup a FieldSpec's option_labels
+# describes; exposed as a Jinja global rather than duplicating the lookup in
+# the template itself.
+_TEMPLATES.globals["option_label"] = option_label
+# render_groups (owner.html) compares against this to suppress a section's
+# heading when it is the single implicit group, the same fallback build_groups
+# uses for a field whose FieldSpec.group is unset.
+_TEMPLATES.globals["UNGROUPED_LABEL"] = UNGROUPED_LABEL
+# render_conditional_field (owner.html) embeds this in a data-visible-if
+# attribute for visibility.js to parse and re-evaluate live on change.
+_TEMPLATES.globals["visible_if_json"] = visible_if_json
 
-# Only these extensions are served from the reports directory.
+# Vendored static assets (Bootstrap5's CSS/JS; see ADR-0003 -- no CDN, no
+# generic client-side form library). Bundled with this package so the editor
+# renders identically with no internet access.
+_STATIC_DIR = Path(__file__).parent / "static"
+# Only these extensions are served from the static directory; e.g. the
+# vendored Bootstrap LICENSE file is deliberately not servable.
+_ALLOWED_STATIC_EXTENSIONS = {".css", ".js", ".html"}
+
+# Only these extensions are served from the reporter's output directory.
 _ALLOWED_REPORT_EXTENSIONS = {".html", ".js", ".css"}
 
-# Only these suffixes are served from the dump directory.
+# Only these suffixes are served from the reporter's dump directory, so a
+# report's download links work through this proxy.
 _ALLOWED_DUMP_SUFFIXES = ("_input.json", "_output.json")
 
-# Substituted for credential values in the /api/config response.
-#
-# The editor needs to know which mqtt fields the Supervisor supplies, and needs
-# a value it can compare the form field against to decide whether the user
-# overrode it. It does not need the secret itself, and this server does not
-# authenticate: anything that can reach the port could read a real password out
-# of the response. The POST handlers strip this sentinel back out, so it never
-# reaches a YAML file even though the form posts it straight back.
-MQTT_ENV_REDACTED = "__supervisor_provided__"
+# The reporter's well-known Config Owner ID (see reporter/daemon.py). Not
+# imported from the reporter package: this module never imports another
+# Config Owner's internals, per this module's own docstring.
+_REPORTER_OWNER_ID = "reporter"
 
-# mqtt fields whose value is replaced by MQTT_ENV_REDACTED on the way out.
-# host, port and tls are not secrets and the form needs to display them.
-_REDACTED_MQTT_FIELDS = ("password",)
+# mimirheim core's well-known Config Owner ID (see mimirheim/io/config_service.py).
+# Not imported from mimirheim core itself, for the same reason as
+# _REPORTER_OWNER_ID above: used only to split the index page's owner list
+# into a "Mimirheim" section and a "Helpers" section.
+_MIMIRHEIM_CORE_OWNER_ID = "mimirheim-core"
 
-# Largest request body accepted on a POST.
-#
-# self.rfile.read(length) previously read whatever the client declared straight
-# into memory, with no cap. The largest thing this API legitimately receives is
-# a full mimirheim.yaml as JSON, which is a few tens of kilobytes; 1 MiB leaves
-# a wide margin while keeping a bad or hostile Content-Length from exhausting a
-# Home Assistant add-on box.
-MAX_REQUEST_BODY_BYTES = 1024 * 1024
+# How long a fetched reporting section is reused before asking the reporter
+# again. A single /reports page load serves several files (index, css, js,
+# dump downloads), each needing this section; without a cache, that is an
+# MQTT round trip per file. output_dir/dump_dir only change when a user edits
+# reporter.yaml and restarts it, so a short cache is a safe trade.
+_REPORTER_REPORTING_CACHE_TTL_S = 30.0
 
-# Path to the static files bundled with this package.
-_STATIC_DIR = Path(__file__).parent / "static"
+# The two theme names a visitor can pick via the toggle control and record in
+# the "theme" cookie. Any other cookie value (stale, tampered, or from a
+# future version) is treated the same as no cookie at all.
+_VALID_THEMES = {"dark", "light"}
+
+
+def _theme_from_cookie(cookie_header: str | None) -> str | None:
+    """Extracts the "theme" cookie's value, if present and recognised.
+
+    Args:
+        cookie_header: The raw `Cookie` request header, or None if absent.
+
+    Returns:
+        "dark" or "light" if that is what the cookie carries, otherwise None
+        (no cookie, no "theme" entry, or an unrecognised value) -- meaning
+        the page should fall back to the OS/browser color-scheme preference.
+    """
+    if not cookie_header:
+        return None
+    cookies: http.cookies.SimpleCookie = http.cookies.SimpleCookie()
+    cookies.load(cookie_header)
+    morsel = cookies.get("theme")
+    if morsel is None or morsel.value not in _VALID_THEMES:
+        return None
+    return morsel.value
 
 
 def _safe_join(base: Path, filename: str) -> Path | None:
-    """Resolve ``filename`` relative to ``base`` and verify containment.
+    """Resolves `filename` relative to `base` and verifies containment.
 
-    Joins ``filename`` onto the resolved ``base`` directory, normalises the
-    result, and confirms that the final path still starts with ``base``. This
-    prevents path traversal regardless of how many ``..`` segments or other
-    tricks are embedded in ``filename``.
+    Joins `filename` onto the resolved `base` directory, normalises the
+    result, and confirms that the final path still starts with `base`. This
+    prevents path traversal regardless of how many `..` segments or other
+    tricks are embedded in `filename`.
 
-    The ``os.sep`` suffix on the prefix check avoids a false pass when a
-    sibling directory shares the same prefix (e.g. ``/data`` vs ``/data2``).
+    The `os.sep` suffix on the prefix check avoids a false pass when a
+    sibling directory shares the same prefix (e.g. `/data` vs `/data2`).
 
     Args:
         base: The directory that the result must stay inside.
-        filename: A filename from an HTTP request or config key.
+        filename: A filename taken from an HTTP request path.
 
     Returns:
-        Resolved ``Path`` inside ``base``, or ``None`` if validation fails.
+        Resolved `Path` inside `base`, or `None` if validation fails.
     """
     base_path = os.path.realpath(str(base))
     fullpath = os.path.normpath(os.path.join(base_path, filename))
@@ -100,357 +161,150 @@ def _safe_join(base: Path, filename: str) -> Path | None:
     return Path(fullpath)
 
 
-def _write_yaml_preserving_comments(
-    data: dict[str, Any], file_path: Path
-) -> str:
-    """Write YAML file while preserving existing comments and formatting.
+class ConfigServiceClient(Protocol):
+    """The one piece of MQTT behaviour `ConfigEditorServer` depends on.
 
-    If the file exists, loads it with ruamel.yaml to preserve comments,
-    updates values in-place, then writes back. If the file doesn't exist,
-    creates a new formatted YAML file.
-
-    Args:
-        data: Dictionary to write as YAML.
-        file_path: Path where the YAML file will be written.
-
-    Returns:
-        The YAML string that was written.
+    Implemented by `mqtt_client.ConfigEditorMqttClient`; declared here as a
+    narrow Protocol so this module keeps depending on a behaviour, not a
+    concrete MQTT implementation, and so tests can supply a fake with no
+    paho involvement at all.
     """
-    yaml_handler = YAML()
-    yaml_handler.default_flow_style = False
-    yaml_handler.preserve_quotes = True
-    yaml_handler.width = 4096  # Prevent line wrapping
 
-    if file_path.exists():
-        # Load existing file to preserve comments and structure
-        try:
-            with file_path.open("r") as f:
-                existing = yaml_handler.load(f)
-        except Exception:
-            # File is malformed or unreadable: write fresh
-            existing = None
-        
-        if existing is not None:
-            # Deep merge: update existing structure with new values
-            def deep_merge(target: Any, source: dict) -> None:
-                """Recursively update target dict with values from source.
-                
-                Updates values, adds new keys, and removes keys not in source.
-                """
-                if not isinstance(target, dict) or not isinstance(source, dict):
-                    return
-                
-                # Remove keys that are in target but not in source
-                keys_to_remove = [k for k in target.keys() if k not in source]
-                for key in keys_to_remove:
-                    del target[key]
-                
-                # Update or add keys from source
-                for key, value in source.items():
-                    if key in target and isinstance(target[key], dict) and isinstance(value, dict):
-                        deep_merge(target[key], value)
-                    else:
-                        target[key] = value
-            
-            deep_merge(existing, data)
-            merged = existing
-        else:
-            # File was empty or malformed
-            merged = data
-    else:
-        # New file: just use the provided data
-        merged = data
+    def submit_validate_and_write(
+        self, owner_id: str, values: dict[str, Any], timeout: float = 10.0
+    ) -> ValidateAndWriteResult:
+        """Submits Candidate Values to a Config Owner and awaits its result.
 
-    # Write to string first to get the output for logging
-    import io
-    stream = io.StringIO()
-    yaml_handler.dump(merged, stream)
-    yaml_str = stream.getvalue()
-    
-    # Now write atomically to disk
-    fd, tmp_path = tempfile.mkstemp(
-        dir=file_path.parent, suffix=".yaml.tmp"
-    )
-    try:
-        with os.fdopen(fd, "w") as fh:
-            fh.write(yaml_str)
-        os.replace(tmp_path, file_path)
-    except OSError:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
-    
-    return yaml_str
+        Args:
+            owner_id: The Config Owner's stable identifier.
+            values: Candidate Values to validate and, on success, write.
+            timeout: Seconds to wait for a response before giving up.
 
+        Returns:
+            The Config Owner's `ValidateAndWriteResult`.
 
-# ---------------------------------------------------------------------------
-# Helper config registry
-#
-# Maps each known helper config filename to (Pydantic model, competing_files).
-# Competing files are the other baseload variants; enabling one deletes them.
-# Imports are deferred to avoid loading optional heavy dependencies at startup.
-# Any filename not in this dict is rejected as 400 on POST.
-# ---------------------------------------------------------------------------
+        Raises:
+            TimeoutError: If no response arrives within `timeout` seconds.
+        """
+        ...
 
-def _load_helper_models() -> dict[str, tuple[Any, list[str]]]:
-    """Import and return all known helper Pydantic config classes.
+    def get_current_values(self, owner_id: str, timeout: float = 10.0) -> dict[str, Any]:
+        """Fetches a Config Owner's current on-disk configuration values.
 
-    Returns a dict mapping config filename to (model_class, competing_filenames).
-    Competing filenames apply only to the mutually-exclusive baseload variants:
-    enabling one deletes the others.
+        Args:
+            owner_id: The Config Owner's stable identifier.
+            timeout: Seconds to wait for a response before giving up.
 
-    Helper packages that are not installed are omitted silently so that the
-    server starts in minimal environments.
-    """
-    result: dict[str, tuple[Any, list[str]]] = {}
-    _baseload_variants = ["baseload-static.yaml", "baseload-ha.yaml", "baseload-ha-db.yaml"]
+        Returns:
+            The Config Owner's current configuration values.
 
-    try:
-        from nordpool.config import NordpoolConfig
-        result["nordpool.yaml"] = (NordpoolConfig, [])
-    except ImportError:
-        pass
+        Raises:
+            TimeoutError: If no response arrives within `timeout` seconds.
+        """
+        ...
 
-    try:
-        from zonneplan_prices.config import ZonneplanPricesConfig
-        result["zonneplan.yaml"] = (ZonneplanPricesConfig, [])
-    except ImportError:
-        pass
+    def submit_restart_request(self, owner_id: str, timeout: float = 10.0) -> RestartResponse:
+        """Requests that a Config Owner exit for its supervisor to restart it.
 
-    try:
-        from epexpredictor_prices.config import EpexPredictorPricesConfig
-        result["epexpredictor.yaml"] = (EpexPredictorPricesConfig, [])
-    except ImportError:
-        pass
+        Args:
+            owner_id: The Config Owner's stable identifier.
+            timeout: Seconds to wait for an acknowledgement before giving up.
 
-    try:
-        from pv_fetcher.config import PvFetcherConfig
-        result["pv-fetcher.yaml"] = (PvFetcherConfig, [])
-    except ImportError:
-        pass
+        Returns:
+            The Config Owner's `RestartResponse`.
 
-    try:
-        from pv_openmeteo.config import PvOpenMeteoConfig
-        result["pv-openmeteo.yaml"] = (PvOpenMeteoConfig, [])
-    except ImportError:
-        pass
-
-    try:
-        from pv_ml_learner.config import PvLearnerConfig
-        result["pv-ml-learner.yaml"] = (PvLearnerConfig, [])
-    except ImportError:
-        pass
-
-    try:
-        from baseload_static.config import BaseloadConfig as BaseloadStaticConfig
-        result["baseload-static.yaml"] = (
-            BaseloadStaticConfig,
-            [f for f in _baseload_variants if f != "baseload-static.yaml"],
-        )
-    except ImportError:
-        pass
-
-    try:
-        from baseload_ha.config import BaseloadConfig as BaseloadHaConfig
-        result["baseload-ha.yaml"] = (
-            BaseloadHaConfig,
-            [f for f in _baseload_variants if f != "baseload-ha.yaml"],
-        )
-    except ImportError:
-        pass
-
-    try:
-        from baseload_ha_db.config import BaseloadConfig as BaseloadHaDbConfig
-        result["baseload-ha-db.yaml"] = (
-            BaseloadHaDbConfig,
-            [f for f in _baseload_variants if f != "baseload-ha-db.yaml"],
-        )
-    except ImportError:
-        pass
-
-    try:
-        from reporter.config import ReporterConfig
-        result["reporter.yaml"] = (ReporterConfig, [])
-    except ImportError:
-        pass
-
-    try:
-        from scheduler.config import SchedulerConfig
-        result["scheduler.yaml"] = (SchedulerConfig, [])
-    except ImportError:
-        pass
-
-    return result
+        Raises:
+            TimeoutError: If no response arrives within `timeout` seconds.
+        """
+        ...
 
 
 class ConfigEditorServer:
-    """Lightweight HTTP server for the mimirheim config editor.
+    """Stdlib HTTP server exposing the Config Editor's discovery, rendering, and submit pages.
 
-    Serves static files and three JSON API endpoints. All request handling
-    is synchronous; the stdlib ThreadingHTTPServer is used so that concurrent
-    browser requests do not block each other.
-
-    The schema is computed once at construction time and cached for the
-    lifetime of the server instance.
+    All request handling is synchronous; the stdlib `ThreadingHTTPServer` is
+    used so that concurrent browser requests do not block each other.
 
     Args:
-        config_dir: Directory where mimirheim.yaml is read from and written to.
+        registry: The in-memory registry of discovered Config Owners this
+            server renders from. Populated by `mqtt_client.py` in the running
+            process; tests populate it directly.
+        config_service_client: Forwards a submitted Config Owner's Candidate
+            Values to `validate_and_write` and awaits the result. The running
+            process passes its `ConfigEditorMqttClient`; tests pass a fake.
         port: TCP port to listen on. Pass 0 to let the OS assign a free port
             (useful in tests).
+        allowed_ip: If set, requests from any other source IP are rejected
+            with 403 Forbidden. Used by the HA add-on to restrict access to
+            the ingress proxy's gateway address; None (the default) accepts
+            every source IP.
     """
 
     def __init__(
         self,
-        config_dir: Path,
-        port: int,
+        registry: ConfigOwnerRegistry,
+        config_service_client: ConfigServiceClient,
+        port: int = 0,
         allowed_ip: str | None = None,
     ) -> None:
-        self._config_dir = Path(config_dir)
+        self._registry = registry
+        self._config_service_client = config_service_client
         self._allowed_ip = allowed_ip
-        self._schema: dict[str, Any] = MimirheimConfig.model_json_schema()
 
-        # Load helper model registry. Dict maps filename → (model_cls, competitors).
-        self._helper_models: dict[str, tuple[Any, list[str]]] = _load_helper_models()
+        # Cache for _reporter_reporting_section(); see
+        # _REPORTER_REPORTING_CACHE_TTL_S. None means "never fetched yet".
+        self._reporter_reporting_cache: dict[str, Any] | None = None
+        self._reporter_reporting_cache_time: float = 0.0
 
-        # Pre-compute helper schemas once — these are expensive for some models
-        # (pv_ml_learner has many nested $defs).
-        self._helper_schemas: dict[str, Any] = {
-            fname: model_cls.model_json_schema()
-            for fname, (model_cls, _) in self._helper_models.items()
-        }
-
-        # Build the actual HTTP server. handler_factory creates a closure over
-        # self so the handler can call _dispatch without global state.
         server_self = self
 
         class _Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802
-                if server_self._allowed_ip and self.client_address[0] != server_self._allowed_ip:
-                    self.send_response(403)
-                    self.end_headers()
-                    return
-                status, headers, body = server_self.handle_request("GET", self.path, body=b"")
+                status, headers, body = server_self.handle_request(
+                    "GET",
+                    self.path,
+                    body=b"",
+                    client_ip=self.client_address[0],
+                    cookie=self.headers.get("Cookie"),
+                )
                 self._send(status, headers, body)
 
             def do_POST(self) -> None:  # noqa: N802
-                if server_self._allowed_ip and self.client_address[0] != server_self._allowed_ip:
-                    self.send_response(403)
-                    self.end_headers()
-                    return
-                raw_length = self.headers.get("Content-Length", "0")
-                try:
-                    length = int(raw_length)
-                except ValueError:
-                    # A non-numeric header used to raise ValueError here, which
-                    # took out the handler thread and reset the connection with
-                    # no response at all.
-                    logger.warning("Rejecting POST: bad Content-Length %r.", raw_length)
-                    self._reject(400, "bad Content-Length")
-                    return
-                if length < 0:
-                    logger.warning("Rejecting POST: negative Content-Length %r.", raw_length)
-                    self._reject(400, "bad Content-Length")
-                    return
-                if length > MAX_REQUEST_BODY_BYTES:
-                    logger.warning(
-                        "Rejecting POST: body of %d bytes exceeds the %d byte limit.",
-                        length,
-                        MAX_REQUEST_BODY_BYTES,
-                    )
-                    self._reject(413, "request body too large")
-                    return
-                raw = self.rfile.read(length)
-                status, headers, body = server_self.handle_request("POST", self.path, body=raw)
+                length = int(self.headers.get("Content-Length", 0))
+                request_body = self.rfile.read(length) if length else b""
+                status, headers, body = server_self.handle_request(
+                    "POST",
+                    self.path,
+                    body=request_body,
+                    client_ip=self.client_address[0],
+                    cookie=self.headers.get("Cookie"),
+                )
                 self._send(status, headers, body)
 
-            def _reject(self, status: int, message: str) -> None:
-                """Send a JSON error response without touching the request body."""
-                payload = json.dumps({"ok": False, "error": message}).encode()
-                self.send_response(status)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(payload)))
-                self.end_headers()
-                self.wfile.write(payload)
-
             def _send(self, status: int, headers: dict[str, str], body: bytes) -> None:
-                def _sanitize_header_component(component: str) -> str:
-                    # Prevent HTTP response splitting by stripping CR and LF
-                    # characters from header names and values before they are
-                    # written to the wire.
-                    return component.replace("\r", "").replace("\n", "")
-
                 self.send_response(status)
                 for key, value in headers.items():
-                    safe_key = _sanitize_header_component(str(key))
-                    safe_value = _sanitize_header_component(str(value))
-                    self.send_header(safe_key, safe_value)
+                    self.send_header(key, value)
                 self.end_headers()
                 self.wfile.write(body)
 
-            def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
+            def log_message(self, format: str, *args: Any) -> None:
                 logger.debug(format, *args)
 
         self._httpd = http.server.ThreadingHTTPServer(("0.0.0.0", port), _Handler)
 
     @property
     def server_port(self) -> int:
-        """Return the actual TCP port the server is bound to."""
+        """Returns the actual TCP port the server is bound to."""
         return self._httpd.server_address[1]
 
-    def _read_reporter_yaml(self) -> dict:
-        """Read and parse reporter.yaml from the config directory.
-
-        Returns an empty dict if the file is absent, unreadable, or cannot be
-        parsed. An unreadable file used to raise OSError out of the request
-        handler; "reports not configured" is the honest answer and does not
-        take the thread down.
-        """
-        reporter_yaml = self._config_dir / "reporter.yaml"
-        try:
-            return yaml.safe_load(reporter_yaml.read_text()) or {}
-        except FileNotFoundError:
-            return {}
-        except (OSError, yaml.YAMLError) as exc:
-            logger.warning("Could not read %s: %s", reporter_yaml, exc)
-            return {}
-
-    def _reporting_path(self, key: str) -> Path | None:
-        """Return a path from the ``reporting`` section of reporter.yaml.
-
-        Read on each access rather than cached at construction. The editor
-        writes reporter.yaml itself, so a cached value meant that enabling the
-        reporter, or moving its output directory, had no effect until the
-        container restarted -- with nothing in the UI to explain why. This is a
-        low-traffic admin interface and the file is small.
-
-        Args:
-            key: The key to read from the ``reporting`` section.
-
-        Returns:
-            The configured path, or None when unset.
-        """
-        value = (self._read_reporter_yaml().get("reporting") or {}).get(key)
-        return Path(value) if value else None
-
-    @property
-    def _reports_dir(self) -> Path | None:
-        """Current reporting.output_dir, or None if not configured."""
-        return self._reporting_path("output_dir")
-
-    @property
-    def _dump_dir(self) -> Path | None:
-        """Current reporting.dump_dir, or None if not configured."""
-        return self._reporting_path("dump_dir")
-
     def serve_forever(self) -> None:
-        """Start serving requests. Blocks until shutdown() is called."""
-        logger.info("Config editor listening on port %d", self.server_port)
+        """Starts serving requests. Blocks until shutdown() is called."""
+        logger.info("config-editor listening on port %d", self.server_port)
         self._httpd.serve_forever()
 
     def shutdown(self) -> None:
-        """Stop the server cleanly."""
+        """Stops the server cleanly."""
         self._httpd.shutdown()
 
     # ------------------------------------------------------------------
@@ -458,90 +312,326 @@ class ConfigEditorServer:
     # ------------------------------------------------------------------
 
     def handle_request(
-        self, method: str, path: str, body: bytes
+        self,
+        method: str,
+        path: str,
+        body: bytes,
+        client_ip: str | None = None,
+        cookie: str | None = None,
     ) -> tuple[int, dict[str, str], bytes]:
-        """Dispatch a request and return (status_code, headers, body_bytes).
+        """Dispatches a request and returns (status_code, headers, body_bytes).
 
-        This method is called both by the real HTTP handler (do_GET / do_POST)
-        and directly by unit tests, which avoids the need for a live socket in
-        unit tests.
+        Called both by the real HTTP handler (`do_GET`) and directly by unit
+        tests, which avoids the need for a live socket in unit tests.
 
         Args:
-            method: HTTP method ("GET" or "POST").
-            path: Request path, possibly with query string (query string is
-                ignored).
-            body: Raw request body bytes.
+            method: HTTP method. "GET" and "POST" are supported.
+            path: Request path, optionally with a query string. The query
+                string is ignored by every route except `/theme/<name>`,
+                which reads a `next` parameter from it.
+            body: Raw request body bytes. Used only for POST, as a
+                `application/x-www-form-urlencoded` body (the `<form>` in
+                `templates/owner.html` submits with no explicit `enctype`,
+                which defaults to this).
+            client_ip: The requesting client's source IP, as supplied by the
+                real HTTP handler's `client_address`. Checked against
+                `allowed_ip` only when both are set; a caller (e.g. an
+                existing unit test) that omits it is never restricted.
+            cookie: The raw `Cookie` request header, as supplied by the real
+                HTTP handler. Used to read the visitor's "theme" override; a
+                caller that omits it renders as if no cookie were sent.
 
         Returns:
-            A three-tuple of (HTTP status code, response headers dict, body bytes).
+            A three-tuple of (HTTP status code, response headers, body bytes).
         """
-        # Strip query string.
-        path = path.split("?")[0]
+        if self._allowed_ip and client_ip is not None and client_ip != self._allowed_ip:
+            return self._html_response(403, "<h1>Forbidden</h1>")
+
+        path, _, query = path.partition("?")
 
         # Fast rejection of obvious path traversal attempts before routing.
         # _safe_join performs the authoritative containment check downstream,
         # but catching these early avoids unnecessary routing work and makes
         # the intent clear to static analysis tools.
         if ".." in path or "\x00" in path:
-            return self._json_response(400, {"error": "bad request"})
+            return self._html_response(403, "<h1>Forbidden</h1>")
+
+        theme = _theme_from_cookie(cookie)
 
         if method == "GET" and path == "/":
-            return self._serve_index()
+            return self._render_index(theme=theme)
         if method == "GET" and path.startswith("/static/"):
-            return self._serve_static(path)
+            return self._serve_static(path[len("/static/") :])
+        if method == "GET" and path.startswith("/theme/"):
+            return self._set_theme(path[len("/theme/") :], query)
         if method == "GET" and path in ("/reports", "/reports/"):
             return self._serve_reports_index()
         if method == "GET" and path.startswith("/reports/dumps/"):
-            return self._serve_dump_file(path[len("/reports/dumps/"):])
+            return self._serve_dump_file(path[len("/reports/dumps/") :])
         if method == "GET" and path.startswith("/reports/"):
-            return self._serve_report_file(path[len("/reports/"):])
-        if method == "GET" and path == "/api/schema":
-            return self._api_get_schema()
-        if method == "GET" and path == "/api/config":
-            return self._api_get_config()
-        if method == "POST" and path == "/api/config":
-            return self._api_post_config(body)
-        if method == "GET" and path == "/api/helper-configs":
-            return self._api_get_helper_configs()
-        if method == "GET" and path == "/api/helper-schemas":
-            return self._api_get_helper_schemas()
-        if method == "POST" and path.startswith("/api/helper-config/"):
-            filename = path[len("/api/helper-config/"):]
-            return self._api_post_helper_config(filename, body)
+            return self._serve_report_file(path[len("/reports/") :])
+        if method == "GET" and path.startswith("/owners/"):
+            owner_id = urllib.parse.unquote(path[len("/owners/") :])
+            return self._render_owner(owner_id, theme=theme)
+        if method == "POST" and path.startswith("/owners/") and path.endswith("/restart"):
+            owner_id = urllib.parse.unquote(path[len("/owners/") : -len("/restart")])
+            return self._request_restart(owner_id, theme=theme)
+        if method == "POST" and path.startswith("/owners/"):
+            owner_id = urllib.parse.unquote(path[len("/owners/") :])
+            return self._submit_owner(owner_id, body, theme=theme)
 
-        return self._json_response(404, {"error": "not found"})
+        return self._html_response(404, "<h1>Not found</h1>")
 
     # ------------------------------------------------------------------
-    # Static file serving
+    # Pages
     # ------------------------------------------------------------------
 
-    def _serve_index(self) -> tuple[int, dict[str, str], bytes]:
-        index = _STATIC_DIR / "index.html"
-        if not index.exists():
-            return self._json_response(404, {"error": "index.html not found"})
-        return 200, {"Content-Type": "text/html; charset=utf-8"}, index.read_bytes()
+    def _render_index(self, *, theme: str | None) -> tuple[int, dict[str, str], bytes]:
+        template = _TEMPLATES.get_template("index.html")
+        owners = self._registry.all()
+        core_owners = [owner for owner in owners if owner.owner_id == _MIMIRHEIM_CORE_OWNER_ID]
+        helper_owners = [owner for owner in owners if owner.owner_id != _MIMIRHEIM_CORE_OWNER_ID]
+        html = template.render(
+            core_owners=core_owners, helper_owners=helper_owners, theme=theme, current_path="/"
+        )
+        return self._html_response(200, html)
+
+    def _render_owner(self, owner_id: str, *, theme: str | None) -> tuple[int, dict[str, str], bytes]:
+        descriptor = self._registry.get(owner_id)
+        if descriptor is None:
+            return self._html_response(404, "<h1>Unknown Config Owner</h1>")
+
+        try:
+            current_values = self._config_service_client.get_current_values(owner_id)
+        except TimeoutError:
+            logger.warning("Timed out fetching current values from %r; showing schema defaults.", owner_id)
+            current_values = None
+        return self._render_owner_page(descriptor, values=current_values, theme=theme)
+
+    def _submit_owner(
+        self, owner_id: str, body: bytes, *, theme: str | None
+    ) -> tuple[int, dict[str, str], bytes]:
+        descriptor = self._registry.get(owner_id)
+        if descriptor is None:
+            return self._html_response(404, "<h1>Unknown Config Owner</h1>")
+
+        raw = _parse_form_body(body)
+        values = parse_submission(descriptor.form_spec, raw)
+
+        try:
+            result = self._config_service_client.submit_validate_and_write(owner_id, values)
+        except TimeoutError:
+            logger.warning("Timed out awaiting validate_and_write response from %r.", owner_id)
+            errors = ["Timed out waiting for a response from this Config Owner."]
+            return self._render_owner_page(descriptor, values=values, errors=errors, theme=theme)
+
+        if result.success:
+            return self._render_owner_page(descriptor, values=values, success=True, theme=theme)
+        return self._render_owner_page(descriptor, values=values, errors=result.errors, theme=theme)
+
+    def _request_restart(self, owner_id: str, *, theme: str | None) -> tuple[int, dict[str, str], bytes]:
+        """Requests that a Config Owner restart, reached only via the owner page's own confirmation modal.
+
+        Restarting is never triggered by a successful Save (`_submit_owner`
+        only ever renders a "restart required" message): it is always a
+        separate, conscious action, per ADR-0012.
+
+        Args:
+            owner_id: The Config Owner's stable identifier.
+            theme: The visitor's theme cookie override, forwarded to the
+                re-rendered owner page.
+
+        Returns:
+            A three-tuple of (status, headers, body): the owner page,
+            re-rendered with either a restart-requested confirmation or a
+            timeout error.
+        """
+        descriptor = self._registry.get(owner_id)
+        if descriptor is None:
+            return self._html_response(404, "<h1>Unknown Config Owner</h1>")
+
+        try:
+            self._config_service_client.submit_restart_request(owner_id)
+        except TimeoutError:
+            logger.warning("Timed out awaiting restart acknowledgement from %r.", owner_id)
+            errors = ["Timed out waiting for a restart acknowledgement from this Config Owner."]
+            return self._render_owner_page(descriptor, theme=theme, errors=errors)
+
+        # The owner is about to exit, so its own current values may no
+        # longer be reachable; fall back to schema defaults rather than
+        # surfacing a second, unrelated timeout error alongside the restart
+        # confirmation.
+        try:
+            current_values = self._config_service_client.get_current_values(owner_id)
+        except TimeoutError:
+            current_values = None
+        return self._render_owner_page(
+            descriptor, values=current_values, restart_requested=True, theme=theme
+        )
+
+    def _render_owner_page(
+        self,
+        descriptor: Descriptor,
+        *,
+        values: dict[str, Any] | None = None,
+        errors: list[str] | None = None,
+        success: bool = False,
+        restart_requested: bool = False,
+        theme: str | None = None,
+    ) -> tuple[int, dict[str, str], bytes]:
+        template = _TEMPLATES.get_template("owner.html")
+        html = template.render(
+            descriptor=descriptor,
+            tabs=build_tabs(descriptor, values=values),
+            errors=errors or [],
+            success=success,
+            restart_requested=restart_requested,
+            theme=theme,
+            current_path=f"/owners/{urllib.parse.quote(descriptor.owner_id)}",
+        )
+        return self._html_response(200, html)
+
+
+    def _set_theme(self, theme: str, query: str) -> tuple[int, dict[str, str], bytes]:
+        """Records the visitor's theme choice in a cookie and redirects back.
+
+        Args:
+            theme: The path segment after `/theme/`, e.g. "dark" or "light".
+            query: The request's raw query string, read for a `next`
+                parameter naming the page to redirect back to.
+
+        Returns:
+            A 302 redirect to `next` (or "/" if absent or not same-origin),
+            with a `Set-Cookie` header recording the chosen theme. 404 if
+            `theme` is not a recognised theme name.
+        """
+        if theme not in _VALID_THEMES:
+            return self._html_response(404, "<h1>Not found</h1>")
+
+        next_path = urllib.parse.parse_qs(query).get("next", ["/"])[0]
+        # Guards against an off-site open redirect: a leading "//" is parsed
+        # by browsers as a protocol-relative URL (e.g. "//evil.example"), not
+        # a same-origin path.
+        if not next_path.startswith("/") or next_path.startswith("//"):
+            next_path = "/"
+
+        headers = {
+            "Location": next_path,
+            "Set-Cookie": f"theme={theme}; Path=/; Max-Age=31536000",
+        }
+        return 302, headers, b""
+
+    def _serve_static(self, relative_path: str) -> tuple[int, dict[str, str], bytes]:
+        """Serves a vendored static asset (e.g. Bootstrap5's CSS/JS) with path traversal protection.
+
+        Only files with an allowed extension (`.css`, `.js`, `.html`) are
+        served; every other extension, and any path that resolves outside
+        `_STATIC_DIR`, is rejected with 403.
+
+        Args:
+            relative_path: The request path with the `/static/` prefix
+                already stripped, e.g. `vendor/bootstrap/bootstrap.min.css`.
+
+        Returns:
+            A three-tuple of (status, headers, body).
+        """
+        suffix = Path(relative_path).suffix
+        if suffix not in _ALLOWED_STATIC_EXTENSIONS:
+            return self._html_response(403, "<h1>Forbidden</h1>")
+
+        resolved = _safe_join(_STATIC_DIR, relative_path)
+        if resolved is None:
+            return self._html_response(403, "<h1>Forbidden</h1>")
+
+        if not resolved.exists():
+            return self._html_response(404, "<h1>Not found</h1>")
+
+        content_type = mimetypes.types_map.get(suffix, "application/octet-stream")
+        return 200, {"Content-Type": content_type}, resolved.read_bytes()
+
+    def _reporter_reporting_section(self) -> dict[str, Any]:
+        """Fetches the reporter Config Owner's live `reporting` section, cached briefly.
+
+        Asks the reporter for its current configuration over the same
+        `get_current_values` Config Service call the owner pages use, rather
+        than reading reporter.yaml off disk directly -- this module never
+        reads another Config Owner's configuration file itself. The result is
+        cached for `_REPORTER_REPORTING_CACHE_TTL_S` seconds, since a single
+        /reports page load needs it once per file served.
+
+        Returns:
+            The reporter's `reporting` dict, or `{}` if the reporter is
+            unreachable (and nothing was ever cached) or has no `reporting`
+            section yet.
+        """
+        now = time.monotonic()
+        if (
+            self._reporter_reporting_cache is not None
+            and now - self._reporter_reporting_cache_time < _REPORTER_REPORTING_CACHE_TTL_S
+        ):
+            return self._reporter_reporting_cache
+
+        try:
+            values = self._config_service_client.get_current_values(_REPORTER_OWNER_ID)
+        except TimeoutError:
+            logger.warning("Timed out fetching the reporter's configuration; reports proxy unavailable.")
+            # Keep serving the last known-good section rather than blanking
+            # out /reports for the rest of the TTL over one transient
+            # timeout; cache_time is left stale so the next call retries.
+            return self._reporter_reporting_cache or {}
+
+        section = values.get("reporting") or {}
+        self._reporter_reporting_cache = section
+        self._reporter_reporting_cache_time = now
+        return section
+
+    def _reporter_reporting_path(self, key: str) -> Path | None:
+        """Reads a path from the reporter's cached `reporting` section.
+
+        Args:
+            key: The key to read from the reporter's `reporting` section,
+                e.g. `"output_dir"` or `"dump_dir"`.
+
+        Returns:
+            The configured path, or None if the reporter is unreachable, has
+            no `reporting` section yet, or does not set `key`.
+        """
+        value = self._reporter_reporting_section().get(key)
+        return Path(value) if value else None
+
+    @property
+    def _reports_dir(self) -> Path | None:
+        """The reporter's current reporting.output_dir, or None if unset/unreachable."""
+        return self._reporter_reporting_path("output_dir")
+
+    @property
+    def _dump_dir(self) -> Path | None:
+        """The reporter's current reporting.dump_dir, or None if unset/unreachable."""
+        return self._reporter_reporting_path("dump_dir")
 
     def _serve_reports_index(self) -> tuple[int, dict[str, str], bytes]:
-        """Serve the reports index.html from the configured reports directory.
+        """Serves the reporter's report index, proxied from its output directory.
 
-        Any ``target="_blank"`` attributes are stripped from the response so
-        that report links navigate within the iframe instead of popping out to
-        a new browser tab. This works regardless of which version of index.html
-        the reporter has written to the output directory.
+        Any `target="_blank"` attribute is stripped from the response so
+        that report links navigate within this page instead of popping out
+        to a new browser tab. This works regardless of which version of
+        index.html the reporter has written.
         """
-        if self._reports_dir is None:
-            return self._json_response(404, {"error": "reports directory not configured"})
-        index = self._reports_dir / "index.html"
+        reports_dir = self._reports_dir
+        if reports_dir is None:
+            return self._html_response(404, "<h1>Reports not configured</h1>")
+        index = reports_dir / "index.html"
         if not index.exists():
-            return self._json_response(404, {"error": "reports index not found"})
+            return self._html_response(404, "<h1>Report index not found</h1>")
         content = index.read_bytes().replace(b' target="_blank"', b"")
         return 200, {"Content-Type": "text/html; charset=utf-8"}, content
 
     def _serve_report_file(self, filename: str) -> tuple[int, dict[str, str], bytes]:
-        """Serve a single file from the reports directory.
+        """Serves a single file from the reporter's output directory.
 
-        Only flat filenames are accepted — no path separators or traversal
-        components. Allowed extensions: .html, .js.
+        Only flat filenames with an allowed extension are served; see
+        `_ALLOWED_REPORT_EXTENSIONS`. Path traversal is rejected the same
+        way `_serve_static` rejects it, via `_safe_join`.
 
         Args:
             filename: Bare filename extracted from the request path.
@@ -549,29 +639,25 @@ class ConfigEditorServer:
         Returns:
             A three-tuple of (status, headers, body).
         """
-        if self._reports_dir is None:
-            return self._json_response(404, {"error": "reports directory not configured"})
+        reports_dir = self._reports_dir
+        if reports_dir is None:
+            return self._html_response(404, "<h1>Reports not configured</h1>")
         suffix = Path(filename).suffix
         if suffix not in _ALLOWED_REPORT_EXTENSIONS:
-            return self._json_response(403, {"error": "forbidden"})
-        resolved = _safe_join(self._reports_dir, filename)
+            return self._html_response(403, "<h1>Forbidden</h1>")
+        resolved = _safe_join(reports_dir, filename)
         if resolved is None:
-            return self._json_response(403, {"error": "forbidden"})
+            return self._html_response(403, "<h1>Forbidden</h1>")
         if not resolved.exists():
-            return self._json_response(404, {"error": "not found"})
+            return self._html_response(404, "<h1>Not found</h1>")
         content_type = mimetypes.types_map.get(suffix, "application/octet-stream")
         return 200, {"Content-Type": content_type}, resolved.read_bytes()
 
     def _serve_dump_file(self, filename: str) -> tuple[int, dict[str, str], bytes]:
-        """Serve a dump JSON file from the reporter's dump directory.
+        """Serves a solve dump JSON file from the reporter's dump directory.
 
-        Only flat filenames ending in ``_input.json`` or ``_output.json`` are
-        served. Path separators and traversal components are rejected with 403.
-
-        Download links in the report index use the relative path ``dumps/<filename>``
-        so they work through the config editor proxy. When the report index is opened
-        directly from the filesystem, these links will 404 — users who need
-        direct-file access can add a web server alias or symlink themselves.
+        Only flat filenames ending in `_input.json` or `_output.json` are
+        served, so a report's own download links work through this proxy.
 
         Args:
             filename: Bare filename extracted from the request path.
@@ -579,375 +665,42 @@ class ConfigEditorServer:
         Returns:
             A three-tuple of (status, headers, body).
         """
-        if self._dump_dir is None:
-            return self._json_response(404, {"error": "dump directory not configured"})
-        if not any(filename.endswith(s) for s in _ALLOWED_DUMP_SUFFIXES):
-            return self._json_response(403, {"error": "forbidden"})
-        resolved = _safe_join(self._dump_dir, filename)
+        dump_dir = self._dump_dir
+        if dump_dir is None:
+            return self._html_response(404, "<h1>Dump directory not configured</h1>")
+        if not any(filename.endswith(suffix) for suffix in _ALLOWED_DUMP_SUFFIXES):
+            return self._html_response(403, "<h1>Forbidden</h1>")
+        resolved = _safe_join(dump_dir, filename)
         if resolved is None:
-            return self._json_response(403, {"error": "forbidden"})
+            return self._html_response(403, "<h1>Forbidden</h1>")
         if not resolved.exists():
-            return self._json_response(404, {"error": "not found"})
-        return (
-            200,
-            {
-                "Content-Type": "application/json",
-                # resolved.name is the final path component after symlink
-                # resolution and containment verification — safe for use in
-                # the Content-Disposition header.
-                "Content-Disposition": f'attachment; filename="{resolved.name}"',
-            },
-            resolved.read_bytes(),
-        )
-
-    def _serve_static(self, path: str) -> tuple[int, dict[str, str], bytes]:
-        """Serve a file from the static directory with path traversal protection.
-
-        Only files with allowed extensions (.js, .css, .html) are served.
-        Any path component containing '..' is rejected with 403.
-
-        Args:
-            path: The raw request path (e.g. '/static/app.js').
-
-        Returns:
-            A three-tuple of (status, headers, body).
-        """
-        # Strip the /static/ prefix.
-        relative = path[len("/static/"):]
-
-        suffix = Path(relative).suffix
-        if suffix not in _ALLOWED_STATIC_EXTENSIONS:
-            return self._json_response(403, {"error": "forbidden"})
-
-        resolved = _safe_join(_STATIC_DIR, relative)
-        if resolved is None:
-            return self._json_response(403, {"error": "forbidden"})
-
-        if not resolved.exists():
-            return self._json_response(404, {"error": "not found"})
-
-        content_type = mimetypes.types_map.get(suffix, "application/octet-stream")
-        return 200, {"Content-Type": content_type}, resolved.read_bytes()
-
-    # ------------------------------------------------------------------
-    # API endpoints
-    # ------------------------------------------------------------------
-
-    def _api_get_schema(self) -> tuple[int, dict[str, str], bytes]:
-        """Return the cached MimirheimConfig JSON Schema."""
-        return self._json_response(200, self._schema)
-
-    def _api_get_config(self) -> tuple[int, dict[str, str], bytes]:
-        """Read mimirheim.yaml and return its parsed contents.
-
-        Does not validate via Pydantic so that partially-complete configs
-        written by the user are returned as-is for display in the frontend.
-
-        The ``mqtt_env`` key in the response names the MQTT broker settings
-        currently set via environment variables (injected by the HA Supervisor).
-        The frontend uses these to show which fields are Supervisor-controlled
-        and to strip them from the saved YAML when the user has not overridden
-        them. Credential values are replaced by ``MQTT_ENV_REDACTED``; the key
-        is still present, so the frontend can tell the field is env-supplied
-        without the secret leaving the process.
-
-        Returns:
-            ``{"exists": false, "config": {}, "mqtt_env": {...}}`` when the
-            file is absent.
-            ``{"exists": true, "config": <dict>, "mqtt_env": {...}}`` when the
-            file is present.
-        """
-        mqtt_env = self._mqtt_env_for_client()
-        reports_available = (
-            self._reports_dir is not None
-            and (self._reports_dir / "index.html").exists()
-        )
-        yaml_path = self._config_dir / "mimirheim.yaml"
-        if not yaml_path.exists():
-            return self._json_response(
-                200,
-                {"exists": False, "config": {}, "mqtt_env": mqtt_env, "reports_available": reports_available},
-            )
-
-        try:
-            raw = yaml.safe_load(yaml_path.read_text()) or {}
-        except yaml.YAMLError as exc:
-            logger.warning("Failed to parse mimirheim.yaml: %s", exc)
-            return self._json_response(
-                200,
-                {"exists": True, "config": {}, "mqtt_env": mqtt_env, "reports_available": reports_available},
-            )
-
-        return self._json_response(
-            200,
-            {"exists": True, "config": raw, "mqtt_env": mqtt_env, "reports_available": reports_available},
-        )
-
-    def _api_post_config(self, body: bytes) -> tuple[int, dict[str, str], bytes]:
-        """Validate a JSON config body and write it to mimirheim.yaml.
-
-        Validation is performed via MimirheimConfig.model_validate. If
-        validation fails, HTTP 422 is returned with a list of Pydantic error
-        dicts; the file is not written.
-
-        When MQTT env vars are set (HA Supervisor context), the submitted config
-        may omit mqtt fields that are provided by the Supervisor at runtime.
-        The server merges env-supplied mqtt fields into a validation-only copy
-        before calling Pydantic; only the original submitted data is written to
-        disk, keeping Supervisor credentials out of the YAML file.
-
-        On success, the config is serialised to YAML and written atomically:
-        a temp file is written in the same directory, then os.replace() moves
-        it into place. This prevents a partial file being visible to the
-        solver if the container is restarted mid-write.
-
-        Args:
-            body: Raw JSON bytes.
-
-        Returns:
-            HTTP 200 {"ok": true} on success.
-            HTTP 422 {"ok": false, "errors": [...]} on validation failure.
-            HTTP 400 on malformed JSON.
-        """
-        try:
-            data = json.loads(body)
-        except (json.JSONDecodeError, ValueError) as exc:
-            return self._json_response(400, {"ok": False, "errors": str(exc)})
-
-        # An untouched password field posts the redaction sentinel back. Drop it
-        # before anything else looks at the data, so it is neither validated nor
-        # written to disk.
-        data = self._strip_redacted_mqtt(data) if isinstance(data, dict) else data
-
-        # Merge env-supplied MQTT fields into a validation-only copy. The user
-        # may have excluded mqtt fields that the Supervisor provides at runtime;
-        # without the merge, Pydantic would reject the config as incomplete.
-        mqtt_env = self._mqtt_env()
-        if mqtt_env:
-            validate_data: dict = dict(data)
-            validate_data["mqtt"] = {**mqtt_env, **dict(data.get("mqtt") or {})}
-        else:
-            validate_data = data
-
-        try:
-            MimirheimConfig.model_validate(validate_data)
-        except PydanticValidationError as exc:
-            return self._json_response(422, {"ok": False, "errors": exc.errors()})
-
-        yaml_path = self._config_dir / "mimirheim.yaml"
-        yaml_str = _write_yaml_preserving_comments(data, yaml_path)
-
-        logger.info("Wrote mimirheim.yaml (%d bytes)", len(yaml_str))
-        return self._json_response(200, {"ok": True})
-
-    # ------------------------------------------------------------------
-    # Helper config endpoints
-    # ------------------------------------------------------------------
-
-    def _api_get_helper_configs(self) -> tuple[int, dict[str, str], bytes]:
-        """Return enabled status and parsed config for every known helper.
-
-        A helper is enabled when its config file exists in config_dir. The
-        config contents are returned as-is (no Pydantic validation on GET)
-        so that partially-complete files are still displayed in the frontend.
-        """
-        result: dict[str, Any] = {}
-        for fname in self._helper_models:
-            fpath = self._config_dir / fname
-            if fpath.exists():
-                try:
-                    raw = yaml.safe_load(fpath.read_text()) or {}
-                except yaml.YAMLError:
-                    raw = {}
-                result[fname] = {"enabled": True, "config": raw}
-            else:
-                result[fname] = {"enabled": False, "config": {}}
-        return self._json_response(200, result)
-
-    def _api_get_helper_schemas(self) -> tuple[int, dict[str, str], bytes]:
-        """Return the pre-computed JSON Schema for every known helper config."""
-        return self._json_response(200, self._helper_schemas)
-
-    def _api_post_helper_config(
-        self, filename: str, body: bytes
-    ) -> tuple[int, dict[str, str], bytes]:
-        """Enable (write) or disable (delete) a helper config file.
-
-        The filename must be present in the hardcoded helper allowlist. Any
-        other value returns 400 to prevent path traversal or arbitrary file
-        writes.
-
-        Request body schema:
-            {"enabled": false}                          — delete the config file
-            {"enabled": true, "config": { ... }}        — validate and write
-
-        For baseload variants, enabling one automatically deletes the other
-        two variants to enforce the mutual-exclusion rule.
-
-        Args:
-            filename: Config filename extracted from the URL path.
-            body: Raw JSON bytes.
-
-        Returns:
-            HTTP 200 {"ok": true} on success.
-            HTTP 400 if filename is not in the allowlist.
-            HTTP 422 {"ok": false, "errors": [...]} on Pydantic validation failure.
-        """
-        if filename not in self._helper_models:
-            return self._json_response(400, {"ok": False, "error": "unknown helper filename"})
-
-        try:
-            data = json.loads(body)
-        except (json.JSONDecodeError, ValueError) as exc:
-            return self._json_response(400, {"ok": False, "errors": str(exc)})
-
-        enabled = data.get("enabled", True)
-        fpath = _safe_join(self._config_dir, filename)
-        if fpath is None:
-            return self._json_response(400, {"ok": False, "error": "invalid filename"})
-
-        if not enabled:
-            # Disable: delete the file if it exists.
-            if fpath.exists():
-                try:
-                    fpath.unlink()
-                    logger.info("Deleted %s", filename)
-                except OSError as exc:
-                    return self._json_response(500, {"ok": False, "error": str(exc)})
-            return self._json_response(200, {"ok": True})
-
-        # Enable: validate then write atomically.
-        config_dict = data.get("config", {})
-        if isinstance(config_dict, dict):
-            config_dict = self._strip_redacted_mqtt(config_dict)
-        model_cls, competitors = self._helper_models[filename]
-
-        # Merge env-supplied MQTT fields for validation only. Helper configs may
-        # omit mqtt fields that the Supervisor provides at runtime.
-        mqtt_env = self._mqtt_env()
-        if mqtt_env:
-            validate_dict: dict = dict(config_dict)
-            validate_dict["mqtt"] = {**mqtt_env, **dict(config_dict.get("mqtt") or {})}
-        else:
-            validate_dict = config_dict
-
-        try:
-            model_cls.model_validate(validate_dict)
-        except PydanticValidationError as exc:
-            return self._json_response(422, {"ok": False, "errors": exc.errors()})
-
-        yaml_str = _write_yaml_preserving_comments(config_dict, fpath)
-
-        # Delete mutually-exclusive variants (baseload only).
-        for competing_fname in competitors:
-            competing_path = _safe_join(self._config_dir, competing_fname)
-            if competing_path is None:
-                logger.warning("Skipping invalid competing filename %s", competing_fname)
-                continue
-            if competing_path.exists():
-                try:
-                    competing_path.unlink()
-                    logger.info("Deleted competing baseload variant %s", competing_fname)
-                except OSError as exc:
-                    logger.warning("Failed to delete %s: %s", competing_fname, exc)
-
-        logger.info("Wrote %s (%d bytes)", filename, len(yaml_str))
-        return self._json_response(200, {"ok": True})
-
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-
-    @classmethod
-    def _mqtt_env_for_client(cls) -> dict[str, Any]:
-        """Return the env-supplied mqtt fields with credentials redacted.
-
-        Same keys as :meth:`_mqtt_env`, so the frontend still learns which
-        fields the Supervisor controls, but with the secret values replaced by
-        ``MQTT_ENV_REDACTED``.
-
-        Returns:
-            Dict mapping mqtt field names to their value, or to
-            ``MQTT_ENV_REDACTED`` for the fields listed in
-            ``_REDACTED_MQTT_FIELDS``.
-        """
-        env = cls._mqtt_env()
-        for field in _REDACTED_MQTT_FIELDS:
-            if field in env:
-                env[field] = MQTT_ENV_REDACTED
-        return env
+            return self._html_response(404, "<h1>Not found</h1>")
+        headers = {
+            "Content-Type": "application/json",
+            # resolved.name is the final path component after symlink
+            # resolution and containment verification -- safe for use in
+            # the Content-Disposition header.
+            "Content-Disposition": f'attachment; filename="{resolved.name}"',
+        }
+        return 200, headers, resolved.read_bytes()
 
     @staticmethod
-    def _strip_redacted_mqtt(config: dict[str, Any]) -> dict[str, Any]:
-        """Return a copy of ``config`` with redacted mqtt values removed.
+    def _html_response(status: int, html: str) -> tuple[int, dict[str, str], bytes]:
+        body = html.encode("utf-8")
+        return status, {"Content-Type": "text/html; charset=utf-8"}, body
 
-        The editor pre-fills its form from the ``mqtt_env`` in the GET
-        response, so an untouched password field posts ``MQTT_ENV_REDACTED``
-        back. Persisting that would leave a config whose broker password is a
-        literal sentinel string.
 
-        The sentinel is stripped whether or not the environment still supplies
-        the field, so a config saved inside the add-on and re-saved outside it
-        does not turn the placeholder into a real password.
+def _parse_form_body(body: bytes) -> dict[str, str]:
+    """Parses an `application/x-www-form-urlencoded` POST body into a flat dict.
 
-        Args:
-            config: The submitted configuration dict.
+    Args:
+        body: The raw request body.
 
-        Returns:
-            A shallow copy with any sentinel-valued mqtt field removed. The
-            ``mqtt`` key itself is dropped if nothing is left in it.
-        """
-        mqtt = config.get("mqtt")
-        if not isinstance(mqtt, dict):
-            return config
-        cleaned = {k: v for k, v in mqtt.items() if v != MQTT_ENV_REDACTED}
-        if cleaned == mqtt:
-            return config
-        result = dict(config)
-        if cleaned:
-            result["mqtt"] = cleaned
-        else:
-            del result["mqtt"]
-        return result
-
-    @staticmethod
-    def _json_response(
-        status: int, data: Any
-    ) -> tuple[int, dict[str, str], bytes]:
-        body = json.dumps(data).encode()
-        return status, {"Content-Type": "application/json"}, body
-
-    @staticmethod
-    def _mqtt_env() -> dict[str, Any]:
-        """Read MQTT broker settings from environment variables set by the HA Supervisor.
-
-        Returns only keys that are actually present in the environment. The
-        returned dict can be merged into an ``mqtt:`` section to fill in fields
-        that the user has not explicitly set in their YAML config.
-
-        The mapping is:
-
-        =============== ========================
-        Env var         mqtt field
-        =============== ========================
-        MQTT_HOST       host
-        MQTT_PORT       port
-        MQTT_USERNAME   username
-        MQTT_PASSWORD   password
-        MQTT_SSL        tls (true/false string)
-        =============== ========================
-
-        Returns:
-            Dict mapping mqtt field names to their env-supplied values. Empty
-            when no MQTT env vars are set (plain Docker, no Supervisor).
-        """
-        try:
-            return mqtt_env_overrides()
-        except ValueError as exc:
-            # A helper daemon exits on this, and should: it cannot connect to a
-            # broker on an invalid port. The editor is the tool an operator
-            # reaches for to fix configuration, so it degrades instead --
-            # reporting no Supervisor-supplied MQTT settings, which makes the
-            # form show the mqtt section for manual entry.
-            logger.warning("Ignoring MQTT environment overrides: %s", exc)
-            return {}
+    Returns:
+        Each field name mapped to its (first, if repeated) submitted value.
+        Every value is a string: the submitted form has no way to convey a
+        field's real JSON Schema type, so type coercion is left to the
+        Config Owner's own pydantic validation in `validate_and_write`.
+    """
+    parsed = urllib.parse.parse_qs(body.decode("utf-8"), keep_blank_values=True)
+    return {name: values[0] for name, values in parsed.items()}

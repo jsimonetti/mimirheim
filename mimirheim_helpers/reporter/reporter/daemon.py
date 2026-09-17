@@ -22,6 +22,12 @@ What this module does not do:
 - It does not serve files over HTTP. A separate static file server is required.
 - It does not subscribe to ``homeassistant/status`` beyond what the base class
   handles automatically.
+
+``ReporterDaemon`` also opts into the Config Service protocol via
+``helper_common.config_owner.ConfigOwnerSupport``, so its configuration is
+discoverable, renderable, and editable in the same running Config Editor as
+mimirheim core's (config-editor-v3 ticket 06). This is additive: it changes
+nothing about the notification/render/GC behavior above.
 """
 from __future__ import annotations
 
@@ -33,13 +39,20 @@ from typing import Any
 
 import paho.mqtt.client as mqtt
 
+from helper_common.config_owner import ConfigOwnerSupport
 from helper_common.daemon import MqttDaemon
 
 from reporter import gc, inventory
 from reporter.config import ReporterConfig
+from reporter.formspec import REPORTER_CONFIG_FORM_SPEC
 from reporter.render import build_report_html
 
 logger = logging.getLogger(__name__)
+
+# Stable regardless of user configuration; the Config Editor needs a fixed
+# identity for this tool across restarts and reconfiguration.
+CONFIG_OWNER_ID = "reporter"
+CONFIG_OWNER_DISPLAY_NAME = "Reporter"
 
 # Names of static files copied into output_dir on first startup.
 _INDEX_FILENAME = "index.html"
@@ -75,14 +88,25 @@ class ReporterDaemon(MqttDaemon):
 
     """
 
-    def __init__(self, config: ReporterConfig) -> None:
+    def __init__(self, config: ReporterConfig, config_path: Path) -> None:
         """Initialise the reporter daemon.
 
         Args:
             config: Validated reporter configuration.
+            config_path: Path to the YAML file this daemon was started with;
+                the target of a successful validate_and_write request.
         """
         super().__init__(config)
         self._reporter_config = config.reporting
+        self._config_owner = ConfigOwnerSupport(
+            owner_id=CONFIG_OWNER_ID,
+            display_name=CONFIG_OWNER_DISPLAY_NAME,
+            model=ReporterConfig,
+            form_spec=REPORTER_CONFIG_FORM_SPEC,
+            config_path=config_path,
+        )
+        # Must be registered before self._client.connect() (called by run()).
+        self._config_owner.register_last_will(self._client)
 
     # ------------------------------------------------------------------
     # Public entry point (extends HelperDaemon.run)
@@ -122,6 +146,7 @@ class ReporterDaemon(MqttDaemon):
         super()._on_connect(client, userdata, flags, reason_code, properties)
         if reason_code.is_failure:
             return
+        self._config_owner.on_connect(client)
         notify_topic = self._reporter_config.notify_topic
         client.subscribe(notify_topic, qos=0)
         logger.info("Subscribed to dump-available notifications on %r.", notify_topic)
@@ -133,8 +158,13 @@ class ReporterDaemon(MqttDaemon):
         message: Any,
     ) -> None:
         """Route dump-available notifications."""
+        if self._config_owner.handle_message(client, message):
+            return
         if message.topic == self._reporter_config.notify_topic:
             self._on_notification(message)
+
+    def _on_shutdown(self) -> None:
+        self._config_owner.clear_descriptor(self._client)
 
     # ------------------------------------------------------------------
     # Notification handler

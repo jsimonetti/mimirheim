@@ -66,17 +66,26 @@ One consequence is worth knowing before switching. mimirheim treats the **last t
 
 ### Area codes
 
-Nordpool area codes follow the standard two- or four-character format used by the data portal:
+`nordpool.area` is validated against `pynordpool`'s own registry of Nordpool day-ahead bidding zones (the Config Editor renders it as a select box listing every one of them):
 
-| Country | Example areas |
+| Country | Areas |
 |---------|--------------|
 | Norway | `NO1` `NO2` `NO3` `NO4` `NO5` |
 | Sweden | `SE1` `SE2` `SE3` `SE4` |
 | Denmark | `DK1` `DK2` |
 | Finland | `FI` |
 | Netherlands | `NL` |
-| Germany | `DE-LU` |
+| Germany | `GER` |
 | Belgium | `BE` |
+| Austria | `AT` |
+| France | `FR` |
+| Poland | `PL` |
+| Estonia | `EE` |
+| Latvia | `LV` |
+| Lithuania | `LT` |
+| Bulgaria | `BG` |
+| Romania | `TEL` |
+
 
 ---
 

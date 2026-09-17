@@ -1,18 +1,23 @@
-# Enable the mimirheim config editor web UI.
+# Enable the mimirheim Config Editor web UI.
 # Access at: http://<host>:8099
 #
-# The editor is activated by the existence of this file. An empty file
-# (or a file containing only comments and whitespace) enables the editor
-# on the default port with all settings at their defaults.
+# The editor is the one tool allowed to start before its own config file
+# exists: an empty file (or one containing only comments) is enough to start
+# it on the default port and rely entirely on the settings below.
 #
+# mqtt is required: the editor discovers every Config Owner (mimirheim core
+# and any running helper) over MQTT, the same broker every other process
+# uses. In the HA add-on, the Supervisor injects these values automatically
+# and this section can be left out entirely.
+mqtt:
+  host: localhost
+  # port: 1883
+  # username: mqtt_user
+  # password: mqtt_password
+
 # In host networking mode, change the port if 8099 conflicts with another service:
 # port: 8321
-#
-# All fields are optional. A 'touch config-editor.yaml' is sufficient to
-# enable the editor on the default port.
 
-# port: 8099
-# config_dir: /config
 # log_level: INFO
 #
 # Set disabled: true (or include a bare 'disabled' key) to stop the config editor

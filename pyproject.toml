@@ -7,6 +7,10 @@ dependencies = [
     "pydantic>=2.13.5",
     "paho-mqtt>=2.0",
     "pyyaml>=6.0.3",
+    # Config Service protocol (describe()/Descriptor, FormSpec types). See
+    # mimirheim_shared/docs/adr/0004: a genuinely separate distribution, not
+    # part of the mimirheim wheel, pulled in via [tool.uv.sources] below.
+    "mimirheim-shared",
 ]
 
 # ---------------------------------------------------------------------------
@@ -71,7 +75,7 @@ reporter = [
     "plotly>=7.0.0",
 ]
 config-editor = [
-    "ruamel.yaml>=0.18",
+    "jinja2>=3.0",
 ]
 # Meta-extra: installs every helper's runtime dependencies in one shot.
 # Used by the container build and by full developer environments.
@@ -128,6 +132,12 @@ dev = [
     "jinja2>=3.0",
 ]
 
+[tool.uv.workspace]
+members = ["mimirheim_shared"]
+
+[tool.uv.sources]
+mimirheim-shared = { workspace = true }
+
 [tool.ruff]
 # Tracks `requires-python` above, which is also what the container runs. Keep
 # the two in step: ruff must not suggest syntax the supported interpreter
@@ -156,7 +166,7 @@ select = ["F", "E9", "B"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-addopts = "-m 'not integration' --import-mode=importlib"
+addopts = "-m 'not integration and not benchmark' --import-mode=importlib"
 testpaths = [
     "tests",
     "mimirheim_helpers/common/tests",
@@ -172,10 +182,11 @@ testpaths = [
     "mimirheim_helpers/baseload/static/tests",
     "mimirheim_helpers/reporter/tests",
     "mimirheim_helpers/config_editor/tests",
+    "mimirheim_shared/tests",
 ]
 markers = [
     "integration: marks tests that require a live MQTT broker (run with -m integration)",
-    "benchmark: marks performance benchmark tests (measured by pytest-benchmark, never fail on timing)",
+    "benchmark: marks performance benchmark tests (measured by pytest-benchmark, never fail on timing; run with -m benchmark)",
 ]
 filterwarnings = [
     # passlib 1.7.4 (pulled in by amqtt) imports the deprecated 'crypt' module.

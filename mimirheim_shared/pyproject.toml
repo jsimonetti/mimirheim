@@ -1,0 +1,22 @@
+[project]
+name = "mimirheim-shared"
+version = "0.1.0"
+requires-python = ">=3.14"
+description = "Config Service protocol, FormSpec presentation types, and the atomic comment-preserving config-writing utility shared by mimirheim core and its helpers."
+dependencies = [
+    "pydantic>=2.13.5",
+    "ruamel.yaml>=0.18",
+    "pyyaml>=6.0.3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["mimirheim_shared"]

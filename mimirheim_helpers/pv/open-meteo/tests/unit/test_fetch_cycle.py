@@ -16,6 +16,7 @@ Tests verify:
 import inspect
 import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import paho.mqtt.client as mqtt
@@ -28,6 +29,7 @@ from pv_openmeteo.config import PvOpenMeteoConfig
 from pv_openmeteo.fetcher import FetchError, RatelimitError
 
 _NOW = datetime.now(tz=timezone.utc)
+_CONFIG_PATH = Path("/tmp/pv-openmeteo-test-config.yaml")
 
 
 @pytest.fixture(autouse=True)
@@ -68,7 +70,7 @@ def _make_config(signal_mimir: bool = False) -> PvOpenMeteoConfig:
 
 
 def _make_daemon(signal_mimir: bool = False) -> PvOpenMeteoDaemon:
-    return PvOpenMeteoDaemon(_make_config(signal_mimir=signal_mimir))
+    return PvOpenMeteoDaemon(_make_config(signal_mimir=signal_mimir), _CONFIG_PATH)
 
 
 def _mqtt_client() -> MagicMock:

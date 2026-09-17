@@ -12,9 +12,18 @@ from __future__ import annotations
 
 import argparse
 import logging
+from pathlib import Path
 
-from reporter.config import load_config
-from reporter.daemon import ReporterDaemon
+from helper_common.config import load_helper_config
+
+from reporter.config import ReporterConfig
+from reporter.daemon import (
+    CONFIG_OWNER_DISPLAY_NAME,
+    CONFIG_OWNER_ID,
+    REPORTER_CONFIG_FORM_SPEC,
+    ReporterDaemon,
+    logger,
+)
 
 
 def _parse_args() -> argparse.Namespace:
@@ -37,8 +46,15 @@ def main() -> None:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    config = load_config(args.config)
-    daemon = ReporterDaemon(config)
+    config = load_helper_config(
+        args.config,
+        ReporterConfig,
+        logger,
+        owner_id=CONFIG_OWNER_ID,
+        display_name=CONFIG_OWNER_DISPLAY_NAME,
+        form_spec=REPORTER_CONFIG_FORM_SPEC,
+    )
+    daemon = ReporterDaemon(config, Path(args.config))
     daemon.run()
 
 

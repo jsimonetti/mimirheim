@@ -1,0 +1,48 @@
+{% import "_theme_toggle.html" as theme_toggle %}
+{% import "_mode_nav.html" as mode_nav %}
+<!DOCTYPE html>
+<html lang="en"{% if theme %} data-bs-theme="{{ theme }}"{% endif %}>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mimirheim</title>
+  <link href="/static/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/static/theme.css" rel="stylesheet">
+</head>
+<body>
+  <nav class="navbar navbar-expand navbar-dark bg-dark mb-4">
+    <div class="container d-flex justify-content-between align-items-center">
+      <span class="navbar-brand mb-0 h1">Mimirheim</span>
+      <div class="d-flex align-items-center">
+        {{ mode_nav.render() }}
+        {{ theme_toggle.render(theme, current_path) }}
+      </div>
+    </div>
+  </nav>
+  <div id="reports-pane" class="d-none"></div>
+  <main class="container pb-5" id="config-pane">
+    <h1 class="h3 mb-3">Configure these systems</h1>
+    {% if core_owners or helper_owners %}
+    {% if core_owners %}
+    <h2 class="h6 text-uppercase text-muted mb-2">Mimirheim Core</h2>
+    <div class="list-group mb-4" id="core-owner-list">
+      {% for owner in core_owners %}
+      <a href="/owners/{{ owner.owner_id }}" class="list-group-item list-group-item-action">{{ owner.display_name }}</a>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if helper_owners %}
+    <h2 class="h6 text-uppercase text-muted mb-2">Helpers</h2>
+    <div class="list-group" id="helper-owner-list">
+      {% for owner in helper_owners %}
+      <a href="/owners/{{ owner.owner_id }}" class="list-group-item list-group-item-action">{{ owner.display_name }}</a>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% else %}
+    <p class="text-muted">No configuration owners discovered yet (did you enable them?).</p>
+    {% endif %}
+  </main>
+  <script src="/static/mode-toggle.js"></script>
+</body>
+</html>
