@@ -96,6 +96,12 @@ _ALLOWED_DUMP_SUFFIXES = ("_input.json", "_output.json")
 # Config Owner's internals, per this module's own docstring.
 _REPORTER_OWNER_ID = "reporter"
 
+# mimirheim core's well-known Config Owner ID (see mimirheim/io/config_service.py).
+# Not imported from mimirheim core itself, for the same reason as
+# _REPORTER_OWNER_ID above: used only to split the index page's owner list
+# into a "Mimirheim" section and a "Helpers" section.
+_MIMIRHEIM_CORE_OWNER_ID = "mimirheim-core"
+
 # How long a fetched reporting section is reused before asking the reporter
 # again. A single /reports page load serves several files (index, css, js,
 # dump downloads), each needing this section; without a cache, that is an
@@ -382,7 +388,12 @@ class ConfigEditorServer:
 
     def _render_index(self, *, theme: str | None) -> tuple[int, dict[str, str], bytes]:
         template = _TEMPLATES.get_template("index.html")
-        html = template.render(owners=self._registry.all(), theme=theme, current_path="/")
+        owners = self._registry.all()
+        core_owners = [owner for owner in owners if owner.owner_id == _MIMIRHEIM_CORE_OWNER_ID]
+        helper_owners = [owner for owner in owners if owner.owner_id != _MIMIRHEIM_CORE_OWNER_ID]
+        html = template.render(
+            core_owners=core_owners, helper_owners=helper_owners, theme=theme, current_path="/"
+        )
         return self._html_response(200, html)
 
     def _render_owner(self, owner_id: str, *, theme: str | None) -> tuple[int, dict[str, str], bytes]:

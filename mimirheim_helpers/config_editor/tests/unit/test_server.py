@@ -105,7 +105,7 @@ def test_index_lists_no_owners_when_registry_is_empty(server: ConfigEditorServer
     status, body = _get(server, "/")
 
     assert status == 200
-    assert "No Config Owners discovered yet." in body
+    assert "No configuration owners discovered yet" in body
     assert "/owners/" not in body
 
 
@@ -123,6 +123,33 @@ def test_index_lists_mimirheim_core_from_its_real_descriptor(
     assert status == 200
     assert "Mimirheim" in body
     assert "/owners/mimirheim-core" in body
+
+
+def test_index_lists_mimirheim_core_and_helpers_in_separate_sections(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    from mimirheim.io import config_service as core_config_service
+
+    core_descriptor = Descriptor.model_validate_json(core_config_service.payload_bytes())
+    helper_descriptor = Descriptor(
+        owner_id="nordpool",
+        display_name="Nordpool",
+        json_schema={"properties": {}},
+        form_spec=FormSpec(fields={"enabled": FieldSpec(label="Enabled", description="Enabled.")}),
+    )
+    registry.update(core_descriptor)
+    registry.update(helper_descriptor)
+
+    status, body = _get(server, "/")
+
+    assert status == 200
+    core_index = body.index('id="core-owner-list"')
+    helper_index = body.index('id="helper-owner-list"')
+    core_link_index = body.index("/owners/mimirheim-core")
+    helper_link_index = body.index("/owners/nordpool")
+    assert core_index < helper_index
+    assert core_index < core_link_index < helper_index
+    assert helper_index < helper_link_index
 
 
 def test_unknown_owner_page_returns_404(server: ConfigEditorServer) -> None:
@@ -1569,7 +1596,7 @@ def test_get_from_allowed_ip_is_served(server_with_allowed_ip: ConfigEditorServe
         "GET", "/", body=b"", client_ip="172.30.32.1"
     )
     assert status == 200
-    assert "No Config Owners discovered yet." in body.decode("utf-8")
+    assert "No configuration owners discovered yet" in body.decode("utf-8")
 
 
 def test_post_from_disallowed_ip_is_rejected(server_with_allowed_ip: ConfigEditorServer) -> None:
