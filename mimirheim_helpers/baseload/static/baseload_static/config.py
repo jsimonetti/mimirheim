@@ -80,6 +80,8 @@ class BaseloadConfig(BaseModel):
             ``output_topic`` when it is not set explicitly. Defaults to
             ``"base_load"``.
         trigger_topic: The tool subscribes here; a message fires one publish cycle.
+            Defaults to the canonical helper trigger topic derived from
+            ``mimir_topic_prefix``.
         output_topic: Base load forecast payload is published retained to this topic.
             Defaults to the mimirheim canonical baseload topic derived from
             ``mimir_topic_prefix`` and ``mimir_static_load_name``.
@@ -101,7 +103,10 @@ class BaseloadConfig(BaseModel):
         default="base_load",
         description="mimirheim static_loads device name. Used to derive the default output_topic."
     )
-    trigger_topic: str = Field(description="MQTT topic that triggers a publish cycle.")
+    trigger_topic: str | None = Field(
+        default=None,
+        description="MQTT topic that triggers a publish cycle. Defaults to '{mimir_topic_prefix}/input/tools/baseload/trigger'."
+    )
     output_topic: str | None = Field(
         default=None,
         description=(
@@ -116,9 +121,11 @@ class BaseloadConfig(BaseModel):
     stats_topic: str | None = Field(default=None, description="MQTT topic where per-cycle run statistics are published.")
 
     @model_validator(mode="after")
-    def _derive_hioo_topics(self) -> "BaseloadConfig":
+    def _derive_mimir_topics(self) -> "BaseloadConfig":
         """Fill in mimirheim-side topics that were not explicitly set."""
         p = self.mimir_topic_prefix
+        if self.trigger_topic is None:
+            self.trigger_topic = _topics.helper_trigger_topic(p, "baseload")
         if self.output_topic is None:
             self.output_topic = _topics.baseload_forecast_topic(p, self.mimir_static_load_name)
         if self.mimir_trigger_topic is None:

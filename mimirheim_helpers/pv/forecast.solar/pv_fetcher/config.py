@@ -125,6 +125,8 @@ class PvFetcherConfig(BaseModel):
             to derive default ``output_topic`` for each array (when not set)
             and the default ``mimir_trigger_topic``. Defaults to ``"mimir"``.
         trigger_topic: MQTT topic that triggers one fetch-and-publish cycle.
+            Defaults to the canonical helper trigger topic derived from
+            ``mimir_topic_prefix``.
         forecast_solar: forecast.solar API configuration (API key).
         arrays: Named map of PV array configurations. The key is used as
             the mimirheim ``pv_arrays`` device name for topic derivation unless
@@ -144,7 +146,10 @@ class PvFetcherConfig(BaseModel):
         default="mimir",
         description="mimirheim mqtt.topic_prefix. Used to derive default array output and trigger topics."
     )
-    trigger_topic: str = Field(description="MQTT topic that triggers a fetch cycle.")
+    trigger_topic: str | None = Field(
+        default=None,
+        description="MQTT topic that triggers a fetch cycle. Defaults to '{mimir_topic_prefix}/input/tools/pv/trigger'."
+    )
     forecast_solar: ForecastSolarApiConfig = Field(
         default_factory=ForecastSolarApiConfig,
         description="forecast.solar API configuration."
@@ -174,14 +179,16 @@ class PvFetcherConfig(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _derive_hioo_topics(self) -> "PvFetcherConfig":
+    def _derive_mimir_topics(self) -> "PvFetcherConfig":
         """Fill in mimirheim-side topics that were not explicitly set.
 
         Derives ``output_topic`` for each array that has not set one explicitly,
         using the array key as the mimirheim ``pv_arrays`` device name. Also derives
-        the default ``mimir_trigger_topic``.
+        the default ``trigger_topic`` and ``mimir_trigger_topic``.
         """
         p = self.mimir_topic_prefix
+        if self.trigger_topic is None:
+            self.trigger_topic = _topics.helper_trigger_topic(p, "pv")
         for key, arr in self.arrays.items():
             if arr.output_topic is None:
                 arr.output_topic = _topics.pv_forecast_topic(p, key)

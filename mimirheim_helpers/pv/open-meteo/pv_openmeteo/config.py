@@ -422,6 +422,8 @@ class PvOpenMeteoConfig(BaseModel):
             Used to derive the default ``output_topic`` of each array and the
             default ``mimir_trigger_topic``.
         trigger_topic: MQTT topic that triggers one fetch-and-publish cycle.
+            Defaults to the canonical helper trigger topic derived from
+            ``mimir_topic_prefix``.
         open_meteo: Open-Meteo API settings shared by every array.
         site: Geographic location, inherited by every plane.
         arrays: Named map of PV arrays. The key is used as the mimirheim
@@ -446,8 +448,9 @@ class PvOpenMeteoConfig(BaseModel):
         default="mimir",
         description="mimirheim mqtt.topic_prefix. Used to derive default array and trigger topics."
     )
-    trigger_topic: str = Field(
-        description="MQTT topic that triggers a fetch cycle."
+    trigger_topic: str | None = Field(
+        default=None,
+        description="MQTT topic that triggers a fetch cycle. Defaults to '{mimir_topic_prefix}/input/tools/pv/trigger'."
     )
     open_meteo: OpenMeteoApiConfig = Field(
         default_factory=OpenMeteoApiConfig,
@@ -485,6 +488,8 @@ class PvOpenMeteoConfig(BaseModel):
     def _derive_mimir_topics(self) -> "PvOpenMeteoConfig":
         """Fill in the mimirheim-side topics that were not set explicitly."""
         prefix = self.mimir_topic_prefix
+        if self.trigger_topic is None:
+            self.trigger_topic = _topics.helper_trigger_topic(prefix, "pv")
         for key, array in self.arrays.items():
             if array.output_topic is None:
                 array.output_topic = _topics.pv_forecast_topic(prefix, key)

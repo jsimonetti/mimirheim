@@ -172,7 +172,8 @@ class ZonneplanPricesConfig(BaseModel):
         mimir_topic_prefix: Topic prefix used to construct default topic paths.
             Defaults to ``"mimir"``.
         trigger_topic: Topic the daemon subscribes to. A message here triggers
-            one fetch-and-publish cycle.
+            one fetch-and-publish cycle. Defaults to the canonical helper
+            trigger topic derived from ``mimir_topic_prefix``.
         output_topic: Topic to publish the price payload to. When None the
             daemon defaults to ``{mimir_topic_prefix}/input/prices``.
         zonneplan: Zonneplan API and pricing parameters.
@@ -194,8 +195,9 @@ class ZonneplanPricesConfig(BaseModel):
         default="mimir",
         description="mimirheim mqtt.topic_prefix. Used to derive default output and trigger topics."
     )
-    trigger_topic: str = Field(
-        description="MQTT topic that triggers a fetch cycle."
+    trigger_topic: str | None = Field(
+        default=None,
+        description="MQTT topic that triggers a fetch cycle. Defaults to '{mimir_topic_prefix}/input/tools/prices/trigger'."
     )
     output_topic: str | None = Field(
         default=None,
@@ -225,9 +227,11 @@ class ZonneplanPricesConfig(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _derive_hioo_topics(self) -> "ZonneplanPricesConfig":
+    def _derive_mimir_topics(self) -> "ZonneplanPricesConfig":
         """Fill in mimirheim-side topics that were not explicitly set."""
         p = self.mimir_topic_prefix
+        if self.trigger_topic is None:
+            self.trigger_topic = _topics.helper_trigger_topic(p, "prices")
         if self.output_topic is None:
             self.output_topic = _topics.prices_topic(p)
         if self.mimir_trigger_topic is None:

@@ -152,6 +152,8 @@ class NordpoolConfig(BaseModel):
             ``mimir_trigger_topic``. Defaults to ``"mimir"`` to match the mimirheim
             default. Override when your mimirheim instance uses a different prefix.
         trigger_topic: The tool subscribes here; a message fires one fetch cycle.
+            Defaults to the canonical helper trigger topic derived from
+            ``mimir_topic_prefix``.
         output_topic: Price payload is published retained to this topic. Defaults
             to the mimirheim canonical price topic derived from ``mimir_topic_prefix``.
         nordpool: Nordpool API and pricing formula parameters.
@@ -167,7 +169,10 @@ class NordpoolConfig(BaseModel):
         default="mimir",
         description="mimirheim mqtt.topic_prefix. Used to derive default output and trigger topics.",
     )
-    trigger_topic: str = Field(description="MQTT topic that triggers a fetch cycle.")
+    trigger_topic: str | None = Field(
+        default=None,
+        description="MQTT topic that triggers a fetch cycle. Defaults to '{mimir_topic_prefix}/input/tools/prices/trigger'.",
+    )
     output_topic: str | None = Field(
         default=None,
         description=(
@@ -188,9 +193,11 @@ class NordpoolConfig(BaseModel):
     mimir_trigger_topic: str | None = Field(default=None, description="Topic to trigger mimirheim. Derived from mimir_topic_prefix when not set.")
 
     @model_validator(mode="after")
-    def _derive_hioo_topics(self) -> "NordpoolConfig":
+    def _derive_mimir_topics(self) -> "NordpoolConfig":
         """Fill in mimirheim-side topics that were not explicitly set."""
         p = self.mimir_topic_prefix
+        if self.trigger_topic is None:
+            self.trigger_topic = _topics.helper_trigger_topic(p, "prices")
         if self.output_topic is None:
             self.output_topic = _topics.prices_topic(p)
         if self.mimir_trigger_topic is None:

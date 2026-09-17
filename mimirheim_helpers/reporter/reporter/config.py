@@ -73,7 +73,7 @@ class ReporterConfig(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _derive_hioo_topics(self) -> ReporterConfig:
+    def _derive_mimir_topics(self) -> ReporterConfig:
         """Fill in mimirheim-side topics that were not explicitly set.
 
         Derives ``reporting.notify_topic`` from ``mimir_topic_prefix`` when it

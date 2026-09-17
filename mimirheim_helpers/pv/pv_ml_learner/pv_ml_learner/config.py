@@ -216,9 +216,12 @@ class TrainingConfig(BaseModel):
     Attributes:
         train_trigger_topic: MQTT topic that triggers a full training cycle:
             ingest new KNMI and HA data, retrain all arrays, then immediately
-            run an inference cycle.
+            run an inference cycle. Defaults to the canonical helper trigger
+            topic derived from ``mimir_topic_prefix``.
         inference_trigger_topic: MQTT topic that triggers an inference-only
             cycle: fetch a fresh Meteoserver forecast, run all arrays, publish.
+            Defaults to the canonical helper trigger topic derived from
+            ``mimir_topic_prefix``.
         min_months_required: Minimum distinct calendar months required to
             train. Default 12. Lower temporarily while data accumulates.
         hyperparams: XGBoost grid search configuration.
@@ -227,11 +230,13 @@ class TrainingConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    train_trigger_topic: str = Field(
-        description="MQTT topic that triggers a training run."
+    train_trigger_topic: str | None = Field(
+        default=None,
+        description="MQTT topic that triggers a training run. Defaults to '{mimir_topic_prefix}/input/tools/pv_ml_learner/train'."
     )
-    inference_trigger_topic: str = Field(
-        description="MQTT topic that triggers an inference run."
+    inference_trigger_topic: str | None = Field(
+        default=None,
+        description="MQTT topic that triggers an inference run. Defaults to '{mimir_topic_prefix}/input/tools/pv_ml_learner/infer'."
     )
     min_months_required: int = Field(
         default=12,
@@ -315,14 +320,18 @@ class PvLearnerConfig(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _derive_hioo_topics(self) -> "PvLearnerConfig":
+    def _derive_mimir_topics(self) -> "PvLearnerConfig":
         """Fill in mimirheim-side topics that were not explicitly set.
 
         Derives ``output_topic`` for each array that has not set one explicitly,
         using the ``arrays`` map key as the mimirheim ``pv_arrays`` device name.
-        Also derives the default ``mimir_trigger_topic``.
+        Also derives the default ``training`` trigger topics and ``mimir_trigger_topic``.
         """
         p = self.mimir_topic_prefix
+        if self.training.train_trigger_topic is None:
+            self.training.train_trigger_topic = _topics.helper_trigger_topic(p, "pv_ml_learner", "train")
+        if self.training.inference_trigger_topic is None:
+            self.training.inference_trigger_topic = _topics.helper_trigger_topic(p, "pv_ml_learner", "infer")
         for key, arr in self.arrays.items():
             if arr.output_topic is None:
                 arr.output_topic = _topics.pv_forecast_topic(p, key)

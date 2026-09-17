@@ -177,7 +177,7 @@ class EpexPredictorPricesConfig(BaseModel):
 
     mqtt: MqttConfig
     mimir_topic_prefix: str = "mimir"
-    trigger_topic: str
+    trigger_topic: str | None = None
     output_topic: str | None = None
     epexpredictor: EpexPredictorApiConfig
     confidence_decay: ConfidenceDecayConfig = Field(default_factory=ConfidenceDecayConfig)
@@ -189,6 +189,8 @@ class EpexPredictorPricesConfig(BaseModel):
     @model_validator(mode="after")
     def _derive_mimir_topics(self) -> "EpexPredictorPricesConfig":
         p = self.mimir_topic_prefix
+        if self.trigger_topic is None:
+            self.trigger_topic = _topics.helper_trigger_topic(p, "prices")
         if self.output_topic is None:
             self.output_topic = _topics.prices_topic(p)
         if self.mimir_trigger_topic is None:
