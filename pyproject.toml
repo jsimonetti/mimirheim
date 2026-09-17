@@ -47,7 +47,7 @@ pv-openmeteo = [
 pv-ml-learner = [
     "httpx>=0.27",
     "knmi-py>=0.2",
-    "sqlalchemy>=2.0.52",
+    "sqlalchemy>=2.0.53",
     "xgboost>=3.4.1",
     "scikit-learn>=1.9.1",
     "joblib>=1.6.0",
@@ -63,7 +63,7 @@ baseload-ha = [
     "httpx>=0.27",
 ]
 baseload-ha-db = [
-    "sqlalchemy>=2.0.52",
+    "sqlalchemy>=2.0.53",
 ]
 baseload-ha-db-postgres = [
     "psycopg2-binary>=2.9.13",
@@ -86,7 +86,7 @@ helpers = [
     "forecast-solar>=5.0.1",
     "httpx>=0.27",
     "knmi-py>=0.2",
-    "sqlalchemy>=2.0.52",
+    "sqlalchemy>=2.0.53",
     "xgboost>=3.4.1",
     "scikit-learn>=1.9.1",
     "joblib>=1.6.0",
