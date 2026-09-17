@@ -77,6 +77,12 @@ FROM python:3.14-slim-bookworm@sha256:23c59390fc717bf09f9336908199a0ae75d9c4264b
 WORKDIR /build
 
 COPY pyproject.toml uv.lock ./
+# mimirheim_shared is a uv workspace member (see [tool.uv.workspace] in
+# pyproject.toml), not a plain PyPI dependency. `uv sync` resolves and
+# installs every workspace member's source unconditionally; --no-install-project
+# only skips the root project (mimirheim itself). Without this, uv fails with
+# "Distribution not found at: file:///build/mimirheim_shared".
+COPY mimirheim_shared/ ./mimirheim_shared/
 
 # --no-dev matters: `uv sync` installs the `dev` dependency-group by default,
 # which put pytest, ruff, rich, typer and amqtt (an MQTT *broker*) into the
