@@ -68,3 +68,15 @@
     --bs-form-invalid-border-color: #ea868f;
   }
 }
+
+/* Reports pane: a full-height iframe proxied from GET /reports (server.py),
+ * toggled against the Config pane by mode-toggle.js. Its own height is set
+ * inline by mode-toggle.js (viewport minus the navbar), since that is not
+ * expressible in CSS alone without giving the whole page a fixed layout.
+ */
+#reports-pane iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}

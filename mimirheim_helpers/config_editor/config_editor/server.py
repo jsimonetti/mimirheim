@@ -11,6 +11,9 @@ schema-to-form library):
     POST /owners/<owner_id>/restart   -- request that a Config Owner exit for its supervisor to restart it
     GET  /static/<path>               -- serve a vendored static asset (e.g. Bootstrap5)
     GET  /theme/<dark|light>          -- record the visitor's theme choice in a cookie
+    GET  /reports                     -- proxy the reporter's report index
+    GET  /reports/<file>              -- proxy a single file from the reporter's output directory
+    GET  /reports/dumps/<file>        -- proxy a solve dump referenced by a report's download links
 
 This module never imports a Config Owner's pydantic model, and never reads
 or writes any Config Owner's configuration file itself: it only ever
@@ -25,6 +28,12 @@ it only renders a message that a restart is required, and a POST to the
 `/restart` route -- reached only via the owner page's own confirmation
 modal, never automatically -- forwards to `submit_restart_request` instead.
 `ConfigServiceClient` is the only thing here that touches MQTT.
+
+The `/reports` routes are the one exception to "never reads another Config
+Owner's configuration file": they proxy static report files the reporter
+writes to disk (not its configuration), and they still learn *where* that
+directory is by asking the reporter for its current values over the same
+`get_current_values` protocol, never by reading reporter.yaml directly.
 """
 
 from __future__ import annotations
@@ -34,6 +43,7 @@ import http.server
 import logging
 import mimetypes
 import os
+import time
 import urllib.parse
 from pathlib import Path
 from typing import Any, Protocol
@@ -73,6 +83,25 @@ _STATIC_DIR = Path(__file__).parent / "static"
 # Only these extensions are served from the static directory; e.g. the
 # vendored Bootstrap LICENSE file is deliberately not servable.
 _ALLOWED_STATIC_EXTENSIONS = {".css", ".js", ".html"}
+
+# Only these extensions are served from the reporter's output directory.
+_ALLOWED_REPORT_EXTENSIONS = {".html", ".js", ".css"}
+
+# Only these suffixes are served from the reporter's dump directory, so a
+# report's download links work through this proxy.
+_ALLOWED_DUMP_SUFFIXES = ("_input.json", "_output.json")
+
+# The reporter's well-known Config Owner ID (see reporter/daemon.py). Not
+# imported from the reporter package: this module never imports another
+# Config Owner's internals, per this module's own docstring.
+_REPORTER_OWNER_ID = "reporter"
+
+# How long a fetched reporting section is reused before asking the reporter
+# again. A single /reports page load serves several files (index, css, js,
+# dump downloads), each needing this section; without a cache, that is an
+# MQTT round trip per file. output_dir/dump_dir only change when a user edits
+# reporter.yaml and restarts it, so a short cache is a safe trade.
+_REPORTER_REPORTING_CACHE_TTL_S = 30.0
 
 # The two theme names a visitor can pick via the toggle control and record in
 # the "theme" cookie. Any other cookie value (stale, tampered, or from a
@@ -216,6 +245,11 @@ class ConfigEditorServer:
         self._config_service_client = config_service_client
         self._allowed_ip = allowed_ip
 
+        # Cache for _reporter_reporting_section(); see
+        # _REPORTER_REPORTING_CACHE_TTL_S. None means "never fetched yet".
+        self._reporter_reporting_cache: dict[str, Any] | None = None
+        self._reporter_reporting_cache_time: float = 0.0
+
         server_self = self
 
         class _Handler(http.server.BaseHTTPRequestHandler):
@@ -324,6 +358,12 @@ class ConfigEditorServer:
             return self._serve_static(path[len("/static/") :])
         if method == "GET" and path.startswith("/theme/"):
             return self._set_theme(path[len("/theme/") :], query)
+        if method == "GET" and path in ("/reports", "/reports/"):
+            return self._serve_reports_index()
+        if method == "GET" and path.startswith("/reports/dumps/"):
+            return self._serve_dump_file(path[len("/reports/dumps/") :])
+        if method == "GET" and path.startswith("/reports/"):
+            return self._serve_report_file(path[len("/reports/") :])
         if method == "GET" and path.startswith("/owners/"):
             owner_id = urllib.parse.unquote(path[len("/owners/") :])
             return self._render_owner(owner_id, theme=theme)
@@ -497,6 +537,141 @@ class ConfigEditorServer:
 
         content_type = mimetypes.types_map.get(suffix, "application/octet-stream")
         return 200, {"Content-Type": content_type}, resolved.read_bytes()
+
+    def _reporter_reporting_section(self) -> dict[str, Any]:
+        """Fetches the reporter Config Owner's live `reporting` section, cached briefly.
+
+        Asks the reporter for its current configuration over the same
+        `get_current_values` Config Service call the owner pages use, rather
+        than reading reporter.yaml off disk directly -- this module never
+        reads another Config Owner's configuration file itself. The result is
+        cached for `_REPORTER_REPORTING_CACHE_TTL_S` seconds, since a single
+        /reports page load needs it once per file served.
+
+        Returns:
+            The reporter's `reporting` dict, or `{}` if the reporter is
+            unreachable (and nothing was ever cached) or has no `reporting`
+            section yet.
+        """
+        now = time.monotonic()
+        if (
+            self._reporter_reporting_cache is not None
+            and now - self._reporter_reporting_cache_time < _REPORTER_REPORTING_CACHE_TTL_S
+        ):
+            return self._reporter_reporting_cache
+
+        try:
+            values = self._config_service_client.get_current_values(_REPORTER_OWNER_ID)
+        except TimeoutError:
+            logger.warning("Timed out fetching the reporter's configuration; reports proxy unavailable.")
+            # Keep serving the last known-good section rather than blanking
+            # out /reports for the rest of the TTL over one transient
+            # timeout; cache_time is left stale so the next call retries.
+            return self._reporter_reporting_cache or {}
+
+        section = values.get("reporting") or {}
+        self._reporter_reporting_cache = section
+        self._reporter_reporting_cache_time = now
+        return section
+
+    def _reporter_reporting_path(self, key: str) -> Path | None:
+        """Reads a path from the reporter's cached `reporting` section.
+
+        Args:
+            key: The key to read from the reporter's `reporting` section,
+                e.g. `"output_dir"` or `"dump_dir"`.
+
+        Returns:
+            The configured path, or None if the reporter is unreachable, has
+            no `reporting` section yet, or does not set `key`.
+        """
+        value = self._reporter_reporting_section().get(key)
+        return Path(value) if value else None
+
+    @property
+    def _reports_dir(self) -> Path | None:
+        """The reporter's current reporting.output_dir, or None if unset/unreachable."""
+        return self._reporter_reporting_path("output_dir")
+
+    @property
+    def _dump_dir(self) -> Path | None:
+        """The reporter's current reporting.dump_dir, or None if unset/unreachable."""
+        return self._reporter_reporting_path("dump_dir")
+
+    def _serve_reports_index(self) -> tuple[int, dict[str, str], bytes]:
+        """Serves the reporter's report index, proxied from its output directory.
+
+        Any `target="_blank"` attribute is stripped from the response so
+        that report links navigate within this page instead of popping out
+        to a new browser tab. This works regardless of which version of
+        index.html the reporter has written.
+        """
+        reports_dir = self._reports_dir
+        if reports_dir is None:
+            return self._html_response(404, "<h1>Reports not configured</h1>")
+        index = reports_dir / "index.html"
+        if not index.exists():
+            return self._html_response(404, "<h1>Report index not found</h1>")
+        content = index.read_bytes().replace(b' target="_blank"', b"")
+        return 200, {"Content-Type": "text/html; charset=utf-8"}, content
+
+    def _serve_report_file(self, filename: str) -> tuple[int, dict[str, str], bytes]:
+        """Serves a single file from the reporter's output directory.
+
+        Only flat filenames with an allowed extension are served; see
+        `_ALLOWED_REPORT_EXTENSIONS`. Path traversal is rejected the same
+        way `_serve_static` rejects it, via `_safe_join`.
+
+        Args:
+            filename: Bare filename extracted from the request path.
+
+        Returns:
+            A three-tuple of (status, headers, body).
+        """
+        reports_dir = self._reports_dir
+        if reports_dir is None:
+            return self._html_response(404, "<h1>Reports not configured</h1>")
+        suffix = Path(filename).suffix
+        if suffix not in _ALLOWED_REPORT_EXTENSIONS:
+            return self._html_response(403, "<h1>Forbidden</h1>")
+        resolved = _safe_join(reports_dir, filename)
+        if resolved is None:
+            return self._html_response(403, "<h1>Forbidden</h1>")
+        if not resolved.exists():
+            return self._html_response(404, "<h1>Not found</h1>")
+        content_type = mimetypes.types_map.get(suffix, "application/octet-stream")
+        return 200, {"Content-Type": content_type}, resolved.read_bytes()
+
+    def _serve_dump_file(self, filename: str) -> tuple[int, dict[str, str], bytes]:
+        """Serves a solve dump JSON file from the reporter's dump directory.
+
+        Only flat filenames ending in `_input.json` or `_output.json` are
+        served, so a report's own download links work through this proxy.
+
+        Args:
+            filename: Bare filename extracted from the request path.
+
+        Returns:
+            A three-tuple of (status, headers, body).
+        """
+        dump_dir = self._dump_dir
+        if dump_dir is None:
+            return self._html_response(404, "<h1>Dump directory not configured</h1>")
+        if not any(filename.endswith(suffix) for suffix in _ALLOWED_DUMP_SUFFIXES):
+            return self._html_response(403, "<h1>Forbidden</h1>")
+        resolved = _safe_join(dump_dir, filename)
+        if resolved is None:
+            return self._html_response(403, "<h1>Forbidden</h1>")
+        if not resolved.exists():
+            return self._html_response(404, "<h1>Not found</h1>")
+        headers = {
+            "Content-Type": "application/json",
+            # resolved.name is the final path component after symlink
+            # resolution and containment verification -- safe for use in
+            # the Content-Disposition header.
+            "Content-Disposition": f'attachment; filename="{resolved.name}"',
+        }
+        return 200, headers, resolved.read_bytes()
 
     @staticmethod
     def _html_response(status: int, html: str) -> tuple[int, dict[str, str], bytes]:

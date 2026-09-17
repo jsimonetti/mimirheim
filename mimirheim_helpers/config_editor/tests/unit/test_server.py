@@ -1633,6 +1633,197 @@ def test_static_asset_missing_file_returns_404(server: ConfigEditorServer) -> No
     assert status == 404
 
 
+# ---------------------------------------------------------------------------
+# Reports proxy (reporter's output directory)
+# ---------------------------------------------------------------------------
+
+
+def _reporter_values(output_dir: Path, dump_dir: Path | None = None) -> dict[str, object]:
+    reporting: dict[str, object] = {"output_dir": str(output_dir)}
+    if dump_dir is not None:
+        reporting["dump_dir"] = str(dump_dir)
+    return {"reporting": reporting}
+
+
+def test_reports_index_is_proxied_from_reporters_output_dir(
+    server: ConfigEditorServer, config_service_client: MagicMock, tmp_path: Path
+) -> None:
+    (tmp_path / "index.html").write_text('<a href="report.html" target="_blank">r</a>')
+    config_service_client.get_current_values.side_effect = lambda owner_id, timeout=10.0: (
+        _reporter_values(tmp_path) if owner_id == "reporter" else {}
+    )
+
+    status, headers, body = server.handle_request("GET", "/reports", body=b"")
+
+    assert status == 200
+    assert headers["Content-Type"] == "text/html; charset=utf-8"
+    # target="_blank" is stripped so report links stay inside this page.
+    assert b'target="_blank"' not in body
+
+
+def test_reports_index_missing_reporter_config_returns_404(
+    server: ConfigEditorServer, config_service_client: MagicMock
+) -> None:
+    config_service_client.get_current_values.return_value = {}
+
+    status, _headers, _body = server.handle_request("GET", "/reports", body=b"")
+
+    assert status == 404
+
+
+def test_reports_index_reporter_timeout_returns_404(
+    server: ConfigEditorServer, config_service_client: MagicMock
+) -> None:
+    config_service_client.get_current_values.side_effect = TimeoutError("no response")
+
+    status, _headers, _body = server.handle_request("GET", "/reports", body=b"")
+
+    assert status == 404
+
+
+def test_reports_reporting_section_is_cached_across_requests(
+    server: ConfigEditorServer, config_service_client: MagicMock, tmp_path: Path
+) -> None:
+    """A page load serves several report files; each must not re-fetch over MQTT."""
+    (tmp_path / "index.html").write_text("<p>report</p>")
+    (tmp_path / "inventory.js").write_text("window.reports = [];")
+    config_service_client.get_current_values.side_effect = lambda owner_id, timeout=10.0: (
+        _reporter_values(tmp_path) if owner_id == "reporter" else {}
+    )
+
+    assert server.handle_request("GET", "/reports", body=b"")[0] == 200
+    assert server.handle_request("GET", "/reports/inventory.js", body=b"")[0] == 200
+
+    reporter_calls = [
+        call for call in config_service_client.get_current_values.call_args_list if call.args[0] == "reporter"
+    ]
+    assert len(reporter_calls) == 1
+
+
+def test_reports_reporting_section_refetches_after_a_timeout(
+    server: ConfigEditorServer, config_service_client: MagicMock, tmp_path: Path
+) -> None:
+    """A transient timeout must not lock /reports out for the rest of the cache TTL."""
+    (tmp_path / "index.html").write_text("<p>report</p>")
+    responses = iter([TimeoutError("no response"), _reporter_values(tmp_path)])
+
+    def fake_get_current_values(owner_id: str, timeout: float = 10.0) -> dict[str, object]:
+        if owner_id != "reporter":
+            return {}
+        result = next(responses)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    config_service_client.get_current_values.side_effect = fake_get_current_values
+
+    assert server.handle_request("GET", "/reports", body=b"")[0] == 404
+    assert server.handle_request("GET", "/reports", body=b"")[0] == 200
+
+
+def test_reports_file_served_for_real_report_file(
+    server: ConfigEditorServer, config_service_client: MagicMock, tmp_path: Path
+) -> None:
+    (tmp_path / "inventory.js").write_text("window.reports = [];")
+    config_service_client.get_current_values.side_effect = lambda owner_id, timeout=10.0: (
+        _reporter_values(tmp_path) if owner_id == "reporter" else {}
+    )
+
+    status, headers, body = server.handle_request("GET", "/reports/inventory.js", body=b"")
+
+    assert status == 200
+    assert headers["Content-Type"] == "text/javascript"
+    assert body == b"window.reports = [];"
+
+
+def test_reports_file_path_traversal_is_rejected(
+    server: ConfigEditorServer, config_service_client: MagicMock, tmp_path: Path
+) -> None:
+    config_service_client.get_current_values.side_effect = lambda owner_id, timeout=10.0: (
+        _reporter_values(tmp_path) if owner_id == "reporter" else {}
+    )
+
+    status, _headers, _body = server.handle_request("GET", "/reports/../config.py", body=b"")
+
+    assert status in (403, 404)
+
+
+def test_reports_file_disallowed_extension_is_rejected(
+    server: ConfigEditorServer, config_service_client: MagicMock, tmp_path: Path
+) -> None:
+    (tmp_path / "secret.txt").write_text("nope")
+    config_service_client.get_current_values.side_effect = lambda owner_id, timeout=10.0: (
+        _reporter_values(tmp_path) if owner_id == "reporter" else {}
+    )
+
+    status, _headers, _body = server.handle_request("GET", "/reports/secret.txt", body=b"")
+
+    assert status == 403
+
+
+def test_reports_file_missing_returns_404(
+    server: ConfigEditorServer, config_service_client: MagicMock, tmp_path: Path
+) -> None:
+    config_service_client.get_current_values.side_effect = lambda owner_id, timeout=10.0: (
+        _reporter_values(tmp_path) if owner_id == "reporter" else {}
+    )
+
+    status, _headers, _body = server.handle_request("GET", "/reports/does-not-exist.html", body=b"")
+
+    assert status == 404
+
+
+def test_reports_dump_file_served_with_attachment_header(
+    server: ConfigEditorServer, config_service_client: MagicMock, tmp_path: Path
+) -> None:
+    reports_dir = tmp_path / "reports"
+    dump_dir = tmp_path / "dumps"
+    reports_dir.mkdir()
+    dump_dir.mkdir()
+    (dump_dir / "2026-01-01T00-00-00Z_input.json").write_text("{}")
+    config_service_client.get_current_values.side_effect = lambda owner_id, timeout=10.0: (
+        _reporter_values(reports_dir, dump_dir) if owner_id == "reporter" else {}
+    )
+
+    status, headers, body = server.handle_request(
+        "GET", "/reports/dumps/2026-01-01T00-00-00Z_input.json", body=b""
+    )
+
+    assert status == 200
+    assert headers["Content-Type"] == "application/json"
+    assert headers["Content-Disposition"] == 'attachment; filename="2026-01-01T00-00-00Z_input.json"'
+    assert body == b"{}"
+
+
+def test_reports_dump_file_disallowed_suffix_is_rejected(
+    server: ConfigEditorServer, config_service_client: MagicMock, tmp_path: Path
+) -> None:
+    (tmp_path / "not_a_dump.json").write_text("{}")
+    config_service_client.get_current_values.side_effect = lambda owner_id, timeout=10.0: (
+        _reporter_values(tmp_path, tmp_path) if owner_id == "reporter" else {}
+    )
+
+    status, _headers, _body = server.handle_request(
+        "GET", "/reports/dumps/not_a_dump.json", body=b""
+    )
+
+    assert status == 403
+
+
+def test_reports_dump_dir_not_configured_returns_404(
+    server: ConfigEditorServer, config_service_client: MagicMock, tmp_path: Path
+) -> None:
+    config_service_client.get_current_values.side_effect = lambda owner_id, timeout=10.0: (
+        _reporter_values(tmp_path) if owner_id == "reporter" else {}
+    )
+
+    status, _headers, _body = server.handle_request(
+        "GET", "/reports/dumps/2026-01-01T00-00-00Z_input.json", body=b""
+    )
+
+    assert status == 404
+
+
 def test_index_page_references_vendored_bootstrap_css_and_uses_bootstrap_classes(
     server: ConfigEditorServer,
 ) -> None:
@@ -1666,6 +1857,45 @@ def test_no_page_loads_assets_from_a_network_location(
         _status, body = _get(server, path)
         assert "https://" not in body
         assert "http://" not in body
+
+
+# ---------------------------------------------------------------------------
+# Config/Reports mode nav (reports proxied via an iframe, like the old editor)
+# ---------------------------------------------------------------------------
+
+
+def test_index_page_has_mode_nav_and_reports_pane(server: ConfigEditorServer) -> None:
+    status, body = _get(server, "/")
+
+    assert status == 200
+    assert 'id="mode-btn-config"' in body
+    assert 'id="mode-btn-reports"' in body
+    assert 'id="reports-pane"' in body
+    assert 'id="config-pane"' in body
+    assert '/static/mode-toggle.js' in body
+
+
+def test_owner_page_has_mode_nav_and_reports_pane(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer
+) -> None:
+    _register_nordpool(registry)
+
+    status, body = _get(server, "/owners/nordpool")
+
+    assert status == 200
+    assert 'id="mode-btn-config"' in body
+    assert 'id="mode-btn-reports"' in body
+    assert 'id="reports-pane"' in body
+    assert 'id="config-pane"' in body
+    assert '/static/mode-toggle.js' in body
+
+
+def test_mode_toggle_script_is_served_as_a_static_asset(server: ConfigEditorServer) -> None:
+    status, headers, body = server.handle_request("GET", "/static/mode-toggle.js", body=b"")
+
+    assert status == 200
+    assert headers["Content-Type"] == "text/javascript"
+    assert b"reports-frame" in body
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,5 @@
 {% import "_theme_toggle.html" as theme_toggle %}
+{% import "_mode_nav.html" as mode_nav %}
 <!DOCTYPE html>
 <html lang="en"{% if theme %} data-bs-theme="{{ theme }}"{% endif %}>
 <head>
@@ -12,10 +13,14 @@
   <nav class="navbar navbar-expand navbar-dark bg-dark mb-4">
     <div class="container d-flex justify-content-between align-items-center">
       <span class="navbar-brand mb-0 h1">Mimirheim Config Editor</span>
-      {{ theme_toggle.render(theme, current_path) }}
+      <div class="d-flex align-items-center">
+        {{ mode_nav.render() }}
+        {{ theme_toggle.render(theme, current_path) }}
+      </div>
     </div>
   </nav>
-  <main class="container pb-5">
+  <div id="reports-pane" class="d-none"></div>
+  <main class="container pb-5" id="config-pane">
     <h1 class="h3 mb-3">Config Owners</h1>
     {% if owners %}
     <div class="list-group" id="owner-list">
@@ -27,5 +32,6 @@
     <p class="text-muted">No Config Owners discovered yet.</p>
     {% endif %}
   </main>
+  <script src="/static/mode-toggle.js"></script>
 </body>
 </html>
