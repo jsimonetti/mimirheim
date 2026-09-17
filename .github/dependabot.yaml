@@ -5,7 +5,17 @@ updates:
   directory: "/"
   schedule:
     interval: "weekly"
-
+  groups:
+    # Specify a name for the group, which will be used in pull request titles
+    # and branch names
+    action-bumps:
+      applies-to: version-updates # Applies the group rule to version updates
+      patterns:
+        - "*"       # A wildcard that matches all dependencies in the package
+        # ecosystem. Note: using "*" may open a large pull request
+        # Define patterns to exclude dependencies from the group (based on
+        # dependency name)
+        
 # Keeps the digest pins in container/Dockerfile current. Without this the
 # pins would freeze the base images indefinitely, trading unprovoked cache
 # invalidation for missed security updates.
@@ -13,6 +23,16 @@ updates:
   directory: "/container"
   schedule:
     interval: "weekly"
+  groups:
+    # Specify a name for the group, which will be used in pull request titles
+    # and branch names
+    docker-bumps:
+      applies-to: version-updates # Applies the group rule to version updates
+      patterns:
+        - "*"       # A wildcard that matches all dependencies in the package
+        # ecosystem. Note: using "*" may open a large pull request
+        # Define patterns to exclude dependencies from the group (based on
+        # dependency name)
   ignore:
     # Digest refreshes are wanted; interpreter version jumps are not. Moving
     # the base image to a new Python is a coordinated change across
@@ -29,6 +49,16 @@ updates:
   directory: "/"
   schedule:
     interval: "weekly"
+  groups:
+    # Specify a name for the group, which will be used in pull request titles
+    # and branch names
+    uv-bumps:
+      applies-to: version-updates # Applies the group rule to version updates
+      patterns:
+        - "*"       # A wildcard that matches all dependencies in the package
+        # ecosystem. Note: using "*" may open a large pull request
+        # Define patterns to exclude dependencies from the group (based on
+        # dependency name)
   ignore:
     # amqtt 0.11.x has a packaging bug: different sub-releases pin either
     # pyyaml==6.0.2 or pyyaml==6.0.3, making the constraints unsatisfiable
