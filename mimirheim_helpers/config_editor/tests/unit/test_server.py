@@ -34,6 +34,7 @@ import yaml
 
 from mimirheim_shared.config_service import (
     Descriptor,
+    RestartResponse,
     ValidateAndWriteRequest,
     ValidateAndWriteResult,
     handle_validate_and_write,
@@ -63,6 +64,7 @@ def config_service_client() -> MagicMock:
     client = MagicMock()
     client.submit_validate_and_write.return_value = ValidateAndWriteResult(request_id="req-1", success=True)
     client.get_current_values.return_value = {}
+    client.submit_restart_request.return_value = RestartResponse(request_id="req-1")
     return client
 
 
@@ -1075,7 +1077,7 @@ def test_owner_page_header_holds_back_link_title_and_stays_pinned(
     assert "Single tab owner" in header
 
 
-def test_owner_page_action_bar_has_enabled_save_and_four_disabled_placeholders(
+def test_owner_page_action_bar_has_enabled_save_restart_and_three_disabled_placeholders(
     registry: ConfigOwnerRegistry, server: ConfigEditorServer
 ) -> None:
     _register_single_tab_owner(registry)
@@ -1085,11 +1087,14 @@ def test_owner_page_action_bar_has_enabled_save_and_four_disabled_placeholders(
     assert status == 200
     header = body[body.index("<header") : body.index("</header>")]
     assert '<button type="submit" form="owner-form" class="btn btn-primary">Save</button>' in header
-    for label in ("Diff", "Validate", "Commit", "Restart"):
+    for label in ("Diff", "Validate", "Commit"):
         assert (
             f'<button type="button" class="btn btn-outline-secondary" disabled '
             f'title="Not yet implemented">{label}</button>' in header
         )
+    assert 'data-restart-trigger' in header
+    assert '>Restart</button>' in header
+    assert 'title="Not yet implemented">Restart</button>' not in header
 
 
 def test_owner_page_top_level_tab_nav_is_pinned_inside_header_not_its_content(
@@ -1198,7 +1203,39 @@ def test_post_success_shows_confirmation_and_forwards_values(
 
     assert status == 200
     assert "Saved" in body
+    assert "restart is required" in body
     config_service_client.submit_validate_and_write.assert_called_once_with("nordpool", {"area": "SE3"})
+    config_service_client.submit_restart_request.assert_not_called()
+
+
+def test_post_restart_requests_restart_and_shows_confirmation(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer, config_service_client: MagicMock
+) -> None:
+    _register_nordpool(registry)
+
+    status, body = _post(server, "/owners/nordpool/restart", {})
+
+    assert status == 200
+    assert "Restart requested." in body
+    config_service_client.submit_restart_request.assert_called_once_with("nordpool")
+
+
+def test_post_restart_unknown_owner_returns_404(server: ConfigEditorServer) -> None:
+    status, _body = _post(server, "/owners/does-not-exist/restart", {})
+
+    assert status == 404
+
+
+def test_post_restart_timeout_shows_error(
+    registry: ConfigOwnerRegistry, server: ConfigEditorServer, config_service_client: MagicMock
+) -> None:
+    _register_nordpool(registry)
+    config_service_client.submit_restart_request.side_effect = TimeoutError("no response")
+
+    status, body = _post(server, "/owners/nordpool/restart", {})
+
+    assert status == 200
+    assert "Timed out waiting for a restart acknowledgement" in body
 
 
 def test_post_validation_failure_shows_errors_and_keeps_submitted_values(

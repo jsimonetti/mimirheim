@@ -31,7 +31,6 @@ What this module does not do:
 import argparse
 import json
 import logging
-import os
 import queue
 import signal
 import sys
@@ -49,6 +48,7 @@ from mimirheim.core.post_process import apply_gain_threshold
 from mimirheim.core.control_arbitration import assign_control_authority
 from mimirheim.core.readiness import ReadinessState
 from mimirheim.io.awaiting_configuration import AwaitingConfigurationClient
+from mimirheim.io.config_service import apply_mqtt_env_overrides
 from mimirheim.io.mqtt_client import MqttClient
 from mimirheim.io.mqtt_publisher import MqttPublisher
 
@@ -191,45 +191,6 @@ def _publish_reporting_notification(
     )
 
 
-def _apply_mqtt_env_overrides(raw: dict) -> None:
-    """Override the mqtt: section of the raw config dict from environment variables.
-
-    When running as a HA add-on, the Supervisor injects MQTT broker credentials
-    as environment variables (written by container/etc/cont-init.d/01-mqtt-env.sh
-    before any s6 service starts). These take precedence over whatever appears in
-    the YAML config file so users do not need to copy broker credentials into
-    mimirheim.yaml.
-
-    ``MQTT_PREFIX`` also overrides ``mqtt.topic_prefix`` here, alongside the
-    broker connection fields: it is the same variable
-    ``mimirheim_shared.config_service`` reads for the Config Service topic
-    root (ADR-0014), and a deployment that sets it expects mimirheim core's
-    own business topics to live under the same root.
-
-    When the environment variables are absent (plain Docker, no Supervisor) this
-    function is a no-op and the YAML values are used as-is.
-
-    Args:
-        raw: The raw dict parsed from the YAML config file. Modified in-place.
-    """
-    overrides: dict = {}
-    if host := os.environ.get("MQTT_HOST"):
-        overrides["host"] = host
-    if port_str := os.environ.get("MQTT_PORT"):
-        overrides["port"] = int(port_str)
-    if username := os.environ.get("MQTT_USERNAME"):
-        overrides["username"] = username
-    if password := os.environ.get("MQTT_PASSWORD"):
-        overrides["password"] = password
-    if ssl_str := os.environ.get("MQTT_SSL"):
-        overrides["tls"] = ssl_str.lower() == "true"
-    if prefix := os.environ.get("MQTT_PREFIX"):
-        overrides["topic_prefix"] = prefix
-    if overrides:
-        raw.setdefault("mqtt", {})
-        raw["mqtt"].update(overrides)
-
-
 def _read_raw_config(path: str) -> tuple[dict, str | None]:
     """Read and parse the YAML configuration file.
 
@@ -268,7 +229,7 @@ def _load_broker_settings(raw: dict, path: str) -> MqttConfig:
 
     Args:
         raw: The raw dict parsed from the YAML config file, with
-            ``_apply_mqtt_env_overrides`` already applied.
+            ``apply_mqtt_env_overrides`` already applied.
         path: Path to the YAML configuration file, for the error message.
 
     Returns:
@@ -299,7 +260,7 @@ def _try_load_full_config(
 
     Args:
         raw: The raw dict parsed from the YAML config file, with
-            ``_apply_mqtt_env_overrides`` already applied.
+            ``apply_mqtt_env_overrides`` already applied.
         load_error: The error from ``_read_raw_config``, if reading or
             parsing the file itself failed; validation is not attempted
             when this is set.
@@ -428,7 +389,7 @@ def main() -> None:
     # credentials to the s6 container environment via cont-init.d/01-mqtt-env.sh.
     # These override any mqtt: values in the YAML file so users do not need to
     # copy broker credentials into mimirheim.yaml.
-    _apply_mqtt_env_overrides(raw)
+    apply_mqtt_env_overrides(raw)
 
     broker_settings = _load_broker_settings(raw, args.config)
     config, config_error = _try_load_full_config(raw, load_error)

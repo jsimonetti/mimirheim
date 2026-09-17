@@ -190,6 +190,60 @@ class TestHandleValidateAndWrite:
             handle_validate_and_write(b"not json", config_path)
 
 
+class TestHandleValidateAndWriteWithMqttEnvOverrides:
+    """Reproduces the reported bug: mimirheim core started with MQTT_HOST
+    supplied by the Supervisor (no mqtt.host in the file) connects and runs
+    fine, but saving an unrelated field via the Config Editor previously
+    failed with "mqtt: Field required" because handle_validate_and_write
+    merged Candidate Values onto the raw on-disk file, which never carries a
+    value the environment supplies instead."""
+
+    def test_env_supplied_host_satisfies_validation_without_being_in_the_submission(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("MQTT_HOST", "broker.local")
+        config_path = tmp_path / "mimirheim.yaml"
+        config_path.write_text("grid:\n  import_limit_kw: 10.0\n  export_limit_kw: 5.0\n")
+        request = ValidateAndWriteRequest(
+            request_id="req-5",
+            values={"grid": {"import_limit_kw": 12.0, "export_limit_kw": 5.0}},
+        )
+
+        response = handle_validate_and_write(
+            request.model_dump_json().encode("utf-8"), config_path
+        )
+
+        result = ValidateAndWriteResult.model_validate_json(response)
+        assert result == ValidateAndWriteResult(request_id="req-5", success=True)
+
+        yaml = YAML()
+        with config_path.open() as fh:
+            written = yaml.load(fh)
+        assert written["grid"]["import_limit_kw"] == 12.0
+        # The env-supplied host must not leak into the file: a plain Docker
+        # deployment without MQTT_HOST set must not silently inherit it.
+        assert "mqtt" not in written
+
+    def test_without_mqtt_env_the_same_submission_still_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("MQTT_HOST", raising=False)
+        config_path = tmp_path / "mimirheim.yaml"
+        config_path.write_text("grid:\n  import_limit_kw: 10.0\n  export_limit_kw: 5.0\n")
+        request = ValidateAndWriteRequest(
+            request_id="req-6",
+            values={"grid": {"import_limit_kw": 12.0, "export_limit_kw": 5.0}},
+        )
+
+        response = handle_validate_and_write(
+            request.model_dump_json().encode("utf-8"), config_path
+        )
+
+        result = ValidateAndWriteResult.model_validate_json(response)
+        assert result.success is False
+        assert any("mqtt" in error for error in result.errors)
+
+
 def test_state_topic_is_the_well_known_state_topic_for_this_owner() -> None:
     assert STATE_TOPIC == state_topic(OWNER_ID)
 

@@ -13,6 +13,7 @@ never touches an MQTT client itself, matching
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from mimirheim_shared.config_service import (
@@ -90,14 +91,70 @@ def payload_bytes() -> bytes:
     )
 
 
+def apply_mqtt_env_overrides(raw: dict) -> dict:
+    """Override the mqtt: section of the raw config dict from environment variables.
+
+    When running as a HA add-on, the Supervisor injects MQTT broker credentials
+    as environment variables (written by container/etc/cont-init.d/01-mqtt-env.sh
+    before any s6 service starts). These take precedence over whatever appears in
+    the YAML config file so users do not need to copy broker credentials into
+    mimirheim.yaml.
+
+    ``MQTT_PREFIX`` also overrides ``mqtt.topic_prefix`` here, alongside the
+    broker connection fields: it is the same variable
+    ``mimirheim_shared.config_service`` reads for the Config Service topic
+    root (ADR-0014), and a deployment that sets it expects mimirheim core's
+    own business topics to live under the same root.
+
+    When the environment variables are absent (plain Docker, no Supervisor) this
+    function is a no-op and the YAML values are returned unchanged.
+
+    ``__main__.py``'s startup path and ``handle_validate_and_write`` below
+    both call this: a required field the environment supplies (e.g.
+    ``mqtt.host``) must be treated as present in both places, or a Config
+    Editor save fails with "mqtt.host: Field required" even though the
+    daemon itself is connected and running fine on the same env-supplied
+    value.
+
+    Args:
+        raw: The raw dict parsed from the YAML config file. Modified in-place.
+
+    Returns:
+        The same dict, for convenient use as a ``handle_validate_and_write``
+        callback.
+    """
+    overrides: dict = {}
+    if host := os.environ.get("MQTT_HOST"):
+        overrides["host"] = host
+    if port_str := os.environ.get("MQTT_PORT"):
+        overrides["port"] = int(port_str)
+    if username := os.environ.get("MQTT_USERNAME"):
+        overrides["username"] = username
+    if password := os.environ.get("MQTT_PASSWORD"):
+        overrides["password"] = password
+    if ssl_str := os.environ.get("MQTT_SSL"):
+        overrides["tls"] = ssl_str.lower() == "true"
+    if prefix := os.environ.get("MQTT_PREFIX"):
+        overrides["topic_prefix"] = prefix
+    if overrides:
+        raw.setdefault("mqtt", {})
+        raw["mqtt"].update(overrides)
+    return raw
+
+
 def handle_validate_and_write(payload: bytes, config_path: Path) -> bytes:
     """Validate submitted Candidate Values against MimirheimConfig and, only on success, write them to disk.
 
     Thin wrapper around
     ``mimirheim_shared.config_service.handle_validate_and_write``,
     parameterised with ``MimirheimConfig``: mimirheim core's own validation
-    model. See that function's docstring for the full validate-merge-write
-    sequence.
+    model. Also passes ``apply_mqtt_env_overrides`` so the on-disk
+    configuration is validated with the same env-supplied ``mqtt:`` overrides
+    core's own startup path applies (ADR-0009): otherwise a save that leaves
+    ``mqtt.host`` blank in the submitted form (because it is supplied by the
+    Supervisor, not the file) would fail validation here even though core is
+    connected and running on that same value. See that function's docstring
+    for the full validate-merge-write sequence.
 
     Args:
         payload: The raw MQTT message payload received on ``REQUEST_TOPIC``.
@@ -112,7 +169,9 @@ def handle_validate_and_write(payload: bytes, config_path: Path) -> bytes:
             ``ValidateAndWriteRequest`` envelope. See
             ``mimirheim_shared.config_service.handle_validate_and_write``.
     """
-    return _shared_handle_validate_and_write(payload, config_path, MimirheimConfig)
+    return _shared_handle_validate_and_write(
+        payload, config_path, MimirheimConfig, apply_mqtt_env_overrides
+    )
 
 
 def operational_state_payload_bytes() -> bytes:

@@ -17,12 +17,16 @@ from mimirheim_shared.config_service import (
     CLEARING_PAYLOAD,
     GetCurrentValuesRequest,
     GetCurrentValuesResult,
+    RestartRequest,
+    RestartResponse,
     ValidateAndWriteRequest,
     ValidateAndWriteResult,
     build_descriptor,
     descriptor_payload,
     get_current_values_response_topic,
     get_current_values_result_payload,
+    restart_response_payload,
+    restart_response_topic,
     validate_and_write_response_topic,
     validate_and_write_result_payload,
 )
@@ -249,6 +253,70 @@ def test_on_message_ignores_get_current_values_response_for_unknown_request_id()
             get_current_values_response_topic("mimirheim-core"),
             get_current_values_result_payload(response),
         ),
+    )
+
+    assert client._pending == {}
+
+
+def _fake_publish_replying_to_restart_request(
+    client: ConfigEditorMqttClient,
+) -> Callable[[str, bytes, int], None]:
+    def _publish(topic: str, payload: bytes, qos: int = 0) -> None:
+        request = RestartRequest.model_validate_json(payload)
+        response = RestartResponse(request_id=request.request_id)
+        client._on_message(
+            MagicMock(),
+            None,
+            _message(restart_response_topic("nordpool"), restart_response_payload(response)),
+        )
+
+    return _publish
+
+
+def test_submit_restart_request_returns_the_owners_acknowledgement() -> None:
+    registry = ConfigOwnerRegistry()
+    client = ConfigEditorMqttClient(_make_config(), registry, _CONFIG_PATH)
+    client._client.publish = MagicMock(side_effect=_fake_publish_replying_to_restart_request(client))
+
+    result = client.submit_restart_request("nordpool")
+
+    assert isinstance(result, RestartResponse)
+    assert client._pending == {}
+
+
+def test_submit_restart_request_times_out_when_no_response_arrives() -> None:
+    registry = ConfigOwnerRegistry()
+    client = ConfigEditorMqttClient(_make_config(), registry, _CONFIG_PATH)
+    client._client.publish = MagicMock()
+
+    with pytest.raises(TimeoutError):
+        client.submit_restart_request("nordpool", timeout=0.05)
+
+    assert client._pending == {}
+
+
+def test_on_message_discards_malformed_restart_response_without_raising() -> None:
+    registry = ConfigOwnerRegistry()
+    client = ConfigEditorMqttClient(_make_config(), registry, _CONFIG_PATH)
+
+    client._on_message(
+        MagicMock(),
+        None,
+        _message(restart_response_topic("nordpool"), b"not json"),
+    )
+
+    assert client._pending == {}
+
+
+def test_on_message_ignores_restart_response_for_unknown_request_id() -> None:
+    registry = ConfigOwnerRegistry()
+    client = ConfigEditorMqttClient(_make_config(), registry, _CONFIG_PATH)
+    response = RestartResponse(request_id="unknown-request-id")
+
+    client._on_message(
+        MagicMock(),
+        None,
+        _message(restart_response_topic("nordpool"), restart_response_payload(response)),
     )
 
     assert client._pending == {}

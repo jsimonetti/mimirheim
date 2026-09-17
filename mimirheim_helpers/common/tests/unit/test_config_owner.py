@@ -35,7 +35,9 @@ from mimirheim_shared.config_service import (
 )
 from mimirheim_shared.formspec import FieldSpec, FormSpec, resolve_field_shapes
 
+from helper_common.config import MqttConfig
 from helper_common.config_owner import ConfigOwnerSupport
+from helper_common.formspec import MQTT_CONFIG_FORM_SPEC
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "sample_helper_config.yaml"
 
@@ -208,6 +210,98 @@ class TestHandleMessage:
         assert handled is True
         client.publish.assert_not_called()
         assert "Failed to handle validate_and_write request" in caplog.text
+
+
+class _ToyHelperConfigWithMqtt(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    area: str
+    mqtt: MqttConfig
+
+
+_TOY_FORM_SPEC_WITH_MQTT = FormSpec(
+    fields={
+        "area": FieldSpec(label="Area", description="Price area code."),
+        "mqtt": FieldSpec(
+            label="MQTT", description="Broker connection.", nested_form_spec=MQTT_CONFIG_FORM_SPEC
+        ),
+    }
+)
+
+
+class TestMqttEnvOverrides:
+    """Reproduces the reported bug: a helper started with MQTT_HOST supplied
+    by the environment (no mqtt.host in the file) connects and runs fine, but
+    saving an unrelated field via the Config Editor previously failed with
+    "mqtt: Field required" because validate_and_write merged Candidate Values
+    onto the raw on-disk file, which never carries a value the environment
+    supplies instead. ConfigOwnerSupport's default ``apply_env_overrides``
+    (``helper_common.config.apply_mqtt_env_overrides``) fixes this without
+    any per-helper wiring."""
+
+    def test_env_supplied_host_satisfies_validation_without_being_in_the_submission(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("MQTT_HOST", "broker.local")
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text("area: SE3\n")
+        support = ConfigOwnerSupport(
+            owner_id="toy-helper",
+            display_name="Toy Helper",
+            model=_ToyHelperConfigWithMqtt,
+            form_spec=_TOY_FORM_SPEC_WITH_MQTT,
+            config_path=config_path,
+        )
+        client = MagicMock()
+        request = ValidateAndWriteRequest(request_id="req-3", values={"area": "SE4"})
+
+        support.handle_message(
+            client,
+            _message(
+                validate_and_write_request_topic("toy-helper"),
+                request.model_dump_json().encode("utf-8"),
+            ),
+        )
+
+        result = ValidateAndWriteResult.model_validate_json(
+            client.publish.call_args.kwargs["payload"]
+        )
+        assert result == ValidateAndWriteResult(request_id="req-3", success=True)
+        written = config_path.read_text()
+        assert "area: SE4" in written
+        # The env-supplied host must not leak into the file: a plain Docker
+        # deployment without MQTT_HOST set must not silently inherit it.
+        assert "mqtt" not in written
+
+    def test_without_mqtt_env_the_same_submission_still_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("MQTT_HOST", raising=False)
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text("area: SE3\n")
+        support = ConfigOwnerSupport(
+            owner_id="toy-helper",
+            display_name="Toy Helper",
+            model=_ToyHelperConfigWithMqtt,
+            form_spec=_TOY_FORM_SPEC_WITH_MQTT,
+            config_path=config_path,
+        )
+        client = MagicMock()
+        request = ValidateAndWriteRequest(request_id="req-4", values={"area": "SE4"})
+
+        support.handle_message(
+            client,
+            _message(
+                validate_and_write_request_topic("toy-helper"),
+                request.model_dump_json().encode("utf-8"),
+            ),
+        )
+
+        result = ValidateAndWriteResult.model_validate_json(
+            client.publish.call_args.kwargs["payload"]
+        )
+        assert result.success is False
+        assert any("mqtt" in error for error in result.errors)
 
     def test_get_current_values_request_is_answered_with_current_on_disk_values(
         self, tmp_path: Path

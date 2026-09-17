@@ -3,11 +3,11 @@
 Covers the pure helper functions ``__main__.py`` uses to split Broker
 Settings validation (always fatal) from full configuration validation (never
 fatal, falls back to Awaiting Configuration): ``_read_raw_config``,
-``_apply_mqtt_env_overrides``, ``_load_broker_settings``,
-``_try_load_full_config``. ``_run_awaiting_configuration`` is covered at the
-wiring level with the MQTT client mocked out; the Config Service protocol
-handling it delegates to is covered in
-tests/unit/test_awaiting_configuration.py.
+``apply_mqtt_env_overrides`` (``mimirheim.io.config_service``),
+``_load_broker_settings``, ``_try_load_full_config``.
+``_run_awaiting_configuration`` is covered at the wiring level with the MQTT
+client mocked out; the Config Service protocol handling it delegates to is
+covered in tests/unit/test_awaiting_configuration.py.
 """
 
 from __future__ import annotations
@@ -19,13 +19,13 @@ from unittest.mock import patch
 import pytest
 
 from mimirheim.__main__ import (
-    _apply_mqtt_env_overrides,
     _load_broker_settings,
     _read_raw_config,
     _run_awaiting_configuration,
     _try_load_full_config,
 )
 from mimirheim.config.schema import MimirheimConfig, MqttConfig
+from mimirheim.io.config_service import apply_mqtt_env_overrides
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "sample_mimirheim_config.yaml"
 
@@ -70,7 +70,7 @@ class TestApplyMqttEnvOverrides:
         monkeypatch.setenv("MQTT_PREFIX", "custom")
         raw: dict = {}
 
-        _apply_mqtt_env_overrides(raw)
+        apply_mqtt_env_overrides(raw)
 
         assert raw["mqtt"]["topic_prefix"] == "custom"
 
@@ -80,7 +80,7 @@ class TestApplyMqttEnvOverrides:
         monkeypatch.delenv("MQTT_PREFIX", raising=False)
         raw = {"mqtt": {"host": "localhost", "topic_prefix": "mine"}}
 
-        _apply_mqtt_env_overrides(raw)
+        apply_mqtt_env_overrides(raw)
 
         assert raw["mqtt"]["topic_prefix"] == "mine"
 

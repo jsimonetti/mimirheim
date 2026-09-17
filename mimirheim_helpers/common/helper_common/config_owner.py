@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -74,6 +75,8 @@ from mimirheim_shared.config_service import (
 )
 from mimirheim_shared.formspec import FormSpec
 
+from helper_common.config import apply_mqtt_env_overrides
+
 logger = logging.getLogger(__name__)
 
 
@@ -92,6 +95,7 @@ class ConfigOwnerSupport:
         form_spec: FormSpec,
         config_path: Path,
         awaiting_configuration_detail: str | None = None,
+        apply_env_overrides: Callable[[dict], dict] | None = apply_mqtt_env_overrides,
     ) -> None:
         """Build the Descriptor and precompute this Config Owner's topics.
 
@@ -116,10 +120,25 @@ class ConfigOwnerSupport:
                 ``mimirheim_shared/CONTEXT.md``'s Awaiting Configuration
                 entry and ADR-0009/ADR-0011. ``None`` (the default) means
                 this Config Owner is running its own function normally.
+            apply_env_overrides: Callback applied to the on-disk
+                configuration before a submitted ``validate_and_write``
+                request is merged onto it, so validation sees the same
+                ``mqtt:`` section this helper actually connected with
+                (e.g. Home Assistant Supervisor-injected ``MQTT_HOST``).
+                Without this, a save that leaves a Supervisor-controlled
+                field blank (correctly, since the file never carries it)
+                fails validation with e.g. "mqtt.host: Field required"
+                even though the helper itself is connected and running on
+                that env-supplied value. Defaults to
+                ``helper_common.config.apply_mqtt_env_overrides``, which
+                every helper's own ``load_helper_config`` already applies
+                at startup; pass ``None`` to opt out for a Config Owner
+                whose model has no ``mqtt`` section shaped that way.
         """
         self.owner_id = owner_id
         self._model = model
         self._config_path = config_path
+        self._apply_env_overrides = apply_env_overrides
         self._awaiting_configuration_detail = awaiting_configuration_detail
         self._descriptor_topic = descriptor_topic(owner_id)
         self._request_topic = validate_and_write_request_topic(owner_id)
@@ -212,7 +231,7 @@ class ConfigOwnerSupport:
             return False
         try:
             response_payload = handle_validate_and_write(
-                message.payload, self._config_path, self._model
+                message.payload, self._config_path, self._model, self._apply_env_overrides
             )
         except Exception:
             # Deliberately broad: this runs on the paho network thread, where

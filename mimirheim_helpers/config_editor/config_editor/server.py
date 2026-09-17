@@ -6,10 +6,11 @@ directly from FormSpec, via Jinja2 templates (`templates/index.html`,
 `templates/owner.html`), per ADR-0003 (no generic client-side
 schema-to-form library):
 
-    GET  /owners/<owner_id>   -- render one Config Owner's configuration
-    POST /owners/<owner_id>   -- submit Candidate Values for validate_and_write
-    GET  /static/<path>       -- serve a vendored static asset (e.g. Bootstrap5)
-    GET  /theme/<dark|light>  -- record the visitor's theme choice in a cookie
+    GET  /owners/<owner_id>           -- render one Config Owner's configuration
+    POST /owners/<owner_id>           -- submit Candidate Values for validate_and_write
+    POST /owners/<owner_id>/restart   -- request that a Config Owner exit for its supervisor to restart it
+    GET  /static/<path>               -- serve a vendored static asset (e.g. Bootstrap5)
+    GET  /theme/<dark|light>          -- record the visitor's theme choice in a cookie
 
 This module never imports a Config Owner's pydantic model, and never reads
 or writes any Config Owner's configuration file itself: it only ever
@@ -18,8 +19,12 @@ consumes the generic `Descriptor` a Config Owner published (obtained from
 `ConfigServiceClient`'s `get_current_values` for a GET, and forwards a POST's
 submitted values (parsed from their dotted/indexed form field names by
 `config_editor.submission.parse_submission`) to the same client's
-`submit_validate_and_write`. `ConfigServiceClient` is the only thing here
-that touches MQTT.
+`submit_validate_and_write`. A successful Save never restarts a Config
+Owner itself (ADR-0012's restart is always a conscious, separate action):
+it only renders a message that a restart is required, and a POST to the
+`/restart` route -- reached only via the owner page's own confirmation
+modal, never automatically -- forwards to `submit_restart_request` instead.
+`ConfigServiceClient` is the only thing here that touches MQTT.
 """
 
 from __future__ import annotations
@@ -35,7 +40,7 @@ from typing import Any, Protocol
 
 import jinja2
 
-from mimirheim_shared.config_service import Descriptor, ValidateAndWriteResult
+from mimirheim_shared.config_service import Descriptor, RestartResponse, ValidateAndWriteResult
 from mimirheim_shared.formspec import option_label
 
 from config_editor.registry import ConfigOwnerRegistry
@@ -157,6 +162,21 @@ class ConfigServiceClient(Protocol):
 
         Returns:
             The Config Owner's current configuration values.
+
+        Raises:
+            TimeoutError: If no response arrives within `timeout` seconds.
+        """
+        ...
+
+    def submit_restart_request(self, owner_id: str, timeout: float = 10.0) -> RestartResponse:
+        """Requests that a Config Owner exit for its supervisor to restart it.
+
+        Args:
+            owner_id: The Config Owner's stable identifier.
+            timeout: Seconds to wait for an acknowledgement before giving up.
+
+        Returns:
+            The Config Owner's `RestartResponse`.
 
         Raises:
             TimeoutError: If no response arrives within `timeout` seconds.
@@ -307,6 +327,9 @@ class ConfigEditorServer:
         if method == "GET" and path.startswith("/owners/"):
             owner_id = urllib.parse.unquote(path[len("/owners/") :])
             return self._render_owner(owner_id, theme=theme)
+        if method == "POST" and path.startswith("/owners/") and path.endswith("/restart"):
+            owner_id = urllib.parse.unquote(path[len("/owners/") : -len("/restart")])
+            return self._request_restart(owner_id, theme=theme)
         if method == "POST" and path.startswith("/owners/"):
             owner_id = urllib.parse.unquote(path[len("/owners/") :])
             return self._submit_owner(owner_id, body, theme=theme)
@@ -355,6 +378,46 @@ class ConfigEditorServer:
             return self._render_owner_page(descriptor, values=values, success=True, theme=theme)
         return self._render_owner_page(descriptor, values=values, errors=result.errors, theme=theme)
 
+    def _request_restart(self, owner_id: str, *, theme: str | None) -> tuple[int, dict[str, str], bytes]:
+        """Requests that a Config Owner restart, reached only via the owner page's own confirmation modal.
+
+        Restarting is never triggered by a successful Save (`_submit_owner`
+        only ever renders a "restart required" message): it is always a
+        separate, conscious action, per ADR-0012.
+
+        Args:
+            owner_id: The Config Owner's stable identifier.
+            theme: The visitor's theme cookie override, forwarded to the
+                re-rendered owner page.
+
+        Returns:
+            A three-tuple of (status, headers, body): the owner page,
+            re-rendered with either a restart-requested confirmation or a
+            timeout error.
+        """
+        descriptor = self._registry.get(owner_id)
+        if descriptor is None:
+            return self._html_response(404, "<h1>Unknown Config Owner</h1>")
+
+        try:
+            self._config_service_client.submit_restart_request(owner_id)
+        except TimeoutError:
+            logger.warning("Timed out awaiting restart acknowledgement from %r.", owner_id)
+            errors = ["Timed out waiting for a restart acknowledgement from this Config Owner."]
+            return self._render_owner_page(descriptor, theme=theme, errors=errors)
+
+        # The owner is about to exit, so its own current values may no
+        # longer be reachable; fall back to schema defaults rather than
+        # surfacing a second, unrelated timeout error alongside the restart
+        # confirmation.
+        try:
+            current_values = self._config_service_client.get_current_values(owner_id)
+        except TimeoutError:
+            current_values = None
+        return self._render_owner_page(
+            descriptor, values=current_values, restart_requested=True, theme=theme
+        )
+
     def _render_owner_page(
         self,
         descriptor: Descriptor,
@@ -362,6 +425,7 @@ class ConfigEditorServer:
         values: dict[str, Any] | None = None,
         errors: list[str] | None = None,
         success: bool = False,
+        restart_requested: bool = False,
         theme: str | None = None,
     ) -> tuple[int, dict[str, str], bytes]:
         template = _TEMPLATES.get_template("owner.html")
@@ -370,10 +434,12 @@ class ConfigEditorServer:
             tabs=build_tabs(descriptor, values=values),
             errors=errors or [],
             success=success,
+            restart_requested=restart_requested,
             theme=theme,
             current_path=f"/owners/{urllib.parse.quote(descriptor.owner_id)}",
         )
         return self._html_response(200, html)
+
 
     def _set_theme(self, theme: str, query: str) -> tuple[int, dict[str, str], bytes]:
         """Records the visitor's theme choice in a cookie and redirects back.

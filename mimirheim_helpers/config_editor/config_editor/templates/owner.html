@@ -323,12 +323,13 @@
         <button type="button" class="btn btn-outline-secondary" disabled title="Not yet implemented">Diff</button>
         <button type="button" class="btn btn-outline-secondary" disabled title="Not yet implemented">Validate</button>
         <button type="button" class="btn btn-outline-secondary" disabled title="Not yet implemented">Commit</button>
-        <button type="button" class="btn btn-outline-secondary" disabled title="Not yet implemented">Restart</button>
+        <button type="button" class="btn btn-outline-danger" data-restart-trigger>Restart</button>
       </div>
       {{ render_tab_nav(tabs) }}
     </header>
 
-    {% if success %}<div class="alert alert-success">Saved.</div>{% endif %}
+    {% if success %}<div class="alert alert-success">Saved. A restart is required for this change to take effect.</div>{% endif %}
+    {% if restart_requested %}<div class="alert alert-success">Restart requested.</div>{% endif %}
     {% if errors %}
     <div class="alert alert-danger">
       <ul class="mb-0">
@@ -368,6 +369,35 @@
     </div>
   </div>
   <div class="modal-backdrop" data-remove-entry-backdrop hidden></div>
+
+  {# Restart confirmation modal: a Restart is a conscious, separate action
+     from Save (see server.py's own docstring and ADR-0012) -- it exits the
+     Config Owner's process for its supervisor to start a fresh one, losing
+     any unsaved form changes -- so it never fires without this confirmation
+     step in between, mirroring the Remove confirmation modal above. The
+     actual request is a plain POST (submitted by restart.js below once
+     confirmed), not client-side DOM manipulation, since unlike Remove there
+     is a real server-side effect to await and report back. #}
+  <div class="modal" tabindex="-1" data-restart-modal aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Restart {{ descriptor.display_name }}?</h5>
+          <button type="button" class="btn-close" data-restart-cancel aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-0">This exits the running process so its supervisor can start a fresh one. Any unsaved changes on this page are lost.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-restart-cancel>Cancel</button>
+          <form id="restart-form" method="post" action="/owners/{{ descriptor.owner_id }}/restart">
+            <button type="submit" class="btn btn-danger">Restart</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop" data-restart-backdrop hidden></div>
 
   {# Only interactivity in the whole editor (ADR-0003 allows "minimal
      client-side JS for interactivity ... such as conditional visibility and
@@ -610,6 +640,40 @@
       if (event.target.closest("[data-remove-entry-cancel]") || event.target.matches("[data-remove-entry-backdrop]")) {
         pendingRemoveEntry = null;
         hideRemoveEntryModal();
+      }
+    });
+
+    // --- Restart confirmation (see the modal markup after <main>) ----------
+    //
+    // The Restart button never submits the request directly: it only opens
+    // this confirmation modal, and the request itself is a plain form POST
+    // (to /owners/<owner_id>/restart, handled by server.py's
+    // _request_restart), submitted only once the modal's own Restart button
+    // is clicked. This is the one place in the editor a confirmation modal's
+    // own action button is a real form submission rather than DOM
+    // manipulation, since restarting has a server-side effect to await and
+    // report back, unlike Remove.
+    function showRestartModal() {
+      document.querySelector("[data-restart-modal]").style.display = "block";
+      document.querySelector("[data-restart-modal]").classList.add("show");
+      document.querySelector("[data-restart-backdrop]").hidden = false;
+      document.querySelector("[data-restart-backdrop]").classList.add("show");
+    }
+
+    function hideRestartModal() {
+      document.querySelector("[data-restart-modal]").style.display = "none";
+      document.querySelector("[data-restart-modal]").classList.remove("show");
+      document.querySelector("[data-restart-backdrop]").hidden = true;
+      document.querySelector("[data-restart-backdrop]").classList.remove("show");
+    }
+
+    document.addEventListener("click", function (event) {
+      if (event.target.closest("[data-restart-trigger]")) {
+        showRestartModal();
+        return;
+      }
+      if (event.target.closest("[data-restart-cancel]") || event.target.matches("[data-restart-backdrop]")) {
+        hideRestartModal();
       }
     });
 

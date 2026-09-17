@@ -328,6 +328,112 @@ class TestHandleValidateAndWrite:
         assert written["mqtt"]["host"] == "localhost"
 
 
+class TestHandleValidateAndWriteWithEnvOverrides:
+    """Reproduces the reported bug: a Config Owner started with a required
+    field (e.g. mqtt.host) supplied only by the environment runs fine, but
+    saving an unrelated field via the Config Service previously failed with
+    "mqtt.host: Field required" because handle_validate_and_write merged
+    Candidate Values onto the raw on-disk file, which never carries a value
+    the environment supplies instead. apply_env_overrides lets validation see
+    the same effective configuration the Config Owner's own daemon runs on."""
+
+    @staticmethod
+    def _inject_host(raw: dict) -> dict:
+        raw["mqtt"] = {**raw.get("mqtt", {}), "host": "broker.local"}
+        return raw
+
+    def test_env_supplied_required_field_satisfies_validation_without_being_in_the_submission(
+        self, tmp_path: Path
+    ) -> None:
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text("battery:\n  capacity_kwh: 5.0\n")
+        request = ValidateAndWriteRequest(
+            request_id="req-6", values={"battery": {"capacity_kwh": 7.0}}
+        )
+
+        response = handle_validate_and_write(
+            request.model_dump_json().encode("utf-8"),
+            config_path,
+            _ToyConfig,
+            self._inject_host,
+        )
+
+        result = ValidateAndWriteResult.model_validate_json(response)
+        assert result == ValidateAndWriteResult(request_id="req-6", success=True)
+
+        yaml = YAML()
+        with config_path.open() as fh:
+            written = yaml.load(fh)
+        assert written["battery"]["capacity_kwh"] == 7.0
+        # The env-supplied host is used only to satisfy validation; it must
+        # not leak into the file, or a plain Docker deployment without that
+        # environment variable would silently gain a broker credential.
+        assert "mqtt" not in written
+
+    def test_missing_config_file_still_validates_via_env_overrides(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "config.yaml"
+        request = ValidateAndWriteRequest(
+            request_id="req-7", values={"battery": {"capacity_kwh": 3.0}}
+        )
+
+        response = handle_validate_and_write(
+            request.model_dump_json().encode("utf-8"),
+            config_path,
+            _ToyConfig,
+            self._inject_host,
+        )
+
+        result = ValidateAndWriteResult.model_validate_json(response)
+        assert result == ValidateAndWriteResult(request_id="req-7", success=True)
+
+    def test_explicitly_submitted_value_takes_precedence_over_env_override(
+        self, tmp_path: Path
+    ) -> None:
+        """A Candidate Value the user actively submits for a field the
+        environment also supplies must win and be written: they are choosing
+        that value right now, in this request."""
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text("battery:\n  capacity_kwh: 5.0\n")
+        request = ValidateAndWriteRequest(
+            request_id="req-8",
+            values={"mqtt": {"host": "explicit.example"}, "battery": {"capacity_kwh": 5.0}},
+        )
+
+        response = handle_validate_and_write(
+            request.model_dump_json().encode("utf-8"),
+            config_path,
+            _ToyConfig,
+            self._inject_host,
+        )
+
+        result = ValidateAndWriteResult.model_validate_json(response)
+        assert result == ValidateAndWriteResult(request_id="req-8", success=True)
+
+        yaml = YAML()
+        with config_path.open() as fh:
+            written = yaml.load(fh)
+        assert written["mqtt"]["host"] == "explicit.example"
+
+    def test_without_apply_env_overrides_the_same_submission_still_fails(
+        self, tmp_path: Path
+    ) -> None:
+        """Confirms the default (``apply_env_overrides=None``) is unchanged:
+        every existing caller that does not pass it keeps today's behaviour."""
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text("battery:\n  capacity_kwh: 5.0\n")
+        request = ValidateAndWriteRequest(
+            request_id="req-9", values={"battery": {"capacity_kwh": 7.0}}
+        )
+
+        response = handle_validate_and_write(
+            request.model_dump_json().encode("utf-8"), config_path, _ToyConfig
+        )
+
+        result = ValidateAndWriteResult.model_validate_json(response)
+        assert result.success is False
+        assert any("mqtt" in error for error in result.errors)
+
+
 def test_get_current_values_request_topic_is_well_known_and_owner_scoped() -> None:
     assert (
         get_current_values_request_topic("mimirheim-core")

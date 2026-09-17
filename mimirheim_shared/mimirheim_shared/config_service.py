@@ -31,6 +31,7 @@ request/response feature: mimirheim core's connection negotiates MQTT
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
@@ -361,7 +362,10 @@ def coerced_submission(dumped: dict[str, Any], submitted: dict[str, Any]) -> dic
 
 
 def handle_validate_and_write(
-    payload: bytes, config_path: Path, model: type[BaseModel]
+    payload: bytes,
+    config_path: Path,
+    model: type[BaseModel],
+    apply_env_overrides: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> bytes:
     """Validate submitted Candidate Values against ``model`` and, only on success, write them.
 
@@ -396,6 +400,17 @@ def handle_validate_and_write(
             file, the one it was started with.
         model: The Config Owner's validation model. ``model.model_validate``
             is called on the merged Candidate Values.
+        apply_env_overrides: Optional callback applied to the on-disk
+            configuration before Candidate Values are overlaid onto it, e.g.
+            a Config Owner's own MQTT-broker-from-environment overrides
+            (Home Assistant Supervisor injection). A required field the
+            environment supplies (e.g. ``mqtt.host``) is otherwise absent from
+            both the on-disk file and an unrelated partial submission,
+            which would fail validation here even though the Config Owner's
+            own daemon runs fine, having applied the same overrides at
+            startup. ``None`` (the default) leaves the on-disk configuration
+            as-is, matching every existing caller before this parameter was
+            added.
 
     Returns:
         UTF-8 encoded JSON bytes to publish to the Config Owner's
@@ -414,6 +429,8 @@ def handle_validate_and_write(
     current: dict[str, Any] = {}
     if config_path.exists():
         current = yaml.safe_load(config_path.read_text()) or {}
+    if apply_env_overrides is not None:
+        current = apply_env_overrides(current)
     merged = dict(current)
     overlay_values(merged, request.values, model)
 
