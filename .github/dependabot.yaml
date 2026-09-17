@@ -4,7 +4,7 @@ updates:
 - package-ecosystem: "github-actions"
   directory: "/"
   schedule:
-    interval: "monthly"
+    interval: "weekly"
 
 # Keeps the digest pins in container/Dockerfile current. Without this the
 # pins would freeze the base images indefinitely, trading unprovoked cache
