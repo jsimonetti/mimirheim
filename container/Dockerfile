@@ -64,7 +64,7 @@ ARG S6_OVERLAY_VERSION=3.2.3.2
 # nothing in this repository changed. Dependabot's `docker` ecosystem updates
 # these digests, so bumps become reviewable commits rather than silent drift.
 # ---------------------------------------------------------------------------
-FROM ghcr.io/astral-sh/uv:0.12.15@sha256:62f8c047d0a0e9ece6b53fc63df902585a67a47a7f318ddec4a37db586edc8e3 AS uvbin
+FROM ghcr.io/astral-sh/uv:0.12.18@sha256:3adc3706091ce7c2fe595e669628caedd6d951551b92b258b7e7dbe06d9440bc AS uvbin
 FROM ghcr.io/hassio-addons/base:stable@sha256:2329e9f61ecbfaa9a2b1b2b260b5a692872f95634fbc58c1a5a685b4bec566cb AS bashio
 
 # ---------------------------------------------------------------------------
@@ -72,7 +72,7 @@ FROM ghcr.io/hassio-addons/base:stable@sha256:2329e9f61ecbfaa9a2b1b2b260b5a69287
 # Third-party packages are large; keeping them in a separate stage means a
 # source-only change never invalidates this cached layer.
 # ---------------------------------------------------------------------------
-FROM python:3.14-slim-bookworm@sha256:9ab8d9c8514b44f90cf0029dd42fdd7e9e211e639c8b995304cc04568dee900f AS deps-builder
+FROM python:3.14-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56 AS deps-builder
 
 WORKDIR /build
 
@@ -117,7 +117,7 @@ RUN --mount=from=uvbin,source=/uv,target=/usr/local/bin/uv \
 # Stage 2: wheel builder — rebuilt on every source change, but produces only
 # a small wheel (~2 MB). No venv needed here; uv build is self-contained.
 # ---------------------------------------------------------------------------
-FROM python:3.14-slim-bookworm@sha256:9ab8d9c8514b44f90cf0029dd42fdd7e9e211e639c8b995304cc04568dee900f AS wheel-builder
+FROM python:3.14-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56 AS wheel-builder
 
 WORKDIR /build
 
@@ -131,7 +131,7 @@ RUN --mount=from=uvbin,source=/uv,target=/usr/local/bin/uv \
 # ---------------------------------------------------------------------------
 # Stage 3: final image
 # ---------------------------------------------------------------------------
-FROM python:3.14-slim-bookworm@sha256:9ab8d9c8514b44f90cf0029dd42fdd7e9e211e639c8b995304cc04568dee900f
+FROM python:3.14-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56
 
 ARG S6_OVERLAY_VERSION
 ARG TARGETARCH
