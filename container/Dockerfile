@@ -64,8 +64,8 @@ ARG S6_OVERLAY_VERSION=3.2.3.2
 # nothing in this repository changed. Dependabot's `docker` ecosystem updates
 # these digests, so bumps become reviewable commits rather than silent drift.
 # ---------------------------------------------------------------------------
-FROM ghcr.io/astral-sh/uv:0.12.18@sha256:3adc3706091ce7c2fe595e669628caedd6d951551b92b258b7e7dbe06d9440bc AS uvbin
-FROM ghcr.io/hassio-addons/base:stable@sha256:2329e9f61ecbfaa9a2b1b2b260b5a692872f95634fbc58c1a5a685b4bec566cb AS bashio
+FROM ghcr.io/astral-sh/uv:0.12.21@sha256:a7aed3216253ee804de3e2d8afa5073baa1a177335345d43845cd4165e43b711 AS uvbin
+FROM ghcr.io/hassio-addons/base:stable@sha256:1a048b6c0d6bcf089e1a60748dd62edfac5e6b85e108dbd825946b6b0fe5d821 AS bashio
 
 # ---------------------------------------------------------------------------
 # Stage 1: deps-only venv — rebuilt only when pyproject.toml or uv.lock change.
