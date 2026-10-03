@@ -33,6 +33,17 @@ def test_reporter_section_defaults() -> None:
     )
     assert sec.max_reports == 100
     assert sec.notify_topic is None
+    assert sec.household_enabled is True
+
+
+def test_reporter_section_household_enabled_can_be_disabled() -> None:
+    """household_enabled accepts an explicit false."""
+    sec = ReporterReportingSection(
+        dump_dir="/tmp/dumps",
+        output_dir="/tmp/reports",
+        household_enabled=False,
+    )
+    assert sec.household_enabled is False
 
 
 def test_reporter_section_dump_dir_required() -> None:

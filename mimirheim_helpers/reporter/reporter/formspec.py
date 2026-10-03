@@ -43,6 +43,14 @@ REPORTER_REPORTING_SECTION_FORM_SPEC = FormSpec(
             description="MQTT topic to subscribe to for dump-available notifications.",
             tier=Tier.EXPERT,
         ),
+        "household_enabled": FieldSpec(
+            label="Household view",
+            description=(
+                "Also write the plain-language household page (household.html), "
+                "refreshed each solve. Default on."
+            ),
+            tier=Tier.BASIC,
+        ),
     }
 )
 

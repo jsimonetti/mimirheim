@@ -1,0 +1,31 @@
+# mimirheim reporter — household view, embedded in Home Assistant
+#
+# The reporter writes a plain-language "what is our house doing today" page to a
+# stable URL (household.html), refreshed each solve. It is self-contained (no
+# Plotly, no Home Assistant entities), so the simplest way to show it in HA is a
+# native iframe card — no custom cards, no tokens, and it keeps working even when
+# Home Assistant is down (the reporter serves it independently).
+#
+# Requirements:
+#   - mimirheim-reporter running with reporting.household_enabled: true (default)
+#   - The reporter output_dir served over HTTP(S) at some host, e.g. via nginx,
+#     the config editor proxy (GET /reports/household.html), or a HA add-on.
+#   - If Home Assistant is served over HTTPS, serve the reporter over HTTPS too,
+#     or the browser blocks the frame as mixed content.
+#
+# Add this as a new view (tab) on a dashboard, or drop the single card anywhere.
+
+title: Energieplan
+path: energieplan
+icon: mdi:sprout
+# A panel view gives the (self-centering, max-width) page room without a
+# surrounding column grid.
+panel: true
+cards:
+  - type: iframe
+    # Point at wherever your reporter output_dir is served from.
+    #   direct nginx/caddy:   https://mimirheim.example.net/household.html
+    #   config editor proxy:  https://mimirheim.example.net/reports/household.html
+    url: https://mimirheim.example.net/household.html
+    # The page is tall; tune to taste, or let it scroll inside the frame.
+    aspect_ratio: 150%

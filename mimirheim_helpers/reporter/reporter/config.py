@@ -36,6 +36,9 @@ class ReporterReportingSection(BaseModel):
         notify_topic: MQTT topic to subscribe to for dump-available
             notifications. Defaults to ``'{mimir_topic_prefix}/status/dump_available'``
             when not set.
+        household_enabled: When true (the default), the daemon also writes the
+            layperson ``household.html`` view — one stable page refreshed each
+            solve — alongside the per-solve technical reports.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -50,6 +53,13 @@ class ReporterReportingSection(BaseModel):
     notify_topic: str | None = Field(
         default=None,
         description="MQTT topic to subscribe to for dump-available notifications."
+    )
+    household_enabled: bool = Field(
+        default=True,
+        description=(
+            "Also write the layperson 'household' view (household.html), a "
+            "single stable page refreshed each solve. Default on."
+        ),
     )
 
 

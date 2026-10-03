@@ -45,6 +45,7 @@ from helper_common.daemon import MqttDaemon
 from reporter import gc, inventory
 from reporter.config import ReporterConfig
 from reporter.formspec import REPORTER_CONFIG_FORM_SPEC
+from reporter.household import build_household_html
 from reporter.render import build_report_html
 
 logger = logging.getLogger(__name__)
@@ -58,6 +59,10 @@ CONFIG_OWNER_DISPLAY_NAME = "Reporter"
 _INDEX_FILENAME = "index.html"
 _INDEX_CSS_FILENAME = "index.css"
 _PLOTLY_JS_FILENAME = "plotly.min.js"
+
+# The household (layperson) view is a single stable "latest" page, overwritten
+# each solve, so it has a bookmarkable URL and can be framed in Home Assistant.
+_HOUSEHOLD_FILENAME = "household.html"
 
 # Characters an ISO 8601 timestamp is built from. Deliberately a whitelist:
 # it excludes both path separators and NUL, so a value that matches cannot
@@ -128,6 +133,7 @@ class ReporterDaemon(MqttDaemon):
         self._catch_up()
         inventory.rebuild_from_disk(cfg.output_dir, cfg.dump_dir)
         gc.collect(cfg.output_dir, cfg.max_reports)
+        self._refresh_household_latest()
         super().run()
 
     # ------------------------------------------------------------------
@@ -259,6 +265,11 @@ class ReporterDaemon(MqttDaemon):
         else:
             self._render_and_save(ts, report_filename, report_path, inp, out)
 
+        # A live notification is the newest solve, so refresh the stable
+        # household page to it regardless of whether the technical report was
+        # just rendered or already existed.
+        self._write_household(inp, out)
+
     def _render_and_save(
         self,
         ts: str,
@@ -295,6 +306,58 @@ class ReporterDaemon(MqttDaemon):
         gc.collect(cfg.output_dir, cfg.max_reports)
         self._install_index_html()
         logger.info("Rendered report: %s", report_path)
+
+    # ------------------------------------------------------------------
+    # Household (layperson) view
+    # ------------------------------------------------------------------
+
+    def _write_household(self, inp: dict[str, Any], out: dict[str, Any]) -> None:
+        """Render the household view and overwrite the stable household page.
+
+        Fault-isolated: a failure here is logged and swallowed so it can never
+        break the technical report write or the daemon, consistent with the
+        daemon's existing tolerance of render failures.
+
+        Args:
+            inp: Parsed SolveBundle JSON.
+            out: Parsed SolveResult JSON.
+        """
+        cfg = self._reporter_config
+        if not cfg.household_enabled:
+            return
+        dest = cfg.output_dir / _HOUSEHOLD_FILENAME
+        try:
+            dest.write_text(build_household_html(inp, out), encoding="utf-8")
+        except Exception:
+            logger.exception("Failed to render household view.")
+            return
+        logger.info("Refreshed household view: %s", dest)
+
+    def _refresh_household_latest(self) -> None:
+        """Write the household page from the newest dump pair on disk.
+
+        Called at startup so that after a restart or a run of missed
+        notifications the stable household page reflects the most recent solve,
+        not whatever a per-pair catch-up happened to render last.
+        """
+        cfg = self._reporter_config
+        for input_path in sorted(cfg.dump_dir.glob("*_input.json"), reverse=True):
+            ts_file = input_path.name[: -len("_input.json")]
+            output_dump_path = cfg.dump_dir / f"{ts_file}_output.json"
+            if not output_dump_path.exists():
+                continue
+            try:
+                inp = json.loads(input_path.read_text())
+                out = json.loads(output_dump_path.read_text())
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning(
+                    "Could not read dump pair for household refresh (%s): %s",
+                    ts_file,
+                    exc,
+                )
+                continue
+            self._write_household(inp, out)
+            return  # newest-first: the first readable pair is the latest
 
     # ------------------------------------------------------------------
     # Startup helpers

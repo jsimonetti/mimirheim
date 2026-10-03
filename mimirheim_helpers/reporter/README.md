@@ -110,6 +110,7 @@ Everything lands in `output_dir`:
 | File | Written | Purpose |
 | --- | --- | --- |
 | `{ts}_report.html` | per solve | The report. Self-contained apart from `plotly.min.js` |
+| `household.html` | each solve (stable name) | The household view: a plain-language "what is our house doing today" page for non-technical readers. Overwritten each solve, no Plotly |
 | `inventory.js` | on every change | The report list, consumed by `index.html` |
 | `index.html` | once, if absent | The index page. Customise freely; it is not overwritten |
 | `index.css` | once, if absent | Its stylesheet |
@@ -132,6 +133,12 @@ window.MIMIRHEIM_REPORTS = [
 ```
 
 Assigning to a global rather than serving JSON is deliberate: `inventory.py` states the reason as letting `index.html` build its table "without requiring a running web server", which is what makes opening the index straight off the disk work.
+
+### The household view
+
+The `{ts}_report.html` files are the technical report: Plotly flows, per-device SOC, the full data table — what an operator needs to see *why* the solver decided what it did. `household.html` is the opposite audience. It answers one question in plain words — *"what is our house doing with electricity today, and is it smart?"* — with a savings headline, a "right now" card, a colour-coded plan timeline, a friendly price chart, practical tips (when to run the laundry, when to avoid), an hourly flow picture, and a day-in-numbers summary. It has an NL/EN toggle and loads no Plotly.
+
+Unlike the per-solve reports, it is written to **one stable filename** reflecting the newest solve, so it has a bookmarkable URL. It self-refreshes every few minutes, which makes it suitable for a kitchen tablet or a framed panel. All of its numbers come from the same `metrics` module as the technical report, so the two never disagree. Set `reporting.household_enabled: false` to turn it off (it is on by default).
 
 ---
 
@@ -175,6 +182,18 @@ This tool serves nothing over HTTP. `output_dir` is a directory of static files;
 The simplest option is the config editor, which proxies the directory when `reporter.yaml` is present in its config directory: `GET /reports` serves the index and `GET /reports/{file}` serves a report. It also serves the dump JSON at `GET /reports/dumps/{ts}_input.json`, so the download links in a report work through the proxy. Note that the config editor does not authenticate.
 
 Otherwise nginx, caddy, a Home Assistant static-file add-on, or `python -m http.server` in that directory all work. Opening `index.html` straight off the disk works too; only the dump download links need the proxy.
+
+### Embedding the household view in Home Assistant
+
+Because the household page lives at a stable URL and the reporter emits no `X-Frame-Options`/CSP of its own, you can drop it straight into a Lovelace `iframe` card (see `examples/homeassistant/mimirheim_household_iframe.yaml`):
+
+```yaml
+type: iframe
+url: https://<your-reporter-host>/household.html
+aspect_ratio: 150%
+```
+
+Serve the reporter over HTTPS if Home Assistant is on HTTPS, or the browser will block the frame as mixed content. If you want to restrict who may frame it, add `Content-Security-Policy: frame-ancestors <your-ha-origin>;` at your reverse proxy — the page deliberately sets no framing headers so that choice stays with the operator.
 
 ---
 
