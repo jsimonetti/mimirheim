@@ -15,6 +15,8 @@ from __future__ import annotations
 import copy
 import json
 import re
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -28,9 +30,9 @@ _FLOW_KEYS = (
 )
 
 
-def _payload(inp: dict, out: dict) -> dict:
+def _payload(inp: dict, out: dict, **kwargs) -> dict:
     """Render and extract the JSON data payload the page embeds."""
-    html = build_household_html(inp, out)
+    html = build_household_html(inp, out, **kwargs)
     m = re.search(
         r'<script id="household-data" type="application/json">(.*?)</script>',
         html,
@@ -155,8 +157,10 @@ def test_hybrid_inverter_split_follows_planned_soc() -> None:
     """A hybrid's AC output is its sun while the cell fills, its battery while it empties."""
     inp = {
         "triggered_at_utc": "2026-10-01T10:00:00Z",
-        "hybrid_inverter_inputs": {"hyb": {"soc_kwh": 5.0}},
+        "hybrid_inverter_inputs": {"hyb": {"soc_kwh": 5.0, "pv_forecast_kw": [1.0, 0.0]}},
         "config": {"hybrid_inverters": {"hyb": {
+            "capacity_kwh": 10.0,
+            "max_pv_kw": 2.0,
             "inverter_efficiency": 1.0,
             "battery_charge_efficiency": 1.0,
             "battery_discharge_efficiency": 1.0,
@@ -301,6 +305,303 @@ def test_household_zero_naive_cost_renders(fixture_inp: dict, fixture_out: dict)
     d = _payload(fixture_inp, out)
     assert d["summary"]["saving"] == 0.0
     assert d["summary"]["case"] == "none"
+
+
+# ---------------------------------------------------------------------------
+# Days: today, tomorrow and the day after
+# ---------------------------------------------------------------------------
+
+_AMS = ZoneInfo("Europe/Amsterdam")
+
+
+def _steps(start: str, n: int, devices: dict, imp: float = 0.0) -> list[dict]:
+    """``n`` quarter-hour steps from ``start`` (UTC), all alike."""
+    t0 = datetime.fromisoformat(start.replace("Z", "+00:00"))
+    return [
+        _step((t0 + timedelta(minutes=15 * i)).strftime("%Y-%m-%dT%H:%M:%SZ"), devices, imp=imp)
+        for i in range(n)
+    ]
+
+
+def test_days_split_at_local_midnight(fixture_inp: dict, fixture_out: dict) -> None:
+    """The fixture runs 17:30 to 17:15 the next day, Amsterdam time (UTC+2).
+
+    Local midnight is 22:00 UTC, step 26 from 15:30 UTC. Today reaches its
+    midnight; tomorrow stops at 17:30, so it is incomplete.
+    """
+    days = _payload(fixture_inp, fixture_out, tz=_AMS)["days"]
+    assert [(d["i0"], d["i1"], d["date"], d["complete"]) for d in days] == [
+        (0, 26, "2026-04-03", True),
+        (26, 96, "2026-04-04", False),
+    ]
+    # The same plan split at UTC midnight instead: step 34.
+    utc = _payload(fixture_inp, fixture_out, tz=timezone.utc)["days"]
+    assert [(d["i0"], d["i1"]) for d in utc] == [(0, 34), (34, 96)]
+
+
+def test_at_most_three_days() -> None:
+    """A plan reaching into a fourth day still offers three tabs."""
+    load = {"base": {"type": "static_load", "kw": -1.0}}
+    out = {"schedule": _steps("2026-10-01T00:00:00Z", 4 * 96, load, imp=1.0)}
+    days = _payload({}, out, tz=timezone.utc)["days"]
+    assert [(d["i0"], d["i1"]) for d in days] == [(0, 96), (96, 192), (192, 288)]
+    assert all(d["complete"] for d in days)
+
+
+def test_days_add_up_to_the_solvers_money(fixture_inp: dict, fixture_out: dict) -> None:
+    """Per day: the baseline adds up to the solver's naive_cost_eur, and grid
+    cash (effective cost plus stored value) to its optimised_cost_eur."""
+    days = _payload(fixture_inp, fixture_out, tz=_AMS)["days"]
+    naive = sum(d["summary"]["naive"] for d in days)
+    assert naive == pytest.approx(fixture_out["naive_cost_eur"], abs=1e-3)
+    cash = sum(d["summary"]["opt"] + d["summary"]["stored"] for d in days)
+    assert cash == pytest.approx(fixture_out["optimised_cost_eur"], abs=1e-3)
+
+
+def test_day_baseline_follows_the_solver_step_by_step(fixture_inp: dict, fixture_out: dict) -> None:
+    """Each day's baseline is the solver's own per step: base load minus PV,
+    at the import or export price.
+
+    The fixture predates per-array forecasts: it has two arrays and only the
+    summed series, which the solver then used as it stood.
+    """
+    sched = fixture_out["schedule"]
+    assert len(fixture_inp["config"]["pv_arrays"]) == 2 and "pv_forecasts" not in fixture_inp
+    per_step = []
+    for t, s in enumerate(sched):
+        pv = fixture_inp["pv_forecast"][t]
+        net = fixture_inp["base_load_forecast"][t] - pv
+        price = s["import_price_eur_per_kwh"] if net >= 0 else s["export_price_eur_per_kwh"]
+        per_step.append(net * price * 0.25)
+    days = _payload(fixture_inp, fixture_out, tz=_AMS)["days"]
+    for d in days:
+        assert d["summary"]["naive"] == pytest.approx(sum(per_step[d["i0"]:d["i1"]]), abs=1e-3)
+
+
+def test_day_baseline_clips_each_array_like_the_solver() -> None:
+    """With per-array forecasts each array is clipped into [0, its ceiling].
+
+    "staged" peaks at 3 kW but its highest register is 2 kW, so day one's
+    3 kW forecast delivers 2 kW against the 4 kW load. Day two's -1 kW is
+    sensor noise and delivers nothing. Clipping to max_power_kw, or not at
+    all, would move the baseline between the days.
+    """
+    n = 4
+    load = {"base": {"type": "static_load", "kw": -4.0}}
+    out = {"schedule": _steps("2026-10-01T23:00:00Z", 2 * n, load, imp=4.0)}
+    inp = {
+        "base_load_forecast": [4.0] * 2 * n,
+        "pv_forecasts": {"staged": [3.0] * n + [-1.0] * n},
+        "config": {"pv_arrays": {"staged": {"max_power_kw": 3.0, "production_stages": [0.0, 2.0]}}},
+    }
+    day_one = (4.0 - 2.0) * 0.30 * 0.25 * n
+    day_two = 4.0 * 0.30 * 0.25 * n
+    days = _payload(inp, out, tz=timezone.utc)["days"]
+    assert [d["summary"]["naive"] for d in days] == pytest.approx([day_one, day_two])
+
+
+def test_day_baseline_counts_a_hybrid_inverters_own_panels() -> None:
+    """A hybrid's panels feed the baseline like the solver's: clipped to
+    max_pv_kw and taken through the inverter, here with no PV array at all.
+
+    Day one's 6 kW forecast on a 4 kW MPPT delivers 4 x 0.96 = 3.84 kW of the
+    4 kW load; day two has no sun.
+    """
+    n = 4
+    load = {"base": {"type": "static_load", "kw": -4.0}}
+    out = {"schedule": _steps("2026-10-01T23:00:00Z", 2 * n, load, imp=4.0)}
+    inp = {
+        "base_load_forecast": [4.0] * 2 * n,
+        "hybrid_inverter_inputs": {
+            "hyb": {"soc_kwh": 0.0, "pv_forecast_kw": [6.0] * n + [0.0] * n},
+        },
+        "config": {"hybrid_inverters": {"hyb": {
+            "capacity_kwh": 10.0,
+            "max_pv_kw": 4.0,
+            "inverter_efficiency": 0.96,
+            "battery_discharge_efficiency": 0.95,
+        }}},
+    }
+    day_one = (4.0 - 3.84) * 0.30 * 0.25 * n
+    day_two = 4.0 * 0.30 * 0.25 * n
+    days = _payload(inp, out, tz=timezone.utc)["days"]
+    assert [d["summary"]["naive"] for d in days] == pytest.approx([day_one, day_two])
+
+
+@pytest.mark.parametrize(
+    ("group", "device", "path"),
+    [
+        # Power-weighted: (0.9 x 2 + 0.8 x 1) / 3.
+        ("batteries", {"discharge_segments": [
+            {"power_max_kw": 2.0, "efficiency": 0.9},
+            {"power_max_kw": 1.0, "efficiency": 0.8},
+        ]}, 2.6 / 3),
+        ("batteries", {"discharge_segments": [
+            {"power_max_kw": 0.0, "efficiency": 0.9},
+            {"power_max_kw": 0.0, "efficiency": 0.8},
+        ]}, 0.85),
+        ("batteries", {"discharge_efficiency_curve": [
+            {"power_kw": 0.0, "efficiency": 0.95},
+            {"power_kw": 2.0, "efficiency": 0.85},
+        ]}, 0.9),
+        ("batteries", {}, 1.0),
+        ("hybrid_inverters", {
+            "max_pv_kw": 2.0,
+            "battery_discharge_efficiency": 0.9,
+            "inverter_efficiency": 0.96,
+        }, 0.864),
+        ("ev_chargers", {"discharge_segments": [{"power_max_kw": 7.0, "efficiency": 0.9}]}, 0.9),
+    ],
+)
+def test_energy_left_for_tomorrow_is_not_a_cost_today(
+    group: str, device: dict, path: float
+) -> None:
+    """A day that charges storage for the next gets the stored energy's value
+    back: the cell's 1 kWh, at the plan's average 0.30 EUR/kWh, through the
+    device's discharge path, the way the solver's soc_credit_eur values it.
+
+    The battery level the page shows is the house's own storage, so a
+    plugged-in EV is valued but has no level of its own there.
+    """
+    kind, inputs = {
+        "batteries": ("battery", "battery_inputs"),
+        "hybrid_inverters": ("hybrid_inverter", "hybrid_inverter_inputs"),
+        "ev_chargers": ("ev_charger", "ev_inputs"),
+    }[group]
+    inp = {
+        inputs: {"bat": {"soc_kwh": 2.0, "available": True, "pv_forecast_kw": [0.0] * 4}},
+        "config": {group: {"bat": {"capacity_kwh": 10.0, **device}}},
+    }
+    day1 = _steps("2026-10-01T23:30:00Z", 2, {"bat": {"type": kind, "kw": -2.0}}, imp=2.0)
+    day1[0]["devices"]["bat"] = {"type": kind, "kw": -2.0, "soc_kwh": 2.5}
+    day1[1]["devices"]["bat"] = {"type": kind, "kw": -2.0, "soc_kwh": 3.0}
+    day2 = _steps("2026-10-02T00:00:00Z", 2, {"bat": {"type": kind, "kw": 0.0, "soc_kwh": 3.0}})
+    days = _payload(inp, {"schedule": day1 + day2}, tz=timezone.utc)["days"]
+
+    stored = 0.30 * 1.0 * path
+    assert days[0]["summary"]["stored"] == pytest.approx(stored, abs=1e-4)
+    # Cash: 2 kW for 30 min at 0.30 EUR/kWh = 0.30 EUR, less what is stored.
+    assert days[0]["summary"]["opt"] == pytest.approx(0.30 - stored, abs=1e-4)
+    assert days[1]["summary"]["stored"] == pytest.approx(0.0)
+    levels = [None, None] if group == "ev_chargers" else [20, 30]
+    assert [d["soc_start_pct"] for d in days] == levels
+
+
+def test_storage_the_solver_does_not_credit_is_not_valued() -> None:
+    """An unplugged EV, whose planned SOC is not the vehicle's, and a battery
+    without config are left out, as in the solver's soc_credit_eur."""
+    inp = {
+        "ev_inputs": {"car": {"soc_kwh": 20.0, "available": False}},
+        "battery_inputs": {"bat": {"soc_kwh": 2.0}},
+        "config": {"ev_chargers": {"car": {}}},
+    }
+    devices = {
+        "car": {"type": "ev_charger", "kw": 0.0, "soc_kwh": 5.0},
+        "bat": {"type": "battery", "kw": -2.0, "soc_kwh": 3.0},
+    }
+    out = {"schedule": _steps("2026-10-01T23:30:00Z", 2, devices, imp=2.0)}
+    today = _payload(inp, out, tz=timezone.utc)["days"][0]
+    assert today["summary"]["stored"] == 0.0
+
+
+def _two_days(battery_kw: float, soc_end: float, load_kw: float, imp: float) -> dict:
+    """A day at 0.20 EUR/kWh where the battery goes from 2.0 kWh to
+    ``soc_end``, then an idle day at 0.40 EUR/kWh: average price 0.30."""
+    day1 = _steps("2026-10-01T00:00:00Z", 4, {
+        "base": {"type": "static_load", "kw": -load_kw},
+        "bat": {"type": "battery", "kw": battery_kw},
+    }, imp=imp)
+    for i, step in enumerate(day1):
+        step["import_price_eur_per_kwh"] = 0.20
+        step["devices"]["bat"]["soc_kwh"] = 2.0 + (soc_end - 2.0) * (i + 1) / 4
+    day2 = _steps("2026-10-02T00:00:00Z", 4, {"bat": {"type": "battery", "kw": 0.0, "soc_kwh": soc_end}})
+    for step in day2:
+        step["import_price_eur_per_kwh"] = 0.40
+    return {"schedule": day1 + day2}
+
+
+_BATTERY = {
+    "battery_inputs": {"bat": {"soc_kwh": 2.0}},
+    "config": {"batteries": {"bat": {
+        "capacity_kwh": 10.0,
+        "discharge_segments": [{"power_max_kw": 2.0, "efficiency": 0.9}],
+    }}},
+}
+
+
+def test_a_day_spending_earlier_energy_can_come_out_negative() -> None:
+    """The battery covers 0.9 of the 1 kW load from 1 kWh stored before.
+
+    Grid cash 0.1 kW x 1 h x 0.20 = 0.02 EUR against a 0.20 EUR baseline, but
+    the 1 kWh spent is worth 0.9 x 0.30 = 0.27 EUR: -0.09 EUR, and not clipped
+    to zero, so the days still add up. The page calls it a carry day.
+    """
+    inp = {**_BATTERY, "base_load_forecast": [1.0] * 4 + [0.0] * 4}
+    days = _payload(inp, _two_days(0.9, 1.0, 1.0, 0.1), tz=timezone.utc)["days"]
+    today = days[0]["summary"]
+    assert today["cash"] == pytest.approx(0.02)
+    assert today["stored"] == pytest.approx(-0.27)
+    assert today["saving"] == pytest.approx(-0.09)
+    assert today["case"] == "carry"
+
+
+def test_a_day_that_simply_costs_more_is_extra() -> None:
+    """Charging 1 kWh at 0.40 EUR/kWh on a day when the plan averages 0.30:
+    the stored energy is worth less than it cost, with nothing spent from
+    before, so the day costs more and the page says so plainly."""
+    out = _two_days(-1.0, 3.0, 0.0, 1.0)
+    for step in out["schedule"][:4]:
+        step["import_price_eur_per_kwh"] = 0.40
+    for step in out["schedule"][4:]:
+        step["import_price_eur_per_kwh"] = 0.20
+    today = _payload(_BATTERY, out, tz=timezone.utc)["days"][0]["summary"]
+    # Cash 1 kW x 1 h x 0.40 = 0.40; stored 1 kWh x 0.9 x 0.30 = 0.27.
+    assert today["saving"] == pytest.approx(-0.13)
+    assert today["case"] == "extra"
+
+
+def test_a_later_day_says_how_much_of_it_is_predicted_prices() -> None:
+    """Steps below confidence 1.0 are priced from a prediction."""
+    load = {"base": {"type": "static_load", "kw": -1.0}}
+    out = {"schedule": _steps("2026-10-01T00:00:00Z", 192, load, imp=1.0)}
+    inp = {"horizon_confidence": [1.0] * 96 + [1.0] * 48 + [0.55] * 48}
+    days = _payload(inp, out, tz=timezone.utc)["days"]
+    assert [d["predicted"] for d in days] == [0.0, 0.5]
+
+
+def test_today_counts_the_quarter_hours_before_this_plan() -> None:
+    """Earlier plans from today add their first step to today's numbers.
+
+    This plan starts at 10:00. Plans made at 09:00 and 09:15 (09:15 twice,
+    the later one counts) add two quarter hours; one from yesterday, one
+    overlapping this plan and an infeasible one with no schedule are ignored.
+    """
+    load = {"base": {"type": "static_load", "kw": -1.0}}
+    out = {"schedule": _steps("2026-10-01T10:00:00Z", 4, load, imp=1.0)}
+
+    def made(at: str, first: str, imp: float) -> tuple[dict, dict]:
+        return {"triggered_at_utc": at}, {"schedule": _steps(first, 2, load, imp=imp)}
+
+    earlier = [
+        made("2026-10-01T09:15:00Z", "2026-10-01T09:15:00Z", 1.0),
+        made("2026-10-01T09:00:00Z", "2026-10-01T09:00:00Z", 1.0),
+        made("2026-10-01T09:14:00Z", "2026-10-01T09:15:00Z", 0.0),
+        made("2026-09-30T23:30:00Z", "2026-09-30T23:30:00Z", 1.0),
+        made("2026-10-01T10:00:00Z", "2026-10-01T10:00:00Z", 1.0),
+        ({"triggered_at_utc": "2026-10-01T09:30:00Z"}, {"schedule": []}),
+    ]
+    today = _payload({}, out, tz=timezone.utc, earlier=earlier)["days"][0]
+    plan_only = _payload({}, out, tz=timezone.utc)["days"][0]
+
+    assert today["past_from"] == "09:00"
+    assert plan_only["past_from"] is None
+    # 4 plan steps + 2 earlier ones, 1 kW each, a quarter hour each.
+    assert today["summary"]["load"] == pytest.approx(1.5)
+    assert today["summary"]["import"] == pytest.approx(1.5)
+    assert plan_only["summary"]["load"] == pytest.approx(1.0)
+    # "Still to come" is the plan's own part.
+    assert today["summary"]["rest_saving"] == pytest.approx(plan_only["summary"]["saving"])
+    assert plan_only["summary"]["rest_saving"] is None
 
 
 # ---------------------------------------------------------------------------

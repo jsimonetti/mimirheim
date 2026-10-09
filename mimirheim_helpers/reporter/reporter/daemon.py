@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -327,11 +328,52 @@ class ReporterDaemon(MqttDaemon):
             return
         dest = cfg.output_dir / _HOUSEHOLD_FILENAME
         try:
-            dest.write_text(build_household_html(inp, out), encoding="utf-8")
+            html = build_household_html(inp, out, earlier=self._earlier_pairs(out))
+            dest.write_text(html, encoding="utf-8")
         except Exception:
             logger.exception("Failed to render household view.")
             return
         logger.info("Refreshed household view: %s", dest)
+
+    def _earlier_pairs(self, out: dict[str, Any]) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+        """Dump pairs made earlier today, before ``out``'s first step.
+
+        The household view reads the first step of each to cover the hours of
+        today that this plan no longer includes. "Today" is the reporter's
+        local date, the same time zone the view splits days in. The window
+        opens an hour before local midnight, in case the clocks changed since;
+        the view keeps only steps on today's date. Unreadable pairs are skipped.
+        """
+        sched = out.get("schedule") or []
+        if not sched:
+            return []
+        first = datetime.fromisoformat(sched[0]["t"].replace("Z", "+00:00"))
+        first = first.astimezone(timezone.utc)
+        midnight = first.astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
+        start = (midnight - timedelta(hours=1)).astimezone(timezone.utc)
+        lo = start.strftime("%Y-%m-%dT%H-%M-%S")
+        hi = first.strftime("%Y-%m-%dT%H-%M-%S")
+        dump_dir = self._reporter_config.dump_dir
+        # Dump names start with their UTC date, so only the dates the window
+        # touches are listed: the cost follows the day, not the retention.
+        dates = [
+            (start + timedelta(days=d)).date().isoformat()
+            for d in range((first.date() - start.date()).days + 1)
+        ]
+        pairs = []
+        inputs = sorted(path for d in dates for path in dump_dir.glob(f"{d}T*_input.json"))
+        for input_path in inputs:
+            ts_file = input_path.name[: -len("_input.json")]
+            if not lo <= ts_file < hi:
+                continue
+            try:
+                pairs.append((
+                    json.loads(input_path.read_text()),
+                    json.loads((dump_dir / f"{ts_file}_output.json").read_text()),
+                ))
+            except (OSError, json.JSONDecodeError):
+                continue
+        return pairs
 
     def _refresh_household_latest(self) -> None:
         """Write the household page from the newest dump pair on disk.

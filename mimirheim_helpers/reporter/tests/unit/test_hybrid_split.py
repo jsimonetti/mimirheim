@@ -163,12 +163,14 @@ def test_unknown_soc_counts_no_solar(prev, now) -> None:
 
 def _hybrid_dump(eff: float = 0.95, inv: float = 0.97, with_start: bool = True):
     inp = {"config": {"hybrid_inverters": {"hyb": {
+        "capacity_kwh": 10.0,
+        "max_pv_kw": 2.0,
         "inverter_efficiency": inv,
         "battery_charge_efficiency": eff,
         "battery_discharge_efficiency": eff,
     }}}}
     if with_start:
-        inp["hybrid_inverter_inputs"] = {"hyb": {"soc_kwh": 5.0}}
+        inp["hybrid_inverter_inputs"] = {"hyb": {"soc_kwh": 5.0, "pv_forecast_kw": [2.0, 1.0]}}
     load = {"type": "static_load", "kw": -0.97}
     schedule = [
         # The solar-charging example above, then the mixed-discharge one.

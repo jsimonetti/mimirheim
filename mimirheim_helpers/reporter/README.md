@@ -110,7 +110,7 @@ Everything lands in `output_dir`:
 | File | Written | Purpose |
 | --- | --- | --- |
 | `{ts}_report.html` | per solve | The report. Self-contained apart from `plotly.min.js` |
-| `household.html` | each solve (stable name) | The household view: a plain-language "what is our house doing today" page for non-technical readers. Overwritten each solve, no Plotly |
+| `household.html` | each solve (stable name) | The household view: a plain-language "what is our house doing today" page for non-technical readers, with tabs for tomorrow and the day after when the plan reaches them. Overwritten each solve, no Plotly |
 | `inventory.js` | on every change | The report list, consumed by `index.html` |
 | `index.html` | once, if absent | The index page. Customise freely; it is not overwritten |
 | `index.css` | once, if absent | Its stylesheet |
@@ -138,7 +138,11 @@ Assigning to a global rather than serving JSON is deliberate: `inventory.py` sta
 
 The `{ts}_report.html` files are the technical report: Plotly flows, per-device SOC, the full data table — what an operator needs to see *why* the solver decided what it did. `household.html` is the opposite audience. It answers one question in plain words — *"what is our house doing with electricity today, and is it smart?"* — with a savings headline, a "right now" card, a colour-coded plan timeline, a friendly price chart, practical tips (when to run the laundry, when to avoid), an hourly flow picture, and a day-in-numbers summary. It has an NL/EN toggle and loads no Plotly.
 
-Unlike the per-solve reports, it is written to **one stable filename** reflecting the newest solve, so it has a bookmarkable URL. It self-refreshes every few minutes, which makes it suitable for a kitchen tablet or a framed panel. All of its numbers come from the same `metrics` module as the technical report, so the two never disagree. Set `reporting.household_enabled: false` to turn it off (it is on by default).
+Unlike the per-solve reports, it is written to **one stable filename** reflecting the newest solve, so it has a bookmarkable URL. It self-refreshes every few minutes, which makes it suitable for a kitchen tablet or a framed panel, and keeps the chosen day and language across the refresh. Set `reporting.household_enabled: false` to turn it off (it is on by default).
+
+The plan is split at the reporter's local midnight into **Today**, **Tomorrow** and **The day after**, as far as the plan reaches. A later day gets its tab once at least three hours of it are planned; one the plan stops inside says where ("until 17:00"), and a day priced from predicted rather than confirmed prices (a price step below confidence 1.0, such as from the epexpredictor helper) is marked as a forecast. **Today** covers the whole day, not only what is left of it: its earlier quarter hours come from the first step of each plan made earlier today, read from `dump_dir`, so they are what was planned at the time, not metered. The savings card says how much of the day's saving is still to come.
+
+Each day's numbers come from the plan: energy totals from the same `metrics` module as the technical report, and money as the solver's own per-step terms, so the days add up to its `naive_cost_eur` and `optimised_cost_eur`. Energy a day leaves in storage for the next is valued at the plan's average import price through each device's discharge path, the way the solver's `soc_credit_eur` values it, so a day that charges for tomorrow is not shown as a loss. A day's saving is not clipped at zero, so the days add up: a day that mostly spends energy stored the day before can come out negative, and the page then tells it by what that day buys from the grid, saying the stored energy was paid for earlier.
 
 ---
 
