@@ -98,6 +98,34 @@ def test_dc_bus_balance_pv_charges_battery_directly() -> None:
     assert abs(pv - charge) < 1e-4, f"DC bus imbalance: pv={pv:.4f}, charge={charge:.4f}"
 
 
+def test_negative_pv_forecast_clipped_to_zero() -> None:
+    """A negative forecast value (sensor noise at night) means no PV, not infeasible.
+
+    pv_dc[t] has a lower bound of 0, so bounding it by a negative forecast
+    leaves the model without a solution. The forecast is clipped into
+    [0, max_pv_kw], as PvDevice does for AC-coupled arrays.
+
+    Setup:
+    - PV forecast [-0.05, 8.0] on a 6 kW MPPT input.
+    - Objective: maximise PV.
+
+    Expected:
+    - The model solves.
+    - pv_dc[0] = 0 and pv_dc[1] = 6.0 (the hardware peak).
+    """
+    ctx = _make_ctx(horizon=2)
+    cfg = _config(max_pv_kw=6.0)
+    device = HybridInverterDevice(name="inv", config=cfg)
+    device.add_variables(ctx)
+    device.add_constraints(ctx, inputs=_inputs(pv_forecast=[-0.05, 8.0], horizon=2))
+
+    ctx.solver.set_objective_minimize(-(device.pv_dc[0] + device.pv_dc[1]))
+    assert ctx.solver.solve() == "optimal"
+
+    assert abs(ctx.solver.var_value(device.pv_dc[0])) < 1e-6
+    assert abs(ctx.solver.var_value(device.pv_dc[1]) - 6.0) < 1e-4
+
+
 def test_dc_bus_balance_battery_discharges_to_ac() -> None:
     """Battery discharges through the inverter to deliver power to the AC bus.
 

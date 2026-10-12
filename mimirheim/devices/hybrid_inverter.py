@@ -17,6 +17,7 @@ from typing import Any
 from mimirheim.config.schema import HybridInverterConfig
 from mimirheim.core.bundle import HybridInverterInputs
 from mimirheim.core.context import ModelContext
+from mimirheim.devices.pv import clip_forecast
 
 
 class HybridInverterDevice:
@@ -234,11 +235,15 @@ class HybridInverterDevice:
         max_ac_import_kw = cfg.max_charge_kw * one_over_eff_inv
         max_ac_export_kw = (cfg.max_discharge_kw + cfg.max_pv_kw) * eff_inv
 
+        # Clipped into [0, max_pv_kw] as for AC-coupled arrays: pv_dc[t] has a
+        # lower bound of 0, so a negative forecast (sensor noise at night)
+        # would leave the model without a solution.
+        pv_cap = clip_forecast(inputs.pv_forecast_kw, cfg.max_pv_kw)
+
         for t in ctx.T:
-            # PV forecast clip: pv_dc[t] bounded by the per-step forecast,
-            # clipped to the hardware peak.
-            pv_cap = min(inputs.pv_forecast_kw[t], cfg.max_pv_kw)
-            ctx.solver.add_constraint(self.pv_dc[t] <= pv_cap)
+            # PV forecast clip: pv_dc[t] bounded by the clipped forecast; the
+            # solver may curtail below it.
+            ctx.solver.add_constraint(self.pv_dc[t] <= pv_cap[t])
 
             # DC bus power balance. See IMPLEMENTATION_DETAILS.md §8,
             # subsection "Hybrid inverter DC bus power balance".
