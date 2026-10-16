@@ -4,7 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.14"
 description = "Config Service protocol, FormSpec presentation types, and the atomic comment-preserving config-writing utility shared by mimirheim core and its helpers."
 dependencies = [
-    "pydantic>=2.13.5",
+    "pydantic>=2.14.1",
     "ruamel.yaml>=0.18",
     "pyyaml>=6.0.3",
 ]
