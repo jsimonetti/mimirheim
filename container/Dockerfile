@@ -64,7 +64,7 @@ ARG S6_OVERLAY_VERSION=3.2.3.2
 # nothing in this repository changed. Dependabot's `docker` ecosystem updates
 # these digests, so bumps become reviewable commits rather than silent drift.
 # ---------------------------------------------------------------------------
-FROM ghcr.io/astral-sh/uv:0.12.23@sha256:61d393e44e249f2e4b526b6c7ddcecce245946826e608e11c93ad4f5bba55b21 AS uvbin
+FROM ghcr.io/astral-sh/uv:0.13.1@sha256:4a1f3666816dafadd20ceb71eac9a7d56d7ef30279f7d64048519ab901ada336 AS uvbin
 FROM ghcr.io/hassio-addons/base:stable@sha256:52f79347fa3e0ceb58af92aecca8165c34099067dde8c5f767e95d9cdd56099f AS bashio
 
 # ---------------------------------------------------------------------------
@@ -72,7 +72,7 @@ FROM ghcr.io/hassio-addons/base:stable@sha256:52f79347fa3e0ceb58af92aecca8165c34
 # Third-party packages are large; keeping them in a separate stage means a
 # source-only change never invalidates this cached layer.
 # ---------------------------------------------------------------------------
-FROM python:3.14-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56 AS deps-builder
+FROM python:3.14-slim-bookworm@sha256:48b13b003dda20b16f9442b8475aa05fe21bf6579a8c881db92ffb4d8fd20f83 AS deps-builder
 
 WORKDIR /build
 
@@ -117,7 +117,7 @@ RUN --mount=from=uvbin,source=/uv,target=/usr/local/bin/uv \
 # Stage 2: wheel builder — rebuilt on every source change, but produces only
 # a small wheel (~2 MB). No venv needed here; uv build is self-contained.
 # ---------------------------------------------------------------------------
-FROM python:3.14-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56 AS wheel-builder
+FROM python:3.14-slim-bookworm@sha256:48b13b003dda20b16f9442b8475aa05fe21bf6579a8c881db92ffb4d8fd20f83 AS wheel-builder
 
 WORKDIR /build
 
@@ -131,7 +131,7 @@ RUN --mount=from=uvbin,source=/uv,target=/usr/local/bin/uv \
 # ---------------------------------------------------------------------------
 # Stage 3: final image
 # ---------------------------------------------------------------------------
-FROM python:3.14-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56
+FROM python:3.14-slim-bookworm@sha256:48b13b003dda20b16f9442b8475aa05fe21bf6579a8c881db92ffb4d8fd20f83
 
 ARG S6_OVERLAY_VERSION
 ARG TARGETARCH
