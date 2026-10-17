@@ -93,6 +93,7 @@ mimirheim_helpers/pv/open-meteo/
     unit/
       test_config.py
       test_fetcher.py
+      test_fetcher_retry.py
       test_series.py
       test_publisher.py
       test_fetch_cycle.py
@@ -120,6 +121,16 @@ power at each timestamp, `wh_period_15m` is the energy delivered across the
 quarter hour. mimirheim schedules average power per step, so the energy series
 is the correct source. Switching to `watts` would overstate production on the
 steep parts of the morning and evening curve.
+
+`fetch_array` passes the library a `_RetryingSession` instead of letting it
+create its own `ClientSession`. The library sends one request per plane and
+maps 502 and 503 to a generic "API is unreachable" error, discarding the status
+and body, so a single overloaded response used to drop the whole array. Retrying
+inside the session repeats only the failed plane, and it is the only place the
+real status and Open-Meteo `reason` are still visible for logging. Do not move
+the retry up to `estimate()`: that re-sends every plane on each attempt, adding
+load to an API that is already overloaded. 429 is deliberately not retried; it
+goes to the `RatelimitError` back-off.
 
 `ac_kwp` is passed as a scalar for a shared inverter and as a list for
 per-plane inverters, because that is how the library distinguishes the two
