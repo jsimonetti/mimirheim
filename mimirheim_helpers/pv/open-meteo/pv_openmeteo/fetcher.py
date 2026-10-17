@@ -15,6 +15,12 @@ Two details of the library shape this module:
   mimirheim schedules average power per step, so this module derives kW from
   the energy series. Using ``watts`` would overstate production on the steep
   parts of the morning and evening curve.
+- The library sends one HTTP request per plane and turns any 502 or 503 into a
+  generic "API is unreachable" error, so one overloaded response would drop the
+  whole array. The library accepts an injected session, and this module passes
+  one that retries transient failures per request and spaces requests apart.
+  Only the failed plane is repeated, and the real status and Open-Meteo
+  ``reason`` are logged before the library discards them.
 
 What this module does not do:
 - It does not trim or attach confidence values. That is series.py's job.
@@ -24,10 +30,15 @@ What this module does not do:
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import math
+import random
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
+from aiohttp import ClientConnectionError, ClientResponse, ClientSession
 from aiohttp import ClientError as AiohttpClientError
 from open_meteo_solar_forecast import OpenMeteoSolarForecast
 from open_meteo_solar_forecast.exceptions import (
@@ -45,6 +56,27 @@ logger = logging.getLogger("pv_openmeteo.fetcher")
 # well beyond what a half-hourly fetch of a handful of arrays consumes, so this
 # path exists for a misconfigured trigger rather than for normal operation.
 RATELIMIT_BACKOFF = timedelta(minutes=15)
+
+# Statuses Open-Meteo returns when it is overloaded or a gateway hiccups. Its
+# free API answers a share of requests with 503 "The service is overloaded",
+# and a retry a few seconds later usually succeeds. 429 is deliberately absent:
+# a rate limit is handled by RATELIMIT_BACKOFF, and retrying it would make it worse.
+TRANSIENT_STATUSES = frozenset({502, 503, 504})
+
+# Total attempts per request, the first included. With RETRY_BASE_DELAY_S the
+# waits are roughly 2, 4 and 8 seconds, so a plane gives up after about 15 s.
+REQUEST_ATTEMPTS = 4
+
+# The first retry waits this long, each further retry twice as long, plus up to
+# one base delay of random jitter so concurrent clients do not retry in step.
+RETRY_BASE_DELAY_S = 2.0
+
+# Gap between consecutive requests in one fetch. Back-to-back plane requests
+# were measured to hit 503 noticeably more often than requests a second apart.
+REQUEST_SPACING_S = 1.0
+
+# Indirection so tests can skip the waits without patching asyncio globally.
+_sleep = asyncio.sleep
 
 # The horizon profile the library falls back to when a plane has none. It is
 # only read for planes with use_horizon set, but the argument is a parallel
@@ -87,6 +119,10 @@ async def fetch_array(
     issues one Open-Meteo request per plane, converts irradiance to power with
     a cell-temperature correction, applies the per-plane inverter clamp, sums
     the planes, and applies the shared inverter clamp if there is one.
+
+    Each plane request is retried on a transient failure (see
+    ``_RetryingSession``), so the array is only lost when one plane fails
+    ``REQUEST_ATTEMPTS`` times in a row.
 
     Args:
         array: The array to fetch, including its planes and inverter limits.
@@ -134,9 +170,13 @@ async def fetch_array(
     }
 
     try:
-        async with OpenMeteoSolarForecast(**kwargs) as forecast:
-            estimate = await forecast.estimate()
-            energy_wh = estimate.wh_period_15m
+        # The library only closes sessions it created itself, so this one is
+        # owned and closed here.
+        async with ClientSession() as http:
+            session = _RetryingSession(http)
+            async with OpenMeteoSolarForecast(**kwargs, session=session) as forecast:
+                estimate = await forecast.estimate()
+                energy_wh = estimate.wh_period_15m
     except OpenMeteoSolarForecastRatelimitError as exc:
         raise RatelimitError(
             f"Rate limit exceeded: {exc}",
@@ -148,6 +188,10 @@ async def fetch_array(
         # aiohttp errors such as a DNS failure can escape the library without
         # being wrapped in its own exception hierarchy.
         raise FetchError(f"HTTP client error: {exc}") from exc
+    except TimeoutError as exc:
+        # A total-request timeout raises the builtin TimeoutError, which is not
+        # an aiohttp.ClientError. It surfaces here once its retries run out.
+        raise FetchError(f"Request timed out: {exc!r}") from exc
 
     if not energy_wh:
         raise FetchError("Open-Meteo returned no forecast steps")
@@ -159,6 +203,110 @@ async def fetch_array(
         _as_utc(ts): wh / 250.0
         for ts, wh in sorted(energy_wh.items(), key=lambda item: _as_utc(item[0]))
     }
+
+
+class _RetryingSession:
+    """A stand-in for ``aiohttp.ClientSession`` that retries transient failures.
+
+    The library calls only ``request()`` on its session, so this wrapper
+    implements that and delegates to a real session. A response with a status in
+    ``TRANSIENT_STATUSES``, a connection error and a timeout are retried with
+    exponential backoff. Every other response is returned untouched so the
+    library's own status mapping still applies, including 429.
+
+    When the attempts run out, the last response is returned (or the last
+    exception re-raised), and the library reports it exactly as it would have
+    without the retry.
+
+    Args:
+        session: The real session that sends the requests. The caller owns it
+            and closes it.
+    """
+
+    def __init__(self, session: ClientSession) -> None:
+        self._session = session
+        self._sent_any = False
+
+    async def request(self, method: str, url: str, **kwargs: Any) -> ClientResponse:
+        """Send one request, retrying it on a transient failure.
+
+        Args:
+            method: HTTP method.
+            url: Absolute request URL.
+            **kwargs: Passed through to ``aiohttp.ClientSession.request``.
+
+        Returns:
+            The first non-transient response, or the last transient one when
+            every attempt failed.
+
+        Raises:
+            aiohttp.ClientConnectionError: If the last attempt failed to connect.
+            TimeoutError: If the last attempt timed out.
+        """
+        if self._sent_any:
+            await _sleep(REQUEST_SPACING_S)
+        self._sent_any = True
+
+        for attempt in range(1, REQUEST_ATTEMPTS + 1):
+            last_attempt = attempt == REQUEST_ATTEMPTS
+            try:
+                response = await self._session.request(method, url, **kwargs)
+            except (ClientConnectionError, TimeoutError) as exc:
+                if last_attempt:
+                    raise
+                problem = f"{type(exc).__name__}: {exc}"
+            else:
+                if response.status not in TRANSIENT_STATUSES:
+                    return response
+                problem = f"HTTP {response.status} ({await _reason(response)})"
+                if last_attempt:
+                    logger.warning(
+                        "Open-Meteo returned %s; giving up after %d attempts",
+                        problem,
+                        REQUEST_ATTEMPTS,
+                    )
+                    return response
+                response.release()
+
+            delay = RETRY_BASE_DELAY_S * 2 ** (attempt - 1)
+            delay += random.uniform(0.0, RETRY_BASE_DELAY_S)
+            logger.warning(
+                "Open-Meteo returned %s; retrying in %.1f s (attempt %d of %d)",
+                problem,
+                delay,
+                attempt + 1,
+                REQUEST_ATTEMPTS,
+            )
+            await _sleep(delay)
+
+        # The loop always returns or raises on its last iteration.
+        raise AssertionError("unreachable")
+
+
+async def _reason(response: ClientResponse) -> str:
+    """Return the ``reason`` Open-Meteo puts in an error body, or the raw body.
+
+    Args:
+        response: An error response whose body has not been read yet.
+
+    Returns:
+        The ``reason`` field of the JSON body, the body text truncated to 200
+        characters when it is not that shape, or a placeholder when the body
+        cannot be read.
+    """
+    try:
+        text = await response.text()
+    except (AiohttpClientError, TimeoutError, UnicodeDecodeError):
+        # A failure here must not escape: it would abort the request instead
+        # of letting the transient status be retried.
+        return "body unreadable"
+    try:
+        body = json.loads(text)
+    except ValueError:
+        return text[:200]
+    if isinstance(body, dict) and isinstance(body.get("reason"), str):
+        return body["reason"]
+    return text[:200]
 
 
 def _ac_kwp(array: ArrayConfig) -> float | list[float | None] | None:

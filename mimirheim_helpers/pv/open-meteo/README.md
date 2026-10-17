@@ -7,7 +7,7 @@ It is an alternative to the [forecast.solar](../forecast.solar/README.md) helper
 | | forecast.solar | Open-Meteo |
 |---|---|---|
 | Resolution | hourly | 15 minutes, matching the mimirheim solver grid |
-| Rate limit | 60 requests/hour on the free tier | several thousand requests/day, free |
+| Rate limit | 12 requests/hour per IP on the free tier | 10,000 requests/day (5,000/hour, 600/minute) on the free tier, non-commercial use only |
 | Modelling | opaque, server-side | local, and every parameter is configurable |
 | Multi-plane arrays | one call and one topic per plane | planes are summed into one array before publishing |
 | Weather model choice | none | any Open-Meteo model, or automatic selection |
@@ -235,7 +235,8 @@ WantedBy=multi-user.target
 
 ## 7. Fault tolerance
 
-- **HTTP failure**: the array is skipped and the error logged with a full traceback. The last retained payload stays on the topic.
+- **Transient HTTP failure**: Open-Meteo's free API answers a share of requests with `503 The service is overloaded`. Each plane request is retried on a 502, 503 or 504, a connection error or a timeout, up to 4 attempts with exponential backoff (about 2, 4 and 8 seconds plus jitter). Only the failed plane is repeated. Each retry logs a warning with the HTTP status and the `reason` from the response body. Consecutive plane requests are spaced 1 second apart, because back-to-back requests were observed to hit the overload response more often.
+- **HTTP failure**: when a plane still fails after its retries, or fails with a non-transient error, the array is skipped and the error logged with a full traceback. The last retained payload stays on the topic.
 - **Partial failure**: arrays are independent. A failure on one still lets the others publish, and the log records which succeeded.
 - **Empty response**: an array whose forecast contains no steps within the horizon is skipped rather than published. An empty payload would overwrite a usable retained forecast with something mimirheim rejects.
 - **Rate limiting**: on an HTTP 429 the cycle aborts immediately and further triggers are ignored for 15 minutes. Open-Meteo does not report when the limit resets, so the back-off is fixed.
