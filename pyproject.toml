@@ -78,23 +78,22 @@ reporter = [
 config-editor = [
     "jinja2>=3.0",
 ]
-# Meta-extra: installs every helper's runtime dependencies in one shot.
-# Used by the container build and by full developer environments.
+# Meta-extra: every helper's runtime dependencies, composed from the per-helper
+# extras above so the two lists cannot drift. The database driver extras
+# (*-postgres, *-mysql) are left out because they depend on the user's database.
+# Used by pip installs of the full set; the container build uses --all-extras.
 helpers = [
-    "apscheduler>=3.11.3,<4.0",
-    "pynordpool>=0.4.0",
-    "requests>=2.34.2",
-    "forecast-solar>=5.0.1",
-    "httpx>=0.27",
-    "knmi-py>=0.2",
-    "sqlalchemy>=2.1.4",
-    "xgboost-cpu>=3.4.1; sys_platform != 'darwin'",
-    "xgboost>=3.4.1; sys_platform == 'darwin'",
-    "scikit-learn>=1.9.1",
-    "joblib>=1.6.0",
-    "pandas>=3.0.6",
-    "plotly>=7.1.0",
-    "open-meteo-solar-forecast>=0.1.32",
+    "mimirheim[scheduler]",
+    "mimirheim[nordpool]",
+    "mimirheim[zonneplan]",
+    "mimirheim[epexpredictor]",
+    "mimirheim[pv-fetcher]",
+    "mimirheim[pv-openmeteo]",
+    "mimirheim[pv-ml-learner]",
+    "mimirheim[baseload-ha]",
+    "mimirheim[baseload-ha-db]",
+    "mimirheim[reporter]",
+    "mimirheim[config-editor]",
 ]
 
 # All module packages live in the single mimirheim wheel.
