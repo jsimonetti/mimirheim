@@ -119,7 +119,6 @@ RUN --mount=from=uvbin,source=/uv,target=/usr/local/bin/uv \
 # duplicates with relative symlinks to the longest-named copy. All names stay
 # resolvable, which matters: python-mip opens libCbc.so by path and the
 # libraries find each other through their .so.0 SONAMEs via RPATH=$ORIGIN.
-# Headers are build-time only and nothing loads them at runtime.
 RUN <<'EOF'
 /app/.venv/bin/python - <<'PY'
 import glob, hashlib, os
@@ -139,21 +138,19 @@ for lib in glob.glob(os.path.join(site, "cbc_dist*", "lib")):
             if name != keep:
                 os.remove(os.path.join(lib, name))
                 os.symlink(keep, os.path.join(lib, name))
-for inc in glob.glob(os.path.join(site, "cbc_dist*", "include")):
-    import shutil
-    shutil.rmtree(inc)
 PY
 EOF
 
 # Remove files that are never used at runtime from third-party packages: the
 # test suites that pandas, scipy, numpy and scikit-learn ship inside their
-# wheels (~45 MB), and C/Cython headers and sources (~4 MB). Directories named
-# `testing` are kept on purpose: scipy and scikit-learn import numpy.testing
-# and pandas._testing. cbcbox is excluded because it is handled above.
+# wheels (~45 MB), and C/C++/Cython headers and sources (~4 MB), which includes
+# the cbcbox headers (python-mip loads only the shared libraries). Directories
+# named `testing` are kept on purpose: scipy and scikit-learn import
+# numpy.testing and pandas._testing.
 RUN find /app/.venv/lib/python*/site-packages \
-        -not -path '*/cbcbox/*' \
         \( \( -type d \( -name tests -o -name test \) \) \
-           -o -name '*.h' -o -name '*.hpp' -o -name '*.pyx' -o -name '*.pxd' \) \
+           -o -name '*.h' -o -name '*.hpp' -o -name '*.c' -o -name '*.cpp' \
+           -o -name '*.pyx' -o -name '*.pxd' \) \
         -prune -exec rm -rf {} +
 
 # ---------------------------------------------------------------------------
