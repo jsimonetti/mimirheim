@@ -113,6 +113,46 @@ RUN --mount=from=uvbin,source=/uv,target=/usr/local/bin/uv \
     UV_PROJECT_ENVIRONMENT=/app/.venv uv sync --all-extras --no-dev --frozen --no-install-project --no-editable && \
     rm -rf /app/.venv/lib/python*/site-packages/cbcbox/cbc_dist_debug*
 
+# The cbcbox wheel stores libX.so, libX.so.0 and libX.so.0.0.0 as three
+# separate regular files with identical content (the symlinks were flattened
+# when the wheel was built), ~130 MB of duplication on amd64. Replace the
+# duplicates with relative symlinks to the longest-named copy. All names stay
+# resolvable, which matters: python-mip opens libCbc.so by path and the
+# libraries find each other through their .so.0 SONAMEs via RPATH=$ORIGIN.
+RUN <<'EOF'
+/app/.venv/bin/python - <<'PY'
+import glob, hashlib, os
+site = glob.glob("/app/.venv/lib/python*/site-packages/cbcbox")[0]
+for lib in glob.glob(os.path.join(site, "cbc_dist*", "lib")):
+    groups = {}
+    for name in os.listdir(lib):
+        path = os.path.join(lib, name)
+        if os.path.islink(path) or not os.path.isfile(path):
+            continue
+        with open(path, "rb") as f:
+            digest = hashlib.sha256(f.read()).hexdigest()
+        groups.setdefault(digest, []).append(name)
+    for names in groups.values():
+        keep = max(names, key=len)
+        for name in names:
+            if name != keep:
+                os.remove(os.path.join(lib, name))
+                os.symlink(keep, os.path.join(lib, name))
+PY
+EOF
+
+# Remove files that are never used at runtime from third-party packages: the
+# test suites that pandas, scipy, numpy and scikit-learn ship inside their
+# wheels (~45 MB), and C/C++/Cython headers and sources (~4 MB), which includes
+# the cbcbox headers (python-mip loads only the shared libraries). Directories
+# named `testing` are kept on purpose: scipy and scikit-learn import
+# numpy.testing and pandas._testing.
+RUN find /app/.venv/lib/python*/site-packages \
+        \( \( -type d \( -name tests -o -name test \) \) \
+           -o -name '*.h' -o -name '*.hpp' -o -name '*.c' -o -name '*.cpp' \
+           -o -name '*.pyx' -o -name '*.pxd' \) \
+        -prune -exec rm -rf {} +
+
 # ---------------------------------------------------------------------------
 # Stage 2: wheel builder — rebuilt on every source change, but produces only
 # a small wheel (~2 MB). No venv needed here; uv build is self-contained.
