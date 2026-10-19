@@ -145,6 +145,17 @@ for inc in glob.glob(os.path.join(site, "cbc_dist*", "include")):
 PY
 EOF
 
+# Remove files that are never used at runtime from third-party packages: the
+# test suites that pandas, scipy, numpy and scikit-learn ship inside their
+# wheels (~45 MB), and C/Cython headers and sources (~4 MB). Directories named
+# `testing` are kept on purpose: scipy and scikit-learn import numpy.testing
+# and pandas._testing. cbcbox is excluded because it is handled above.
+RUN find /app/.venv/lib/python*/site-packages \
+        -not -path '*/cbcbox/*' \
+        \( \( -type d \( -name tests -o -name test \) \) \
+           -o -name '*.h' -o -name '*.hpp' -o -name '*.pyx' -o -name '*.pxd' \) \
+        -prune -exec rm -rf {} +
+
 # ---------------------------------------------------------------------------
 # Stage 2: wheel builder — rebuilt on every source change, but produces only
 # a small wheel (~2 MB). No venv needed here; uv build is self-contained.
