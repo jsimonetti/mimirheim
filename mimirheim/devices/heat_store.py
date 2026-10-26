@@ -436,6 +436,8 @@ class HeatStoreDevice:
         boosting_before = boost_run is not None and boost_run.boosting
         self._carry_over_forced = False
         self._add_min_run_constraints(ctx, boosting_before)
+        # A persisted stage above len(boost_stages), left by a config change,
+        # still carries over: the run length protects the compressor at any stage.
         if boosting_before:
             self._add_carry_over_constraints(ctx, boost_run)
 

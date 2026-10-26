@@ -796,6 +796,21 @@ def test_a_persisted_stage_zero_forces_nothing() -> None:
     assert _stages(result) == [0] * _HORIZON
 
 
+def test_a_persisted_stage_beyond_the_configured_stages_still_carries_over() -> None:
+    """A config change removed stages 2 and 3 while the store boosted at stage 3.
+
+    The run length protects the compressor whatever the stage, so the rest of
+    the run is still forced, at the one configured stage.
+    """
+    result = build_and_solve(
+        _bundle(prices=[0.25] * _HORIZON, boost_run=_boosting_since(1, stage=3)),
+        _config(min_run_steps=4),
+    )
+
+    assert _stages(result)[:3] == [1, 1, 1]
+    assert _runs(_stages(result)) == [(0, 3)]
+
+
 def test_carry_over_is_truncated_at_the_first_deny_step() -> None:
     """"00:30-01:00" denies steps 2 and 3. Six steps remain of the run, but
     the deny window wins, and the run is not resumed after it."""
