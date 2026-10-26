@@ -694,16 +694,22 @@ def test_a_stage_switch_within_a_run_is_not_a_new_start() -> None:
     minimum run of four extends that run into the expensive steps, and the
     plan changes stage within it, with each stage on for fewer than four
     steps. Were a stage switch a new start, every stage would need four steps.
+
+    The base load is zero so that the objective stays small. Holding at the
+    cap with stage 3 instead of stage 1 costs about 0.006 EUR, which must
+    exceed the solver's 0.5% relative MIP gap or either plan may be returned.
     """
     min_run = 4
     prices = [0.05] * 2 + [0.40] * (_HORIZON - 2)
     unconstrained = _stages(
-        build_and_solve(_bundle(prices=prices), _config(boost_stages=_EXAMPLE_STAGES))
+        build_and_solve(
+            _bundle(prices=prices, load_kw=0.0), _config(boost_stages=_EXAMPLE_STAGES)
+        )
     )
     assert all(length < min_run for _, length in _runs(unconstrained))
 
     result = build_and_solve(
-        _bundle(prices=prices),
+        _bundle(prices=prices, load_kw=0.0),
         _config(boost_stages=_EXAMPLE_STAGES, min_run_steps=min_run),
     )
 
