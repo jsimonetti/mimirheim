@@ -38,7 +38,7 @@ All runtime MQTT inputs as Pydantic models collected into `SolveBundle`; forecas
 
 ## 8. MIP model design: device contract, split variables, piecewise efficiency, and objective builder
 
-`ModelContext`, the device method contract, the `Grid` device, split charge/discharge variables, piecewise efficiency, wear cost, vendor capability flags, `ObjectiveBuilder`, the power balance constraint, and the thermal device models (boiler, space heating, combi heat pump, building thermal model). See [`IMPLEMENTATION_DETAILS/08_mip_model_design.md`](IMPLEMENTATION_DETAILS/08_mip_model_design.md).
+`ModelContext`, the device method contract, the `Grid` device, split charge/discharge variables, piecewise efficiency, wear cost, vendor capability flags, `ObjectiveBuilder`, the power balance constraint, and the thermal device models (boiler, space heating, combi heat pump, heat store, building thermal model). See [`IMPLEMENTATION_DETAILS/08_mip_model_design.md`](IMPLEMENTATION_DETAILS/08_mip_model_design.md).
 
 ## 9. Arbitration engine and closed-loop enforcer selection
 

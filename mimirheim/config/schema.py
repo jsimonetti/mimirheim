@@ -2551,6 +2551,192 @@ class ThermalBoilerConfig(BaseModel):
             )
         return self
 
+class HeatStoreBoostStageConfig(BaseModel):
+    """One boost stage of a heat store.
+
+    A stage is one way the device can be told to heat above its normal
+    setpoint, for example the heat pump heating further (SG Ready state 3), the
+    immersion element, or both together. Stages are numbered by their position
+    in ``HeatStoreConfig.boost_stages``, starting at 1; stage 0 means no boost.
+
+    Attributes:
+        power_kw: Electrical power while boosting at full power in this stage,
+            in kW.
+        cop: Efficiency in this stage: kWh of heat per kWh of electricity.
+            Must not exceed the store's ``normal_cop``.
+        max_temp_c: Temperature at which the device actually stops heating in
+            this stage (the stage cap), in degrees C. Must be above the store's
+            ``normal_setpoint_c``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    power_kw: float = Field(
+        gt=0, description="Electrical power while boosting at full power in this stage, in kW."
+    )
+    cop: float = Field(
+        gt=0, description="Efficiency in this stage. Must not exceed normal_cop."
+    )
+    max_temp_c: float = Field(
+        description=(
+            "Temperature in °C at which the device actually stops heating in this "
+            "stage. Must be above normal_setpoint_c."
+        ),
+    )
+
+
+class HeatStoreInputsConfig(BaseModel):
+    """MQTT input topic configuration for a heat store.
+
+    Attributes:
+        topic_current_temp: MQTT topic publishing the current store temperature
+            in degrees C as a plain number, retained. No solve runs until a first
+            value has arrived.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    topic_current_temp: str | None = Field(
+        default=None,
+        description=(
+            "MQTT topic publishing the current store temperature in °C, retained. "
+            "Defaults to '{mqtt.topic_prefix}/input/heat_store/{name}/temp_c' when not set."
+        ),
+    )
+
+
+class HeatStoreOutputsConfig(BaseModel):
+    """MQTT output topic configuration for a heat store.
+
+    Attributes:
+        boost_run_state: Topic carrying the persisted boost run state, JSON,
+            retained. mimirheim reads it back on startup.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    boost_run_state: str | None = Field(
+        default=None,
+        description=(
+            "MQTT topic for the persisted boost run state, published retained and "
+            "read back on startup. "
+            "Defaults to '{mqtt.topic_prefix}/status/heat_store/{name}/boost_run_state' "
+            "when not set."
+        ),
+    )
+
+
+class HeatStoreConfig(BaseModel):
+    """Configuration for a heat store: a thermal store mimirheim may boost.
+
+    A heat store is a DHW heat pump boiler, a pool, a hot tub or any other
+    store of heat whose own program keeps it at a normal setpoint. mimirheim
+    does not control that program. It plans only optional boosts above the
+    normal setpoint, at one of the configured boost stages, when the price
+    spread pays for the efficiency loss of storing the heat. Without boosts the
+    device behaves exactly as it does without mimirheim. See
+    IMPLEMENTATION_DETAILS.md §8, subsection "Heat store model".
+
+    Attributes:
+        heat_capacity_kwh_per_k: Energy needed to raise the store by 1 K, in
+            kWh/K. For water: litres x 0.001163.
+        normal_cop: Efficiency of the normal program (1.0 for resistive). Used
+            to value the electricity that stored heat displaces.
+        normal_setpoint_c: Temperature the normal program heats to, in degrees
+            C. Measurements below it count as no stored heat.
+        ambient_c: Average temperature around the store, in degrees C. Only
+            used to derive how fast extra heat decays.
+        drift_k_per_hour: Observed cooldown in K/hour when idle at the normal
+            setpoint, without hot water use.
+        min_run_steps: Minimum consecutive boost steps once a boost starts.
+        deny_boost_hours: UTC windows (``"HH:MM-HH:MM"``) in which no boost is
+            planned.
+        boost_stages: One to three boost stages, numbered from 1 by position.
+        inputs: MQTT input topics.
+        outputs: MQTT output topics.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    heat_capacity_kwh_per_k: float = Field(
+        gt=0,
+        description="Energy needed to raise the store by 1 K, in kWh/K. Water: litres x 0.001163.",
+    )
+    normal_cop: float = Field(
+        gt=0,
+        description="Efficiency of the normal program (1.0 for resistive). Values displaced heating.",
+    )
+    normal_setpoint_c: float = Field(
+        description=(
+            "Temperature in °C the normal program heats to. "
+            "Measurements below it count as no stored heat."
+        ),
+    )
+    ambient_c: float = Field(
+        default=20.0,
+        description=(
+            "Average temperature in °C around the store. Must be below "
+            "normal_setpoint_c. Only used to derive how fast extra heat decays."
+        ),
+    )
+    drift_k_per_hour: float = Field(
+        gt=0,
+        description="Observed cooldown in K/hour when idle at the normal setpoint, without hot water use.",
+    )
+    min_run_steps: int = Field(
+        ge=1,
+        default=1,
+        description="Minimum consecutive boost steps (any stage) once a boost starts.",
+    )
+    deny_boost_hours: list[str] = Field(
+        default_factory=list,
+        description=(
+            "UTC windows 'HH:MM-HH:MM' in which no boost is planned. "
+            "Windows may cross midnight."
+        ),
+    )
+    boost_stages: list[HeatStoreBoostStageConfig] = Field(
+        min_length=1,
+        max_length=3,
+        description="One to three boost stages, numbered by list position from 1.",
+    )
+    inputs: HeatStoreInputsConfig = Field(
+        default_factory=HeatStoreInputsConfig,
+        description="MQTT input topic configuration. Topics are derived when not set.",
+    )
+    outputs: HeatStoreOutputsConfig = Field(
+        default_factory=HeatStoreOutputsConfig,
+        description="MQTT output topic configuration. Topics are derived when not set.",
+    )
+
+    @model_validator(mode="after")
+    def _validate_temperatures_and_stages(self) -> "HeatStoreConfig":
+        """Reject configurations that break the energy model's assumptions.
+
+        ``ambient_c`` below the normal setpoint keeps the decay rate positive
+        and finite. A stage COP above ``normal_cop`` would let a boost on flat
+        prices pay, because the displaced heating would cost more than the
+        boost. A stage cap at or below the normal setpoint leaves the stage no
+        room to store heat.
+        """
+        if self.ambient_c >= self.normal_setpoint_c:
+            raise ValueError(
+                f"ambient_c ({self.ambient_c}) must be strictly less than "
+                f"normal_setpoint_c ({self.normal_setpoint_c})."
+            )
+        for number, stage in enumerate(self.boost_stages, start=1):
+            if stage.cop > self.normal_cop:
+                raise ValueError(
+                    f"boost_stages[{number - 1}].cop ({stage.cop}) must not exceed "
+                    f"normal_cop ({self.normal_cop})."
+                )
+            if stage.max_temp_c <= self.normal_setpoint_c:
+                raise ValueError(
+                    f"boost_stages[{number - 1}].max_temp_c ({stage.max_temp_c}) must be "
+                    f"above normal_setpoint_c ({self.normal_setpoint_c})."
+                )
+        return self
+
 class HeatingStage(BaseModel):
     """A single operating point on a heat pump's electrical-to-thermal power curve.
 
@@ -2839,6 +3025,8 @@ class MimirheimConfig(BaseModel):
         ev_chargers: Named EV charger devices.
         deferrable_loads: Named deferrable load devices.
         static_loads: Named static load devices.
+        heat_stores: Named heat stores that mimirheim may boost above their
+            normal setpoint.
         grid: Grid connection parameters. Exactly one per mimirheim instance.
         objectives: Objective function parameters.
         constraints: Hard constraints on grid power.
@@ -2863,6 +3051,7 @@ class MimirheimConfig(BaseModel):
     static_loads: dict[str, StaticLoadConfig] = Field(default_factory=dict)
     hybrid_inverters: dict[str, HybridInverterConfig] = Field(default_factory=dict)
     thermal_boilers: dict[str, ThermalBoilerConfig] = Field(default_factory=dict)
+    heat_stores: dict[str, HeatStoreConfig] = Field(default_factory=dict)
     space_heating_hps: dict[str, SpaceHeatingConfig] = Field(default_factory=dict)
     combi_heat_pumps: dict[str, CombiHeatPumpConfig] = Field(default_factory=dict)
     grid: GridConfig
@@ -2894,6 +3083,7 @@ class MimirheimConfig(BaseModel):
             *self.static_loads,
             *self.hybrid_inverters,
             *self.thermal_boilers,
+            *self.heat_stores,
             *self.space_heating_hps,
             *self.combi_heat_pumps,
         ]
@@ -3014,6 +3204,12 @@ class MimirheimConfig(BaseModel):
         for name, cfg in self.thermal_boilers.items():
             if cfg.inputs is not None and cfg.inputs.topic_current_temp is None:
                 cfg.inputs.topic_current_temp = _topics.thermal_boiler_temp_topic(p, name)
+
+        for name, cfg in self.heat_stores.items():
+            if cfg.inputs.topic_current_temp is None:
+                cfg.inputs.topic_current_temp = _topics.heat_store_temp_topic(p, name)
+            if cfg.outputs.boost_run_state is None:
+                cfg.outputs.boost_run_state = _topics.heat_store_boost_run_state_topic(p, name)
 
         for name, cfg in self.space_heating_hps.items():
             if cfg.inputs is not None:

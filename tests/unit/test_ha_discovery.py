@@ -122,6 +122,15 @@ def _make_config_new_devices() -> MimirheimConfig:
                 "inputs": {"topic_current_temp": "mimir/input/dhw_boiler/temp"},
             },
         },
+        "heat_stores": {
+            "pool": {
+                "heat_capacity_kwh_per_k": 35.0,
+                "normal_cop": 4.0,
+                "normal_setpoint_c": 28.0,
+                "drift_k_per_hour": 0.1,
+                "boost_stages": [{"power_kw": 2.0, "cop": 4.0, "max_temp_c": 30.0}],
+            },
+        },
         "space_heating_hps": {
             "sh_hp": {
                 "elec_power_kw": 5.0,
@@ -568,7 +577,7 @@ def test_new_device_types_have_setpoint_sensors() -> None:
     """Hybrid inverters, thermal boilers, space heating HPs, and combi HPs each
     receive a setpoint component in the components map."""
     components = _publish_and_get_components(_make_config_new_devices())
-    for device_name in ("hybrid1", "dhw_boiler", "sh_hp", "combi_hp"):
+    for device_name in ("hybrid1", "dhw_boiler", "pool", "sh_hp", "combi_hp"):
         matching = {k: v for k, v in components.items() if f"_{device_name}_setpoint" in k}
         assert len(matching) == 1, (
             f"Expected 1 setpoint component for {device_name!r}, got {len(matching)}"

@@ -166,6 +166,7 @@ Confidence is applied to revenue/cost terms only, never to constraints. Physical
 | Grid | `grid` | `import[t]`, `export[t]` |
 | Hybrid inverter | `hybrid_inverters` | `charge_seg[t,i]`, `discharge_seg[t,i]`, `soc[t]`, `pv[t]` (clipped forecast) |
 | Thermal boiler | `thermal_boilers` | `T_tank[t]`, `on[t]` (binary) |
+| Heat store | `heat_stores` | `on[s,t]` (binary per boost stage), `p[s,t]`, `at_cap[t]` (binary), stored heat `S[t]` |
 | Space heating HP | `space_heating_hps` | `hp_on[t]` (on/off) or SOS2 mode variable; optional `T_indoor[t]` (BTM) |
 | Combi heat pump | `combi_heat_pumps` | `T_tank[t]`, `dhw_mode[t]`, `sh_mode[t]`, `hp_on[t]`; optional `T_indoor[t]` (BTM) |
 
@@ -186,6 +187,32 @@ A hybrid inverter combines battery storage with a directly coupled PV input. The
 ### Thermal boiler
 
 An electric resistance boiler with a hot-water tank. Tank temperature is tracked as a decision variable across the horizon. The solver may run the boiler element (`on[t] = 1`) at any step to raise the tank temperature, subject to a minimum tank temperature (to satisfy DHW demand) and a maximum temperature (safety limit). The binary `on[t]` variable incurs a minimum run-time constraint to avoid short cycling.
+
+### Heat store
+
+A thermal store whose own program keeps it at a normal setpoint: a DHW heat pump boiler, a pool, a hot tub. mimirheim does not control or model that program; its consumption stays in the static load forecast. mimirheim plans only optional boosts above the normal setpoint, at one of the configured boost stages, and only when the price spread pays for the efficiency loss and the extra heat loss of a hotter store. On flat prices it never boosts. Without boosts the device behaves exactly as it does without mimirheim.
+
+Stored heat is valued by a credit for the normal-program electricity it later displaces: at the import price where that electricity would have been imported, and at the export price where PV (including hybrid inverter PV) would have covered the base load. Credit prices are clamped at zero. Boost electricity is paid through the normal grid cost. Heat left at the end of the horizon is worth nothing.
+
+Each solve publishes the boost stage per store (`0` = no boost). The integration (Home Assistant, Node-RED) maps the stage to the device, for example to an SG Ready state, a relay or a raised setpoint. mimirheim has no knowledge of SG Ready.
+
+**Your integration must stop boosting when mimirheim goes offline.** The last setpoint stays retained on the broker; when `outputs.availability` reads `offline`, return the device to its normal program.
+
+Strategy behaviour:
+
+- `minimize_cost`: the credit is part of the confidence-weighted cost.
+- `balanced`: the credit is part of the cost component and is scaled by the cost weight like grid cost, so `balanced` never boosts on flat prices either.
+- `minimize_consumption`: phase 1 minimises import without regard to the store; the credit applies in phase 2.
+
+Known approximations:
+
+- Normal heating is not modelled, only valued through the credit. If the normal program is already running when a boost starts, real consumption differs from the plan. The static load forecast still contains normal heating in steps where stored heat displaces it.
+- Hot water draws are not modelled. This undervalues boosts for DHW boilers, so boosts happen only on clearly profitable spreads.
+- A measured temperature below the normal setpoint counts as no stored heat, and one above the highest stage cap as a full store. When a boost starts below the normal setpoint, real consumption is higher than planned.
+- Constant COP per stage, constant losses and a constant ambient temperature. Outdoor pools are approximate.
+- The import baseline uses the static load and PV forecasts and ignores the battery.
+- Heat already in the store at solve time is used at its physical rate. Heat from a planned boost may be planned to be held back through steps where its credit is zero (export price at or below zero and PV covering the base load), so in those steps the planned `temp_c` is slightly high.
+- `kw` is the planned average draw for the step. In the step that reaches a stage cap, and while holding at a cap, it is below the stage power. Discrete devices should switch on `boost_stage`, not on `kw`.
 
 ### Space heating heat pump
 
@@ -477,6 +504,14 @@ Published retained. Required for each configured thermal boiler that has `inputs
 58.3
 ```
 
+### Heat store temperature — topic from `heat_stores.*.inputs.topic_current_temp`
+
+Published retained. Required for each configured heat store; no solve runs until a first value arrives. Payload is a plain numeric string representing the current store temperature in degrees Celsius:
+
+```
+52.4
+```
+
 ### Space heating demand — topic from `space_heating_hps.*.inputs.topic_heat_needed_kwh`
 
 Published retained. Required for each configured space heating HP that has `inputs` configured. Payload is a plain numeric string representing the heat energy demand for the horizon in kWh:
@@ -590,6 +625,14 @@ Published retained for each device in the current step (`t=0`):
 ```
 
 HA automations can subscribe directly to `mimirheim/device/home_battery/setpoint` rather than parsing the full schedule JSON.
+
+Heat stores also carry the boost stage, always present and `0` when not boosting:
+
+```json
+{"kw": -0.5, "type": "heat_store", "boost_stage": 1}
+```
+
+In the schedule, heat store entries additionally carry `boost_stage` and the planned store temperature at the end of the step, `temp_c`.
 
 ### `outputs.last_solve`
 
@@ -946,6 +989,40 @@ The departure target is supplied at runtime via the EV state MQTT payload (not c
 | `min_run_steps` | int ≥ 0 | 0 | Minimum consecutive steps the element must run once switched on (avoids short cycling). |
 | `inputs.topic_current_temp` | string or null | derived | MQTT topic for the current tank temperature (plain float, °C). Derived as `{prefix}/input/thermal_boiler/{name}/temp_c`. |
 
+#### `heat_stores` (dict, keyed by device name)
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `heat_capacity_kwh_per_k` | float > 0 | — | Energy needed to raise the store by 1 K. Water: litres x 0.001163. |
+| `normal_cop` | float > 0 | — | Efficiency of the normal program (1.0 for resistive). Used to value displaced heating. |
+| `normal_setpoint_c` | float | — | Temperature the normal program heats to (°C). Measurements below it count as no stored heat. |
+| `ambient_c` | float < `normal_setpoint_c` | 20.0 | Average temperature around the store (°C). Only used to derive how fast extra heat decays. |
+| `drift_k_per_hour` | float > 0 | — | Observed cooldown when idle at the normal setpoint, without hot water use (K/h). |
+| `min_run_steps` | int ≥ 1 | 1 | Minimum consecutive boost steps once a boost starts. Accepted, not yet applied. |
+| `deny_boost_hours` | list of `"HH:MM-HH:MM"` | `[]` | UTC windows in which no boost is planned. Accepted, not yet applied. |
+| `boost_stages` | list, 1 to 3 entries | — | Boost stages, numbered by list position from 1. |
+| `boost_stages[].power_kw` | float > 0 | — | Electrical power while boosting at full power in this stage (kW). |
+| `boost_stages[].cop` | float > 0, ≤ `normal_cop` | — | Efficiency in this stage. |
+| `boost_stages[].max_temp_c` | float > `normal_setpoint_c` | — | Temperature at which the device actually stops heating in this stage (°C). Set it to what the device really does, not to a nominal limit, or the plan assumes heat the device will not deliver. |
+| `inputs.topic_current_temp` | string | derived | MQTT topic for the current store temperature (plain float, °C). Derived as `{prefix}/input/heat_store/{name}/temp_c`. |
+| `outputs.boost_run_state` | string | derived | Retained boost run state, read back on startup. Derived as `{prefix}/status/heat_store/{name}/boost_run_state`. Reserved; not yet published. |
+
+Example, a 200 L DHW heat pump boiler whose heat pump can heat 5 K above its normal setpoint:
+
+```yaml
+heat_stores:
+  boiler:
+    heat_capacity_kwh_per_k: 0.233
+    normal_cop: 2.5
+    normal_setpoint_c: 50
+    ambient_c: 20
+    drift_k_per_hour: 0.4
+    boost_stages:
+      - {power_kw: 0.5, cop: 2.5, max_temp_c: 55}
+```
+
+A stage COP above `normal_cop`, a stage cap at or below `normal_setpoint_c`, `ambient_c` at or above `normal_setpoint_c`, and zero or more than three stages are rejected at startup.
+
 #### `space_heating_hps` (dict, keyed by device name)
 
 | Field | Type | Default | Description |
@@ -1058,6 +1135,7 @@ a Home Assistant entity topic) or when sharing a topic between multiple instance
 | `deferrable_loads.{name}.topic_window_latest` | `{p}/input/deferrable/{name}/window_latest` |
 | `deferrable_loads.{name}.topic_committed_start_time` | `{p}/input/deferrable/{name}/committed_start` |
 | `thermal_boilers.{name}.inputs.topic_current_temp` | `{p}/input/thermal_boiler/{name}/temp_c` |
+| `heat_stores.{name}.inputs.topic_current_temp` | `{p}/input/heat_store/{name}/temp_c` |
 | `space_heating_hps.{name}.inputs.topic_heat_needed_kwh` | `{p}/input/space_heating/{name}/heat_needed_kwh` |
 | `space_heating_hps.{name}.inputs.topic_heat_produced_today_kwh` | `{p}/input/space_heating/{name}/heat_produced_today_kwh` |
 | `space_heating_hps.{name}.building_thermal.inputs.topic_current_indoor_temp_c` | `{p}/input/space_heating/{name}/btm/indoor_temp_c` |
@@ -1073,6 +1151,7 @@ a Home Assistant entity topic) or when sharing a topic between multiple instance
 |---|---|
 | `batteries.{name}.outputs.exchange_mode` | `{p}/output/battery/{name}/exchange_mode` |
 | `batteries.{name}.outputs.soc_ratchet` | `{p}/status/battery/{name}/soc_ratchet` |
+| `heat_stores.{name}.outputs.boost_run_state` | `{p}/status/heat_store/{name}/boost_run_state` |
 | `ev_chargers.{name}.outputs.exchange_mode` | `{p}/output/ev/{name}/exchange_mode` |
 | `ev_chargers.{name}.outputs.loadbalance_cmd` | `{p}/output/ev/{name}/loadbalance` |
 | `pv_arrays.{name}.outputs.power_limit_kw` | `{p}/output/pv/{name}/power_limit_kw` |
@@ -1110,6 +1189,7 @@ Battery SOC, EV state, and thermal device readings are required before mimirheim
 | `{hybrid_inverters.*.inputs.soc.topic}` (when `inputs` is configured) |
 | `{hybrid_inverters.*.topic_pv_forecast}` |
 | `{thermal_boilers.*.inputs.topic_current_temp}` (when `inputs` is configured) |
+| `{heat_stores.*.inputs.topic_current_temp}` |
 | `{space_heating_hps.*.inputs.topic_heat_needed_kwh}` (when `inputs` is configured) |
 | `{space_heating_hps.*.building_thermal.inputs.topic_current_indoor_temp_c}` (when BTM `inputs` is configured) |
 | `{space_heating_hps.*.building_thermal.inputs.topic_outdoor_temp_forecast_c}` (when BTM `inputs` is configured) |

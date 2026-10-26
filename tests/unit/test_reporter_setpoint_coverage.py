@@ -61,7 +61,11 @@ _REPORTER_DISPLAYED_FIELDS: frozenset[str] = frozenset(
 # Each entry must have a comment explaining why.
 _REPORTER_EXPLICITLY_EXCLUDED_FIELDS: frozenset[str] = frozenset(
     {
-        # None currently.
+        # Heat store fields. The reporter's household page already counts a
+        # heat store's kw as house usage; showing the planned stage and
+        # temperature is a reporter feature not yet built.
+        "boost_stage",
+        "temp_c",
     }
 )
 

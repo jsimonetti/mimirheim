@@ -766,6 +766,108 @@ THERMAL_BOILER_CONFIG_FORM_SPEC = FormSpec(
 )
 
 # ---------------------------------------------------------------------------
+# Heat store
+# ---------------------------------------------------------------------------
+
+HEAT_STORE_BOOST_STAGE_FORM_SPEC = FormSpec(
+    fields={
+        "power_kw": FieldSpec(
+            label="Power (kW)",
+            description="Electrical power while boosting at full power in this stage, in kW.",
+            tier=Tier.BASIC,
+        ),
+        "cop": FieldSpec(
+            label="COP",
+            description="Efficiency in this stage. Must not exceed the normal program's COP.",
+            tier=Tier.BASIC,
+        ),
+        "max_temp_c": FieldSpec(
+            label="Stop temperature (°C)",
+            description="Temperature at which the device actually stops heating in this stage.",
+            tier=Tier.BASIC,
+        ),
+    }
+)
+
+HEAT_STORE_INPUTS_FORM_SPEC = FormSpec(
+    fields={
+        "topic_current_temp": FieldSpec(
+            label="Current temperature topic",
+            description="MQTT topic publishing the current store temperature in degrees C, retained.",
+            tier=Tier.EXPERT,
+        ),
+    }
+)
+
+HEAT_STORE_OUTPUTS_FORM_SPEC = FormSpec(
+    fields={
+        "boost_run_state": FieldSpec(
+            label="Boost run state topic",
+            description="MQTT topic for the persisted boost run state, retained and read back on startup.",
+            tier=Tier.EXPERT,
+        ),
+    }
+)
+
+HEAT_STORE_CONFIG_FORM_SPEC = FormSpec(
+    fields={
+        "heat_capacity_kwh_per_k": FieldSpec(
+            label="Heat capacity (kWh/K)",
+            description="Energy needed to raise the store by 1 K. Water: litres x 0.001163.",
+            tier=Tier.BASIC,
+        ),
+        "normal_cop": FieldSpec(
+            label="Normal program COP",
+            description="Efficiency of the normal program (1.0 for resistive).",
+            tier=Tier.BASIC,
+        ),
+        "normal_setpoint_c": FieldSpec(
+            label="Normal setpoint (°C)",
+            description="Temperature the normal program heats to.",
+            tier=Tier.BASIC,
+        ),
+        "ambient_c": FieldSpec(
+            label="Ambient temperature (°C)",
+            description="Average temperature around the store.",
+            tier=Tier.EXPERT,
+        ),
+        "drift_k_per_hour": FieldSpec(
+            label="Cooldown (K/h)",
+            description="Observed cooldown when idle at the normal setpoint, without hot water use.",
+            tier=Tier.BASIC,
+        ),
+        "min_run_steps": FieldSpec(
+            label="Minimum run steps",
+            description="Minimum consecutive boost steps once a boost starts.",
+            tier=Tier.EXPERT,
+        ),
+        "deny_boost_hours": FieldSpec(
+            label="Deny boost hours (UTC)",
+            description="UTC windows 'HH:MM-HH:MM' in which no boost is planned.",
+            tier=Tier.EXPERT,
+        ),
+        "boost_stages": FieldSpec(
+            label="Boost stages",
+            description="One to three boost stages, numbered by list position from 1.",
+            tier=Tier.BASIC,
+            nested_form_spec=HEAT_STORE_BOOST_STAGE_FORM_SPEC,
+        ),
+        "inputs": FieldSpec(
+            label="Input topics",
+            description="MQTT input topic configuration for the store temperature.",
+            tier=Tier.EXPERT,
+            nested_form_spec=HEAT_STORE_INPUTS_FORM_SPEC,
+        ),
+        "outputs": FieldSpec(
+            label="Output topics",
+            description="MQTT output topic configuration for the boost run state.",
+            tier=Tier.EXPERT,
+            nested_form_spec=HEAT_STORE_OUTPUTS_FORM_SPEC,
+        ),
+    }
+)
+
+# ---------------------------------------------------------------------------
 # Space heating heat pump
 # ---------------------------------------------------------------------------
 
@@ -1233,6 +1335,13 @@ MIMIRHEIM_CONFIG_FORM_SPEC = FormSpec(
             tab="Thermal Boilers",
             tier=Tier.BASIC,
             nested_form_spec=THERMAL_BOILER_CONFIG_FORM_SPEC,
+        ),
+        "heat_stores": FieldSpec(
+            label="Heat stores",
+            description="Named heat stores (DHW boilers, pools, hot tubs) that mimirheim may boost.",
+            tab="Heat Stores",
+            tier=Tier.BASIC,
+            nested_form_spec=HEAT_STORE_CONFIG_FORM_SPEC,
         ),
         "space_heating_hps": FieldSpec(
             label="Space heating heat pumps",

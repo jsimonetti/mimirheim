@@ -1,0 +1,2991 @@
+{
+  "strategy": "minimize_cost",
+  "strategy_degraded": false,
+  "solve_time_utc": "2026-10-13T00:00:00Z",
+  "objective_value": 11.819844672256696,
+  "solve_status": "optimal",
+  "dispatch_suppressed": false,
+  "naive_cost_eur": 3.0,
+  "optimised_cost_eur": 2.9999999999994373,
+  "soc_credit_eur": 0.0,
+  "schedule": [
+    {
+      "t": 0,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 51.893344432109046
+        }
+      }
+    },
+    {
+      "t": 1,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 51.78704379090462
+        }
+      }
+    },
+    {
+      "t": 2,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 51.68109689526738
+        }
+      }
+    },
+    {
+      "t": 3,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 51.57550256800852
+        }
+      }
+    },
+    {
+      "t": 4,
+      "grid_import_kw": 0.49999999999762873,
+      "grid_export_kw": -2.371373705661655e-12,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 51.47025963585664
+        }
+      }
+    },
+    {
+      "t": 5,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 51.365366929444754
+        }
+      }
+    },
+    {
+      "t": 6,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 51.26082328329726
+        }
+      }
+    },
+    {
+      "t": 7,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 51.15662753581702
+        }
+      }
+    },
+    {
+      "t": 8,
+      "grid_import_kw": 0.49999999999762873,
+      "grid_export_kw": -2.371373705661655e-12,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 51.05277852927244
+        }
+      }
+    },
+    {
+      "t": 9,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.94927510978458
+        }
+      }
+    },
+    {
+      "t": 10,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.8461161273144
+        }
+      }
+    },
+    {
+      "t": 11,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.743300435649914
+        }
+      }
+    },
+    {
+      "t": 12,
+      "grid_import_kw": 0.49999999999762873,
+      "grid_export_kw": -2.371373705661655e-12,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.64082689239349
+        }
+      }
+    },
+    {
+      "t": 13,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.53869435894916
+        }
+      }
+    },
+    {
+      "t": 14,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.43690170050993
+        }
+      }
+    },
+    {
+      "t": 15,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.335447786045215
+        }
+      }
+    },
+    {
+      "t": 16,
+      "grid_import_kw": 0.49999999999762873,
+      "grid_export_kw": -2.371373705661655e-12,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.23433148828827
+        }
+      }
+    },
+    {
+      "t": 17,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.133551683723624
+        }
+      }
+    },
+    {
+      "t": 18,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.03310725257464
+        }
+      }
+    },
+    {
+      "t": 19,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 20,
+      "grid_import_kw": 0.49999999999762873,
+      "grid_export_kw": -2.371373705661655e-12,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 21,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 22,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 23,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 24,
+      "grid_import_kw": 0.49999999999762873,
+      "grid_export_kw": -2.371373705661655e-12,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 25,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 26,
+      "grid_import_kw": 0.49999999999762873,
+      "grid_export_kw": -2.371373705661655e-12,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 27,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 28,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 29,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 30,
+      "grid_import_kw": 0.49999999999762873,
+      "grid_export_kw": -2.371373705661655e-12,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 31,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 32,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 33,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 34,
+      "grid_import_kw": 0.49999999999762873,
+      "grid_export_kw": -2.371373705661655e-12,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 35,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 36,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 37,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 38,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 39,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 40,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 41,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 42,
+      "grid_import_kw": 0.49999999999762873,
+      "grid_export_kw": -2.371373705661655e-12,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 43,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 44,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 45,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 46,
+      "grid_import_kw": 0.49999999999762873,
+      "grid_export_kw": -2.371373705661655e-12,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 47,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 48,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 49,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 50,
+      "grid_import_kw": 0.49999999999762873,
+      "grid_export_kw": -2.371373705661655e-12,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 51,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 52,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 53,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 54,
+      "grid_import_kw": 0.49999999999762873,
+      "grid_export_kw": -2.371373705661655e-12,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 55,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 56,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 57,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 58,
+      "grid_import_kw": 0.49999999999762873,
+      "grid_export_kw": -2.371373705661655e-12,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 59,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 60,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 61,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 62,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 63,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 64,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 65,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 66,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 67,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 68,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 69,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 70,
+      "grid_import_kw": 0.49999999999762873,
+      "grid_export_kw": -2.371373705661655e-12,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 71,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 72,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 73,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 74,
+      "grid_import_kw": 0.49999999999762873,
+      "grid_export_kw": -2.371373705661655e-12,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 75,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 76,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 77,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 78,
+      "grid_import_kw": 0.49999999999762873,
+      "grid_export_kw": -2.371373705661655e-12,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 79,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 80,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 81,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 82,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 83,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 84,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 85,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 86,
+      "grid_import_kw": 0.49999999999762873,
+      "grid_export_kw": -2.371373705661655e-12,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 87,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 88,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 89,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 90,
+      "grid_import_kw": 0.49999999999762873,
+      "grid_export_kw": -2.371373705661655e-12,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 91,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 92,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 93,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 94,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    },
+    {
+      "t": 95,
+      "grid_import_kw": 0.5000000000000001,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "base": {
+          "kw": -0.5,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": null,
+          "temp_c": null
+        },
+        "boiler": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "boost_stage": 0,
+          "temp_c": 50.0
+        }
+      }
+    }
+  ],
+  "deferrable_recommended_starts": {},
+  "battery_care": {}
+}

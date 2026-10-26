@@ -540,3 +540,47 @@ def test_a_dip_during_the_hold_starts_it_over(monkeypatch) -> None:
     current["now"] = t0 + timedelta(hours=2, minutes=30)
     state.update("mimir/input/battery/bat/soc", 9.8)  # only 1h30 since the dip
     assert "bat" not in state._last_full_utc
+
+
+# ---------------------------------------------------------------------------
+# Heat store temperature
+# ---------------------------------------------------------------------------
+
+
+_HEAT_STORE_TOPIC = "mimir/input/heat_store/boiler/temp_c"
+
+
+def _heat_store_config() -> MimirheimConfig:
+    """The minimal battery config plus one heat store with derived topics."""
+    config = _make_config()
+    raw = config.model_dump(mode="json", exclude_none=True)
+    raw["heat_stores"] = {
+        "boiler": {
+            "heat_capacity_kwh_per_k": 0.233,
+            "normal_cop": 2.5,
+            "normal_setpoint_c": 50.0,
+            "drift_k_per_hour": 0.4,
+            "boost_stages": [{"power_kw": 0.5, "cop": 2.5, "max_temp_c": 55.0}],
+        }
+    }
+    return MimirheimConfig.model_validate(raw)
+
+
+def test_heat_store_temperature_gates_readiness() -> None:
+    """No solve runs until a first store temperature arrives."""
+    state = ReadinessState(_heat_store_config())
+    _feed_all(state)
+    assert not state.is_ready()
+    assert _HEAT_STORE_TOPIC in state.not_ready_reason()
+
+    state.update(_HEAT_STORE_TOPIC, 52.5)
+    assert state.is_ready()
+
+
+def test_heat_store_temperature_reaches_the_bundle() -> None:
+    state = ReadinessState(_heat_store_config())
+    _feed_all(state)
+    state.update(_HEAT_STORE_TOPIC, 52.5)
+
+    bundle = state.snapshot()
+    assert bundle.heat_store_inputs["boiler"].current_temp_c == 52.5

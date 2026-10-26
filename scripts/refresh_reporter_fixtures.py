@@ -59,6 +59,7 @@ _FIXTURE_TS = "2026-04-03T15-30-00Z"
 #   car           v2h + loadbalance, plugged-> loadbalance_active, soc_kwh
 #   dishwasher    scheduling window         -> deferrable_recommended_starts
 #   base_load     static forecast           -> a non-controllable series
+#   dhw_boiler    heat store                -> boost_stage, temp_c
 #
 # 96 steps, so the charts and the step table have a realistic amount to show,
 # and a price ramp with enough spread that the solver actually dispatches.
@@ -124,6 +125,13 @@ _CONFIG: dict = {
             "topic_recommended_start_time": "mimir/dishwasher/recommended_start",
         }
     },
+    "heat_stores": {
+        "dhw_boiler": {
+            "heat_capacity_kwh_per_k": 0.233, "normal_cop": 2.5,
+            "normal_setpoint_c": 50.0, "drift_k_per_hour": 0.4,
+            "boost_stages": [{"power_kw": 0.5, "cop": 2.5, "max_temp_c": 55.0}],
+        }
+    },
 }
 
 
@@ -141,6 +149,10 @@ def _solar_curve(peak_kw: float, peak_hour: float, width_h: float) -> list[float
 def _fixture_case() -> tuple[SolveBundle, MimirheimConfig]:
     """Build the bundle and config for the reporter fixture."""
     prices = [round(0.14 + 0.16 * ((i * 7) % _STEPS) / _STEPS, 4) for i in range(_STEPS)]
+    # Per-array forecasts are required with more than one array; the summed
+    # series is what the dump carries alongside them.
+    roof = _solar_curve(4.0, 13.5, 6.0)
+    garage = _solar_curve(1.5, 13.5, 6.0)
     bundle = {
         "strategy": "minimize_cost",
         "solve_time_utc": _T0.isoformat(),
@@ -148,7 +160,8 @@ def _fixture_case() -> tuple[SolveBundle, MimirheimConfig]:
         "horizon_prices": prices,
         "horizon_export_prices": [round(p - 0.06, 4) for p in prices],
         "horizon_confidence": [1.0] * _STEPS,
-        "pv_forecast": _solar_curve(5.5, 13.5, 6.0),
+        "pv_forecast": [round(r + g, 3) for r, g in zip(roof, garage, strict=True)],
+        "pv_forecasts": {"roof_pv": roof, "garage_pv": garage},
         "base_load_forecast": [
             round(0.35 + 0.25 * ((i % 12) / 12), 3) for i in range(_STEPS)
         ],
@@ -161,6 +174,7 @@ def _fixture_case() -> tuple[SolveBundle, MimirheimConfig]:
                 "window_latest": (_T0 + timedelta(hours=14)).isoformat(),
             }
         },
+        "heat_store_inputs": {"dhw_boiler": {"current_temp_c": 51.0}},
         "deferrable_windows": {
             "dishwasher": {
                 "earliest": (_T0 + timedelta(hours=1)).isoformat(),

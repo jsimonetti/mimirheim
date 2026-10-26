@@ -229,3 +229,14 @@ def test_deferrable_recommended_start_topic() -> None:
         deferrable_recommended_start_topic("mimir", "washing_machine")
         == "mimir/output/deferrable/washing_machine/recommended_start"
     )
+
+
+def test_heat_store_temp_topic() -> None:
+    assert topics.heat_store_temp_topic("mimir", "boiler") == "mimir/input/heat_store/boiler/temp_c"
+
+
+def test_heat_store_boost_run_state_topic() -> None:
+    assert (
+        topics.heat_store_boost_run_state_topic("mimir", "boiler")
+        == "mimir/status/heat_store/boiler/boost_run_state"
+    )

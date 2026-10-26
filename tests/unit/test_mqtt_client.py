@@ -167,6 +167,34 @@ class TestMultiTopicPrices:
         assert "b/prices" in subscribed_topics
 
 
+class TestHeatStoreTemperature:
+    def test_store_temperature_topic_is_subscribed_and_parsed(self) -> None:
+        """The derived store temperature topic is subscribed and parsed as a float."""
+        raw = _make_config().model_dump(mode="json", exclude_none=True)
+        raw["heat_stores"] = {
+            "boiler": {
+                "heat_capacity_kwh_per_k": 0.233,
+                "normal_cop": 2.5,
+                "normal_setpoint_c": 50.0,
+                "drift_k_per_hour": 0.4,
+                "boost_stages": [{"power_kw": 0.5, "cop": 2.5, "max_temp_c": 55.0}],
+            }
+        }
+        config = MimirheimConfig.model_validate(raw)
+        readiness = MagicMock(spec=ReadinessState)
+        paho_mock = MagicMock()
+        client = MqttClient(config, readiness, MagicMock(), paho_mock, _CONFIG_PATH)
+
+        topic = "mimir/input/heat_store/boiler/temp_c"
+        assert client._topic_handlers[topic](b"52.5") == 52.5
+
+        reason_code = MagicMock()
+        reason_code.is_failure = False
+        client._on_connect(paho_mock, None, None, reason_code, None)
+        subscribed_topics = {call.args[0] for call in paho_mock.subscribe.call_args_list}
+        assert topic in subscribed_topics
+
+
 class TestFaultLogging:
     """A failure on the paho network thread must be logged, not propagated."""
 

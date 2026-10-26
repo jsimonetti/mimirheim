@@ -362,11 +362,14 @@ def test_day_baseline_follows_the_solver_step_by_step(fixture_inp: dict, fixture
     """Each day's baseline is the solver's own per step: base load minus PV,
     at the import or export price.
 
-    The fixture predates per-array forecasts: it has two arrays and only the
-    summed series, which the solver then used as it stood.
+    The fixture's two arrays both forecast below their ceilings, so clipping
+    each array changes nothing and the summed series is what the solver used.
     """
     sched = fixture_out["schedule"]
-    assert len(fixture_inp["config"]["pv_arrays"]) == 2 and "pv_forecasts" not in fixture_inp
+    arrays = fixture_inp["config"]["pv_arrays"]
+    assert len(arrays) == 2
+    for name, forecast in fixture_inp["pv_forecasts"].items():
+        assert max(forecast) <= arrays[name]["max_power_kw"]
     per_step = []
     for t, s in enumerate(sched):
         pv = fixture_inp["pv_forecast"][t]

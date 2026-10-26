@@ -329,6 +329,71 @@ The DHW mode feeds the hot-water tank (same dynamics as `ThermalBoilerDevice`). 
 
 When `building_thermal` is not configured, the SH mode power must satisfy the aggregate demand `heat_needed_kwh` over the horizon (same as the space heating HP degree-days constraint). When `building_thermal` is configured, the BTM replaces the degree-days constraint for the SH portion.
 
+## Heat store model
+
+`HeatStoreDevice` (`mimirheim/devices/heat_store.py`) plans optional boosts of a thermal store above its normal setpoint. The device's own program does all ordinary heating and stays in the static load forecast (ADR 0001). The model plans only whether to boost, and at which stage; the stage is the command the integration acts on.
+
+### Energy core
+
+The user configures a store in temperatures. The pure function `heat_store_energy(config, measured_temp_c, dt)` translates the configuration and the measurement into the energy parameters the model uses (ADR 0002). A later energy-based configuration mode, for stores without a meaningful temperature, needs only a second translation function.
+
+```
+C        = heat_capacity_kwh_per_k
+S_cap[s] = C * (boost_stages[s].max_temp_c - normal_setpoint_c)   # kWh per stage
+S_max    = max over s of S_cap[s]
+maint    = C * drift_k_per_hour * dt                               # kWh lost per step at the setpoint
+d        = 1 - exp(-dt * drift_k_per_hour / (normal_setpoint_c - ambient_c))
+S0       = clamp(C * (T_measured - normal_setpoint_c), 0, S_max)
+```
+
+`S` is stored heat above the normal setpoint, in kWh. The store's heat loss splits in two. The maintenance loss `maint` is what the store loses at its normal setpoint; stored heat covers it instead of the normal program, which is where a boost's value comes from. The extra loss `d * S` is waste from being hotter than normal; `d` follows from Newton cooling, with the drift at the setpoint fixing the time constant. A measurement below the setpoint counts as no stored heat, one above the highest cap as a full store.
+
+### Variables and constraints
+
+Per step `t` and stage `s`: `on[s,t]` (binary, the command), `p[s,t]` (kW drawn), `at_cap[t]` (binary), `w[t]` (kWh of stored heat used instead of the normal program), `imp[t]` and `rest[t]` (kWh of normal-program electricity `w[t]` displaces), and `S[t]` (kWh stored at the end of the step).
+
+```
+sum_s on[s,t] <= 1                                              # one stage at a time
+0 <= p[s,t] <= P[s] * on[s,t]
+p[s,t] >= P[s] * on[s,t] - P[s] * at_cap[t]                     # full power unless at cap
+S[t] = (1 - d) * S[t-1] + sum_s cop[s] * p[s,t] * dt - w[t]     # S[-1] = S0
+S[t] <= S_cap[s] + (S_max - S_cap[s]) * (1 - on[s,t])           # stage s stops at its cap
+S[t] <= S_max
+S[t] >= sum_s S_cap[s] * on[s,t] - S_max * (1 - at_cap[t])      # at_cap only at the active cap
+0 <= w[t] <= maint
+w[t] = maint                         for t in the covered prefix (see below)
+w[t] / normal_cop = imp[t] + rest[t]
+imp[t] <= baseline_import[t]
+```
+
+The device draws `net_power(t) = -sum_s p[s,t]`.
+
+**Partial draw at the cap.** Draw is full stage power unless the store ends the step at the active stage's cap; there it is exactly what fits. The step that reaches the cap is partial, and later steps at the cap draw only loss replacement, `(d * S_cap + w) / cop / dt`. The command stays discrete; only the planned power is continuous. The rejected alternative, always planning full power and absorbing overshoot as paid-for spill, plans full-power draw while the store is full whenever import or export prices are negative, consumption the real device never makes (ADR 0002). With `at_cap[t] = 1` and a stage on, the two stage-cap constraints pin `S[t]` to that stage's cap, so the draw is determined and the binary cannot be used to plan an idle "boost".
+
+**Stage cap.** The cap is a big-M constraint on the stage binary, with `M = S_max - S_cap[s]`. It also orders stages: once a higher-cap stage has heated above a lower stage's cap, the lower stage cannot be on. There is no forced stage 0 when the measured temperature is at a cap: the solver chooses stage 0 when holding does not pay, and holding is correct at negative prices.
+
+**Physical use of stored heat.** Physically the store covers its full maintenance loss as long as it holds heat: `w[t] = min(maint, available)`. The model only bounds `w[t] <= maint`, and leaves the rest to the credit, which rewards using heat. That is not enough where the credit is zero (export price at or below zero and PV covering the base load): the solver then holds heat back for later steps with a positive credit, and the store appears to keep heat it is losing.
+
+An exact formulation needs one more binary per step, `empty[t]`, with `w[t] >= maint * (1 - empty[t])` and `S[t] <= S_max * (1 - empty[t])`. It was implemented and rejected: its weak LP relaxation let CBC return schedules with useless boosts on flat prices, a few cents worse than the optimum and inside the 0.5% MIP gap (§2), which breaks the guarantee that flat prices never boost. The model uses an LP-only partial fix instead. Before the solve, `_covered_steps` follows the no-boost trajectory from `S0`; in every step where that trajectory still covers `maint`, `w[t] = maint` is fixed. Boosts only add heat, so this holds in every plan. Heat already in the store at solve time is therefore always used at its physical rate. Heat from a planned boost can still be held back through zero-credit steps; this is documented to users as a known approximation.
+
+**Feasibility.** `on = 0` everywhere is always feasible. Forced boosting with a full store, which later tickets introduce through the minimum run, is feasible through `at_cap` with partial draw.
+
+### Credit
+
+The device returns a credit through the optional `economic_terms(t)` hook (§10, "Device economic terms"), a negative cost inside the confidence-weighted economic block (ADR 0003):
+
+```
+credit[t] = (max(import_price[t], 0) * imp[t] + max(export_price[t], 0) * rest[t]) / dt
+```
+
+The division by `dt` puts the kWh-based credit on the same per-kW scale as grid cost. `baseline_import[t]` is `_baseline_import_kwh` from `build_and_solve()`, computed from the clipped PV series that includes hybrid inverter PV and passed to `add_constraints` explicitly with the prices; `ModelContext` does not carry them. Displaced heating up to the baseline is valued at the import price, the rest at the export price, because PV would have covered it. Credit prices are clamped at zero so the credit is never negative. Boost electricity is paid through the grid cost of `net_power`. There is no terminal value.
+
+Flat prices never boost: storing heat at stage `s` costs `price / cop[s]` per kWh of heat, and because `d > 0` and `cop[s] <= normal_cop`, less than that heat is later displaced at `price / normal_cop`. No tie-breaking penalty is needed.
+
+### Outputs
+
+Each step's `DeviceSetpoint` carries `type="heat_store"`, `kw` (the planned average draw, at most 0), `boost_stage` (stage number from 1, or 0) and the planned `temp_c = normal_setpoint_c + S[t] / C`.
+
 ## Building thermal model (BTM)
 
 The BTM is an optional feature on `SpaceHeatingDevice` and `CombiHeatPumpDevice`. It replaces the degree-days demand constraint with explicit indoor temperature tracking. The primary motivation is enabling pre-heating: storing heat in the building fabric during cheap-electricity periods and reducing HP operation during expensive periods, without violating indoor comfort.

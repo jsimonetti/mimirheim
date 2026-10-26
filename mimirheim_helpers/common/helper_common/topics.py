@@ -337,6 +337,37 @@ def thermal_boiler_temp_topic(prefix: str, name: str) -> str:
     return f"{prefix}/input/thermal_boiler/{name}/temp_c"
 
 
+def heat_store_temp_topic(prefix: str, name: str) -> str:
+    """Return the topic for the current heat store temperature.
+
+    Corresponds to ``heat_stores.{name}.inputs.topic_current_temp``.
+
+    Args:
+        prefix: The ``mqtt.topic_prefix`` value from mimirheim config.
+        name: The heat store device name.
+
+    Returns:
+        e.g. ``"mimir/input/heat_store/boiler/temp_c"``.
+    """
+    return f"{prefix}/input/heat_store/{name}/temp_c"
+
+
+def heat_store_boost_run_state_topic(prefix: str, name: str) -> str:
+    """Return the topic carrying a heat store's persisted boost run state.
+
+    Corresponds to ``heat_stores.{name}.outputs.boost_run_state``. Published
+    retained by mimirheim and read back on startup.
+
+    Args:
+        prefix: The ``mqtt.topic_prefix`` value from mimirheim config.
+        name: The heat store device name.
+
+    Returns:
+        e.g. ``"mimir/status/heat_store/boiler/boost_run_state"``.
+    """
+    return f"{prefix}/status/heat_store/{name}/boost_run_state"
+
+
 def space_heating_heat_needed_topic(prefix: str, name: str) -> str:
     """Return the topic for the space heating HP heat demand.
 

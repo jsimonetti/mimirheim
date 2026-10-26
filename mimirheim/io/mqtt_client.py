@@ -72,6 +72,7 @@ from mimirheim.io.input_parser import (
     parse_price_steps,
     parse_space_heating_demand,
     parse_strategy,
+    parse_heat_store_temp,
     parse_thermal_boiler_temp,
 )
 from mimirheim.io.mqtt_publisher import MqttPublisher
@@ -654,6 +655,10 @@ class MqttClient:
         for tb_cfg in config.thermal_boilers.values():
             if tb_cfg.inputs is not None:
                 handlers[tb_cfg.inputs.topic_current_temp] = parse_thermal_boiler_temp
+
+        # Heat store temperature topics.
+        for hs_cfg in config.heat_stores.values():
+            handlers[hs_cfg.inputs.topic_current_temp] = parse_heat_store_temp
 
         # Space heating heat pump demand topics (plan 26).
         for sh_cfg in config.space_heating_hps.values():

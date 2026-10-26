@@ -184,6 +184,7 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
         *config.static_loads,
         *config.hybrid_inverters,
         *config.thermal_boilers,
+        *config.heat_stores,
         *config.space_heating_hps,
         *config.combi_heat_pumps,
     ]

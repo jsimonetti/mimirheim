@@ -2931,3 +2931,126 @@ def test_soc_ratchet_hold_bounds() -> None:
         SocRatchetConfig(enabled=True, hold_hours=-0.25)
     with pytest.raises(ValidationError):
         SocRatchetConfig(enabled=True, hold_hours=24.25)
+
+
+# ---------------------------------------------------------------------------
+# HeatStoreConfig
+# ---------------------------------------------------------------------------
+
+
+def _heat_store_data(**overrides: object) -> dict:
+    data: dict = {
+        "heat_capacity_kwh_per_k": 0.233,
+        "normal_cop": 2.5,
+        "normal_setpoint_c": 50.0,
+        "drift_k_per_hour": 0.4,
+        "boost_stages": [{"power_kw": 0.5, "cop": 2.5, "max_temp_c": 55.0}],
+    }
+    data.update(overrides)
+    return data
+
+
+def test_heat_store_happy_path_and_defaults() -> None:
+    from mimirheim.config.schema import HeatStoreConfig
+
+    cfg = HeatStoreConfig.model_validate(_heat_store_data())
+    assert cfg.ambient_c == 20.0
+    assert cfg.min_run_steps == 1
+    assert cfg.deny_boost_hours == []
+    assert len(cfg.boost_stages) == 1
+    assert cfg.boost_stages[0].power_kw == 0.5
+
+
+def test_heat_store_rejects_ambient_at_or_above_normal_setpoint() -> None:
+    from mimirheim.config.schema import HeatStoreConfig
+
+    with pytest.raises(ValidationError, match="ambient_c"):
+        HeatStoreConfig.model_validate(_heat_store_data(ambient_c=50.0))
+    with pytest.raises(ValidationError, match="ambient_c"):
+        HeatStoreConfig.model_validate(_heat_store_data(ambient_c=60.0))
+
+
+def test_heat_store_rejects_stage_cop_above_normal_cop() -> None:
+    from mimirheim.config.schema import HeatStoreConfig
+
+    stages = [{"power_kw": 0.5, "cop": 2.6, "max_temp_c": 55.0}]
+    with pytest.raises(ValidationError, match="cop"):
+        HeatStoreConfig.model_validate(_heat_store_data(boost_stages=stages))
+
+
+def test_heat_store_rejects_stage_cap_at_or_below_normal_setpoint() -> None:
+    from mimirheim.config.schema import HeatStoreConfig
+
+    for max_temp_c in (50.0, 45.0):
+        stages = [{"power_kw": 0.5, "cop": 2.5, "max_temp_c": max_temp_c}]
+        with pytest.raises(ValidationError, match="max_temp_c"):
+            HeatStoreConfig.model_validate(_heat_store_data(boost_stages=stages))
+
+
+def test_heat_store_rejects_zero_or_more_than_three_stages() -> None:
+    from mimirheim.config.schema import HeatStoreConfig
+
+    stage = {"power_kw": 0.5, "cop": 2.5, "max_temp_c": 55.0}
+    with pytest.raises(ValidationError):
+        HeatStoreConfig.model_validate(_heat_store_data(boost_stages=[]))
+    with pytest.raises(ValidationError):
+        HeatStoreConfig.model_validate(_heat_store_data(boost_stages=[stage] * 4))
+
+
+def test_heat_store_rejects_non_positive_parameters() -> None:
+    from mimirheim.config.schema import HeatStoreConfig
+
+    for field in ("heat_capacity_kwh_per_k", "normal_cop", "drift_k_per_hour"):
+        with pytest.raises(ValidationError):
+            HeatStoreConfig.model_validate(_heat_store_data(**{field: 0.0}))
+    with pytest.raises(ValidationError):
+        HeatStoreConfig.model_validate(_heat_store_data(min_run_steps=0))
+    stages = [{"power_kw": 0.0, "cop": 2.5, "max_temp_c": 55.0}]
+    with pytest.raises(ValidationError):
+        HeatStoreConfig.model_validate(_heat_store_data(boost_stages=stages))
+
+
+def test_heat_store_models_forbid_extra_fields() -> None:
+    from mimirheim.config.schema import HeatStoreConfig
+
+    with pytest.raises(ValidationError):
+        HeatStoreConfig.model_validate(_heat_store_data(volume_liters=200.0))
+    stages = [{"power_kw": 0.5, "cop": 2.5, "max_temp_c": 55.0, "min_temp_c": 40.0}]
+    with pytest.raises(ValidationError):
+        HeatStoreConfig.model_validate(_heat_store_data(boost_stages=stages))
+    with pytest.raises(ValidationError):
+        HeatStoreConfig.model_validate(_heat_store_data(inputs={"topic_soc": "x"}))
+    with pytest.raises(ValidationError):
+        HeatStoreConfig.model_validate(_heat_store_data(outputs={"setpoint": "x"}))
+
+
+def test_heat_store_topics_derived() -> None:
+    """Input and status topics derive from the prefix and device name."""
+    raw = _base_no_outputs()
+    raw["heat_stores"] = {"boiler": _heat_store_data()}
+    config = MimirheimConfig.model_validate(raw)
+    hs = config.heat_stores["boiler"]
+    assert hs.inputs.topic_current_temp == "mimir/input/heat_store/boiler/temp_c"
+    assert hs.outputs.boost_run_state == "mimir/status/heat_store/boiler/boost_run_state"
+
+
+def test_heat_store_explicit_topics_preserved() -> None:
+    raw = _base_no_outputs()
+    raw["heat_stores"] = {
+        "boiler": _heat_store_data(
+            inputs={"topic_current_temp": "ha/sensor/boiler_temp/state"},
+            outputs={"boost_run_state": "custom/boost"},
+        )
+    }
+    config = MimirheimConfig.model_validate(raw)
+    hs = config.heat_stores["boiler"]
+    assert hs.inputs.topic_current_temp == "ha/sensor/boiler_temp/state"
+    assert hs.outputs.boost_run_state == "custom/boost"
+
+
+def test_heat_store_name_must_be_unique_across_sections() -> None:
+    raw = _base_no_outputs()
+    raw["heat_stores"] = {"base": _heat_store_data()}
+    raw["static_loads"] = {"base": {}}
+    with pytest.raises(ValidationError, match="unique"):
+        MimirheimConfig.model_validate(raw)

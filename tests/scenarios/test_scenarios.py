@@ -96,3 +96,16 @@ def test_golden_scenario(
                     f"step={step.t} device={name!r}: "
                     f"{setpoint.soc_kwh} != {g_soc}"
                 )
+            # Heat store fields: the commanded stage and the planned temperature.
+            assert setpoint.boost_stage == g_step.devices[name].boost_stage, (
+                f"step={step.t} device={name!r}: boost_stage "
+                f"{setpoint.boost_stage} != {g_step.devices[name].boost_stage}"
+            )
+            g_temp = g_step.devices[name].temp_c
+            if g_temp is None:
+                assert setpoint.temp_c is None
+            else:
+                assert setpoint.temp_c == pytest.approx(g_temp, abs=1e-4), (
+                    f"step={step.t} device={name!r}: temp_c "
+                    f"{setpoint.temp_c} != {g_temp}"
+                )

@@ -100,6 +100,12 @@ def _result() -> SolveResult:
                         on_off_active=True,
                         pv_is_curtailed=True,
                     ),
+                    "boiler": DeviceSetpoint(
+                        kw=-0.5,
+                        type="heat_store",
+                        boost_stage=1,
+                        temp_c=51.24,
+                    ),
                 },
             )
             for t in range(2)

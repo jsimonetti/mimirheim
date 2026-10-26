@@ -65,6 +65,15 @@ class ThermalBoilerInputs(BaseModel):
     """
     current_temp_c: float
 
+class HeatStoreInputs(BaseModel):
+    """Current state for a heat store: the measured store temperature.
+
+    Translated into stored heat above the normal setpoint by
+    heat_store_energy(): clamped to zero below the setpoint and to the
+    highest stage cap above it. Presence-only readiness input.
+    """
+    current_temp_c: float
+
 class SpaceHeatingInputs(BaseModel):
     """Current state for a space heating heat pump.
 
@@ -109,6 +118,7 @@ class SolveBundle(BaseModel):
     deferrable_windows: dict[str, DeferrableWindow] = Field(default_factory=dict)
     hybrid_inverter_inputs: dict[str, HybridInverterInputs] = Field(default_factory=dict)
     thermal_boiler_inputs: dict[str, ThermalBoilerInputs] = Field(default_factory=dict)
+    heat_store_inputs: dict[str, HeatStoreInputs] = Field(default_factory=dict)
     space_heating_inputs: dict[str, SpaceHeatingInputs] = Field(default_factory=dict)
     combi_hp_inputs: dict[str, CombiHeatPumpInputs] = Field(default_factory=dict)
 ```
@@ -131,6 +141,8 @@ class DeviceSetpoint(BaseModel):
     kw: float                # net power setpoint; positive = producing, negative = consuming
     type: str                # device type derived from config section (e.g. "battery", "ev_charger")
     soc_kwh: float | None    # terminal SOC in kWh at end of step; None for non-storage devices
+    boost_stage: int | None  # heat stores only: commanded stage from 1, or 0; None otherwise
+    temp_c: float | None     # heat stores only: planned store temperature at end of step
 
 class ScheduleStep(BaseModel):
     t: int                   # time step index

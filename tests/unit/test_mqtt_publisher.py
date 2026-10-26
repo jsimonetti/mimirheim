@@ -1907,7 +1907,8 @@ def test_a_stale_payload_is_dropped_rather_than_part_corrected() -> None:
 
 
 @pytest.mark.parametrize(
-    "load_type", ["ev_charger", "thermal_boiler", "space_heating_hp", "combi_heat_pump"]
+    "load_type",
+    ["ev_charger", "thermal_boiler", "heat_store", "space_heating_hp", "combi_heat_pump"],
 )
 def test_last_solve_status_self_sufficiency_counts_every_consuming_type(
     load_type: str,
@@ -1970,3 +1971,72 @@ def test_published_load_types_match_the_reporter() -> None:
     this keeps the two lists from drifting apart.
     """
     assert _LOAD_TYPES == REPORTER_LOAD_TYPES
+
+
+# ---------------------------------------------------------------------------
+# Heat store
+# ---------------------------------------------------------------------------
+
+
+def _heat_store_result(kw: float, boost_stage: int) -> SolveResult:
+    step = ScheduleStep(
+        t=0,
+        grid_import_kw=1.0,
+        grid_export_kw=0.0,
+        devices={
+            "boiler": DeviceSetpoint(
+                kw=kw, type="heat_store", boost_stage=boost_stage, temp_c=51.24
+            )
+        },
+    )
+    return SolveResult(
+        strategy="minimize_cost",
+        objective_value=0.5,
+        solve_status="optimal",
+        schedule=[step] * 4,
+    )
+
+
+def test_heat_store_setpoint_carries_the_boost_stage() -> None:
+    client = MagicMock()
+    MqttPublisher(client=client, config=_make_config()).publish_result(
+        _heat_store_result(kw=-0.5, boost_stage=1)
+    )
+
+    assert _published(client, "mimir/device/boiler/setpoint") == {
+        "kw": -0.5,
+        "type": "heat_store",
+        "boost_stage": 1,
+    }
+
+
+def test_heat_store_setpoint_carries_stage_zero_when_not_boosting() -> None:
+    client = MagicMock()
+    MqttPublisher(client=client, config=_make_config()).publish_result(
+        _heat_store_result(kw=0.0, boost_stage=0)
+    )
+
+    assert _published(client, "mimir/device/boiler/setpoint")["boost_stage"] == 0
+
+
+def test_other_setpoints_do_not_gain_a_boost_stage() -> None:
+    client = MagicMock()
+    MqttPublisher(client=client, config=_make_config()).publish_result(_make_result())
+
+    assert _published(client, "mimir/device/bat/setpoint") == {
+        "kw": -1.0,
+        "type": "battery",
+    }
+
+
+def test_heat_store_schedule_entries_carry_stage_and_temperature() -> None:
+    client = MagicMock()
+    MqttPublisher(client=client, config=_make_config()).publish_result(
+        _heat_store_result(kw=-0.5, boost_stage=1)
+    )
+
+    entry = _published(client, "mimir/strategy/schedule")["schedule"][0]["devices"]["boiler"]
+    assert entry["type"] == "heat_store"
+    assert entry["kw"] == -0.5
+    assert entry["boost_stage"] == 1
+    assert entry["temp_c"] == 51.24

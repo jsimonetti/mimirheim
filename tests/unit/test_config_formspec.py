@@ -63,6 +63,7 @@ _DEVICE_FIELD_NAMES = (
     "static_loads",
     "hybrid_inverters",
     "thermal_boilers",
+    "heat_stores",
     "space_heating_hps",
     "combi_heat_pumps",
 )

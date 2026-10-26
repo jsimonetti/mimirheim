@@ -17,3 +17,4 @@ The user-facing model describes a store by heat capacity and temperatures, but t
 - A per-kelvin heat capacity does not represent latent-heat stores; those require a later energy-based configuration mode.
 - Each store needs one additional binary per step for the at-cap state.
 - Planned power can be below a stage's power in steps at the cap; discrete integrations switch on the boost stage, not on planned power.
+- Stored heat use is bounded by the maintenance loss and fixed to it only where heat already in the store provably covers it. An exact per-step "empty" binary was rejected: its weak LP relaxation let the solver return useless flat-price boosts within the MIP gap. Heat from a planned boost can therefore be held back through zero-credit steps; this is a documented approximation.

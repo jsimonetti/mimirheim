@@ -259,6 +259,23 @@ class ThermalBoilerInputs(BaseModel):
     )
 
 
+class HeatStoreInputs(BaseModel):
+    """Live heat store state received from MQTT, validated at the system boundary.
+
+    Attributes:
+        current_temp_c: Measured store temperature in degrees Celsius. The heat
+            store translates it into stored heat above the normal setpoint,
+            clamped to zero below the setpoint and to the highest stage cap
+            above it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    current_temp_c: float = Field(
+        description="Measured store temperature in °C, as read from sensor."
+    )
+
+
 class DeferrableWindow(BaseModel):
     """Time window within which a deferrable load must run.
 
@@ -389,6 +406,10 @@ class SolveBundle(BaseModel):
         default_factory=dict,
         description="Live thermal boiler state keyed by device name.",
     )
+    heat_store_inputs: dict[str, HeatStoreInputs] = Field(
+        default_factory=dict,
+        description="Live heat store state keyed by device name.",
+    )
     space_heating_inputs: dict[str, SpaceHeatingInputs] = Field(
         default_factory=dict,
         description="Live space heating demand keyed by device name.",
@@ -494,6 +515,11 @@ class DeviceSetpoint(BaseModel):
         soc_kwh: Terminal state of charge in kWh at the end of this time step.
             Populated for storage devices (batteries, EV chargers, hybrid
             inverters) only. None for all other device types.
+        boost_stage: For heat stores only. The boost stage commanded for this
+            step, counted from 1 in ``boost_stages`` order, or 0 when not
+            boosting. None for all other device types.
+        temp_c: For heat stores only. Planned store temperature in degrees C
+            at the end of this step. None for all other device types.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -506,6 +532,8 @@ class DeviceSetpoint(BaseModel):
     loadbalance_active: bool | None = None
     pv_is_curtailed: bool | None = None
     soc_kwh: float | None = None
+    boost_stage: int | None = None
+    temp_c: float | None = None
 
 
 class ScheduleStep(BaseModel):

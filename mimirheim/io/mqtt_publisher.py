@@ -48,6 +48,7 @@ _LOAD_TYPES = frozenset(
         "deferrable_load",
         "ev_charger",
         "thermal_boiler",
+        "heat_store",
         "space_heating_hp",
         "combi_heat_pump",
     }
@@ -257,9 +258,14 @@ class MqttPublisher:
             # answerable in one place.
             prefix = self._config.mqtt.topic_prefix
             for device_name, setpoint in current.devices.items():
+                payload: dict[str, Any] = {"kw": setpoint.kw, "type": setpoint.type}
+                if setpoint.type == "heat_store":
+                    # Discrete devices switch on the stage, not on kw, which is
+                    # the planned average draw and partial at a stage cap.
+                    payload["boost_stage"] = setpoint.boost_stage
                 self._client.publish(
                     f"{prefix}/device/{device_name}/setpoint",
-                    json.dumps({"kw": setpoint.kw, "type": setpoint.type}),
+                    json.dumps(payload),
                     qos=1,
                     retain=True,
                 )

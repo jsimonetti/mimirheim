@@ -31,7 +31,7 @@ Devices that value displaced consumption need to know how much of it would have 
 baseline_import[t] = max(0, base_load_forecast[t] - clipped_pv_kw[t]) * dt   # kWh
 ```
 
-`clipped_pv_kw` is the series `build_and_solve()` accumulates for the naive-cost baseline: every array's forecast clipped to its deliverable ceiling, plus each hybrid inverter's panels clipped to `max_pv_kw` and taken through the inverter. It must be called once per solve in `build_and_solve()`, after the hybrid inverter loop, and the result passed to the consuming device explicitly. No device consumes it yet, so `build_and_solve()` does not call it.
+`clipped_pv_kw` is the series `build_and_solve()` accumulates for the naive-cost baseline: every array's forecast clipped to its deliverable ceiling, plus each hybrid inverter's panels clipped to `max_pv_kw` and taken through the inverter. `build_and_solve()` calls it once per solve, after the hybrid inverter loop and only when a heat store is configured, and passes the result to each heat store's `add_constraints` explicitly (§8, "Heat store model").
 
 ## Phase-1 import credit
 
