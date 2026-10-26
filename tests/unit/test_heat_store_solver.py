@@ -559,7 +559,7 @@ def test_deny_window_crossing_midnight() -> None:
 
 
 def test_deny_window_recurs_daily_and_ends_at_its_end_time() -> None:
-    """A 48-hour horizon sees the window on both days; the steps just outside are allowed.
+    """A 48-hour horizon sees the window on both days; the steps immediately outside are allowed.
 
     "01:00-02:00" denies steps 4 to 7 and 100 to 103. Prices are negative in
     every step, so without the window the store would be held at its cap

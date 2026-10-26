@@ -9,8 +9,7 @@ normal-program electricity that heat later displaces.
 
 The device works in energy terms. ``heat_store_energy`` is a pure translation
 from the temperature-based configuration and the measured temperature into the
-energy parameters the model uses, so a later energy-based configuration mode
-needs only a second translation function.
+energy parameters the model uses.
 
 The module does not import from ``mimirheim.io``. The measured temperature, the
 prices and the pre-solve import baseline are passed to ``add_constraints``
@@ -255,7 +254,7 @@ class HeatStoreDevice:
         # Per-step credit coefficients, set in add_constraints.
         self._import_credit: list[float] = []
         self._export_credit: list[float] = []
-        self._dt: float = 0.25
+        self._dt: float = 0.25  # overwritten in add_variables from ctx.dt
         # Credit of the idle plan in EUR, and whether a persisted boost run
         # forces a boost in step 0; both set in add_constraints.
         self._idle_credit_eur: float = 0.0
@@ -411,13 +410,15 @@ class HeatStoreDevice:
                 - self._w[t]
             )
 
-            # Stored heat replaces at most the normal program's maintenance
-            # heat for this step.
+            # Caps w[t] (kWh) at the normal program's maintenance heat for
+            # this step: stored heat cannot replace more than that program
+            # would have supplied.
             ctx.solver.add_constraint(self._w[t] <= energy.maintenance_kwh)
             # Where the store without any boost still holds enough heat, it
-            # physically covers the full maintenance loss. Boosts only add
-            # heat, so this holds in every plan. It stops the solver holding
-            # back heat for steps with a higher credit. See
+            # physically covers the full maintenance loss, so w[t] equals the
+            # maintenance heat in kWh. Boosts only add heat, so this holds in
+            # every plan. It stops the solver holding back heat for steps with
+            # a higher credit. See
             # IMPLEMENTATION_DETAILS.md §8, subsection "Heat store model".
             if t in covered_steps:
                 ctx.solver.add_constraint(self._w[t] == energy.maintenance_kwh)
@@ -435,7 +436,7 @@ class HeatStoreDevice:
         boosting_before = boost_run is not None and boost_run.boosting
         self._carry_over_forced = False
         self._add_min_run_constraints(ctx, boosting_before)
-        if boost_run is not None and boost_run.boosting:
+        if boosting_before:
             self._add_carry_over_constraints(ctx, boost_run)
 
     def _add_min_run_constraints(self, ctx: ModelContext, boosting_before: bool) -> None:
