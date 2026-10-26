@@ -403,6 +403,10 @@ The division by `dt` puts the kWh-based credit on the same per-kW scale as grid 
 
 Flat prices never boost: storing heat at stage `s` costs `price / cop[s]` per kWh of heat, and because `d > 0` and `cop[s] <= normal_cop`, less than that heat is later displaced at `price / normal_cop`. No tie-breaking penalty is needed.
 
+### Heat store phase-1 import credit
+
+The device also implements `phase1_import_credit(t)` (§10, "Phase-1 import credit"), returning `imp[t] / dt` in kW. Only `imp[t]` counts: displaced electricity that PV would have covered lowers no import. Under `minimize_consumption` this lets a boost on surplus PV count as lower import, so phase 1 uses the store to absorb surplus, and the phase-1 lock keeps that boost in phase 2 even when its cost is slightly positive. Under `balanced` the self-sufficiency term includes it. Grid-powered boosting never lowers credited import: 1 kW imported displaces at most `cop[s] / normal_cop` (at most 1) kW later, minus decay, so flat prices never boost under any strategy.
+
 ### Gain threshold
 
 `apply_gain_threshold` (`min_dispatch_gain_eur`) treats a heat store as idle-able: the idle schedule sets `kw = 0`, `boost_stage = 0` and leaves `temp_c` unset, like a battery's `soc_kwh`. The persisted boost run state then records stage 0 through the normal publisher path.

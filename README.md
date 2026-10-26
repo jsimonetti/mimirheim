@@ -203,8 +203,8 @@ Each solve publishes the boost stage per store (`0` = no boost). The integration
 Strategy behaviour:
 
 - `minimize_cost`: the credit is part of the confidence-weighted cost.
-- `balanced`: the credit is part of the cost component and is scaled by the cost weight like grid cost, so `balanced` never boosts on flat prices either.
-- `minimize_consumption`: phase 1 minimises import without regard to the store; the credit applies in phase 2.
+- `balanced`: the credit is part of the cost component and is scaled by the cost weight like grid cost. The self-sufficiency component also counts the import that stored heat displaces, so `balanced` can store surplus PV as heat even when export would earn as much. It never boosts on flat prices.
+- `minimize_consumption`: phase 1 counts the import that stored heat displaces as reduced import, so the store absorbs surplus PV. A boost from the grid never reduces import, so this strategy does not boost from the grid, even on a price spread, unless the result is `strategy_degraded`. Phase 2 applies the credit as under `minimize_cost`.
 
 With `min_dispatch_gain_eur` set, a heat store is idled like other storage when the gain is below the threshold: `kw` 0 and `boost_stage` 0. The gain counts the credit that boosts add; heat already in the store does not count, because it drains whether or not mimirheim boosts. The threshold is not applied while a boost run carried over from an earlier solve has not yet reached `min_run_steps`.
 

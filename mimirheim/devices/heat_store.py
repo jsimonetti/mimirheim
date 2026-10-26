@@ -549,6 +549,22 @@ class HeatStoreDevice:
         """
         return [-self._credit(t, self._imp[t], self._rest[t]) * (1.0 / self._dt)]
 
+    def phase1_import_credit(self, t: int) -> list[Any]:
+        """Return the grid import the store's discharge displaces at step t, in kW.
+
+        Only imp[t] counts: displaced electricity that PV would have covered
+        lowers no import. A grid-powered boost never lowers credited import.
+        See IMPLEMENTATION_DETAILS.md §8, subsection "Heat store phase-1 import
+        credit".
+
+        Args:
+            t: Zero-based time step index.
+
+        Returns:
+            A list with one solver expression.
+        """
+        return [self._imp[t] * (1.0 / self._dt)]
+
     def _credit(self, t: int, imp: Any, rest: Any) -> Any:
         """Value displaced normal-program electricity at step t, in EUR.
 

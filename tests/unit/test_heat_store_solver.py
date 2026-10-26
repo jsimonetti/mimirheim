@@ -122,7 +122,9 @@ def _temps(result: SolveResult) -> list[float]:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("strategy", ["minimize_cost", "balanced"])
+@pytest.mark.parametrize(
+    "strategy", ["minimize_cost", "balanced", "minimize_consumption"]
+)
 def test_flat_prices_never_boost(strategy: str) -> None:
     result = build_and_solve(
         _bundle(prices=[0.25] * _HORIZON, strategy=strategy), _config()
@@ -298,6 +300,77 @@ def test_hybrid_inverter_pv_counts_towards_covering_base_load() -> None:
             prices=prices, export_prices=exports, hybrid_pv_kw=[5.0] * _HORIZON
         ),
         _config(hybrid=True),
+    )
+
+    assert all(stage == 0 for stage in _stages(result))
+
+
+# ---------------------------------------------------------------------------
+# minimize_consumption and balanced
+# ---------------------------------------------------------------------------
+
+# Net metering: export earns the import price, so under minimize_cost a boost
+# on surplus PV forgoes exactly the value it later displaces, minus decay, and
+# never pays. Only the phase-1 import credit makes it worthwhile.
+_SURPLUS_STEPS = 16
+
+
+def _surplus_pv_kw() -> list[float]:
+    return [5.0] * _SURPLUS_STEPS + [0.0] * (_HORIZON - _SURPLUS_STEPS)
+
+
+def _surplus_bundle(strategy: str) -> SolveBundle:
+    prices = [0.25] * _HORIZON
+    return _bundle(
+        prices=prices,
+        export_prices=prices,
+        pv_kw=_surplus_pv_kw(),
+        strategy=strategy,
+    )
+
+
+@pytest.mark.parametrize("strategy", ["minimize_consumption", "balanced"])
+def test_surplus_pv_is_stored_to_displace_later_import(strategy: str) -> None:
+    result = build_and_solve(_surplus_bundle(strategy), _config(pv=True))
+
+    stages = _stages(result)
+    assert any(stage == 1 for stage in stages[:_SURPLUS_STEPS])
+    assert all(stage == 0 for stage in stages[_SURPLUS_STEPS:])
+
+
+def test_surplus_pv_boost_does_not_pay_under_minimize_cost() -> None:
+    result = build_and_solve(_surplus_bundle("minimize_cost"), _config(pv=True))
+
+    assert all(stage == 0 for stage in _stages(result))
+
+
+def test_phase_one_lock_keeps_the_surplus_boost_in_phase_two() -> None:
+    """Phase 2 minimises cost, which alone would idle the store.
+
+    Boosting on surplus PV leaves grid import unchanged; only the credit
+    lowers the phase-1 objective. The boost therefore survives phase 2 only
+    if the lock constrains import minus the credit, not import alone.
+    """
+    consumption = build_and_solve(
+        _surplus_bundle("minimize_consumption"), _config(pv=True)
+    )
+    cost = build_and_solve(_surplus_bundle("minimize_cost"), _config(pv=True))
+
+    # At least one more full-power boost step than minimize_cost, which has none.
+    assert sum(_draw_kw(consumption)) > sum(_draw_kw(cost)) + _STAGE_KW - 0.1
+    assert sum(s.grid_import_kw for s in consumption.schedule) == pytest.approx(
+        sum(s.grid_import_kw for s in cost.schedule), abs=1e-4
+    )
+
+
+def test_price_spread_does_not_justify_a_grid_boost_under_minimize_consumption() -> None:
+    """One kW imported displaces at most cop / normal_cop = 1 kW later, minus decay.
+
+    A grid boost therefore raises import minus credit, which phase 1 locks
+    before phase 2 can weigh the price spread.
+    """
+    result = build_and_solve(
+        _bundle(prices=_spread_prices(), strategy="minimize_consumption"), _config()
     )
 
     assert all(stage == 0 for stage in _stages(result))
