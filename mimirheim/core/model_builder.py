@@ -241,6 +241,35 @@ def _dt_from_horizon(horizon: int) -> float:
     return 0.25
 
 
+def _baseline_import_kwh(
+    base_load_kw: list[float], clipped_pv_kw: list[float], dt: float
+) -> list[float]:
+    """Compute the pre-solve grid import per step, before any device dispatch.
+
+    This is the energy the household would import if nothing were scheduled:
+    the base load less what the PV can deliver, floored at zero. Devices that
+    value displaced consumption split it between import and export value with
+    this series. See IMPLEMENTATION_DETAILS.md §10, subsection "Device
+    economic terms".
+
+    Args:
+        base_load_kw: Base load forecast per step in kW. May be longer than
+            ``clipped_pv_kw``; steps beyond the horizon are ignored.
+        clipped_pv_kw: Deliverable PV per step in kW, clipped to each array's
+            ceiling and including hybrid inverter panels, as accumulated in
+            ``build_and_solve``.
+        dt: Step duration in hours.
+
+    Returns:
+        Baseline import per step in kWh, one entry per ``clipped_pv_kw`` step.
+    """
+    horizon = len(clipped_pv_kw)
+    return [
+        max(0.0, load - pv) * dt
+        for load, pv in zip(base_load_kw[:horizon], clipped_pv_kw, strict=True)
+    ]
+
+
 def _eval_net_power(ctx: ModelContext, expr: Any) -> float:
     """Evaluate a device's net_power expression after a solve.
 

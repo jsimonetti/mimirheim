@@ -22,7 +22,12 @@ from mimirheim.core.bundle import (
     SolveBundle,
     SolveResult,
 )
-from mimirheim.core.model_builder import _compute_naive_cost, _compute_soc_credit, build_and_solve
+from mimirheim.core.model_builder import (
+    _baseline_import_kwh,
+    _compute_naive_cost,
+    _compute_soc_credit,
+    build_and_solve,
+)
 
 
 def _bundle(
@@ -627,3 +632,22 @@ def test_soc_credit_of_a_battery_follows_the_solver_soc() -> None:
     avg_price = sum(bundle.horizon_prices) / horizon
     assert result.soc_credit_eur == pytest.approx(avg_price * (end_soc - 2.0) * 0.9)
 
+
+
+# ---------------------------------------------------------------------------
+# Baseline import
+# ---------------------------------------------------------------------------
+
+
+def test_baseline_import_is_the_load_shortfall_in_kwh() -> None:
+    """Baseline import is max(0, load - clipped PV) * dt per step.
+
+    Steps where PV covers the load contribute zero, not a negative import.
+    """
+    baseline = _baseline_import_kwh(
+        base_load_kw=[2.0, 1.0, 0.5, 0.0],
+        clipped_pv_kw=[0.0, 1.0, 1.5, 0.0],
+        dt=0.25,
+    )
+
+    assert baseline == pytest.approx([0.5, 0.0, 0.0, 0.0])

@@ -42,6 +42,22 @@ class Device(Protocol):
         For most devices this is zero. Battery and EV return a wear cost."""
 ```
 
+Two further methods are optional. The `ObjectiveBuilder` looks them up with `getattr`, and a device that does not define them contributes nothing. Like `objective_terms`, each may return the number `0`, a single expression, or a list of expressions.
+
+```python
+    def economic_terms(self, t: int) -> LinExpr:
+        """Return terms valued at forecast prices, in EUR per step, like grid cost.
+        Added inside the confidence-weighted economic block."""
+
+    def phase1_import_credit(self, t: int) -> LinExpr:
+        """Return a credit in kW subtracted from grid import at step t wherever
+        the objective minimises import volume."""
+```
+
+The difference from `objective_terms` is how the term is weighted. Wear terms are added at full weight under every strategy, because wear happens regardless of forecast quality. Economic terms are multiplied by `confidence[t]` together with grid cost, scaled by the cost weight under `balanced`, and absent from `minimize_consumption` phase 1. The phase-1 import credit enters the import volume that `minimize_consumption` phase 1 minimises and locks, and the `balanced` self-sufficiency term. See §10, subsections "Device economic terms" and "Phase-1 import credit".
+
+Values a device needs to build these terms, such as the pre-solve baseline import, must be computed in `build_and_solve()` and passed to that device explicitly. `ModelContext` does not carry them.
+
 `DeviceInputs` is a union of the per-device input models from `SolveBundle` — the model builder slices the bundle and passes the relevant piece to each device.
 
 `LinExpr` is the solver expression type produced when device variables are combined arithmetically (e.g. `self.charge_seg[t, 0] + self.charge_seg[t, 1]`). It is whatever type `SolverBackend.add_var()` returns when added together. Device code must only return expressions formed from its own variables — never raw numeric values, and never variables belonging to another device.
@@ -229,6 +245,7 @@ Internally it branches on `bundle.strategy`:
 
 All three modes add:
 - Device wear terms from `device.objective_terms(t)` for each device
+- Device economic terms from the optional `device.economic_terms(t)`, inside the confidence-weighted economic block (phase 2 only under `minimize_consumption`)
 - Import/export hard cap enforcement from `constraints.import_limit_kw` / `constraints.export_limit_kw` (added as constraints, not objective terms)
 - Confidence weighting: every economic term is multiplied by `bundle.horizon_confidence[t]`
 

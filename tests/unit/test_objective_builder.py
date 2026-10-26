@@ -909,3 +909,210 @@ def test_a_time_limited_phase_1_is_locked_but_reported_as_degraded() -> None:
     assert total_import < 1e-3, (
         f"phase 2 imported {total_import:.3f} kW: the incumbent was not locked"
     )
+
+
+# ---------------------------------------------------------------------------
+# Device economic terms and phase-1 import credit hooks
+# ---------------------------------------------------------------------------
+
+
+class _CreditedLoad:
+    """Test double for a device using the optional economic hooks.
+
+    It consumes ``x[t]`` kW, bounded to ``[lb_kw, ub_kw]``. Each kW of
+    consumption earns ``credit_eur_per_kw`` through ``economic_terms`` and
+    ``phase1_credit_per_kw`` kW through ``phase1_import_credit``. A zero rate
+    makes the hook return the number 0, the shape a device without anything
+    to contribute uses.
+    """
+
+    def __init__(
+        self,
+        lb_kw: float,
+        ub_kw: float,
+        credit_eur_per_kw: float = 0.0,
+        phase1_credit_per_kw: float = 0.0,
+    ) -> None:
+        self.lb_kw = lb_kw
+        self.ub_kw = ub_kw
+        self.credit_eur_per_kw = credit_eur_per_kw
+        self.phase1_credit_per_kw = phase1_credit_per_kw
+        self.x: dict[int, object] = {}
+
+    def add_variables(self, ctx: ModelContext) -> None:
+        for t in ctx.T:
+            self.x[t] = ctx.solver.add_var(lb=self.lb_kw, ub=self.ub_kw)
+
+    def net_power(self, t: int) -> object:
+        return -self.x[t]
+
+    def objective_terms(self, t: int) -> int:
+        return 0
+
+    def economic_terms(self, t: int) -> object:
+        if self.credit_eur_per_kw == 0.0:
+            return 0
+        return -self.credit_eur_per_kw * self.x[t]
+
+    def phase1_import_credit(self, t: int) -> object:
+        if self.phase1_credit_per_kw == 0.0:
+            return 0
+        return self.phase1_credit_per_kw * self.x[t]
+
+
+def _build_credited(
+    load: _CreditedLoad, pv_kw: float = 0.0
+) -> tuple[ModelContext, Grid]:
+    """Wire a grid, the credited load, and a fixed PV output into a model."""
+    ctx = ModelContext(solver=CBCSolverBackend(), horizon=4, dt=0.25)
+    grid = Grid(config=GridConfig(import_limit_kw=20.0, export_limit_kw=10.0))
+    grid.add_variables(ctx)
+    grid.add_constraints(ctx, inputs=None)
+    load.add_variables(ctx)
+    for t in ctx.T:
+        ctx.solver.add_constraint(grid.net_power(t) + load.net_power(t) + pv_kw == 0)
+    return ctx, grid
+
+
+def _no_battery_config(
+    balanced_weights: BalancedWeightsConfig | None = None,
+) -> MimirheimConfig:
+    return MimirheimConfig(
+        mqtt=MqttConfig(host="localhost", client_id="test"),
+        outputs=OutputsConfig(
+            schedule="mimir/schedule",
+            current="mimir/current",
+            last_solve="mimir/status",
+            availability="mimir/status/availability",
+        ),
+        grid=GridConfig(import_limit_kw=20.0, export_limit_kw=10.0),
+        objectives=ObjectivesConfig(balanced_weights=balanced_weights),
+    )
+
+
+def test_economic_terms_are_confidence_weighted_under_minimize_cost() -> None:
+    """Device economic terms are scaled by confidence together with grid cost.
+
+    A fixed 1 kW load imports at 0.30 and earns a 0.20 credit at every step,
+    with confidence 0.5. Weighted together, each step contributes
+    0.5 * (0.30 - 0.20) = 0.05. Adding the credit at full weight, like a wear
+    term, would give 0.15 - 0.20 = -0.05 instead.
+    """
+    load = _CreditedLoad(lb_kw=1.0, ub_kw=1.0, credit_eur_per_kw=0.20)
+    ctx, grid = _build_credited(load)
+    bundle = _bundle(prices=[0.30] * 4, confidence=[0.5] * 4)
+
+    ObjectiveBuilder().build(ctx, [load], grid, bundle, _no_battery_config())
+    assert ctx.solver.solve() == "optimal"
+
+    assert ctx.solver.objective_value() == pytest.approx(4 * 0.05, abs=1e-8)
+
+
+def test_economic_terms_are_scaled_by_cost_weight_under_balanced() -> None:
+    """Under balanced, device economic terms are scaled by cw like grid cost.
+
+    Equal weights give cw = sw = 0.5. A fixed 1 kW load at 0.30 with a 0.20
+    credit contributes 0.5 * (0.30 - 0.20) + 0.5 * 1.0 = 0.55 per step. A
+    credit added at full weight would give 0.15 - 0.20 + 0.5 = 0.45.
+    """
+    load = _CreditedLoad(lb_kw=1.0, ub_kw=1.0, credit_eur_per_kw=0.20)
+    ctx, grid = _build_credited(load)
+    bundle = _bundle(strategy="balanced", prices=[0.30] * 4)
+    config = _no_battery_config(
+        BalancedWeightsConfig(cost_weight=1.0, self_sufficiency_weight=1.0)
+    )
+
+    ObjectiveBuilder().build(ctx, [load], grid, bundle, config)
+    assert ctx.solver.solve() == "optimal"
+
+    assert ctx.solver.objective_value() == pytest.approx(4 * 0.55, abs=1e-8)
+
+
+def test_balanced_self_sufficiency_term_subtracts_phase1_import_credit() -> None:
+    """The balanced self-sufficiency term is sw * (import - phase-1 credit).
+
+    A fixed 1 kW load at 0.30 with a phase-1 credit of 0.4 kW per kW
+    contributes 0.5 * 0.30 + 0.5 * (1.0 - 0.4) = 0.45 per step. Without the
+    credit it would be 0.5 * 0.30 + 0.5 * 1.0 = 0.65.
+    """
+    load = _CreditedLoad(lb_kw=1.0, ub_kw=1.0, phase1_credit_per_kw=0.4)
+    ctx, grid = _build_credited(load)
+    bundle = _bundle(strategy="balanced", prices=[0.30] * 4)
+    config = _no_battery_config(
+        BalancedWeightsConfig(cost_weight=1.0, self_sufficiency_weight=1.0)
+    )
+
+    ObjectiveBuilder().build(ctx, [load], grid, bundle, config)
+    assert ctx.solver.solve() == "optimal"
+
+    assert ctx.solver.objective_value() == pytest.approx(4 * 0.45, abs=1e-8)
+
+
+def test_economic_terms_are_absent_from_minimize_consumption_phase_1() -> None:
+    """Phase 1 minimises import volume only; device economic terms do not enter.
+
+    A flexible load earns a credit larger than the import price. If the credit
+    entered phase 1 it would pull the load on and lock a positive import
+    volume. Phase 1 must instead find zero import, which the lock then holds.
+    """
+    load = _CreditedLoad(lb_kw=0.0, ub_kw=1.0, credit_eur_per_kw=1.0)
+    ctx, grid = _build_credited(load)
+    bundle = _bundle(strategy="minimize_consumption", prices=[0.30] * 4)
+
+    budget = ObjectiveBuilder().build(ctx, [load], grid, bundle, _no_battery_config())
+    assert ctx.solver.solve(time_limit_seconds=budget) == "optimal"
+
+    total_import = sum(ctx.solver.var_value(grid.import_[t]) for t in ctx.T)
+    assert total_import == pytest.approx(0.0, abs=1e-3)
+
+
+def test_economic_terms_are_part_of_minimize_consumption_phase_2() -> None:
+    """Phase 2 uses the economic block including device economic terms.
+
+    1 kW of PV covers the flexible load in full, so phase 1 locks zero import
+    whatever the load does. In phase 2 the load either absorbs the PV and
+    earns its 0.20 credit or lets it export at 0.05. The credit must win.
+    """
+    load = _CreditedLoad(lb_kw=0.0, ub_kw=1.0, credit_eur_per_kw=0.20)
+    ctx, grid = _build_credited(load, pv_kw=1.0)
+    bundle = _bundle(
+        strategy="minimize_consumption", prices=[0.30] * 4, export_prices=[0.05] * 4
+    )
+
+    budget = ObjectiveBuilder().build(ctx, [load], grid, bundle, _no_battery_config())
+    assert ctx.solver.solve(time_limit_seconds=budget) == "optimal"
+
+    for t in ctx.T:
+        assert ctx.solver.var_value(load.x[t]) == pytest.approx(1.0, abs=1e-6)
+
+
+def test_minimize_consumption_phase_1_and_lock_subtract_import_credit() -> None:
+    """Phase 1 minimises import minus credits, and the lock bounds the same sum.
+
+    Each kW of load earns 2 kW of phase-1 credit, so phase 1 runs the load at
+    full power: import minus credit is 1 - 2 = -1 per step. Phase 2 prices
+    import at 0.30 with no economic credit, so on its own it would switch the
+    load off. Only a lock on import minus credit keeps the load on; a lock on
+    import alone would let phase 2 drop it.
+    """
+    load = _CreditedLoad(lb_kw=0.0, ub_kw=1.0, phase1_credit_per_kw=2.0)
+    ctx, grid = _build_credited(load)
+    bundle = _bundle(strategy="minimize_consumption", prices=[0.30] * 4)
+
+    budget = ObjectiveBuilder().build(ctx, [load], grid, bundle, _no_battery_config())
+    assert ctx.solver.solve(time_limit_seconds=budget) == "optimal"
+
+    for t in ctx.T:
+        assert ctx.solver.var_value(load.x[t]) == pytest.approx(1.0, abs=1e-3)
+
+
+def test_hooks_returning_numeric_zero_leave_the_objective_unchanged() -> None:
+    """A device whose hooks return the number 0 contributes nothing."""
+    load = _CreditedLoad(lb_kw=1.0, ub_kw=1.0)
+    ctx, grid = _build_credited(load)
+    bundle = _bundle(prices=[0.30] * 4)
+
+    ObjectiveBuilder().build(ctx, [load], grid, bundle, _no_battery_config())
+    assert ctx.solver.solve() == "optimal"
+
+    assert ctx.solver.objective_value() == pytest.approx(4 * 0.30, abs=1e-8)

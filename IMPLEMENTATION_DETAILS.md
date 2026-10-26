@@ -46,7 +46,7 @@ Why the solver does not zero out closed-loop device variables; enforcer eligibil
 
 ## 10. Exchange-shaping secondary term
 
-The small `exchange_shaping_weight` objective term that breaks degeneracy under symmetric net-of-meter pricing. See [`IMPLEMENTATION_DETAILS/10_exchange_shaping_secondary_term.md`](IMPLEMENTATION_DETAILS/10_exchange_shaping_secondary_term.md).
+The small `exchange_shaping_weight` objective term that breaks degeneracy under symmetric net-of-meter pricing, and the optional device hooks for confidence-weighted economic terms and the phase-1 import credit. See [`IMPLEMENTATION_DETAILS/10_exchange_shaping_secondary_term.md`](IMPLEMENTATION_DETAILS/10_exchange_shaping_secondary_term.md).
 
 ## 11. Concurrency model
 

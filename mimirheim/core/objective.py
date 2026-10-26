@@ -88,8 +88,10 @@ class ObjectiveBuilder:
 
         Args:
             ctx: The model context holding the solver and time horizon.
-            devices: All non-grid devices whose ``objective_terms(t)`` values
-                contribute wear-cost penalties to the objective.
+            devices: All non-grid devices. Their ``objective_terms(t)``
+                values contribute wear-cost penalties; the optional
+                ``economic_terms(t)`` and ``phase1_import_credit(t)`` hooks
+                contribute to the economic block and the import volume.
             grid: The grid device. Its import and export variables are the
                 primary economic variables in the objective.
             bundle: Runtime inputs including the strategy name, time-varying
@@ -176,7 +178,8 @@ class ObjectiveBuilder:
         apart.
 
         Terms are produced in step order, each step contributing its economic
-        term followed by the wear terms of every device, then the terminal SoC
+        term (grid cost plus device economic terms, confidence-weighted)
+        followed by the wear terms of every device, then the terminal SoC
         and exchange-shaping terms at the end. The order is part of the
         contract: floating-point addition is not associative, so reordering can
         shift the objective in the last bits and change which of two equally
@@ -195,11 +198,7 @@ class ObjectiveBuilder:
         """
         terms: list[Any] = []
         for t in ctx.T:
-            economic = weight_by_confidence(
-                bundle.horizon_prices[t] * grid.import_[t]
-                - bundle.horizon_export_prices[t] * grid.export_[t],
-                bundle.horizon_confidence[t],
-            )
+            economic = self._economic_term(devices, grid, bundle, t)
             # weight_by_confidence returns Python int 0 when confidence == 0;
             # only append solver expressions (non-numeric values).
             if not isinstance(economic, (int, float)):
@@ -228,12 +227,108 @@ class ObjectiveBuilder:
         Returns:
             Zero or more solver expressions.
         """
-        wear = device.objective_terms(t)
-        if isinstance(wear, list):
-            return [w for w in wear if not isinstance(w, (int, float))]
-        if isinstance(wear, (int, float)):
+        return ObjectiveBuilder._solver_terms(device.objective_terms(t))
+
+    @staticmethod
+    def _solver_terms(value: Any) -> list[Any]:
+        """Flatten a device hook's return value into a list of solver expressions.
+
+        Device hooks return a scalar zero when the device has nothing to
+        contribute, a single solver expression, or a list of expressions.
+        Numeric values are dropped rather than added, because adding a Python
+        int to a solver expression is pointless work and some backends object
+        to it.
+
+        Args:
+            value: The return value of a device hook for one step.
+
+        Returns:
+            Zero or more solver expressions.
+        """
+        if isinstance(value, list):
+            return [v for v in value if not isinstance(v, (int, float))]
+        if isinstance(value, (int, float)):
             return []
-        return [wear]
+        return [value]
+
+    @staticmethod
+    def _optional_hook_terms(device: Any, hook: str, t: int) -> list[Any]:
+        """Return the terms of an optional device hook at step ``t``.
+
+        ``economic_terms`` and ``phase1_import_credit`` are optional: a device
+        that does not define them contributes nothing. See
+        IMPLEMENTATION_DETAILS.md §8, subsection "Device method contract".
+
+        Args:
+            device: Any device.
+            hook: Name of the optional method, called as ``hook(t)``.
+            t: Time step index.
+
+        Returns:
+            Zero or more solver expressions.
+        """
+        method = getattr(device, hook, None)
+        if method is None:
+            return []
+        return ObjectiveBuilder._solver_terms(method(t))
+
+    def _economic_term(
+        self,
+        devices: list[Any],
+        grid: Grid,
+        bundle: SolveBundle,
+        t: int,
+    ) -> Any:
+        """Build the confidence-weighted economic term for step ``t``.
+
+        The term is grid import cost minus export revenue, plus every device's
+        ``economic_terms(t)``, all multiplied by ``confidence[t]``. Device
+        economic terms sit inside the weighting because they are valued at the
+        same forecast prices as grid exchange; wear terms do not, because wear
+        occurs regardless of forecast quality. See IMPLEMENTATION_DETAILS.md
+        §10, subsection "Device economic terms".
+
+        Args:
+            devices: Non-grid devices, some of which may define
+                ``economic_terms``.
+            grid: Grid device providing import and export variables.
+            bundle: Runtime inputs with prices and per-step confidence.
+            t: Time step index.
+
+        Returns:
+            A solver expression, or the Python int 0 when confidence is zero.
+        """
+        economic: Any = (
+            bundle.horizon_prices[t] * grid.import_[t]
+            - bundle.horizon_export_prices[t] * grid.export_[t]
+        )
+        for d in devices:
+            for term in self._optional_hook_terms(d, "economic_terms", t):
+                economic = economic + term
+        return weight_by_confidence(economic, bundle.horizon_confidence[t])
+
+    def _credited_import(self, devices: list[Any], grid: Grid, t: int) -> Any:
+        """Return grid import at step ``t`` minus every device's phase-1 credit.
+
+        This is the per-step quantity ``minimize_consumption`` phase 1 and the
+        ``balanced`` self-sufficiency term minimise, in kW. It is not
+        confidence-weighted, matching the plain import it extends. See
+        IMPLEMENTATION_DETAILS.md §10, subsection "Phase-1 import credit".
+
+        Args:
+            devices: Non-grid devices, some of which may define
+                ``phase1_import_credit``.
+            grid: Grid device providing the import variable.
+            t: Time step index.
+
+        Returns:
+            A solver expression in kW.
+        """
+        credited: Any = grid.import_[t]
+        for d in devices:
+            for credit in self._optional_hook_terms(d, "phase1_import_credit", t):
+                credited = credited - credit
+        return credited
 
     @staticmethod
     def _set_objective(ctx: ModelContext, terms: list[Any]) -> None:
@@ -269,7 +364,8 @@ class ObjectiveBuilder:
 
         For each time step t, the contribution to the objective is:
 
-            confidence[t] × (import_price[t] × import[t] − export_price[t] × export[t])
+            confidence[t] × (import_price[t] × import[t] − export_price[t] × export[t]
+                             + Σ_d device.economic_terms(t))
             + Σ_d device.objective_terms(t)
 
         A terminal SoC value term is also added for each storage device (battery
@@ -318,7 +414,8 @@ class ObjectiveBuilder:
         minimise the full net cost subject to the minimum import found.
 
         Phase 1 (executed inside this method):
-            Minimise ``Σ_t import[t]``. ``ctx.solver.solve()`` is called here
+            Minimise ``Σ_t (import[t] − Σ_d device.phase1_import_credit(t))``,
+            referred to below as the import volume. ``ctx.solver.solve()`` is called here
             to find the optimal total import I*. Two outcomes fall short of
             that and both set ``strategy_degraded``: a time-limited incumbent
             ("feasible") is locked as I* although it is an achievable volume
@@ -327,8 +424,8 @@ class ObjectiveBuilder:
             objective and this method returns early.
 
         Phase 2 (set up here; executed by the caller):
-            Add a hard constraint ``Σ_t import[t] <= I* + ε`` to preserve
-            the minimum import, then minimise the confidence-weighted net cost
+            Add a hard constraint ``Σ_t (import[t] − Σ_d credit[t]) <= I* + ε``
+            to preserve the minimum import volume, then minimise the confidence-weighted net cost
             (import cost minus export revenue) plus device wear cost plus
             terminal SoC value — exactly the same objective as
             ``_minimize_cost``. This shifts imports to the cheapest time slots
@@ -368,13 +465,14 @@ class ObjectiveBuilder:
         """
         phase_budget = config.solver.time_limit_seconds / 2.0
 
-        # Phase 1: minimise total import.
-        import_vars = [grid.import_[t] for t in ctx.T]
-        import_sum: Any = import_vars[0]
-        for v in import_vars[1:]:
-            import_sum = import_sum + v
+        # Phase 1: minimise total import minus device phase-1 import credits.
+        def _credited_import_sum() -> Any:
+            total: Any = self._credited_import(devices, grid, ctx.T[0])
+            for t in ctx.T[1:]:
+                total = total + self._credited_import(devices, grid, t)
+            return total
 
-        ctx.solver.set_objective_minimize(import_sum)
+        ctx.solver.set_objective_minimize(_credited_import_sum())
         phase_1_status = ctx.solver.solve(time_limit_seconds=phase_budget)
 
         if phase_1_status == "feasible":
@@ -417,21 +515,21 @@ class ObjectiveBuilder:
             )
             return config.solver.time_limit_seconds - phase_budget
 
-        # Record the optimal total import and lock it in with a small slack.
+        # Record the optimal credited import and lock it in with a small slack.
         # The slack prevents numeric infeasibility if the phase-1 optimal value
         # is fractionally below the sum of individual var_value readings.
-        i_star = sum(ctx.solver.var_value(v) for v in import_vars)
+        i_star = sum(
+            ctx.solver.var_value(self._credited_import(devices, grid, t))
+            for t in ctx.T
+        )
 
-        # Build the same sum a second time rather than reusing import_sum.
+        # Build the same sum a second time rather than reusing the objective.
         # mip.minimize() mutates the expression it is handed, stamping a sense
-        # of "MIN" onto it, so the object above is no longer a neutral linear
+        # of "MIN" onto it, so that object is no longer a neutral linear
         # expression. Feeding it into a constraint happens to work today, but
         # relying on that couples this code to an implementation detail of the
         # backend that SolverBackend exists to hide.
-        import_sum_for_constr: Any = import_vars[0]
-        for v in import_vars[1:]:
-            import_sum_for_constr = import_sum_for_constr + v
-        ctx.solver.add_constraint(import_sum_for_constr <= i_star + 1e-4)
+        ctx.solver.add_constraint(_credited_import_sum() <= i_star + 1e-4)
 
         # Phase 2: minimise confidence-weighted net cost subject to the locked-in
         # import volume from Phase 1. This shifts imports to the cheapest time slots
@@ -462,8 +560,13 @@ class ObjectiveBuilder:
         where the normalised weights sum to 1, and:
 
             cost_obj      = Σ_t confidence[t] × (price[t] × import[t]
-                                                  − export_price[t] × export[t])
-            self_suf_obj  = Σ_t import[t]   (minimising import = more self-sufficient)
+                                                  − export_price[t] × export[t]
+                                                  + Σ_d device.economic_terms(t))
+            self_suf_obj  = Σ_t (import[t] − Σ_d device.phase1_import_credit(t))
+
+        Minimising import makes the schedule more self-sufficient. Device
+        economic terms sit inside ``cost_obj`` and are therefore scaled by the
+        cost weight, never added at full weight.
 
         Normalising weights allows intuitive per-dimension tuning: doubling
         ``cost_weight`` shifts the blend toward cost minimisation without
@@ -485,21 +588,19 @@ class ObjectiveBuilder:
         sw = weights.self_sufficiency_weight / total_weight
 
         # Cost component: confidence-weighted net energy cost.
+        # Device economic terms are inside it, so they are scaled by cw too.
         cost_terms: list[Any] = []
         for t in ctx.T:
-            economic = weight_by_confidence(
-                bundle.horizon_prices[t] * grid.import_[t]
-                - bundle.horizon_export_prices[t] * grid.export_[t],
-                bundle.horizon_confidence[t],
-            )
+            economic = self._economic_term(devices, grid, bundle, t)
             # weight_by_confidence returns Python int 0 when confidence==0;
             # only scale and append solver expressions.
             if not isinstance(economic, (int, float)):
                 cost_terms.append(cw * economic)
 
-        # Self-sufficiency component: minimise total grid import.
+        # Self-sufficiency component: minimise total grid import minus device
+        # phase-1 import credits.
         for t in ctx.T:
-            cost_terms.append(sw * grid.import_[t])
+            cost_terms.append(sw * self._credited_import(devices, grid, t))
 
         # Device wear cost terms (unconditional, not confidence-weighted).
         for t in ctx.T:
