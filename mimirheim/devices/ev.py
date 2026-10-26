@@ -98,6 +98,42 @@ def _deadline_to_step(dt_value: datetime, solve_time: datetime, dt_hours: float)
     return int(delta_hours / dt_hours + 1e-9) - 1
 
 
+def charge_derate_line(config: EvConfig) -> tuple[float, float] | None:
+    """Return the charge ceiling line ``(slope, intercept)`` or None.
+
+    The ceiling on total charge power in kW at start-of-step SOC ``s`` is
+    ``slope * s + intercept``. Shared by the solver constraint and the
+    deliverability clamp so the two cannot diverge.
+    """
+    if config.reduce_charge_above_soc_kwh is None:
+        return None
+    max_charge_kw = sum(s.power_max_kw for s in config.charge_segments)
+    slope = (config.reduce_charge_min_kw - max_charge_kw) / (
+        config.capacity_kwh - config.reduce_charge_above_soc_kwh
+    )
+    return slope, max_charge_kw - slope * config.reduce_charge_above_soc_kwh
+
+
+def max_charge_energy_kwh(config: EvConfig, soc_start_kwh: float, dt_hours: float) -> float:
+    """Return the most energy the solver can store in one step, in kWh.
+
+    The power cap is the full segment power, or the derate line at
+    start-of-step SOC when that is lower, filled highest-efficiency segment
+    first (the energy-maximising allocation). Does not apply the
+    ``capacity_kwh`` limit; callers cap the resulting SOC.
+    """
+    line = charge_derate_line(config)
+    remaining_kw = sum(s.power_max_kw for s in config.charge_segments)
+    if line is not None:
+        remaining_kw = min(remaining_kw, line[0] * soc_start_kwh + line[1])
+    stored_kwh = 0.0
+    for seg in sorted(config.charge_segments, key=lambda s: s.efficiency, reverse=True):
+        kw = min(seg.power_max_kw, max(remaining_kw, 0.0))
+        stored_kwh += kw * seg.efficiency * dt_hours
+        remaining_kw -= kw
+    return stored_kwh
+
+
 class EvDevice:
     """Models an EV charger with optional V2H discharge as a MILP sub-problem.
 
@@ -479,12 +515,9 @@ class EvDevice:
         # Battery device's charge derating. See IMPLEMENTATION_DETAILS.md §8,
         # subsection "Power derating near SOC extremes" for the two-point
         # derivation and why start-of-step SOC.
-        if self.config.reduce_charge_above_soc_kwh is not None:
-            slope_c = (
-                (self.config.reduce_charge_min_kw - max_charge_kw)
-                / (self.config.capacity_kwh - self.config.reduce_charge_above_soc_kwh)
-            )
-            rhs_c = max_charge_kw - slope_c * self.config.reduce_charge_above_soc_kwh
+        derate_line = charge_derate_line(self.config)
+        if derate_line is not None:
+            slope_c, rhs_c = derate_line
             for t in ctx.T:
                 soc_prev = inputs.soc_kwh if t == 0 else self.soc[t - 1]
                 total_charge = sum(
