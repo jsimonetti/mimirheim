@@ -143,11 +143,11 @@ A discrete boost mode commanded by mimirheim, defined by its electrical power, e
 _Avoid_: Heating stage, normal stage
 
 **Stage cap**:
-The store temperature at which the device actually stops heating in a given boost stage; once reached, the stage draws only what replaces losses.
+The store temperature at which the device actually stops heating in a given boost stage; once reached, the stage draws only what replaces losses. Configured per stage as `max_temp_c`; the "maximum temperature" to avoid below refers to the device as a whole, not to this per-stage field.
 _Avoid_: Setpoint, maximum temperature (of the device as a whole)
 
 **Boost run state**:
-The persisted record of the boost stage commanded by mimirheim and when the current continuous boost run began.
+The persisted record of the boost stage commanded by mimirheim and when boosting last started or stopped.
 _Avoid_: Measured run state
 
 **Stored heat**:

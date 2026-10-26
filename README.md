@@ -636,7 +636,7 @@ Heat stores also carry the boost stage, always present and `0` when not boosting
 {"kw": -0.5, "type": "heat_store", "boost_stage": 1}
 ```
 
-In the schedule, heat store entries additionally carry `boost_stage` and the planned store temperature at the end of the step, `temp_c`.
+In the schedule, heat store entries additionally carry `boost_stage` and the planned store temperature at the end of the step, `temp_c`. Both keys are present on every device entry in the schedule and are `null` for devices other than heat stores.
 
 ### `outputs.last_solve`
 
