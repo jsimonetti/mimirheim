@@ -42,14 +42,14 @@ class Device(Protocol):
         For most devices this is zero. Battery and EV return a wear cost."""
 ```
 
-Two further methods are optional. The `ObjectiveBuilder` looks them up with `getattr`, and a device that does not define them contributes nothing. Like `objective_terms`, each may return the number `0`, a single expression, or a list of expressions.
+Two further methods are optional. Each is described by a `runtime_checkable` Protocol in `mimirheim/core/objective.py`: `EconomicTermsProvider` for `economic_terms` and `Phase1ImportCreditProvider` for `phase1_import_credit`. The `ObjectiveBuilder` calls a hook only on devices that satisfy its Protocol (`isinstance`), and a device that does not define the method contributes nothing. A device opts in by defining the method; it does not inherit from the Protocol. Like `objective_terms`, each may return the number `0`, a single expression, or a list of expressions.
 
 ```python
-    def economic_terms(self, t: int) -> LinExpr:
+    def economic_terms(self, t: int) -> Any:
         """Return terms valued at forecast prices, in EUR per step, like grid cost.
         Added inside the confidence-weighted economic block."""
 
-    def phase1_import_credit(self, t: int) -> LinExpr:
+    def phase1_import_credit(self, t: int) -> Any:
         """Return a credit in kW subtracted from grid import at step t wherever
         the objective minimises import volume."""
 ```

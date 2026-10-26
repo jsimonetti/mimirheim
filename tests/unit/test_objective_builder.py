@@ -21,10 +21,15 @@ from mimirheim.config.schema import (
 )
 from mimirheim.core.bundle import BatteryInputs, SolveBundle
 from mimirheim.core.context import ModelContext
-from mimirheim.core.objective import ObjectiveBuilder
+from mimirheim.core.objective import (
+    EconomicTermsProvider,
+    ObjectiveBuilder,
+    Phase1ImportCreditProvider,
+)
 from mimirheim.core.solver_backend import CBCSolverBackend
 from mimirheim.devices.battery import Battery
 from mimirheim.devices.grid import Grid
+from mimirheim.devices.heat_store import HeatStoreDevice
 
 
 # ---------------------------------------------------------------------------
@@ -961,9 +966,9 @@ class _CreditedLoad:
 
 
 def _build_credited(
-    load: _CreditedLoad, pv_kw: float = 0.0
+    load: _CreditedLoad | _PlainLoad, pv_kw: float = 0.0
 ) -> tuple[ModelContext, Grid]:
-    """Wire a grid, the credited load, and a fixed PV output into a model."""
+    """Wire a grid, the load, and a fixed PV output into a model."""
     ctx = ModelContext(solver=CBCSolverBackend(), horizon=4, dt=0.25)
     grid = Grid(config=GridConfig(import_limit_kw=20.0, export_limit_kw=10.0))
     grid.add_variables(ctx)
@@ -1116,3 +1121,63 @@ def test_hooks_returning_numeric_zero_leave_the_objective_unchanged() -> None:
     assert ctx.solver.solve() == "optimal"
 
     assert ctx.solver.objective_value() == pytest.approx(4 * 0.30, abs=1e-8)
+
+
+class _PlainLoad:
+    """Test double for a device that defines neither optional hook."""
+
+    def __init__(self, kw: float) -> None:
+        self.kw = kw
+        self.x: dict[int, object] = {}
+
+    def add_variables(self, ctx: ModelContext) -> None:
+        for t in ctx.T:
+            self.x[t] = ctx.solver.add_var(lb=self.kw, ub=self.kw)
+
+    def net_power(self, t: int) -> object:
+        return -self.x[t]
+
+    def objective_terms(self, t: int) -> int:
+        return 0
+
+
+def test_a_device_implementing_the_hook_protocols_is_recognised() -> None:
+    """A device defining both hooks satisfies both Protocols."""
+    load = _CreditedLoad(lb_kw=1.0, ub_kw=1.0)
+    assert isinstance(load, EconomicTermsProvider)
+    assert isinstance(load, Phase1ImportCreditProvider)
+
+
+def test_a_device_without_the_hooks_satisfies_neither_protocol() -> None:
+    """A device defining neither hook satisfies neither Protocol."""
+    load = _PlainLoad(kw=1.0)
+    assert not isinstance(load, EconomicTermsProvider)
+    assert not isinstance(load, Phase1ImportCreditProvider)
+
+
+def test_heat_store_device_satisfies_both_hook_protocols() -> None:
+    """HeatStoreDevice provides both optional objective hooks."""
+    assert issubclass(HeatStoreDevice, EconomicTermsProvider)
+    assert issubclass(HeatStoreDevice, Phase1ImportCreditProvider)
+
+
+@pytest.mark.parametrize("strategy", ["minimize_cost", "balanced", "minimize_consumption"])
+def test_a_device_without_the_hooks_contributes_nothing(strategy: str) -> None:
+    """A device without the optional hooks adds no terms under any strategy.
+
+    The same model is built twice: once with the load passed to the builder and
+    once without. The objective values must match.
+    """
+
+    def solve(devices_with_load: bool) -> float:
+        load = _PlainLoad(kw=1.0)
+        ctx, grid = _build_credited(load)
+        bundle = _bundle(strategy=strategy, prices=[0.30] * 4)
+        devices = [load] if devices_with_load else []
+        budget = ObjectiveBuilder().build(ctx, devices, grid, bundle, _no_battery_config())
+        assert ctx.solver.solve(time_limit_seconds=budget) == "optimal"
+        return ctx.solver.objective_value()
+
+    assert solve(devices_with_load=True) == pytest.approx(
+        solve(devices_with_load=False), abs=1e-8
+    )

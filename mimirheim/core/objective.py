@@ -18,13 +18,16 @@ Three strategies are supported:
 - ``balanced``: weighted sum of cost and self-sufficiency objectives, blended
   according to ``config.objectives.balanced_weights``.
 
+It also defines ``EconomicTermsProvider`` and ``Phase1ImportCreditProvider``,
+the Protocols for the optional device objective hooks.
+
 This module imports from ``mimirheim.core`` and ``mimirheim.devices`` but never from
 ``mimirheim.io``. It does not read configuration files, connect to MQTT, or perform
 any I/O.
 """
 
 import logging
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from mimirheim.config.schema import BalancedWeightsConfig, MimirheimConfig
 from mimirheim.core.bundle import SolveBundle
@@ -33,6 +36,48 @@ from mimirheim.core.context import ModelContext
 from mimirheim.devices.grid import Grid
 
 logger = logging.getLogger("mimirheim.solver")
+
+
+@runtime_checkable
+class EconomicTermsProvider(Protocol):
+    """A device that contributes terms to the confidence-weighted economic block.
+
+    The hook is optional: ``ObjectiveBuilder`` calls it only on devices that
+    satisfy this Protocol. See IMPLEMENTATION_DETAILS.md §8, subsection
+    "Device method contract".
+    """
+
+    def economic_terms(self, t: int) -> Any:
+        """Return terms valued at forecast prices at step ``t``, in EUR.
+
+        Args:
+            t: Time step index.
+
+        Returns:
+            The number 0, a single solver expression, or a list of them.
+        """
+        ...
+
+
+@runtime_checkable
+class Phase1ImportCreditProvider(Protocol):
+    """A device that credits grid import wherever the objective minimises it.
+
+    The hook is optional: ``ObjectiveBuilder`` calls it only on devices that
+    satisfy this Protocol. See IMPLEMENTATION_DETAILS.md §8, subsection
+    "Device method contract".
+    """
+
+    def phase1_import_credit(self, t: int) -> Any:
+        """Return the credit subtracted from grid import at step ``t``, in kW.
+
+        Args:
+            t: Time step index.
+
+        Returns:
+            The number 0, a single solver expression, or a list of them.
+        """
+        ...
 
 
 class ObjectiveBuilder:
@@ -251,27 +296,6 @@ class ObjectiveBuilder:
             return []
         return [value]
 
-    @staticmethod
-    def _optional_hook_terms(device: Any, hook: str, t: int) -> list[Any]:
-        """Return the terms of an optional device hook at step ``t``.
-
-        ``economic_terms`` and ``phase1_import_credit`` are optional: a device
-        that does not define them contributes nothing. See
-        IMPLEMENTATION_DETAILS.md §8, subsection "Device method contract".
-
-        Args:
-            device: Any device.
-            hook: Name of the optional method, called as ``hook(t)``.
-            t: Time step index.
-
-        Returns:
-            Zero or more solver expressions.
-        """
-        method = getattr(device, hook, None)
-        if method is None:
-            return []
-        return ObjectiveBuilder._solver_terms(method(t))
-
     def _economic_term(
         self,
         devices: list[Any],
@@ -289,8 +313,8 @@ class ObjectiveBuilder:
         §10, subsection "Device economic terms".
 
         Args:
-            devices: Non-grid devices, some of which may define
-                ``economic_terms``.
+            devices: Non-grid devices, some of which may satisfy
+                ``EconomicTermsProvider``.
             grid: Grid device providing import and export variables.
             bundle: Runtime inputs with prices and per-step confidence.
             t: Time step index.
@@ -303,7 +327,9 @@ class ObjectiveBuilder:
             - bundle.horizon_export_prices[t] * grid.export_[t]
         )
         for d in devices:
-            for term in self._optional_hook_terms(d, "economic_terms", t):
+            if not isinstance(d, EconomicTermsProvider):
+                continue
+            for term in self._solver_terms(d.economic_terms(t)):
                 economic = economic + term
         return weight_by_confidence(economic, bundle.horizon_confidence[t])
 
@@ -316,8 +342,8 @@ class ObjectiveBuilder:
         IMPLEMENTATION_DETAILS.md §10, subsection "Phase-1 import credit".
 
         Args:
-            devices: Non-grid devices, some of which may define
-                ``phase1_import_credit``.
+            devices: Non-grid devices, some of which may satisfy
+                ``Phase1ImportCreditProvider``.
             grid: Grid device providing the import variable.
             t: Time step index.
 
@@ -326,7 +352,9 @@ class ObjectiveBuilder:
         """
         credited: Any = grid.import_[t]
         for d in devices:
-            for credit in self._optional_hook_terms(d, "phase1_import_credit", t):
+            if not isinstance(d, Phase1ImportCreditProvider):
+                continue
+            for credit in self._solver_terms(d.phase1_import_credit(t)):
                 credited = credited - credit
         return credited
 
