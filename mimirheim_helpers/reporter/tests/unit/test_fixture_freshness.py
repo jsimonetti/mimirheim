@@ -27,7 +27,12 @@ def _keys(fixture_out: dict) -> tuple[set[str], set[str], set[str]]:
 def test_fixture_covers_every_solve_result_field(fixture_out: dict) -> None:
     """A field the fixture lacks is a field no render test can exercise."""
     result_keys, _, _ = _keys(fixture_out)
-    missing = set(SolveResult.model_fields) - result_keys
+    # Fields excluded from serialisation never reach a dump, so no fixture
+    # can carry them.
+    dumped = {
+        name for name, field in SolveResult.model_fields.items() if not field.exclude
+    }
+    missing = dumped - result_keys
     assert not missing, (
         f"fixture is missing SolveResult field(s) {sorted(missing)}; "
         "regenerate with scripts/refresh_reporter_fixtures.py"

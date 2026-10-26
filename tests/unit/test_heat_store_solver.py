@@ -16,7 +16,7 @@ which the normal program's maintenance loss of 0.233 * 0.4 * 0.25 = 0.0233 kWh
 per step takes 50 steps to use up.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -76,6 +76,7 @@ def _bundle(
     hybrid_pv_kw: list[float] | None = None,
     strategy: str = "minimize_cost",
     solve_time_utc: datetime = _T0,
+    boost_run: dict | None = None,
 ) -> SolveBundle:
     horizon = len(prices)
     pv = pv_kw if pv_kw is not None else [0.0] * horizon
@@ -89,7 +90,9 @@ def _bundle(
         "horizon_confidence": [1.0] * horizon,
         "pv_forecast": pv,
         "base_load_forecast": [load_kw] * horizon,
-        "heat_store_inputs": {"boiler": {"current_temp_c": temp_c}},
+        "heat_store_inputs": {
+            "boiler": {"current_temp_c": temp_c, "boost_run": boost_run}
+        },
     }
     if pv_kw is not None:
         data["pv_forecasts"] = {"roof": pv}
@@ -665,3 +668,86 @@ def test_no_boost_starts_that_cannot_complete_before_a_deny_window() -> None:
     assert all(stage == 0 for stage in stages[:8])
     for first, length in _runs(stages):
         assert length >= 6 or first + length == _HORIZON
+
+
+# ---------------------------------------------------------------------------
+# Minimum run across solves
+# ---------------------------------------------------------------------------
+
+
+def _boosting_since(steps_ago: int, stage: int = 1) -> dict:
+    """A persisted boost run at ``stage`` that started ``steps_ago`` steps before _T0."""
+    return {"stage": stage, "since": _T0 - timedelta(minutes=15 * steps_ago)}
+
+
+def test_a_persisted_boost_is_continued_for_the_rest_of_its_minimum_run() -> None:
+    """Flat prices never boost, so every boosting step is the carry-over.
+
+    The run started one step before this solve; with a minimum run of four,
+    three steps remain.
+    """
+    result = build_and_solve(
+        _bundle(prices=[0.25] * _HORIZON, boost_run=_boosting_since(1)),
+        _config(min_run_steps=4),
+    )
+
+    assert _runs(_stages(result)) == [(0, 3)]
+
+
+def test_a_persisted_boost_started_in_this_slot_runs_its_full_minimum_run() -> None:
+    """A re-solve in the slot the boost started in has elapsed nothing."""
+    result = build_and_solve(
+        _bundle(prices=[0.25] * _HORIZON, boost_run=_boosting_since(0, stage=2)),
+        _config(boost_stages=_EXAMPLE_STAGES, min_run_steps=4),
+    )
+
+    assert _runs(_stages(result)) == [(0, 4)]
+
+
+def test_a_completed_minimum_run_is_not_continued() -> None:
+    result = build_and_solve(
+        _bundle(prices=[0.25] * _HORIZON, boost_run=_boosting_since(4)),
+        _config(min_run_steps=4),
+    )
+
+    assert _stages(result) == [0] * _HORIZON
+
+
+def test_a_persisted_stage_zero_forces_nothing() -> None:
+    result = build_and_solve(
+        _bundle(prices=[0.25] * _HORIZON, boost_run={"stage": 0, "since": _T0}),
+        _config(min_run_steps=4),
+    )
+
+    assert _stages(result) == [0] * _HORIZON
+
+
+def test_carry_over_is_truncated_at_the_first_deny_step() -> None:
+    """"00:30-01:00" denies steps 2 and 3. Six steps remain of the run, but
+    the deny window wins, and the run is not resumed after it."""
+    result = build_and_solve(
+        _bundle(prices=[0.25] * _HORIZON, boost_run=_boosting_since(0)),
+        _config(deny_boost_hours=["00:30-01:00"], min_run_steps=6),
+    )
+
+    assert _runs(_stages(result)) == [(0, 2)]
+
+
+def test_continuing_a_persisted_boost_is_not_a_new_start() -> None:
+    """Two cheap steps, then expensive.
+
+    Without run state, a boost in the cheap steps is a new start and must
+    run for four steps. A boost that has run for three steps already only
+    has one left, so continuing it through the two cheap steps and stopping
+    there is allowed.
+    """
+    prices = [0.05] * 2 + [0.40] * (_HORIZON - 2)
+    fresh = build_and_solve(_bundle(prices=prices), _config(min_run_steps=4))
+    assert all(length >= 4 for _, length in _runs(_stages(fresh)))
+
+    result = build_and_solve(
+        _bundle(prices=prices, boost_run=_boosting_since(3)),
+        _config(min_run_steps=4),
+    )
+
+    assert _runs(_stages(result)) == [(0, 2)]

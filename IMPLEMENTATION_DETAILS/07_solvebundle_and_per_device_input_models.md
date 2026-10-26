@@ -65,14 +65,33 @@ class ThermalBoilerInputs(BaseModel):
     """
     current_temp_c: float
 
-class HeatStoreInputs(BaseModel):
-    """Current state for a heat store: the measured store temperature.
+class HeatStoreBoostRun(BaseModel):
+    """The boost mimirheim last commanded, persisted across solves and restarts.
 
-    Translated into stored heat above the normal setpoint by
-    heat_store_energy(): clamped to zero below the setpoint and to the
+    Published retained to outputs.boost_run_state after each successful solve,
+    derived from step 0 of the published schedule, and read back by
+    ReadinessState. Records mimirheim's own command, not a measurement.
+    """
+    stage: int               # commanded stage from 1, or 0 when not boosting
+    since: datetime          # UTC; when boosting last started or stopped
+
+class HeatStoreInputs(BaseModel):
+    """Current state for a heat store: the measured store temperature and the
+    persisted boost run.
+
+    The temperature is translated into stored heat above the normal setpoint
+    by heat_store_energy(): clamped to zero below the setpoint and to the
     highest stage cap above it. Presence-only readiness input.
+
+    boost_run is optional and never gates readiness. It is None when the
+    retained state is absent or unparseable (the MQTT client stores None for a
+    payload that fails to parse, so a corrupt or cleared payload replaces an
+    earlier valid state), and snapshot() sets it to None when since is after
+    the solve start, a clock error that would otherwise force a run longer
+    than min_run_steps. None means not boosting.
     """
     current_temp_c: float
+    boost_run: HeatStoreBoostRun | None = None
 
 class SpaceHeatingInputs(BaseModel):
     """Current state for a space heating heat pump.
@@ -155,7 +174,10 @@ class SolveResult(BaseModel):
     objective_value: float
     solve_status: str        # "optimal" | "feasible" (time-limited incumbent) | "infeasible"
     schedule: list[ScheduleStep]
+    heat_store_prior_runs: dict[str, HeatStoreBoostRun]  # exclude=True; input echo for the publisher
 ```
+
+`heat_store_prior_runs` copies each heat store's `boost_run` from the bundle. The publisher derives the next boost run state from it and step 0 of the schedule it publishes, so a schedule changed by post-processing persists what is actually commanded. `since` keeps its previous value while the boosting state is unchanged (boosting at any stage, or not boosting) and becomes `solve_time_utc` when boosting starts or stops. The field is excluded from serialisation, so it appears neither in `golden.json` nor on the schedule topic.
 
 `SolveResult.model_dump()` is the golden file `golden.json`. The MQTT publisher reads the same object to publish `mimir/strategy/schedule`, `mimir/strategy/current`, and the per-device retained topics.
 

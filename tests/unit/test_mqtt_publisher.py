@@ -20,7 +20,12 @@ from mimirheim.config.schema import (
     MqttConfig,
     OutputsConfig,
 )
-from mimirheim.core.bundle import DeviceSetpoint, ScheduleStep, SolveResult
+from mimirheim.core.bundle import (
+    DeviceSetpoint,
+    HeatStoreBoostRun,
+    ScheduleStep,
+    SolveResult,
+)
 from mimirheim.io.mqtt_publisher import _LOAD_TYPES, MqttPublisher
 from reporter.metrics import _LOAD_TYPES as REPORTER_LOAD_TYPES
 
@@ -2041,3 +2046,112 @@ def test_heat_store_schedule_entries_carry_stage_and_temperature() -> None:
     assert entry["kw"] == -0.5
     assert entry["boost_stage"] == 1
     assert entry["temp_c"] == 51.24
+
+
+# ---------------------------------------------------------------------------
+# Heat store boost run state
+# ---------------------------------------------------------------------------
+
+_RUN_TOPIC = "mimir/status/heat_store/boiler/boost_run_state"
+_SOLVE_START = datetime(2026, 10, 13, 12, 0, tzinfo=UTC)
+_EARLIER = datetime(2026, 10, 13, 11, 15, tzinfo=UTC)
+
+
+def _heat_store_config() -> MimirheimConfig:
+    return MimirheimConfig.model_validate(
+        {
+            "mqtt": {"host": "localhost", "client_id": "test", "topic_prefix": "mimir"},
+            "grid": {"import_limit_kw": 10.0, "export_limit_kw": 5.0},
+            "heat_stores": {
+                "boiler": {
+                    "heat_capacity_kwh_per_k": 0.233,
+                    "normal_cop": 2.5,
+                    "normal_setpoint_c": 50.0,
+                    "drift_k_per_hour": 0.4,
+                    "boost_stages": [
+                        {"power_kw": 0.5, "cop": 2.5, "max_temp_c": 55.0},
+                        {"power_kw": 1.2, "cop": 1.0, "max_temp_c": 65.0},
+                    ],
+                }
+            },
+        }
+    )
+
+
+def _run_result(stage: int, prior: HeatStoreBoostRun | None) -> SolveResult:
+    result = _heat_store_result(kw=-0.5 if stage else 0.0, boost_stage=stage)
+    return result.model_copy(
+        update={
+            "solve_time_utc": _SOLVE_START,
+            "heat_store_prior_runs": {} if prior is None else {"boiler": prior},
+        }
+    )
+
+
+def _publish_run(stage: int, prior: HeatStoreBoostRun | None) -> MagicMock:
+    client = MagicMock()
+    MqttPublisher(client=client, config=_heat_store_config()).publish_result(
+        _run_result(stage, prior)
+    )
+    return client
+
+
+def test_boost_run_state_is_published_retained() -> None:
+    client = _publish_run(1, None)
+
+    calls = [c for c in client.publish.call_args_list if c.args[0] == _RUN_TOPIC]
+    assert len(calls) == 1
+    assert calls[0].kwargs["retain"] is True
+
+
+@pytest.mark.parametrize(
+    ("prior", "stage", "expected"),
+    [
+        # Boosting starts: since is the solve start.
+        (None, 1, {"stage": 1, "since": _SOLVE_START}),
+        (HeatStoreBoostRun(stage=0, since=_EARLIER), 2, {"stage": 2, "since": _SOLVE_START}),
+        # Boosting continues, stage change included: since is unchanged.
+        (HeatStoreBoostRun(stage=1, since=_EARLIER), 1, {"stage": 1, "since": _EARLIER}),
+        (HeatStoreBoostRun(stage=1, since=_EARLIER), 2, {"stage": 2, "since": _EARLIER}),
+        # Boosting stops: since is the solve start.
+        (HeatStoreBoostRun(stage=2, since=_EARLIER), 0, {"stage": 0, "since": _SOLVE_START}),
+        # Not boosting before or now.
+        (None, 0, {"stage": 0, "since": _SOLVE_START}),
+        (HeatStoreBoostRun(stage=0, since=_EARLIER), 0, {"stage": 0, "since": _EARLIER}),
+    ],
+)
+def test_boost_run_state_since_handling(
+    prior: HeatStoreBoostRun | None, stage: int, expected: dict
+) -> None:
+    payload = _published(_publish_run(stage, prior), _RUN_TOPIC)
+
+    assert payload == {"stage": expected["stage"], "since": expected["since"].isoformat()}
+
+
+def test_boost_run_state_follows_the_published_step_zero() -> None:
+    """The state is derived from the schedule as published, after any
+    post-processing, not from what the solver first planned."""
+    result = _run_result(2, HeatStoreBoostRun(stage=2, since=_EARLIER))
+    idle_step = result.schedule[0].model_copy(
+        update={
+            "devices": {
+                "boiler": DeviceSetpoint(kw=0.0, type="heat_store", boost_stage=0, temp_c=51.0)
+            }
+        }
+    )
+    client = MagicMock()
+    MqttPublisher(client=client, config=_heat_store_config()).publish_result(
+        result.model_copy(update={"schedule": [idle_step, *result.schedule[1:]]})
+    )
+
+    assert _published(client, _RUN_TOPIC) == {"stage": 0, "since": _SOLVE_START.isoformat()}
+
+
+def test_boost_run_state_is_not_published_for_an_infeasible_result() -> None:
+    client = MagicMock()
+    result = _run_result(1, None).model_copy(
+        update={"solve_status": "infeasible", "schedule": []}
+    )
+    MqttPublisher(client=client, config=_heat_store_config()).publish_result(result)
+
+    assert all(c.args[0] != _RUN_TOPIC for c in client.publish.call_args_list)

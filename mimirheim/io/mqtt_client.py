@@ -57,6 +57,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from mimirheim.config.schema import MimirheimConfig
+from mimirheim.core.bundle import HeatStoreBoostRun
 from mimirheim.core.readiness import ReadinessState
 from mimirheim.io.input_parser import (
     parse_battery_care,
@@ -72,6 +73,7 @@ from mimirheim.io.input_parser import (
     parse_price_steps,
     parse_space_heating_demand,
     parse_strategy,
+    parse_heat_store_boost_run,
     parse_heat_store_temp,
     parse_thermal_boiler_temp,
 )
@@ -659,6 +661,24 @@ class MqttClient:
         # Heat store temperature topics.
         for hs_cfg in config.heat_stores.values():
             handlers[hs_cfg.inputs.topic_current_temp] = parse_heat_store_temp
+
+        # Heat store boost run state. mimirheim publishes it retained and
+        # subscribes to its own output, so the broker replays it on connect
+        # and a boost keeps its minimum run across a restart. Not a readiness
+        # input: a fresh installation has no retained value.
+        def _parse_boost_run(raw: bytes) -> HeatStoreBoostRun | None:
+            # A corrupt or cleared payload means "not boosting". Raising would
+            # drop the message and keep an earlier valid state, which could
+            # force a boost the broker no longer records.
+            try:
+                return parse_heat_store_boost_run(raw)
+            except ValueError as exc:
+                logger.warning("Ignoring unparseable boost run state: %s", exc)
+                return None
+
+        for hs_cfg in config.heat_stores.values():
+            if hs_cfg.outputs.boost_run_state is not None:
+                handlers[hs_cfg.outputs.boost_run_state] = _parse_boost_run
 
         # Space heating heat pump demand topics (plan 26).
         for sh_cfg in config.space_heating_hps.values():

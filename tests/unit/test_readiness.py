@@ -19,7 +19,7 @@ from mimirheim.config.schema import (
     OutputsConfig,
     SocTopicConfig,
 )
-from mimirheim.core.bundle import PriceStep, SolveBundle
+from mimirheim.core.bundle import HeatStoreBoostRun, PriceStep, SolveBundle
 from mimirheim.core.readiness import ReadinessState
 
 
@@ -584,3 +584,57 @@ def test_heat_store_temperature_reaches_the_bundle() -> None:
 
     bundle = state.snapshot()
     assert bundle.heat_store_inputs["boiler"].current_temp_c == 52.5
+
+
+# ---------------------------------------------------------------------------
+# Heat store boost run state
+# ---------------------------------------------------------------------------
+
+
+_BOOST_RUN_TOPIC = "mimir/status/heat_store/boiler/boost_run_state"
+
+
+def _ready_heat_store_state() -> ReadinessState:
+    state = ReadinessState(_heat_store_config())
+    _feed_all(state)
+    state.update(_HEAT_STORE_TOPIC, 52.5)
+    return state
+
+
+def test_boost_run_state_does_not_gate_readiness() -> None:
+    """A fresh install has no retained run state and must still solve."""
+    assert _ready_heat_store_state().is_ready()
+
+
+def test_absent_boost_run_state_is_no_boost() -> None:
+    bundle = _ready_heat_store_state().snapshot()
+
+    assert bundle.heat_store_inputs["boiler"].boost_run is None
+
+
+def test_boost_run_state_reaches_the_bundle() -> None:
+    state = _ready_heat_store_state()
+    since = datetime.now(UTC) - timedelta(hours=1)
+    state.update(_BOOST_RUN_TOPIC, HeatStoreBoostRun(stage=2, since=since))
+
+    run = state.snapshot().heat_store_inputs["boiler"].boost_run
+    assert run == HeatStoreBoostRun(stage=2, since=since)
+
+
+def test_boost_run_state_dated_after_the_solve_start_is_no_boost() -> None:
+    """A clock error must not force boosts."""
+    state = _ready_heat_store_state()
+    since = datetime.now(UTC) + timedelta(hours=1)
+    state.update(_BOOST_RUN_TOPIC, HeatStoreBoostRun(stage=1, since=since))
+
+    assert state.snapshot().heat_store_inputs["boiler"].boost_run is None
+
+
+def test_cleared_boost_run_state_is_no_boost() -> None:
+    """The MQTT client hands over None for a corrupt or cleared payload."""
+    state = _ready_heat_store_state()
+    since = datetime.now(UTC) - timedelta(hours=1)
+    state.update(_BOOST_RUN_TOPIC, HeatStoreBoostRun(stage=2, since=since))
+    state.update(_BOOST_RUN_TOPIC, None)
+
+    assert state.snapshot().heat_store_inputs["boiler"].boost_run is None

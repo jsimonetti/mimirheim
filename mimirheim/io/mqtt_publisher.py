@@ -30,6 +30,7 @@ from mimirheim.core.battery_care import care_plan, is_newer, is_older
 from mimirheim.core.bundle import (
     BatteryCareStatus,
     DeviceSetpoint,
+    HeatStoreBoostRun,
     ScheduleStep,
     SolveResult,
 )
@@ -172,8 +173,9 @@ class MqttPublisher:
         6. Battery exchange-mode topics.
         7. Hybrid inverter exchange-mode topics.
         8. Recommended start times for deferrable loads the solver scheduled.
+        9. The boost run state of each heat store.
 
-        Items 4 to 8 are published only for devices whose configuration
+        Items 4 to 9 are published only for devices whose configuration
         declares the matching capability and output topic, so a minimal
         installation sees only the first three.
 
@@ -276,7 +278,10 @@ class MqttPublisher:
             # 8. Deferrable load recommended-start output topics.
             self._publish_deferrable_recommended_starts(result)
 
-        # 9. Full-charge policy status, outside the schedule guard: the floor
+            # 9. Heat store boost run state, read back by the next solve.
+            self._publish_heat_store_boost_runs(result, step_start)
+
+        # 10. Full-charge policy status, outside the schedule guard: the floor
         # and the last-full timestamp are true whether or not this solve
         # produced a schedule, and mimirheim reads this topic back on startup.
         self.publish_battery_care(result)
@@ -529,6 +534,42 @@ class MqttPublisher:
             self._client.publish(
                 dl_cfg.topic_recommended_start_time,
                 rec_start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                qos=1,
+                retain=True,
+            )
+
+    def _publish_heat_store_boost_runs(
+        self, result: SolveResult, solve_start: datetime
+    ) -> None:
+        """Publish the boost run state of each heat store, retained.
+
+        mimirheim subscribes to this topic and reads it back, so the next
+        solve, including the first one after a restart, can continue a boost
+        for the rest of its minimum run. The state is derived from step 0 of
+        ``result`` as published, so a schedule idled by post-processing
+        persists stage 0.
+
+        ``since`` keeps its previous value while the boosting state is
+        unchanged (boosting at any stage, or not boosting) and becomes the
+        solve start when boosting starts or stops.
+
+        Args:
+            result: The result being published. Must have a non-empty schedule.
+            solve_start: Start of step 0.
+        """
+        for name, setpoint in result.schedule[0].devices.items():
+            if setpoint.type != "heat_store":
+                continue
+            cfg = self._config.heat_stores.get(name)
+            if cfg is None or cfg.outputs.boost_run_state is None:
+                continue
+            state = HeatStoreBoostRun(stage=setpoint.boost_stage or 0, since=solve_start)
+            prior = result.heat_store_prior_runs.get(name)
+            if prior is not None and prior.boosting == state.boosting:
+                state = state.model_copy(update={"since": prior.since})
+            self._client.publish(
+                cfg.outputs.boost_run_state,
+                json.dumps({"stage": state.stage, "since": state.since.isoformat()}),
                 qos=1,
                 retain=True,
             )

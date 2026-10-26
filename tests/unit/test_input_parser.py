@@ -233,3 +233,46 @@ def test_parse_battery_care_rejects_malformed_json() -> None:
 
     with pytest.raises(ValueError):
         parse_battery_care(b"{nope")
+
+
+# ---------------------------------------------------------------------------
+# parse_heat_store_boost_run
+# ---------------------------------------------------------------------------
+
+
+def test_parse_heat_store_boost_run_reads_the_published_payload() -> None:
+    from mimirheim.core.bundle import HeatStoreBoostRun
+    from mimirheim.io.input_parser import parse_heat_store_boost_run
+
+    payload = b'{"stage": 2, "since": "2026-10-13T12:00:00+00:00"}'
+
+    assert parse_heat_store_boost_run(payload) == HeatStoreBoostRun(
+        stage=2, since=datetime(2026, 10, 13, 12, 0, tzinfo=UTC)
+    )
+
+
+def test_parse_heat_store_boost_run_treats_a_naive_since_as_utc() -> None:
+    from mimirheim.io.input_parser import parse_heat_store_boost_run
+
+    run = parse_heat_store_boost_run('{"stage": 1, "since": "2026-10-13T12:00:00"}')
+
+    assert run.since == datetime(2026, 10, 13, 12, 0, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        b"not json",
+        b"[1, 2]",
+        b'{"stage": 1}',
+        b'{"since": "2026-10-13T12:00:00+00:00"}',
+        b'{"stage": -1, "since": "2026-10-13T12:00:00+00:00"}',
+        b'{"stage": 1, "since": "yesterday"}',
+        b'{"stage": 1, "since": "2026-10-13T12:00:00+00:00", "extra": 1}',
+    ],
+)
+def test_parse_heat_store_boost_run_rejects_malformed_payloads(payload: bytes) -> None:
+    from mimirheim.io.input_parser import parse_heat_store_boost_run
+
+    with pytest.raises(ValueError):
+        parse_heat_store_boost_run(payload)

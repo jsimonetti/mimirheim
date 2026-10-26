@@ -15,8 +15,9 @@ needs only a second translation function.
 The module does not import from ``mimirheim.io``. The measured temperature, the
 prices and the pre-solve import baseline are passed to ``add_constraints``
 explicitly; the solve start time, which places the deny windows, is passed to
-the constructor. Hot water draws and run state carried over from earlier solves
-are not modelled here. See IMPLEMENTATION_DETAILS.md §8, subsection "Heat store model".
+the constructor. The boost run carried over from earlier solves arrives with
+the inputs; publishing it is the IO layer's job. Hot water draws are not
+modelled here. See IMPLEMENTATION_DETAILS.md §8, subsection "Heat store model".
 """
 
 import math
@@ -25,7 +26,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from mimirheim.config.schema import HeatStoreConfig, parse_utc_window
-from mimirheim.core.bundle import HeatStoreInputs
+from mimirheim.core.bundle import HeatStoreBoostRun, HeatStoreInputs
 from mimirheim.core.context import ModelContext
 
 
@@ -209,6 +210,8 @@ class HeatStoreDevice:
         self._S: dict[int, Any] = {}
         # Only populated when min_run_steps > 1.
         self._start: dict[int, Any] = {}
+        # Steps inside a deny window, set in add_variables.
+        self._denied: set[int] = set()
 
         # Per-step credit coefficients, set in add_constraints.
         self._import_credit: list[float] = []
@@ -231,6 +234,7 @@ class HeatStoreDevice:
         denied = _deny_steps(
             self.config.deny_boost_hours, self._solve_time_utc, ctx.dt, len(ctx.T)
         )
+        self._denied = denied
 
         for t in ctx.T:
             # Upper bound of the binaries in step t: 0 inside a deny window,
@@ -277,13 +281,15 @@ class HeatStoreDevice:
         """Add all MILP constraints for this heat store.
 
         Also adds the minimum run constraints via
-        ``_add_min_run_constraints`` when ``min_run_steps > 1``. See
+        ``_add_min_run_constraints`` when ``min_run_steps > 1``, and the
+        carry-over of a persisted boost run via
+        ``_add_carry_over_constraints``. See
         IMPLEMENTATION_DETAILS.md §8, subsection "Heat store model", for the
         derivation of each constraint.
 
         Args:
             ctx: The current solve context.
-            inputs: Measured store temperature.
+            inputs: Measured store temperature and persisted boost run.
             import_prices: Import price per step in EUR/kWh.
             export_prices: Export price per step in EUR/kWh.
             baseline_import_kwh: Grid import per step before any device
@@ -375,9 +381,13 @@ class HeatStoreDevice:
             )
             ctx.solver.add_constraint(self._imp[t] <= baseline_import_kwh[t])
 
-        self._add_min_run_constraints(ctx)
+        boost_run = inputs.boost_run
+        boosting_before = boost_run is not None and boost_run.boosting
+        self._add_min_run_constraints(ctx, boosting_before)
+        if boost_run is not None and boost_run.boosting:
+            self._add_carry_over_constraints(ctx, boost_run)
 
-    def _add_min_run_constraints(self, ctx: ModelContext) -> None:
+    def _add_min_run_constraints(self, ctx: ModelContext, boosting_before: bool) -> None:
         """Keep every boost run on for at least ``min_run_steps`` steps.
 
         A run is a sequence of consecutive boosting steps at any stage, so a
@@ -388,6 +398,9 @@ class HeatStoreDevice:
 
         Args:
             ctx: The current solve context.
+            boosting_before: Whether the persisted boost run says the store
+                was boosting before step 0. Continuing that boost is not a
+                new start.
         """
         min_run = self.config.min_run_steps
         if min_run <= 1:
@@ -399,15 +412,47 @@ class HeatStoreDevice:
 
         for t in ctx.T:
             # start[t] must be 1 when boosting begins in step t (boost[t] = 1
-            # after boost[t-1] = 0). Before the horizon nothing is boosting,
-            # so a boost in step 0 is a start.
-            previous: Any = 0 if t == 0 else boost[t - 1]
+            # after boost[t-1] = 0). boost[-1] comes from the persisted boost
+            # run, so continuing an earlier boost in step 0 is not a start.
+            previous: Any = (1 if boosting_before else 0) if t == 0 else boost[t - 1]
             ctx.solver.add_constraint(self._start[t] >= boost[t] - previous)
             # A start keeps the store boosting, at any stage, for the next
             # min_run_steps - 1 steps that lie inside the horizon.
             for k in range(1, min_run):
                 if t + k < n:
                     ctx.solver.add_constraint(boost[t + k] >= self._start[t])
+
+    def _add_carry_over_constraints(
+        self, ctx: ModelContext, boost_run: HeatStoreBoostRun
+    ) -> None:
+        """Keep boosting for what remains of a boost run started in an earlier solve.
+
+        ``elapsed = floor((solve_start - since) / dt)`` steps of the run have
+        passed, so boosting, at any stage, is forced for the first
+        ``min_run_steps - elapsed`` steps. The forcing stops at the first deny
+        step: deny windows always win, and the run is not resumed after the
+        window. Forcing is always feasible, because a full store holds at its
+        cap through ``at_cap`` with partial draw. See IMPLEMENTATION_DETAILS.md
+        §8, subsection "Heat store model".
+
+        Args:
+            ctx: The current solve context.
+            boost_run: The persisted boost run, with ``stage > 0``. Its
+                ``since`` is not after the solve start; the readiness layer
+                drops a state dated in the future.
+        """
+        stages = range(len(self.config.boost_stages))
+        elapsed_hours = (self._solve_time_utc - boost_run.since).total_seconds() / 3600
+        # A small tolerance keeps floating-point division from losing a whole
+        # step when since lies exactly on a step boundary.
+        elapsed = math.floor(elapsed_hours / ctx.dt + 1e-9)
+        remaining = self.config.min_run_steps - elapsed
+        for t in ctx.T:
+            if t >= remaining or t in self._denied:
+                break
+            # boost[t] = 1: the carried-over run is not finished, so the
+            # store keeps boosting at some stage. The stage may change.
+            ctx.solver.add_constraint(sum(self._on[s, t] for s in stages) >= 1)
 
     def net_power(self, t: int) -> Any:
         """Net AC power drawn from the home bus at step t, in kW.

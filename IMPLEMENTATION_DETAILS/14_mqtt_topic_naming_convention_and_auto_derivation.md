@@ -111,6 +111,8 @@ topics use `{p}/input/...`; output topics use `{p}/output/...`.
 | `deferrable_loads.{name}.topic_recommended_start_time` | `{p}/output/deferrable/{name}/recommended_start` |
 | `heat_stores.{name}.outputs.boost_run_state` | `{p}/status/heat_store/{name}/boost_run_state` |
 
+`status/` topics are mimirheim's own persisted state. mimirheim publishes them retained and subscribes to them, so the broker replays the last value on connect; that round trip is the persistence across restarts. They are never readiness inputs, because a fresh installation has no retained value. `boost_run_state` is published after each successful solve with payload `{"stage": 2, "since": "2026-10-13T12:00:00+00:00"}`: the stage commanded in step 0 of the published schedule (0 when not boosting) and the UTC time boosting last started or stopped. The battery `soc_ratchet` topic follows the same pattern.
+
 ## Overriding a derived topic
 
 Set the field explicitly in the YAML to override the derived value. The

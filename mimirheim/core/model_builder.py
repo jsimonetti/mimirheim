@@ -870,6 +870,11 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
         schedule=schedule,
         deferrable_recommended_starts=deferrable_recommended_starts,
         battery_care=battery_care,
+        heat_store_prior_runs={
+            name: inputs.boost_run
+            for name, inputs in bundle.heat_store_inputs.items()
+            if inputs.boost_run is not None
+        },
     )
 
 

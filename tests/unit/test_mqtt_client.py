@@ -194,6 +194,40 @@ class TestHeatStoreTemperature:
         subscribed_topics = {call.args[0] for call in paho_mock.subscribe.call_args_list}
         assert topic in subscribed_topics
 
+    def test_boost_run_state_topic_is_subscribed_and_parsed(self) -> None:
+        """mimirheim reads its own retained boost run state back."""
+        raw = _make_config().model_dump(mode="json", exclude_none=True)
+        raw["heat_stores"] = {
+            "boiler": {
+                "heat_capacity_kwh_per_k": 0.233,
+                "normal_cop": 2.5,
+                "normal_setpoint_c": 50.0,
+                "drift_k_per_hour": 0.4,
+                "boost_stages": [{"power_kw": 0.5, "cop": 2.5, "max_temp_c": 55.0}],
+            }
+        }
+        config = MimirheimConfig.model_validate(raw)
+        paho_mock = MagicMock()
+        client = MqttClient(
+            config, MagicMock(spec=ReadinessState), MagicMock(), paho_mock, _CONFIG_PATH
+        )
+
+        topic = "mimir/status/heat_store/boiler/boost_run_state"
+        run = client._topic_handlers[topic](
+            b'{"stage": 1, "since": "2026-10-13T12:00:00+00:00"}'
+        )
+        assert run.stage == 1
+        # A corrupt or cleared payload replaces an earlier valid state with
+        # "not boosting" rather than being dropped, which would keep it.
+        assert client._topic_handlers[topic](b"not json") is None
+        assert client._topic_handlers[topic](b"") is None
+
+        reason_code = MagicMock()
+        reason_code.is_failure = False
+        client._on_connect(paho_mock, None, None, reason_code, None)
+        subscribed_topics = {call.args[0] for call in paho_mock.subscribe.call_args_list}
+        assert topic in subscribed_topics
+
 
 class TestFaultLogging:
     """A failure on the paho network thread must be logged, not propagated."""

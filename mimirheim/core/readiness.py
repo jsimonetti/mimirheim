@@ -60,6 +60,7 @@ from mimirheim.core.bundle import (
     PriceStep,
     SolveBundle,
     SpaceHeatingInputs,
+    HeatStoreBoostRun,
     HeatStoreInputs,
     ThermalBoilerInputs,
 )
@@ -722,14 +723,33 @@ class ReadinessState:
                     current_temp_c=temp_entry[0],
                 )
 
-            # Heat store inputs: current store temperature.
+            # Heat store inputs: current store temperature and the boost run
+            # state mimirheim persisted itself. The run state is optional and
+            # never gates readiness.
             heat_store_inputs: dict[str, HeatStoreInputs] = {}
             for name, cfg in self._config.heat_stores.items():
                 temp_entry = self._entries.get(cfg.inputs.topic_current_temp)
                 if temp_entry is None:
                     continue
+                boost_run: HeatStoreBoostRun | None = None
+                if cfg.outputs.boost_run_state is not None:
+                    run_entry = self._entries.get(cfg.outputs.boost_run_state)
+                    if run_entry is not None:
+                        boost_run = run_entry[0]
+                if boost_run is not None and boost_run.since > solve_start:
+                    # A start time after the solve start is a clock error,
+                    # not a boost. Carrying it over would force a run longer
+                    # than min_run_steps, so it counts as not boosting.
+                    logger.warning(
+                        "Heat store %s: retained boost run since %s is after the "
+                        "solve start; treating it as not boosting.",
+                        name,
+                        boost_run.since.isoformat(),
+                    )
+                    boost_run = None
                 heat_store_inputs[name] = HeatStoreInputs(
                     current_temp_c=temp_entry[0],
+                    boost_run=boost_run,
                 )
 
             # Space heating inputs (plan 26): demand + optional BTM fields.

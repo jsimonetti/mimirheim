@@ -29,7 +29,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from mimirheim.core.bundle import PowerForecastStep, PriceStep
+from mimirheim.core.bundle import HeatStoreBoostRun, PowerForecastStep, PriceStep
 
 _VALID_STRATEGIES = {"minimize_cost", "minimize_consumption", "balanced"}
 
@@ -666,3 +666,40 @@ def parse_outdoor_temp_forecast(payload: bytes | str) -> list[float]:
             ) from exc
 
     return result
+
+
+def parse_heat_store_boost_run(payload: bytes | str) -> HeatStoreBoostRun:
+    """Parse the retained boost run state of one heat store.
+
+    mimirheim publishes this payload itself after each successful solve and
+    reads it back, so a boost keeps its minimum run across solves and
+    restarts. The MQTT client turns a payload that fails to parse into None, so
+    the store is treated as not boosting.
+
+    Args:
+        payload: Raw MQTT payload, the JSON object published by
+            ``MqttPublisher``. Example::
+
+                {"stage": 2, "since": "2026-10-13T12:00:00+00:00"}
+
+            A ``since`` without a timezone is interpreted as UTC.
+
+    Returns:
+        The validated boost run state.
+
+    Raises:
+        ValueError: If the payload is not a JSON object, a field is missing,
+            unknown or invalid, or ``since`` is not an ISO 8601 datetime.
+    """
+    text = _decode(payload).strip()
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"boost run state payload is not valid JSON: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"boost run state payload must be a JSON object, got {type(data).__name__}"
+        )
+    if "since" in data:
+        data["since"] = parse_datetime(str(data["since"]))
+    return HeatStoreBoostRun.model_validate(data)

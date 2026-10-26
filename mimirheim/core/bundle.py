@@ -259,6 +259,31 @@ class ThermalBoilerInputs(BaseModel):
     )
 
 
+class HeatStoreBoostRun(BaseModel):
+    """The boost mimirheim last commanded a heat store, persisted across solves.
+
+    mimirheim publishes it retained after each successful solve and reads it
+    back, so a boost run keeps its minimum run length across solve cycles and
+    restarts. It records mimirheim's own command, not a measurement.
+
+    Attributes:
+        stage: Boost stage commanded in step 0 of the last published schedule,
+            counted from 1, or 0 when not boosting.
+        since: UTC time at which boosting last started or stopped. Unchanged
+            while boosting continues at any stage.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    stage: int = Field(ge=0, description="Commanded boost stage, 0 when not boosting.")
+    since: datetime = Field(description="UTC time boosting last started or stopped.")
+
+    @property
+    def boosting(self) -> bool:
+        """True when a boost, at any stage, was commanded."""
+        return self.stage > 0
+
+
 class HeatStoreInputs(BaseModel):
     """Live heat store state received from MQTT, validated at the system boundary.
 
@@ -267,12 +292,19 @@ class HeatStoreInputs(BaseModel):
             store translates it into stored heat above the normal setpoint,
             clamped to zero below the setpoint and to the highest stage cap
             above it.
+        boost_run: The persisted boost run state, or None when absent,
+            unparseable, or dated after the solve start. None is treated as
+            not boosting.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     current_temp_c: float = Field(
         description="Measured store temperature in °C, as read from sensor."
+    )
+    boost_run: HeatStoreBoostRun | None = Field(
+        default=None,
+        description="Persisted boost run state; None means not boosting.",
     )
 
 
@@ -729,6 +761,11 @@ class SolveResult(BaseModel):
             first step where the schedule assigns nonzero power to the load.
             Only present for loads that were actively optimised; absent for
             loads in running, committed, or unscheduled state.
+        heat_store_prior_runs: The persisted boost run state each heat store
+            started this solve from, copied from the bundle. Stores without
+            one are absent. The publisher derives the next state from it and
+            the final, post-processed step 0. Excluded from serialisation: it
+            is an input, not part of the published schedule.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -797,4 +834,9 @@ class SolveResult(BaseModel):
             "Full-charge policy status per battery, for batteries with soc_ratchet "
             "enabled. Empty when no battery configures the policy."
         ),
+    )
+    heat_store_prior_runs: dict[str, HeatStoreBoostRun] = Field(
+        default_factory=dict,
+        exclude=True,
+        description="Persisted boost run state per heat store this solve started from.",
     )
