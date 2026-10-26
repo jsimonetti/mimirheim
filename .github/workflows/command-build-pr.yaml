@@ -26,6 +26,7 @@ jobs:
     permissions:
       actions: write
       issues: write
+      pull-requests: write
 
     steps:
       - name: Dispatch build
