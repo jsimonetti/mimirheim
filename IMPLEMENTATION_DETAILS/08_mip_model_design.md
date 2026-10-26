@@ -350,7 +350,7 @@ S0       = clamp(C * (T_measured - normal_setpoint_c), 0, S_max)
 
 ### Variables and constraints
 
-Per step `t` and stage `s`: `on[s,t]` (binary, the command), `p[s,t]` (kW drawn), `at_cap[t]` (binary), `w[t]` (kWh of stored heat used instead of the normal program), `imp[t]` and `rest[t]` (kWh of normal-program electricity `w[t]` displaces), and `S[t]` (kWh stored at the end of the step).
+Per step `t` and stage `s`: `on[s,t]` (binary, the command), `p[s,t]` (kW drawn), `at_cap[t]` (binary), `w[t]` (kWh of stored heat used instead of the normal program), `imp[t]` and `rest[t]` (kWh of normal-program electricity `w[t]` displaces), `S[t]` (kWh stored at the end of the step), and, only when `min_run_steps > 1`, `start[t]` (binary, a boost run starts).
 
 ```
 sum_s on[s,t] <= 1                                              # one stage at a time
@@ -365,6 +365,9 @@ w[t] = maint                         for t in the covered prefix (see below)
 w[t] / normal_cop = imp[t] + rest[t]
 imp[t] <= baseline_import[t]
 on[s,t] = 0, at_cap[t] = 0           for t in a deny window
+boost[t] = sum_s on[s,t]
+start[t] >= boost[t] - boost[t-1]    # boost[-1] = 0; only when min_run_steps > 1
+boost[t+k] >= start[t]               for k in 1..min_run_steps-1, while t+k < horizon
 ```
 
 The device draws `net_power(t) = -sum_s p[s,t]`.
@@ -381,7 +384,9 @@ An exact formulation needs one more binary per step, `empty[t]`, with `w[t] >= m
 
 **Deny windows.** `deny_boost_hours` are daily UTC windows, parsed at config load by `parse_utc_window` (`mimirheim/config/schema.py`), the codebase's only time-of-day window parser. Minutes must be multiples of 15, and `solve_time_utc` is a 15-minute boundary, so every step lies wholly inside or outside a window; a step is denied when its start time of day falls in `[start, end)`, or outside `[end, start)` for a window that crosses midnight. The device receives `solve_time_utc` in its constructor so `add_variables` can declare `on[s,t]` and `at_cap[t]` with upper bound 0 in denied steps: the binaries are fixed, not left for the solver to branch on. `p[s,t]` follows through `p <= P * on`. The normal program is not modelled, so a window denies only the boost. Windows do not follow DST; users configure the union of the summer and winter windows.
 
-**Feasibility.** `on = 0` everywhere is always feasible. Forced boosting with a full store, which later tickets introduce through the minimum run, is feasible through `at_cap` with partial draw at the stage with the highest cap, which always permits `S = S_max`. Lower-cap stages are excluded then, so a forced boost holds through the highest-cap stage.
+**Minimum run.** `min_run_steps` protects a heat pump compressor from short cycles. It applies to `boost[t]`, boosting at any stage, so a stage switch within a run is not a new start; per-stage minimum runs are out of scope. The start sentinel follows the thermal boiler's (see "Minimum run-time via a start sentinel" above), bounded only from below, with these differences. `start[t]` exists from `t = 0`, with `boost[-1] = 0` until run state from earlier solves is carried over, so no separate propagation of a `t = 0` start is needed. A run that reaches the horizon end may be shorter than the minimum; the heat pump devices forbid such starts, but here a boost near the horizon end is rare (heat left at the end is worth nothing) and the next solve, with its longer view, decides how the run continues. `start[t]` has upper bound 0 in deny steps like the other binaries; because `boost` is fixed to 0 there, a run that would reach into a deny window cannot start, so the minimum run never conflicts with a window. A run that reaches a full store holds at the cap through `at_cap`, drawing only loss replacement.
+
+**Feasibility.** `on = 0` everywhere is always feasible. Forced boosting with a full store, through the minimum run, is feasible through `at_cap` with partial draw at the stage with the highest cap, which always permits `S = S_max`. Lower-cap stages are excluded then, so a forced boost holds through the highest-cap stage.
 
 ### Credit
 

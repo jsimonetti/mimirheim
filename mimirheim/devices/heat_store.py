@@ -15,8 +15,8 @@ needs only a second translation function.
 The module does not import from ``mimirheim.io``. The measured temperature, the
 prices and the pre-solve import baseline are passed to ``add_constraints``
 explicitly; the solve start time, which places the deny windows, is passed to
-the constructor. Hot water draws and minimum run length are not modelled here.
-See IMPLEMENTATION_DETAILS.md §8, subsection "Heat store model".
+the constructor. Hot water draws and run state carried over from earlier solves
+are not modelled here. See IMPLEMENTATION_DETAILS.md §8, subsection "Heat store model".
 """
 
 import math
@@ -176,6 +176,8 @@ class HeatStoreDevice:
         _rest[t]     The remainder of that electricity, in kWh.
         _S[t]        Stored heat above the normal setpoint at the end of step
                      t, in kWh.
+        _start[t]    Binary; 1 = a boost run starts in step t. Only present
+                     when min_run_steps > 1.
 
     Attributes:
         name: Device name matching the key in ``config.heat_stores``.
@@ -205,6 +207,8 @@ class HeatStoreDevice:
         self._imp: dict[int, Any] = {}
         self._rest: dict[int, Any] = {}
         self._S: dict[int, Any] = {}
+        # Only populated when min_run_steps > 1.
+        self._start: dict[int, Any] = {}
 
         # Per-step credit coefficients, set in add_constraints.
         self._import_credit: list[float] = []
@@ -256,6 +260,11 @@ class HeatStoreDevice:
             # S[t]: stored heat above the normal setpoint at the end of step
             # t, in kWh. The stage-cap constraints bound it from above.
             self._S[t] = ctx.solver.add_var(lb=0.0)
+            if self.config.min_run_steps > 1:
+                # start[t]: 1 when a boost run, at any stage, starts in step
+                # t. Tied to the stage binaries in add_constraints. Fixed to
+                # 0 in deny steps like the stage binaries.
+                self._start[t] = ctx.solver.add_var(lb=0.0, ub=binary_ub, integer=True)
 
     def add_constraints(
         self,
@@ -267,8 +276,10 @@ class HeatStoreDevice:
     ) -> None:
         """Add all MILP constraints for this heat store.
 
-        See IMPLEMENTATION_DETAILS.md §8, subsection "Heat store model", for
-        the derivation of each constraint.
+        Also adds the minimum run constraints via
+        ``_add_min_run_constraints`` when ``min_run_steps > 1``. See
+        IMPLEMENTATION_DETAILS.md §8, subsection "Heat store model", for the
+        derivation of each constraint.
 
         Args:
             ctx: The current solve context.
@@ -363,6 +374,40 @@ class HeatStoreDevice:
                 self._w[t] * (1.0 / self.config.normal_cop) == self._imp[t] + self._rest[t]
             )
             ctx.solver.add_constraint(self._imp[t] <= baseline_import_kwh[t])
+
+        self._add_min_run_constraints(ctx)
+
+    def _add_min_run_constraints(self, ctx: ModelContext) -> None:
+        """Keep every boost run on for at least ``min_run_steps`` steps.
+
+        A run is a sequence of consecutive boosting steps at any stage, so a
+        stage switch within a run is not a new start. A run that reaches the
+        horizon end may be shorter. A run that would reach into a deny window
+        cannot start, because the stage binaries there are fixed to 0. See
+        IMPLEMENTATION_DETAILS.md §8, subsection "Heat store model".
+
+        Args:
+            ctx: The current solve context.
+        """
+        min_run = self.config.min_run_steps
+        if min_run <= 1:
+            return
+
+        stages = range(len(self.config.boost_stages))
+        n = len(ctx.T)
+        boost = [sum(self._on[s, t] for s in stages) for t in ctx.T]
+
+        for t in ctx.T:
+            # start[t] must be 1 when boosting begins in step t (boost[t] = 1
+            # after boost[t-1] = 0). Before the horizon nothing is boosting,
+            # so a boost in step 0 is a start.
+            previous: Any = 0 if t == 0 else boost[t - 1]
+            ctx.solver.add_constraint(self._start[t] >= boost[t] - previous)
+            # A start keeps the store boosting, at any stage, for the next
+            # min_run_steps - 1 steps that lie inside the horizon.
+            for k in range(1, min_run):
+                if t + k < n:
+                    ctx.solver.add_constraint(boost[t + k] >= self._start[t])
 
     def net_power(self, t: int) -> Any:
         """Net AC power drawn from the home bus at step t, in kW.

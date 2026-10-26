@@ -1000,7 +1000,7 @@ The departure target is supplied at runtime via the EV state MQTT payload (not c
 | `normal_setpoint_c` | float | — | Temperature the normal program heats to (°C). Measurements below it count as no stored heat. |
 | `ambient_c` | float < `normal_setpoint_c` | 20.0 | Average temperature around the store (°C). Only used to derive how fast extra heat decays. |
 | `drift_k_per_hour` | float > 0 | — | Observed cooldown when idle at the normal setpoint, without hot water use (K/h). |
-| `min_run_steps` | int ≥ 1 | 1 | Minimum consecutive boost steps once a boost starts. Accepted, not yet applied. |
+| `min_run_steps` | int ≥ 1 | 1 | Minimum consecutive boost steps, at any stage, once a boost starts. Protects a heat pump compressor from short cycles. A run may change stage, and may be cut short by the horizon end. A boost that cannot complete its minimum run before a deny window is not started. Runs from earlier solves are not yet carried over. |
 | `deny_boost_hours` | list of `"HH:MM-HH:MM"` | `[]` | Daily UTC windows in which no boost is planned. Minutes must be multiples of 15. A window may cross midnight (`"20:00-06:00"`); `"00:00"` as the end means midnight. Windows do not follow daylight saving time; see "Heat store" above. |
 | `boost_stages` | list, 1 to 3 entries | — | Boost stages, numbered by list position from 1. |
 | `boost_stages[].power_kw` | float > 0 | — | Electrical power while boosting at full power in this stage (kW). |

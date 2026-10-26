@@ -525,3 +525,143 @@ def test_deny_window_applies_to_every_stage() -> None:
     for t in [*range(0, 4), 12, 13]:
         assert stages[t] == 0
     assert any(stage != 0 for stage in stages[4:12])
+
+
+# ---------------------------------------------------------------------------
+# Minimum run within a solve
+# ---------------------------------------------------------------------------
+
+
+def _runs(stages: list[int]) -> list[tuple[int, int]]:
+    """Return (first step, length) of each run of consecutive boosting steps, any stage."""
+    runs: list[tuple[int, int]] = []
+    start: int | None = None
+    for t, stage in enumerate([*stages, 0]):
+        if stage != 0 and start is None:
+            start = t
+        elif stage == 0 and start is not None:
+            runs.append((start, t - start))
+            start = None
+    return runs
+
+
+def _one_cheap_step_prices() -> list[float]:
+    """Expensive throughout except step 10."""
+    prices = [0.40] * _HORIZON
+    prices[10] = 0.05
+    return prices
+
+
+def test_default_min_run_allows_a_single_step_boost() -> None:
+    """At 54 degrees C the store has room for less than one full step.
+
+    With no minimum run the plan tops up in the one cheap step and nowhere
+    else. This is the baseline the minimum-run tests below change.
+    """
+    result = build_and_solve(
+        _bundle(prices=_one_cheap_step_prices(), temp_c=54.0), _config()
+    )
+
+    assert _runs(_stages(result)) == [(10, 1)]
+
+
+def test_every_boost_run_lasts_at_least_min_run_steps() -> None:
+    """The one cheap step still pays for a run of four steps.
+
+    The run tops up in its first step and holds the store at its cap for the
+    other three, drawing only loss replacement rather than full stage power.
+    """
+    result = build_and_solve(
+        _bundle(prices=_one_cheap_step_prices(), temp_c=54.0),
+        _config(min_run_steps=4),
+    )
+
+    stages = _stages(result)
+    temps = _temps(result)
+    draws = _draw_kw(result)
+    runs = _runs(stages)
+    assert runs
+    for first, length in runs:
+        assert length >= 4 or first + length == _HORIZON
+    assert stages[10] == 1
+    held = 0
+    for first, length in runs:
+        for t in range(first, first + length):
+            if t > 0 and temps[t - 1] >= _CAP - 1e-4:
+                # Held at the cap: boosting, but only replacing losses.
+                held += 1
+                assert temps[t] == pytest.approx(_CAP, abs=1e-4)
+                assert 0.0 < draws[t] < 0.2 * _STAGE_KW
+    assert held >= 2
+
+
+def test_a_run_may_be_cut_short_by_the_horizon_end() -> None:
+    """Being paid to consume in the last two steps boosts there alone.
+
+    A run of four steps would have to start in the expensive steps before;
+    the minimum run does not reach past the horizon, so it does not have to.
+    """
+    prices = [0.30] * (_HORIZON - 2) + [-0.10] * 2
+    result = build_and_solve(
+        _bundle(prices=prices, export_prices=[p - 0.05 for p in prices]),
+        _config(min_run_steps=4),
+    )
+
+    assert _runs(_stages(result)) == [(_HORIZON - 2, 2)]
+
+
+def test_a_stage_switch_within_a_run_is_not_a_new_start() -> None:
+    """With the example boiler and two cheap steps, the minimum run spans stages.
+
+    Without a minimum run the plan boosts in the two cheap steps only. A
+    minimum run of four extends that run into the expensive steps, and the
+    plan changes stage within it, with each stage on for fewer than four
+    steps. Were a stage switch a new start, every stage would need four steps.
+    """
+    min_run = 4
+    prices = [0.05] * 2 + [0.40] * (_HORIZON - 2)
+    unconstrained = _stages(
+        build_and_solve(_bundle(prices=prices), _config(boost_stages=_EXAMPLE_STAGES))
+    )
+    assert all(length < min_run for _, length in _runs(unconstrained))
+
+    result = build_and_solve(
+        _bundle(prices=prices),
+        _config(boost_stages=_EXAMPLE_STAGES, min_run_steps=min_run),
+    )
+
+    stages = _stages(result)
+    runs = _runs(stages)
+    assert runs
+    for first, length in runs:
+        assert length >= min_run or first + length == _HORIZON
+    first, length = runs[0]
+    run = stages[first : first + length]
+    assert len(set(run)) > 1
+    for stage in set(run):
+        segments = _runs([1 if s == stage else 0 for s in run])
+        assert max(segment_length for _, segment_length in segments) < min_run
+
+
+def test_no_boost_starts_that_cannot_complete_before_a_deny_window() -> None:
+    """The cheap period is steps 0 to 7; "01:00-02:00" denies steps 4 to 7.
+
+    With a minimum run of four, a run fits in steps 0 to 3. With a minimum
+    run of six it does not, and a run may not reach into the window, so
+    the cheap steps are not used at all.
+    """
+    fits = build_and_solve(
+        _bundle(prices=_spread_prices()),
+        _config(deny_boost_hours=["01:00-02:00"], min_run_steps=4),
+    )
+    assert _runs(_stages(fits))[0] == (0, 4)
+
+    result = build_and_solve(
+        _bundle(prices=_spread_prices()),
+        _config(deny_boost_hours=["01:00-02:00"], min_run_steps=6),
+    )
+
+    stages = _stages(result)
+    assert all(stage == 0 for stage in stages[:8])
+    for first, length in _runs(stages):
+        assert length >= 6 or first + length == _HORIZON
