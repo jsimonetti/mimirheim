@@ -2997,6 +2997,39 @@ def test_heat_store_rejects_zero_or_more_than_three_stages() -> None:
         HeatStoreConfig.model_validate(_heat_store_data(boost_stages=[stage] * 4))
 
 
+_EXAMPLE_BOILER_STAGES = [
+    {"power_kw": 0.5, "cop": 2.5, "max_temp_c": 55.0},
+    {"power_kw": 1.2, "cop": 1.0, "max_temp_c": 65.0},
+    {"power_kw": 1.7, "cop": 1.44, "max_temp_c": 55.0},
+]
+
+
+def test_heat_store_accepts_three_stages_in_list_order() -> None:
+    from mimirheim.config.schema import HeatStoreConfig
+
+    cfg = HeatStoreConfig.model_validate(
+        _heat_store_data(boost_stages=_EXAMPLE_BOILER_STAGES)
+    )
+    assert [stage.power_kw for stage in cfg.boost_stages] == [0.5, 1.2, 1.7]
+
+
+@pytest.mark.parametrize("index", [1, 2])
+@pytest.mark.parametrize(
+    ("override", "field"),
+    [({"cop": 2.6}, "cop"), ({"max_temp_c": 50.0}, "max_temp_c")],
+)
+def test_heat_store_validates_every_stage(
+    index: int, override: dict[str, float], field: str
+) -> None:
+    """Per-stage rules apply to later stages too, and the error names the stage."""
+    from mimirheim.config.schema import HeatStoreConfig
+
+    stages = [dict(stage) for stage in _EXAMPLE_BOILER_STAGES]
+    stages[index].update(override)
+    with pytest.raises(ValidationError, match=rf"boost_stages\[{index}\]\.{field}"):
+        HeatStoreConfig.model_validate(_heat_store_data(boost_stages=stages))
+
+
 def test_heat_store_rejects_non_positive_parameters() -> None:
     from mimirheim.config.schema import HeatStoreConfig
 

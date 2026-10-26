@@ -1997,16 +1997,17 @@ def _heat_store_result(kw: float, boost_stage: int) -> SolveResult:
     )
 
 
-def test_heat_store_setpoint_carries_the_boost_stage() -> None:
+@pytest.mark.parametrize("boost_stage", [1, 3])
+def test_heat_store_setpoint_carries_the_boost_stage(boost_stage: int) -> None:
     client = MagicMock()
     MqttPublisher(client=client, config=_make_config()).publish_result(
-        _heat_store_result(kw=-0.5, boost_stage=1)
+        _heat_store_result(kw=-0.5, boost_stage=boost_stage)
     )
 
     assert _published(client, "mimir/device/boiler/setpoint") == {
         "kw": -0.5,
         "type": "heat_store",
-        "boost_stage": 1,
+        "boost_stage": boost_stage,
     }
 
 

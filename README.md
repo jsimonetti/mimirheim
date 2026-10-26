@@ -1007,7 +1007,7 @@ The departure target is supplied at runtime via the EV state MQTT payload (not c
 | `inputs.topic_current_temp` | string | derived | MQTT topic for the current store temperature (plain float, °C). Derived as `{prefix}/input/heat_store/{name}/temp_c`. |
 | `outputs.boost_run_state` | string | derived | Retained boost run state, read back on startup. Derived as `{prefix}/status/heat_store/{name}/boost_run_state`. Reserved; not yet published. |
 
-Example, a 200 L DHW heat pump boiler whose heat pump can heat 5 K above its normal setpoint:
+Example, a 200 L DHW heat pump boiler whose heat pump can heat 5 K above its normal setpoint and whose element can heat to 65 °C:
 
 ```yaml
 heat_stores:
@@ -1018,8 +1018,14 @@ heat_stores:
     ambient_c: 20
     drift_k_per_hour: 0.4
     boost_stages:
-      - {power_kw: 0.5, cop: 2.5, max_temp_c: 55}
+      - {power_kw: 0.5, cop: 2.5,  max_temp_c: 55}   # stage 1: heat pump above its normal setpoint
+      - {power_kw: 1.2, cop: 1.0,  max_temp_c: 65}   # stage 2: element
+      - {power_kw: 1.7, cop: 1.44, max_temp_c: 55}   # stage 3: both
 ```
+
+Stage 1 is the heat pump heating above the normal setpoint (for example SG Ready state 3), not the normal program itself; the normal program is never a stage. A combined stage's COP follows from its parts: (0.5 x 2.5 + 1.2 x 1.0) / 1.7 = 1.44. Its `max_temp_c` is the lowest of its parts, because above the heat pump's limit the combined mode runs only the element, which stage 2 already describes.
+
+mimirheim plans at most one stage per step. A stage cannot run once the store is above its `max_temp_c`, so in this example the plan heats with stage 1 or 3 up to 55 °C and only with stage 2 above it.
 
 A stage COP above `normal_cop`, a stage cap at or below `normal_setpoint_c`, `ambient_c` at or above `normal_setpoint_c`, and zero or more than three stages are rejected at startup.
 
