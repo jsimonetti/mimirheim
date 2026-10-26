@@ -403,6 +403,20 @@ The division by `dt` puts the kWh-based credit on the same per-kW scale as grid 
 
 Flat prices never boost: storing heat at stage `s` costs `price / cop[s]` per kWh of heat, and because `d > 0` and `cop[s] <= normal_cop`, less than that heat is later displaced at `price / normal_cop`. No tie-breaking penalty is needed.
 
+### Gain threshold
+
+`apply_gain_threshold` (`min_dispatch_gain_eur`) treats a heat store as idle-able: the idle schedule sets `kw = 0`, `boost_stage = 0` and leaves `temp_c` unset, like a battery's `soc_kwh`. The persisted boost run state then records stage 0 through the normal publisher path.
+
+The published costs are grid cash, so a profitable boost shows `optimised_cost_eur > naive_cost_eur`; without a correction its gain would be negative and it would never be suppressed. The gain therefore adds `heat_store_net_credit_eur`:
+
+```
+gain = naive_cost_eur - optimised_cost_eur + sum_stores(credit_solved - credit_idle)
+```
+
+`credit_solved` is the credit of the solved `imp[t]` and `rest[t]` at the clamped credit prices, without confidence weighting, because the cost figures it is compared with are unweighted. `credit_idle` is the credit of the idle plan: the initial stored heat decays and covers `min(available, maint)` each step with no boosts, and the displaced electricity is split as the model splits it (up to `baseline_import[t]` at the import credit price where that exceeds the export credit price, the rest at the export credit price). Heat already in the store drains in both plans; counting its credit only on the solved side would inflate the gain and let marginal dispatch through. The idle plan drains greedily, where the solver may hold the last partial step of heat for a better price, so the two can differ by at most one step's maintenance credit.
+
+The threshold is skipped while a carried-over boost run forces step 0 (`heat_store_carry_over`), like an active EV deadline: idling would cut short a run whose minimum length protects the compressor. A completed run, a persisted stage 0 or a deny window at step 0 forces nothing, so the threshold applies.
+
 ### Outputs
 
 Each step's `DeviceSetpoint` carries `type="heat_store"`, `kw` (the planned average draw, at most 0), `boost_stage` (stage number from 1, or 0) and the planned `temp_c = normal_setpoint_c + S[t] / C`.

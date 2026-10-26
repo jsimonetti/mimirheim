@@ -23,6 +23,7 @@ import pytest
 from mimirheim.config.schema import MimirheimConfig
 from mimirheim.core.bundle import SolveBundle, SolveResult
 from mimirheim.core.model_builder import build_and_solve
+from mimirheim.core.post_process import apply_gain_threshold
 
 _T0 = datetime(2026, 10, 13, 0, 0, tzinfo=timezone.utc)
 _HORIZON = 96
@@ -751,3 +752,109 @@ def test_continuing_a_persisted_boost_is_not_a_new_start() -> None:
     )
 
     assert _runs(_stages(result)) == [(0, 2)]
+
+
+# ---------------------------------------------------------------------------
+# min_dispatch_gain_eur
+# ---------------------------------------------------------------------------
+
+
+def _gain(result: SolveResult) -> float:
+    """The gain apply_gain_threshold compares against the threshold."""
+    return (
+        result.naive_cost_eur
+        - result.optimised_cost_eur
+        + result.heat_store_net_credit_eur
+    )
+
+
+def _with_threshold(config: MimirheimConfig, threshold: float) -> MimirheimConfig:
+    objectives = config.objectives.model_copy(update={"min_dispatch_gain_eur": threshold})
+    return config.model_copy(update={"objectives": objectives})
+
+
+def test_heat_already_in_the_store_adds_no_net_credit() -> None:
+    """A store at its cap drains the same heat whether or not anything is
+    dispatched, so its credit is no gain from dispatch."""
+    result = build_and_solve(
+        _bundle(prices=[0.25] * _HORIZON, temp_c=_CAP), _config()
+    )
+
+    assert _stages(result) == [0] * _HORIZON
+    assert result.heat_store_net_credit_eur == pytest.approx(0.0, abs=1e-6)
+
+
+def test_heat_already_in_the_store_does_not_inflate_the_gain() -> None:
+    """Draining the full store displaces about 0.1 EUR of normal-program
+    electricity. Counting it as gain would lift this plan, which dispatches
+    nothing, over a 0.05 EUR threshold."""
+    config = _with_threshold(_config(), 0.05)
+    result = build_and_solve(_bundle(prices=[0.25] * _HORIZON, temp_c=_CAP), config)
+
+    out = apply_gain_threshold(result, _bundle(prices=[0.25] * _HORIZON, temp_c=_CAP), config)
+
+    assert _gain(result) == pytest.approx(0.0, abs=1e-6)
+    assert out.dispatch_suppressed
+
+
+def test_a_profitable_boost_has_a_positive_gain() -> None:
+    """The boost only adds grid import, so without the credit its gain would
+    be negative. With the credit it is the value of the displaced
+    normal-program electricity less the cost of the boost."""
+    result = build_and_solve(_bundle(prices=_spread_prices()), _config())
+
+    assert any(stage > 0 for stage in _stages(result))
+    assert result.optimised_cost_eur > result.naive_cost_eur
+    assert _gain(result) > 0.05
+
+
+def test_a_boost_below_the_threshold_is_idled() -> None:
+    """The spread boost gains about 0.13 EUR, below a 1.0 EUR threshold."""
+    bundle = _bundle(prices=_spread_prices())
+    config = _with_threshold(_config(), 1.0)
+
+    out = apply_gain_threshold(build_and_solve(bundle, config), bundle, config)
+
+    assert out.dispatch_suppressed
+    for step in out.schedule:
+        boiler = step.devices["boiler"]
+        assert boiler.kw == 0.0
+        assert boiler.boost_stage == 0
+        assert boiler.temp_c is None
+
+
+def test_a_boost_above_the_threshold_is_kept() -> None:
+    """The spread boost gains about 0.13 EUR, above a 0.05 EUR threshold."""
+    bundle = _bundle(prices=_spread_prices())
+    config = _with_threshold(_config(), 0.05)
+
+    out = apply_gain_threshold(build_and_solve(bundle, config), bundle, config)
+
+    assert not out.dispatch_suppressed
+    assert any(stage > 0 for stage in _stages(out))
+
+
+@pytest.mark.parametrize(
+    ("boost_run", "deny", "expected"),
+    [
+        # One step of a four-step run has elapsed: step 0 is forced.
+        (_boosting_since(1), [], ["boiler"]),
+        # The minimum run is complete: nothing is forced.
+        (_boosting_since(4), [], []),
+        # Not boosting: nothing is forced.
+        ({"stage": 0, "since": _T0}, [], []),
+        # Step 0 lies in a deny window, which wins over the carry-over.
+        (_boosting_since(1), ["00:00-01:00"], []),
+        # No persisted state.
+        (None, [], []),
+    ],
+)
+def test_result_names_the_stores_a_carry_over_forces_to_boost(
+    boost_run: dict | None, deny: list[str], expected: list[str]
+) -> None:
+    result = build_and_solve(
+        _bundle(prices=[0.25] * _HORIZON, boost_run=boost_run),
+        _config(min_run_steps=4, deny_boost_hours=deny),
+    )
+
+    assert result.heat_store_carry_over == expected

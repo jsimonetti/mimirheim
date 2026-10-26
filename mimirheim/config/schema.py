@@ -117,8 +117,10 @@ class ObjectivesConfig(BaseModel):
             mimirheim publishes an idle schedule instead. Set to 0.0 (the default)
             to disable the check. Applies only to ``minimize_cost`` and
             ``balanced`` strategies. Has no effect when an EV with an active
-            charge deadline is connected, or when a deferrable load has an
-            active scheduling window.
+            charge deadline is connected, when a deferrable load has an
+            active scheduling window, or when a heat store's carried-over
+            boost run has not reached its minimum length. Heat store boosts
+            are idled too; the saving includes the credit boosts add.
         exchange_shaping_weight: Weight for the optional secondary exchange-
             minimisation term ``lambda * sum_t(import_t + export_t)``. When
             set to a small positive value (e.g. 1e-4), this term breaks solver

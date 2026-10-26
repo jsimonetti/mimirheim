@@ -206,6 +206,8 @@ Strategy behaviour:
 - `balanced`: the credit is part of the cost component and is scaled by the cost weight like grid cost, so `balanced` never boosts on flat prices either.
 - `minimize_consumption`: phase 1 minimises import without regard to the store; the credit applies in phase 2.
 
+With `min_dispatch_gain_eur` set, a heat store is idled like other storage when the gain is below the threshold: `kw` 0 and `boost_stage` 0. The gain counts the credit that boosts add; heat already in the store does not count, because it drains whether or not mimirheim boosts. The threshold is not applied while a boost run carried over from an earlier solve has not yet reached `min_run_steps`.
+
 Known approximations:
 
 - Normal heating is not modelled, only valued through the credit. If the normal program is already running when a boost starts, real consumption differs from the plan. The static load forecast still contains normal heating in steps where stored heat displaces it.
@@ -1085,7 +1087,7 @@ A stage COP above `normal_cop`, a stage cap at or below `normal_setpoint_c`, `am
 |---|---|---|---|
 | `balanced_weights.cost_weight` | float ≥ 0 | 1.0 | Weight on revenue/cost terms when strategy is `balanced`. |
 | `balanced_weights.self_sufficiency_weight` | float ≥ 0 | 1.0 | Weight on grid import penalty. |
-| `min_dispatch_gain_eur` | float ≥ 0 | 0.0 | Minimum projected saving in EUR required to dispatch storage. Below this threshold mimirheim publishes an idle schedule. 0.0 disables. |
+| `min_dispatch_gain_eur` | float ≥ 0 | 0.0 | Minimum projected saving in EUR required to dispatch storage. Below this threshold mimirheim publishes an idle schedule (heat stores included: no boost). 0.0 disables. |
 | `exchange_shaping_weight` | float ≥ 0 | 0.0 | Weight for the optional secondary term `lambda × Σ_t(import_t + export_t)`. Breaks solver indifference on flat or near-symmetric tariffs by favouring lower total exchange. Must be orders of magnitude smaller than typical prices (e.g. `1e-4`). 0.0 disables. |
 
 #### `constraints` (optional)

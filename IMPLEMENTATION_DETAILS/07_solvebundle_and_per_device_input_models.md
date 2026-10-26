@@ -175,9 +175,13 @@ class SolveResult(BaseModel):
     solve_status: str        # "optimal" | "feasible" (time-limited incumbent) | "infeasible"
     schedule: list[ScheduleStep]
     heat_store_prior_runs: dict[str, HeatStoreBoostRun]  # exclude=True; input echo for the publisher
+    heat_store_net_credit_eur: float  # exclude=True; credit over the idle plan, for the gain threshold
+    heat_store_carry_over: list[str]  # exclude=True; stores a carried-over run forces in step 0
 ```
 
 `heat_store_prior_runs` copies each heat store's `boost_run` from the bundle. The publisher derives the next boost run state from it and step 0 of the schedule it publishes, so a schedule changed by post-processing persists what is actually commanded. `since` keeps its previous value while the boosting state is unchanged (boosting at any stage, or not boosting) and becomes `solve_time_utc` when boosting starts or stops. The field is excluded from serialisation, so it appears neither in `golden.json` nor on the schedule topic.
+
+`heat_store_net_credit_eur` and `heat_store_carry_over` exist only for `apply_gain_threshold` and are excluded from serialisation for the same reason. The published `naive_cost_eur` and `optimised_cost_eur` stay grid cash. See §8, subsection "Heat store model", paragraph "Gain threshold".
 
 `SolveResult.model_dump()` is the golden file `golden.json`. The MQTT publisher reads the same object to publish `mimir/strategy/schedule`, `mimir/strategy/current`, and the per-device retained topics.
 

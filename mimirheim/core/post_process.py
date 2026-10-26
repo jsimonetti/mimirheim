@@ -35,7 +35,9 @@ logger = logging.getLogger("mimirheim.post_process")
 # Device types whose kw setpoint is set to zero in an idle schedule. PV and
 # static_load setpoints are derived from forecasts and are independent of the
 # dispatch decision; they are preserved unchanged.
-_CONTROLLABLE_TYPES: frozenset[str] = frozenset({"battery", "ev_charger", "deferrable_load", "hybrid_inverter"})
+_CONTROLLABLE_TYPES: frozenset[str] = frozenset(
+    {"battery", "ev_charger", "deferrable_load", "hybrid_inverter", "heat_store"}
+)
 
 # Strategies for which the gain threshold is meaningful. The threshold compares
 # EUR costs, so it is only applicable when the objective involves EUR. The
@@ -49,9 +51,13 @@ def apply_gain_threshold(
 ) -> SolveResult:
     """Replace the schedule with an idle one if the gain is below the configured threshold.
 
-    The gain is defined as ``naive_cost_eur - optimised_cost_eur``: how much
-    cheaper the optimised schedule is compared to doing nothing (grid covers
-    base load minus PV, storage stays idle).
+    The gain is defined as
+    ``naive_cost_eur - optimised_cost_eur + heat_store_net_credit_eur``: how
+    much cheaper the optimised schedule is compared to doing nothing (grid
+    covers base load minus PV, storage stays idle, heat stores do not boost).
+    The heat store term counts the normal-program electricity that boosts
+    displace, which the grid cash figures do not show. Heat already in a store
+    drains in both plans, so it is not part of the gain.
 
     When the gain is below ``config.objectives.min_dispatch_gain_eur``, cycling
     storage would cause wear for a benefit too small to justify it. In that
@@ -73,6 +79,9 @@ def apply_gain_threshold(
     - Any battery had a full-charge target enforced on this solve. The balance
       charge is mandatory work; idling the battery would strip it out while the
       retained status still reported the target as met.
+    - Any heat store has a boost run carried over from an earlier solve that
+      forces a boost in step 0. Idling it would cut short a run whose minimum
+      length the device needs.
     - The gain is negative (the optimised schedule is already worse than naive,
       which indicates mandatory work such as EV charging is driving up costs;
       idling would make things worse, not better).
@@ -107,7 +116,14 @@ def apply_gain_threshold(
     ):
         return result
 
-    gain = result.naive_cost_eur - result.optimised_cost_eur
+    if result.heat_store_carry_over:
+        return result
+
+    gain = (
+        result.naive_cost_eur
+        - result.optimised_cost_eur
+        + result.heat_store_net_credit_eur
+    )
 
     # Only suppress when gain is a small positive number. Negative gain means
     # the solver had a good reason to spend more than the naive baseline (e.g.
@@ -178,9 +194,12 @@ def _build_idle_result(result: SolveResult) -> SolveResult:
     """Build a SolveResult whose schedule idles all controllable devices.
 
     Every device type in ``_CONTROLLABLE_TYPES`` is set to 0 kW: batteries,
-    EV chargers, deferrable loads and hybrid inverters. Suppression exists to
-    avoid cycling storage for a gain too small to justify the wear, and those
-    are the devices whose dispatch is discretionary.
+    EV chargers, deferrable loads, hybrid inverters and heat stores.
+    Suppression exists to avoid cycling storage for a gain too small to
+    justify the wear, and those are the devices whose dispatch is
+    discretionary. A heat store also gets ``boost_stage`` 0, so its normal
+    program runs on its own; its ``temp_c`` is left unset, like a battery's
+    ``soc_kwh``.
 
     Everything else keeps the setpoint the solver chose. For PV and static
     loads that is because they are forecasts rather than decisions. For the
@@ -223,6 +242,7 @@ def _build_idle_result(result: SolveResult) -> SolveResult:
                     power_limit_kw=sp.power_limit_kw,
                     zero_exchange_active=sp.zero_exchange_active,
                     loadbalance_active=sp.loadbalance_active,
+                    boost_stage=0 if sp.type == "heat_store" else None,
                 )
             else:
                 idle_devices[name] = sp

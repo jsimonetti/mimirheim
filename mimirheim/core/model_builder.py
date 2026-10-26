@@ -875,6 +875,8 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
             for name, inputs in bundle.heat_store_inputs.items()
             if inputs.boost_run is not None
         },
+        heat_store_net_credit_eur=sum(hs.net_credit_eur(ctx) for hs in heat_stores),
+        heat_store_carry_over=[hs.name for hs in heat_stores if hs.carry_over_forced],
     )
 
 

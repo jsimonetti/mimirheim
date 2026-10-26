@@ -24,8 +24,10 @@ from mimirheim.core.bundle import (
     DeviceSetpoint,
     HeatStoreBoostRun,
     ScheduleStep,
+    SolveBundle,
     SolveResult,
 )
+from mimirheim.core.post_process import apply_gain_threshold
 from mimirheim.io.mqtt_publisher import _LOAD_TYPES, MqttPublisher
 from reporter.metrics import _LOAD_TYPES as REPORTER_LOAD_TYPES
 
@@ -2155,3 +2157,33 @@ def test_boost_run_state_is_not_published_for_an_infeasible_result() -> None:
     MqttPublisher(client=client, config=_heat_store_config()).publish_result(result)
 
     assert all(c.args[0] != _RUN_TOPIC for c in client.publish.call_args_list)
+
+
+def test_boost_run_state_of_an_idled_schedule_is_stage_zero() -> None:
+    """A boost idled by min_dispatch_gain_eur is recorded as not boosting."""
+    config = _heat_store_config()
+    config = config.model_copy(
+        update={
+            "objectives": config.objectives.model_copy(
+                update={"min_dispatch_gain_eur": 0.10}
+            )
+        }
+    )
+    result = _run_result(1, None).model_copy(
+        update={"naive_cost_eur": 1.00, "optimised_cost_eur": 0.97}
+    )
+    bundle = SolveBundle(
+        strategy="minimize_cost",
+        solve_time_utc=_SOLVE_START,
+        horizon_prices=[0.20],
+        horizon_export_prices=[0.05],
+        horizon_confidence=[1.0],
+        pv_forecast=[0.0],
+        base_load_forecast=[0.5],
+    )
+    idled = apply_gain_threshold(result, bundle, config)
+    client = MagicMock()
+    MqttPublisher(client=client, config=config).publish_result(idled)
+
+    assert idled.dispatch_suppressed
+    assert _published(client, _RUN_TOPIC) == {"stage": 0, "since": _SOLVE_START.isoformat()}

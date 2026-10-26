@@ -410,3 +410,82 @@ def test_idle_schedule_grid_balance_correct_with_hybrid_inverter() -> None:
         assert step.grid_import_kw == pytest.approx(1.0)
         assert step.grid_export_kw == pytest.approx(0.0)
 
+
+# ---------------------------------------------------------------------------
+# Heat stores
+# ---------------------------------------------------------------------------
+
+
+def _result_with_heat_store(
+    naive_cost: float,
+    optimised_cost: float,
+    net_credit: float = 0.0,
+    carry_over: list[str] | None = None,
+) -> SolveResult:
+    """Build a SolveResult whose schedule includes a boosting heat store."""
+    step = ScheduleStep(
+        t=0,
+        grid_import_kw=1.5,
+        grid_export_kw=0.0,
+        devices={
+            "boiler": DeviceSetpoint(kw=-0.5, type="heat_store", boost_stage=1, temp_c=52.0),
+            "pv": DeviceSetpoint(kw=2.0, type="pv"),
+            "load": DeviceSetpoint(kw=-3.0, type="static_load"),
+        },
+    )
+    return SolveResult(
+        strategy="minimize_cost",
+        objective_value=-0.1,
+        solve_status="optimal",
+        naive_cost_eur=naive_cost,
+        optimised_cost_eur=optimised_cost,
+        heat_store_net_credit_eur=net_credit,
+        heat_store_carry_over=carry_over or [],
+        schedule=[step] * 4,
+    )
+
+
+def test_heat_store_is_idled_below_the_threshold() -> None:
+    """Gain 0.03 is below 0.10: the store stops boosting and leaves its
+    planned temperature unset, like a battery's SOC."""
+    config = _make_config(threshold=0.10)
+    res = _result_with_heat_store(naive_cost=1.00, optimised_cost=0.97)
+
+    out = apply_gain_threshold(res, _bundle(), config)
+
+    assert out.dispatch_suppressed
+    for step in out.schedule:
+        boiler = step.devices["boiler"]
+        assert boiler.type == "heat_store"
+        assert boiler.kw == 0.0
+        assert boiler.boost_stage == 0
+        assert boiler.temp_c is None
+        # pv=+2.0, load=-3.0, boiler zeroed: import 1.0.
+        assert step.grid_import_kw == pytest.approx(1.0)
+
+
+def test_gain_includes_the_heat_store_net_credit() -> None:
+    """The boost costs 0.20 EUR of grid cash and earns 0.25 EUR of credit:
+    a gain of 0.05, below the 0.10 threshold."""
+    config = _make_config(threshold=0.10)
+    res = _result_with_heat_store(naive_cost=1.00, optimised_cost=1.20, net_credit=0.25)
+
+    assert apply_gain_threshold(res, _bundle(), config).dispatch_suppressed
+
+
+def test_gain_with_a_large_heat_store_net_credit_is_not_suppressed() -> None:
+    """0.40 EUR of credit for 0.20 EUR of grid cash: a gain of 0.20."""
+    config = _make_config(threshold=0.10)
+    res = _result_with_heat_store(naive_cost=1.00, optimised_cost=1.20, net_credit=0.40)
+
+    assert apply_gain_threshold(res, _bundle(), config) is res
+
+
+def test_no_suppression_while_a_carried_over_boost_is_forced() -> None:
+    """Gain 0.03 is below 0.10, but idling would cut short a minimum run."""
+    config = _make_config(threshold=0.10)
+    res = _result_with_heat_store(
+        naive_cost=1.00, optimised_cost=0.97, carry_over=["boiler"]
+    )
+
+    assert apply_gain_threshold(res, _bundle(), config) is res

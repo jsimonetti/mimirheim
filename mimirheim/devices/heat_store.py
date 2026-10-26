@@ -125,6 +125,45 @@ def _covered_steps(energy: HeatStoreEnergy, horizon: int) -> set[int]:
     return covered
 
 
+def _idle_credit_eur(
+    energy: HeatStoreEnergy,
+    normal_cop: float,
+    import_credit: list[float],
+    export_credit: list[float],
+    baseline_import_kwh: list[float],
+) -> float:
+    """Return the credit an idle plan earns from the heat already in the store.
+
+    The idle plan never boosts. Each step the stored heat loses its extra
+    decay, then covers as much of the maintenance loss as it can, until the
+    store is empty. The displaced normal-program electricity is valued as the
+    model values it: the part within the import baseline at the import credit
+    price where that beats the export credit price, the rest at the export
+    credit price. See IMPLEMENTATION_DETAILS.md §8, subsection "Heat store
+    model".
+
+    Args:
+        energy: Energy parameters for this solve.
+        normal_cop: Efficiency of the normal program.
+        import_credit: Clamped import credit price per step in EUR/kWh.
+        export_credit: Clamped export credit price per step in EUR/kWh.
+        baseline_import_kwh: Grid import per step before any device dispatch,
+            in kWh.
+
+    Returns:
+        The credit in EUR over the horizon.
+    """
+    credit = 0.0
+    stored = energy.initial_stored_kwh
+    for ic, ec, baseline in zip(import_credit, export_credit, baseline_import_kwh, strict=True):
+        available = (1 - energy.decay) * stored
+        used = min(available, energy.maintenance_kwh)
+        stored = available - used
+        displaced_kwh = used / normal_cop
+        credit += displaced_kwh * ec + min(displaced_kwh, baseline) * max(ic - ec, 0.0)
+    return credit
+
+
 def _deny_steps(
     windows: list[str], solve_time_utc: datetime, dt: float, horizon: int
 ) -> set[int]:
@@ -217,6 +256,10 @@ class HeatStoreDevice:
         self._import_credit: list[float] = []
         self._export_credit: list[float] = []
         self._dt: float = 0.25
+        # Credit of the idle plan in EUR, and whether a persisted boost run
+        # forces a boost in step 0; both set in add_constraints.
+        self._idle_credit_eur: float = 0.0
+        self._carry_over_forced: bool = False
 
     def add_variables(self, ctx: ModelContext) -> None:
         """Declare all MILP variables for this heat store.
@@ -304,6 +347,13 @@ class HeatStoreDevice:
         # never makes boosting look worse than not boosting.
         self._import_credit = [max(price, 0.0) for price in import_prices[: len(ctx.T)]]
         self._export_credit = [max(price, 0.0) for price in export_prices[: len(ctx.T)]]
+        self._idle_credit_eur = _idle_credit_eur(
+            energy,
+            self.config.normal_cop,
+            self._import_credit,
+            self._export_credit,
+            baseline_import_kwh,
+        )
 
         for t in ctx.T:
             on = [self._on[s, t] for s in stages]
@@ -383,6 +433,7 @@ class HeatStoreDevice:
 
         boost_run = inputs.boost_run
         boosting_before = boost_run is not None and boost_run.boosting
+        self._carry_over_forced = False
         self._add_min_run_constraints(ctx, boosting_before)
         if boost_run is not None and boost_run.boosting:
             self._add_carry_over_constraints(ctx, boost_run)
@@ -450,6 +501,7 @@ class HeatStoreDevice:
         for t in ctx.T:
             if t >= remaining or t in self._denied:
                 break
+            self._carry_over_forced = True
             # boost[t] = 1: the carried-over run is not finished, so the
             # store keeps boosting at some stage. The stage may change.
             ctx.solver.add_constraint(sum(self._on[s, t] for s in stages) >= 1)
@@ -495,13 +547,51 @@ class HeatStoreDevice:
         Returns:
             A list with one solver expression.
         """
-        return [
-            -(
-                self._import_credit[t] * self._imp[t]
-                + self._export_credit[t] * self._rest[t]
+        return [-self._credit(t, self._imp[t], self._rest[t]) * (1.0 / self._dt)]
+
+    def _credit(self, t: int, imp: Any, rest: Any) -> Any:
+        """Value displaced normal-program electricity at step t, in EUR.
+
+        Args:
+            t: Zero-based time step index.
+            imp: Displaced electricity that would have been imported, in kWh.
+                A solver variable or its solved value.
+            rest: The remainder of the displaced electricity, in kWh.
+
+        Returns:
+            A solver expression or a float, matching the arguments.
+        """
+        return self._import_credit[t] * imp + self._export_credit[t] * rest
+
+    @property
+    def carry_over_forced(self) -> bool:
+        """True when a persisted boost run forces a boost in step 0.
+
+        Valid after ``add_constraints``.
+        """
+        return self._carry_over_forced
+
+    def net_credit_eur(self, ctx: ModelContext) -> float:
+        """Return the credit the solved plan earns over an idle plan, in EUR.
+
+        The solved plan's credit is the displaced normal-program electricity
+        valued at the clamped credit prices, without confidence weighting. The
+        idle plan's credit is that of the heat already in the store draining
+        with no boosts. The difference is the credit that dispatch adds.
+
+        Args:
+            ctx: The solved model context.
+
+        Returns:
+            The net credit in EUR. Close to zero when the plan does not boost.
+        """
+        solved = sum(
+            self._credit(
+                t, ctx.solver.var_value(self._imp[t]), ctx.solver.var_value(self._rest[t])
             )
-            * (1.0 / self._dt)
-        ]
+            for t in ctx.T
+        )
+        return solved - self._idle_credit_eur
 
     def boost_stage(self, ctx: ModelContext, t: int) -> int:
         """Return the boost stage the solved plan commands at step t.

@@ -766,6 +766,18 @@ class SolveResult(BaseModel):
             one are absent. The publisher derives the next state from it and
             the final, post-processed step 0. Excluded from serialisation: it
             is an input, not part of the published schedule.
+        heat_store_net_credit_eur: The heat store credit the solved plan earns
+            over the credit an idle plan would earn, in EUR, summed over all
+            heat stores. The idle plan drains the heat already in each store
+            with no boosts, so that heat is not counted as a gain from
+            dispatch. Unweighted, at the clamped credit prices the model uses.
+            ``apply_gain_threshold`` adds it to the gain. Excluded from
+            serialisation: published costs remain grid cash. Zero for
+            infeasible solves.
+        heat_store_carry_over: Names of the heat stores whose persisted boost
+            run forces a boost in step 0 of this solve. ``apply_gain_threshold``
+            does not idle a plan while any store is listed. Excluded from
+            serialisation.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -839,4 +851,17 @@ class SolveResult(BaseModel):
         default_factory=dict,
         exclude=True,
         description="Persisted boost run state per heat store this solve started from.",
+    )
+    heat_store_net_credit_eur: float = Field(
+        default=0.0,
+        exclude=True,
+        description=(
+            "Heat store credit of the solved plan minus that of an idle plan, in EUR, "
+            "summed over all heat stores."
+        ),
+    )
+    heat_store_carry_over: list[str] = Field(
+        default_factory=list,
+        exclude=True,
+        description="Heat stores whose persisted boost run forces a boost in step 0.",
     )
