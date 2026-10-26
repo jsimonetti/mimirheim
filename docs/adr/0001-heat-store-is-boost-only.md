@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 # Heat stores are boost-only devices
 
