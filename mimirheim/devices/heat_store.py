@@ -14,15 +14,17 @@ needs only a second translation function.
 
 The module does not import from ``mimirheim.io``. The measured temperature, the
 prices and the pre-solve import baseline are passed to ``add_constraints``
-explicitly. Hot water draws, minimum run length and deny windows are not
-modelled here. See IMPLEMENTATION_DETAILS.md §8, subsection "Heat store model".
+explicitly; the solve start time, which places the deny windows, is passed to
+the constructor. Hot water draws and minimum run length are not modelled here.
+See IMPLEMENTATION_DETAILS.md §8, subsection "Heat store model".
 """
 
 import math
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from mimirheim.config.schema import HeatStoreConfig
+from mimirheim.config.schema import HeatStoreConfig, parse_utc_window
 from mimirheim.core.bundle import HeatStoreInputs
 from mimirheim.core.context import ModelContext
 
@@ -122,12 +124,46 @@ def _covered_steps(energy: HeatStoreEnergy, horizon: int) -> set[int]:
     return covered
 
 
+def _deny_steps(
+    windows: list[str], solve_time_utc: datetime, dt: float, horizon: int
+) -> set[int]:
+    """Return the steps that start inside a deny window.
+
+    Windows are aligned to 15 minutes and so is ``solve_time_utc``, so with
+    15-minute steps every step lies entirely inside or outside a window.
+
+    Args:
+        windows: Validated ``"HH:MM-HH:MM"`` UTC windows.
+        solve_time_utc: Start of step 0.
+        dt: Step duration in hours.
+        horizon: Number of steps.
+
+    Returns:
+        Indices of the steps in which no boost may be planned.
+    """
+    spans = [parse_utc_window(window) for window in windows]
+    start = solve_time_utc.astimezone(timezone.utc)
+    denied: set[int] = set()
+    for t in range(horizon):
+        step_start = start + timedelta(hours=dt * t)
+        minute = step_start.hour * 60 + step_start.minute
+        for begin, end in spans:
+            # A window with its end before its start crosses midnight.
+            inside = begin <= minute < end if begin < end else minute >= begin or minute < end
+            if inside:
+                denied.add(t)
+                break
+    return denied
+
+
 class HeatStoreDevice:
     """Models a heat store's optional boosts as a MILP sub-problem.
 
     Each instance corresponds to one entry in ``config.heat_stores``. The model
-    builder calls ``add_variables`` once, then ``add_constraints`` with the
-    measured temperature, the prices and the import baseline.
+    builder constructs it with the solve start time, which places the deny
+    windows on the horizon, then calls ``add_variables`` once, then
+    ``add_constraints`` with the measured temperature, the prices and the
+    import baseline.
 
     The device exposes the following solver variables after ``add_variables``:
 
@@ -146,15 +182,20 @@ class HeatStoreDevice:
         config: Static heat store configuration.
     """
 
-    def __init__(self, name: str, config: HeatStoreConfig) -> None:
+    def __init__(
+        self, name: str, config: HeatStoreConfig, solve_time_utc: datetime
+    ) -> None:
         """Initialise the HeatStoreDevice.
 
         Args:
             name: Device name, matching the key in ``MimirheimConfig.heat_stores``.
             config: Validated static configuration for this heat store.
+            solve_time_utc: Start of step 0. Places ``deny_boost_hours`` on
+                the horizon.
         """
         self.name = name
         self.config = config
+        self._solve_time_utc = solve_time_utc
 
         # Solver variables populated by add_variables.
         self._on: dict[tuple[int, int], Any] = {}
@@ -183,12 +224,19 @@ class HeatStoreDevice:
         """
         self._dt = ctx.dt
         stages = range(len(self.config.boost_stages))
+        denied = _deny_steps(
+            self.config.deny_boost_hours, self._solve_time_utc, ctx.dt, len(ctx.T)
+        )
 
         for t in ctx.T:
+            # Upper bound of the binaries in step t: 0 inside a deny window,
+            # which fixes them rather than leaving the solver to branch on
+            # them. Deny windows block only the boost, not the normal program.
+            binary_ub = 0.0 if t in denied else 1.0
             for s in stages:
                 # on[s, t]: 1 when the integration is told to boost at stage
                 # s + 1 during step t. The command the integration acts on.
-                self._on[s, t] = ctx.solver.add_var(lb=0.0, ub=1.0, integer=True)
+                self._on[s, t] = ctx.solver.add_var(lb=0.0, ub=binary_ub, integer=True)
                 # p[s, t]: electrical draw in kW at stage s. Bounded by the
                 # stage power and tied to on[s, t] in add_constraints.
                 self._p[s, t] = ctx.solver.add_var(
@@ -196,7 +244,7 @@ class HeatStoreDevice:
                 )
             # at_cap[t]: 1 when the store ends step t at the active stage's
             # cap. Only then may the draw be below full stage power.
-            self._at_cap[t] = ctx.solver.add_var(lb=0.0, ub=1.0, integer=True)
+            self._at_cap[t] = ctx.solver.add_var(lb=0.0, ub=binary_ub, integer=True)
             # w[t]: stored heat in kWh used instead of the normal program.
             # Upper bound (the maintenance loss) is set in add_constraints.
             self._w[t] = ctx.solver.add_var(lb=0.0)

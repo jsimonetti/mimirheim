@@ -3087,3 +3087,40 @@ def test_heat_store_name_must_be_unique_across_sections() -> None:
     raw["static_loads"] = {"base": {}}
     with pytest.raises(ValidationError, match="unique"):
         MimirheimConfig.model_validate(raw)
+
+
+def test_heat_store_accepts_deny_windows_including_across_midnight() -> None:
+    from mimirheim.config.schema import HeatStoreConfig
+
+    windows = ["20:00-06:00", "12:15-13:45", "23:45-00:00"]
+    cfg = HeatStoreConfig.model_validate(_heat_store_data(deny_boost_hours=windows))
+    assert cfg.deny_boost_hours == windows
+
+
+@pytest.mark.parametrize(
+    "window",
+    [
+        "20:00",
+        "20:00-",
+        "2000-0600",
+        "8:00-10:00",
+        "20:00 - 06:00",
+        "aa:bb-cc:dd",
+        "24:00-06:00",
+        "20:60-06:00",
+        "20:00-20:00",
+    ],
+)
+def test_heat_store_rejects_malformed_deny_windows(window: str) -> None:
+    from mimirheim.config.schema import HeatStoreConfig
+
+    with pytest.raises(ValidationError, match="deny_boost_hours"):
+        HeatStoreConfig.model_validate(_heat_store_data(deny_boost_hours=[window]))
+
+
+@pytest.mark.parametrize("window", ["20:10-06:00", "20:00-06:05", "06:30-07:20"])
+def test_heat_store_rejects_deny_windows_off_the_quarter_hour(window: str) -> None:
+    from mimirheim.config.schema import HeatStoreConfig
+
+    with pytest.raises(ValidationError, match="multiple of 15"):
+        HeatStoreConfig.model_validate(_heat_store_data(deny_boost_hours=[window]))

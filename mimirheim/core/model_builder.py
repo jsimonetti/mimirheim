@@ -377,7 +377,7 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
         for name, cfg in config.thermal_boilers.items()
     ]
     heat_stores = [
-        HeatStoreDevice(name=name, config=cfg)
+        HeatStoreDevice(name=name, config=cfg, solve_time_utc=bundle.solve_time_utc)
         for name, cfg in config.heat_stores.items()
     ]
     space_heating_hps = [

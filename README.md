@@ -194,6 +194,8 @@ A thermal store whose own program keeps it at a normal setpoint: a DHW heat pump
 
 Stored heat is valued by a credit for the normal-program electricity it later displaces: at the import price where that electricity would have been imported, and at the export price where PV (including hybrid inverter PV) would have covered the base load. Credit prices are clamped at zero. Boost electricity is paid through the normal grid cost. Heat left at the end of the horizon is worth nothing.
 
+Deny windows (`deny_boost_hours`) are daily UTC windows, such as `"20:00-06:00"` to keep the boiler quiet at night, in which mimirheim plans no boost. A window may cross midnight; minutes must be multiples of 15. A window denies only mimirheim's boost: the device's normal program keeps running. Windows are in UTC and do not follow daylight saving time. If exact local times matter in a DST timezone, configure the union of the summer and winter windows; in the Netherlands, local 22:00-06:00 becomes `"20:00-05:00"` (20:00 UTC is 22:00 in summer, 05:00 UTC is 06:00 in winter).
+
 Each solve publishes the boost stage per store (`0` = no boost). The integration (Home Assistant, Node-RED) maps the stage to the device, for example to an SG Ready state, a relay or a raised setpoint. mimirheim has no knowledge of SG Ready.
 
 **Your integration must stop boosting when mimirheim goes offline.** The last setpoint stays retained on the broker; when `outputs.availability` reads `offline`, return the device to its normal program.
@@ -999,7 +1001,7 @@ The departure target is supplied at runtime via the EV state MQTT payload (not c
 | `ambient_c` | float < `normal_setpoint_c` | 20.0 | Average temperature around the store (°C). Only used to derive how fast extra heat decays. |
 | `drift_k_per_hour` | float > 0 | — | Observed cooldown when idle at the normal setpoint, without hot water use (K/h). |
 | `min_run_steps` | int ≥ 1 | 1 | Minimum consecutive boost steps once a boost starts. Accepted, not yet applied. |
-| `deny_boost_hours` | list of `"HH:MM-HH:MM"` | `[]` | UTC windows in which no boost is planned. Accepted, not yet applied. |
+| `deny_boost_hours` | list of `"HH:MM-HH:MM"` | `[]` | Daily UTC windows in which no boost is planned. Minutes must be multiples of 15. A window may cross midnight (`"20:00-06:00"`); `"00:00"` as the end means midnight. Windows do not follow daylight saving time; see "Heat store" above. |
 | `boost_stages` | list, 1 to 3 entries | — | Boost stages, numbered by list position from 1. |
 | `boost_stages[].power_kw` | float > 0 | — | Electrical power while boosting at full power in this stage (kW). |
 | `boost_stages[].cop` | float > 0, ≤ `normal_cop` | — | Efficiency in this stage. |
@@ -1027,7 +1029,7 @@ Stage 1 is the heat pump heating above the normal setpoint (for example SG Ready
 
 mimirheim plans at most one stage per step. A stage cannot run once the store is above its `max_temp_c`, so in this example the plan heats with stage 1 or 3 up to 55 °C and only with stage 2 above it.
 
-A stage COP above `normal_cop`, a stage cap at or below `normal_setpoint_c`, `ambient_c` at or above `normal_setpoint_c`, and zero or more than three stages are rejected at startup.
+A stage COP above `normal_cop`, a stage cap at or below `normal_setpoint_c`, `ambient_c` at or above `normal_setpoint_c`, zero or more than three stages, and a malformed, unaligned or empty `deny_boost_hours` window are rejected at startup.
 
 #### `space_heating_hps` (dict, keyed by device name)
 

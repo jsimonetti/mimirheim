@@ -10,6 +10,7 @@ IO loads config, devices receive config models as constructor arguments.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Literal
 
@@ -2551,6 +2552,44 @@ class ThermalBoilerConfig(BaseModel):
             )
         return self
 
+_UTC_WINDOW = re.compile(r"(\d{2}):(\d{2})-(\d{2}):(\d{2})")
+
+
+def parse_utc_window(window: str) -> tuple[int, int]:
+    """Parse a daily UTC time-of-day window ``"HH:MM-HH:MM"``.
+
+    The window starts at the first time and ends at the second, exclusive. An
+    end before the start means the window crosses midnight, so
+    ``"20:00-06:00"`` covers 20:00 to 24:00 and 00:00 to 06:00. ``"00:00"`` as
+    the end means midnight. Minutes must be multiples of 15, the length of a
+    mimirheim time step, so every step lies entirely inside or outside a
+    window.
+
+    Args:
+        window: The window text.
+
+    Returns:
+        Start and end as minutes since 00:00 UTC, each in ``[0, 1440)``.
+
+    Raises:
+        ValueError: If the text is not ``"HH:MM-HH:MM"``, a time is not a valid
+            time of day, a minute is not a multiple of 15, or the start equals
+            the end.
+    """
+    match = _UTC_WINDOW.fullmatch(window)
+    if match is None:
+        raise ValueError(f"window {window!r} must have the form 'HH:MM-HH:MM'.")
+    start_h, start_m, end_h, end_m = (int(part) for part in match.groups())
+    if start_h > 23 or end_h > 23 or start_m > 59 or end_m > 59:
+        raise ValueError(f"window {window!r} contains a time that is not a valid time of day.")
+    if start_m % 15 or end_m % 15:
+        raise ValueError(f"window {window!r}: minutes must be a multiple of 15.")
+    start, end = start_h * 60 + start_m, end_h * 60 + end_m
+    if start == end:
+        raise ValueError(f"window {window!r} is empty: start and end are equal.")
+    return start, end
+
+
 class HeatStoreBoostStageConfig(BaseModel):
     """One boost stage of a heat store.
 
@@ -2692,7 +2731,8 @@ class HeatStoreConfig(BaseModel):
         default_factory=list,
         description=(
             "UTC windows 'HH:MM-HH:MM' in which no boost is planned. "
-            "Windows may cross midnight."
+            "Minutes must be multiples of 15. Windows may cross midnight, "
+            "for example '20:00-06:00'."
         ),
     )
     boost_stages: list[HeatStoreBoostStageConfig] = Field(
@@ -2708,6 +2748,17 @@ class HeatStoreConfig(BaseModel):
         default_factory=HeatStoreOutputsConfig,
         description="MQTT output topic configuration. Topics are derived when not set.",
     )
+
+    @field_validator("deny_boost_hours")
+    @classmethod
+    def _validate_deny_boost_hours(cls, windows: list[str]) -> list[str]:
+        """Reject malformed or unaligned deny windows at config load."""
+        for index, window in enumerate(windows):
+            try:
+                parse_utc_window(window)
+            except ValueError as exc:
+                raise ValueError(f"deny_boost_hours[{index}]: {exc}") from exc
+        return windows
 
     @model_validator(mode="after")
     def _validate_temperatures_and_stages(self) -> "HeatStoreConfig":

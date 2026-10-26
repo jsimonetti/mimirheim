@@ -75,12 +75,13 @@ def _bundle(
     pv_kw: list[float] | None = None,
     hybrid_pv_kw: list[float] | None = None,
     strategy: str = "minimize_cost",
+    solve_time_utc: datetime = _T0,
 ) -> SolveBundle:
     horizon = len(prices)
     pv = pv_kw if pv_kw is not None else [0.0] * horizon
     data: dict = {
         "strategy": strategy,
-        "solve_time_utc": _T0,
+        "solve_time_utc": solve_time_utc,
         "horizon_prices": prices,
         "horizon_export_prices": (
             export_prices if export_prices is not None else [p - 0.05 for p in prices]
@@ -435,3 +436,92 @@ def test_full_store_at_negative_prices_holds_through_the_highest_cap_stage() -> 
         assert temps[t] == pytest.approx(_ELEMENT_CAP, abs=1e-4)
         # Loss replacement is a small fraction of the element's power.
         assert 0.0 < draws[t] < 0.2 * _EXAMPLE_POWER_KW[2]
+
+
+# ---------------------------------------------------------------------------
+# Deny boost windows
+# ---------------------------------------------------------------------------
+
+
+def test_no_boost_is_planned_inside_a_deny_window() -> None:
+    """A deny window over the second half of the cheap period moves the boost.
+
+    Without a window the store boosts as late as possible in the cheap
+    period, to lose the least heat before the expensive period. The horizon
+    starts at 00:00 UTC; "01:00-02:00" denies steps 4 to 7, so the boost moves
+    to steps 0 to 3.
+    """
+    undenied = _stages(build_and_solve(_bundle(prices=_spread_prices()), _config()))
+    assert any(stage == 1 for stage in undenied[4:8])
+
+    result = build_and_solve(
+        _bundle(prices=_spread_prices()), _config(deny_boost_hours=["01:00-02:00"])
+    )
+
+    stages = _stages(result)
+    assert any(stage == 1 for stage in stages[:4])
+    assert all(stage == 0 for stage in stages[4:])
+    assert all(draw == pytest.approx(0.0, abs=1e-6) for draw in _draw_kw(result)[4:8])
+
+
+def test_deny_window_crossing_midnight() -> None:
+    """A solve starting at 22:00 UTC with "22:00-02:00" denied.
+
+    The window covers steps 0 to 15, across midnight, and so the entire cheap
+    period of 8 steps. Steps 16 onwards (02:00) are allowed but expensive.
+    """
+    start = datetime(2026, 10, 12, 22, 0, tzinfo=timezone.utc)
+    prices = [0.05] * 16 + [0.40] * (_HORIZON - 16)
+    result = build_and_solve(
+        _bundle(prices=prices, solve_time_utc=start),
+        _config(deny_boost_hours=["22:00-02:00"]),
+    )
+
+    stages = _stages(result)
+    assert all(stage == 0 for stage in stages[:16])
+
+
+def test_deny_window_recurs_daily_and_ends_at_its_end_time() -> None:
+    """A 48-hour horizon sees the window on both days; the steps just outside are allowed.
+
+    "01:00-02:00" denies steps 4 to 7 and 100 to 103. Prices are negative in
+    every step, so without the window the store would be held at its cap
+    throughout and every step would boost.
+    """
+    horizon = 192
+    prices = [-0.10] * horizon
+    result = build_and_solve(
+        _bundle(prices=prices, export_prices=[p - 0.05 for p in prices]),
+        _config(deny_boost_hours=["01:00-02:00"]),
+    )
+
+    stages = _stages(result)
+    denied = set(range(4, 8)) | set(range(100, 104))
+    for t, stage in enumerate(stages):
+        if t in denied:
+            assert stage == 0
+    assert stages[3] == 1
+    assert stages[8] == 1
+    assert stages[99] == 1
+    assert stages[104] == 1
+
+
+def test_deny_window_applies_to_every_stage() -> None:
+    """With three stages and two windows, no stage runs in a denied step.
+
+    Prices are negative throughout, so every allowed step would boost.
+    "00:00-01:00" denies steps 0 to 3 and "03:00-03:30" denies steps 12 and 13.
+    """
+    prices = [-0.10] * _HORIZON
+    result = build_and_solve(
+        _bundle(prices=prices, export_prices=[p - 0.05 for p in prices]),
+        _config(
+            boost_stages=_EXAMPLE_STAGES,
+            deny_boost_hours=["00:00-01:00", "03:00-03:30"],
+        ),
+    )
+
+    stages = _stages(result)
+    for t in [*range(0, 4), 12, 13]:
+        assert stages[t] == 0
+    assert any(stage != 0 for stage in stages[4:12])

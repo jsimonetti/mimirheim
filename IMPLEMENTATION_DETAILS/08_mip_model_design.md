@@ -364,6 +364,7 @@ S[t] >= sum_s S_cap[s] * on[s,t] - S_max * (1 - at_cap[t])      # at_cap only at
 w[t] = maint                         for t in the covered prefix (see below)
 w[t] / normal_cop = imp[t] + rest[t]
 imp[t] <= baseline_import[t]
+on[s,t] = 0, at_cap[t] = 0           for t in a deny window
 ```
 
 The device draws `net_power(t) = -sum_s p[s,t]`.
@@ -377,6 +378,8 @@ The device draws `net_power(t) = -sum_s p[s,t]`.
 **Physical use of stored heat.** Physically the store covers its full maintenance loss as long as it holds heat: `w[t] = min(maint, available)`. The model only bounds `w[t] <= maint`, and leaves the rest to the credit, which rewards using heat. That is not enough where the credit is zero (export price at or below zero and PV covering the base load): the solver then holds heat back for later steps with a positive credit, and the store appears to keep heat it is losing.
 
 An exact formulation needs one more binary per step, `empty[t]`, with `w[t] >= maint * (1 - empty[t])` and `S[t] <= S_max * (1 - empty[t])`. It was implemented and rejected: its weak LP relaxation let CBC return schedules with useless boosts on flat prices, a few cents worse than the optimum and inside the 0.5% MIP gap (§2), which breaks the guarantee that flat prices never boost. The model uses an LP-only partial fix instead. Before the solve, `_covered_steps` follows the no-boost trajectory from `S0`; in every step where that trajectory still covers `maint`, `w[t] = maint` is fixed. Boosts only add heat, so this holds in every plan. Heat already in the store at solve time is therefore always used at its physical rate. Heat from a planned boost can still be held back through zero-credit steps; this is documented to users as a known approximation.
+
+**Deny windows.** `deny_boost_hours` are daily UTC windows, parsed at config load by `parse_utc_window` (`mimirheim/config/schema.py`), the codebase's only time-of-day window parser. Minutes must be multiples of 15, and `solve_time_utc` is a 15-minute boundary, so every step lies wholly inside or outside a window; a step is denied when its start time of day falls in `[start, end)`, or outside `[end, start)` for a window that crosses midnight. The device receives `solve_time_utc` in its constructor so `add_variables` can declare `on[s,t]` and `at_cap[t]` with upper bound 0 in denied steps: the binaries are fixed, not left for the solver to branch on. `p[s,t]` follows through `p <= P * on`. The normal program is not modelled, so a window denies only the boost. Windows do not follow DST; users configure the union of the summer and winter windows.
 
 **Feasibility.** `on = 0` everywhere is always feasible. Forced boosting with a full store, which later tickets introduce through the minimum run, is feasible through `at_cap` with partial draw at the stage with the highest cap, which always permits `S = S_max`. Lower-cap stages are excluded then, so a forced boost holds through the highest-cap stage.
 

@@ -1,0 +1,33 @@
+# The cheapest two hours (00:00-02:00 UTC) fall inside a deny window, the next
+# two hours are slightly dearer, then prices are expensive. The store is
+# boosted in 02:00-04:00 instead of the cheapest hours.
+
+mqtt:
+  host: localhost
+  client_id: mimir-test
+
+outputs:
+  schedule: mimir/schedule
+  current: mimir/current
+  last_solve: mimir/status
+  availability: mimir/status/availability
+
+grid:
+  import_limit_kw: 10.0
+  export_limit_kw: 10.0
+
+static_loads:
+  base: {}
+
+# 200 L DHW heat pump boiler. One boost stage: the heat pump heating 5 K above
+# its normal setpoint at the normal program's COP.
+heat_stores:
+  boiler:
+    heat_capacity_kwh_per_k: 0.233
+    normal_cop: 2.5
+    normal_setpoint_c: 50.0
+    ambient_c: 20.0
+    drift_k_per_hour: 0.4
+    deny_boost_hours: ["00:00-02:00"]
+    boost_stages:
+      - {power_kw: 0.5, cop: 2.5, max_temp_c: 55.0}
