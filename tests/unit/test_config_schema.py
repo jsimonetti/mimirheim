@@ -5,6 +5,8 @@ model in the config schema. Tests are written before the implementation exists
 and must fail with ImportError or similar until schema.py is created.
 """
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -3124,3 +3126,17 @@ def test_heat_store_rejects_deny_windows_off_the_quarter_hour(window: str) -> No
 
     with pytest.raises(ValidationError, match="multiple of 15"):
         HeatStoreConfig.model_validate(_heat_store_data(deny_boost_hours=[window]))
+
+
+def test_example_config_loads() -> None:
+    """The annotated example config validates against the schema.
+
+    Also pins the heat store example: the three-stage DHW heat pump boiler
+    from .scratch/heat-store/spec.md (heat pump, element, both combined).
+    """
+    from mimirheim.config.schema import load_config
+
+    example = Path(__file__).parents[2] / "mimirheim" / "config" / "example.yaml"
+    cfg = load_config(str(example))
+
+    assert len(cfg.heat_stores["dhw_hp_boiler"].boost_stages) == 3

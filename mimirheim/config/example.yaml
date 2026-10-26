@@ -346,6 +346,57 @@ thermal_boilers:
     #   topic_current_temp: "homeassistant/sensor/boiler_temp/state"
 
 # ---------------------------------------------------------------------------
+# Heat stores
+# ---------------------------------------------------------------------------
+# Named map. Models a thermal store whose own program keeps it at a normal
+# setpoint: a DHW heat pump boiler, a pool or a hot tub. mimirheim does not
+# control that program; its consumption stays in the static load forecast.
+# mimirheim plans only optional boosts above the normal setpoint, at one of
+# the configured boost stages, when cheap electricity now displaces more
+# expensive normal heating later. On flat prices it never boosts.
+#
+# The setpoint topic carries boost_stage (0 = no boost, otherwise the
+# stage's list position from 1).
+# The integration maps the stage to the device, for example to an SG Ready
+# state or a relay, and must return the device to its normal program when
+# outputs.availability reads offline.
+
+heat_stores:
+  dhw_hp_boiler:
+    heat_capacity_kwh_per_k: 0.233    # 200 L of water: litres x 0.001163
+    normal_cop: 2.5                   # efficiency of the normal program
+    normal_setpoint_c: 50.0           # temperature the normal program heats to
+    ambient_c: 20.0                   # average temperature around the store. Default: 20.0
+    drift_k_per_hour: 0.4             # idle cooldown at the setpoint, no hot water use
+
+    # Minimum consecutive boost steps, at any stage, once a boost starts.
+    # Protects a heat pump compressor from short cycles. A run is continued
+    # across solves and restarts via outputs.boost_run_state. Default: 1.
+    min_run_steps: 4
+
+    # Daily UTC windows in which no boost is planned. Windows may cross
+    # midnight; minutes must be multiples of 15. They deny only the boost;
+    # the normal program keeps running. Default: [].
+    deny_boost_hours: ["20:00-06:00"]
+
+    # One to three stages, numbered by list position from 1. A stage's cop may
+    # not exceed normal_cop. max_temp_c is the temperature at which the device
+    # actually stops heating in that stage. A combined stage's cop follows from
+    # its parts, (0.5 x 2.5 + 1.2 x 1.0) / 1.7 = 1.44, and its max_temp_c is
+    # the lowest of its parts.
+    boost_stages:
+      - { power_kw: 0.5, cop: 2.5,  max_temp_c: 55.0 }   # stage 1: heat pump above its normal setpoint
+      - { power_kw: 1.2, cop: 1.0,  max_temp_c: 65.0 }   # stage 2: element
+      - { power_kw: 1.7, cop: 1.44, max_temp_c: 55.0 }   # stage 3: both
+
+    # MQTT topic from which mimirheim reads the current store temperature.
+    # Topic derived to mimir/input/heat_store/dhw_hp_boiler/temp_c by default.
+    # The boost run state is derived to
+    # mimir/status/heat_store/dhw_hp_boiler/boost_run_state; do not publish to it.
+    # Override: inputs:
+    #   topic_current_temp: "homeassistant/sensor/dhw_temp/state"
+
+# ---------------------------------------------------------------------------
 # Space heating heat pumps (plan 26)
 # ---------------------------------------------------------------------------
 # Named map. Models a space heating heat pump using the degree-days demand
