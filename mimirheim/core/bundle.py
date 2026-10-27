@@ -259,6 +259,22 @@ class ThermalBoilerInputs(BaseModel):
     )
 
 
+class HeatStoreInputs(BaseModel):
+    """Live heat store state, validated at the system boundary.
+
+    Attributes:
+        current_temp_c: Current store temperature in degrees Celsius, as read
+            from the store sensor. The solver derives the boost heat present at
+            the start of the horizon from it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    current_temp_c: float = Field(
+        description="Current store temperature in °C, as read from sensor."
+    )
+
+
 class DeferrableWindow(BaseModel):
     """Time window within which a deferrable load must run.
 
@@ -389,6 +405,10 @@ class SolveBundle(BaseModel):
         default_factory=dict,
         description="Live thermal boiler state keyed by device name.",
     )
+    heat_store_inputs: dict[str, HeatStoreInputs] = Field(
+        default_factory=dict,
+        description="Live heat store state keyed by device name.",
+    )
     space_heating_inputs: dict[str, SpaceHeatingInputs] = Field(
         default_factory=dict,
         description="Live space heating demand keyed by device name.",
@@ -494,6 +514,16 @@ class DeviceSetpoint(BaseModel):
         soc_kwh: Terminal state of charge in kWh at the end of this time step.
             Populated for storage devices (batteries, EV chargers, hybrid
             inverters) only. None for all other device types.
+        on: For heat stores only. True when the planned boost power is at
+            least ``boost.on_threshold_pct`` percent of ``boost.power_kw``, so
+            a relay-switched element should be on for this step. None for all
+            other device types.
+
+            Maps to the ``outputs.on_off`` topic: ``"true"`` when on,
+            ``"false"`` when off.
+        planned_temp_c: Planned store temperature in degrees Celsius at the
+            end of this time step. Populated for heat stores only. None for all
+            other device types.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -506,6 +536,8 @@ class DeviceSetpoint(BaseModel):
     loadbalance_active: bool | None = None
     pv_is_curtailed: bool | None = None
     soc_kwh: float | None = None
+    on: bool | None = None
+    planned_temp_c: float | None = None
 
 
 class ScheduleStep(BaseModel):
@@ -693,6 +725,15 @@ class SolveResult(BaseModel):
             ``optimised_cost_eur`` to compare fairly against ``naive_cost_eur``:
             ``effective_cost = optimised_cost_eur - soc_credit_eur``.
             Zero for infeasible solves.
+        heat_credit_eur: Value in EUR of the normal-program electricity that
+            the planned boost saves across all heat stores, priced exactly as
+            in the objective: the running minimum reference price per step,
+            and the last step's reference price for the heat left at the end
+            of the horizon. The same value with the boost off is subtracted,
+            so heat present at solve start does not inflate it. The
+            ``min_dispatch_gain_eur`` check subtracts it from
+            ``optimised_cost_eur``. Zero without heat stores and for
+            infeasible solves.
         schedule: Ordered list of ScheduleStep objects, one per time step in
             the horizon. Empty if the solve was infeasible.
         deferrable_recommended_starts: Solver-chosen start datetimes for
@@ -752,6 +793,15 @@ class SolveResult(BaseModel):
             "Estimated future value in EUR of the net change in stored energy over the "
             "horizon. avg_import_price * soc_delta_cell_kwh * avg_discharge_eff per device. "
             "Subtract from optimised_cost_eur for a fair comparison against naive_cost_eur."
+        ),
+    )
+    heat_credit_eur: float = Field(
+        default=0.0,
+        description=(
+            "Value in EUR of the normal-program electricity saved by the planned "
+            "heat store boost, priced at the running minimum reference price, minus "
+            "the same value with the boost off. Subtracted from optimised_cost_eur "
+            "in the min_dispatch_gain_eur check."
         ),
     )
     schedule: list[ScheduleStep]

@@ -337,6 +337,21 @@ def thermal_boiler_temp_topic(prefix: str, name: str) -> str:
     return f"{prefix}/input/thermal_boiler/{name}/temp_c"
 
 
+def heat_store_temp_topic(prefix: str, name: str) -> str:
+    """Return the topic for the current heat store temperature.
+
+    Corresponds to ``heat_stores.{name}.inputs.topic_current_temp``.
+
+    Args:
+        prefix: The ``mqtt.topic_prefix`` value from mimirheim config.
+        name: The heat store device name.
+
+    Returns:
+        e.g. ``"mimir/input/heat_store/dhw/temp_c"``.
+    """
+    return f"{prefix}/input/heat_store/{name}/temp_c"
+
+
 def space_heating_heat_needed_topic(prefix: str, name: str) -> str:
     """Return the topic for the space heating HP heat demand.
 
@@ -529,6 +544,21 @@ def ev_loadbalance_topic(prefix: str, name: str) -> str:
         e.g. ``"mimir/output/ev/ev_charger/loadbalance"``.
     """
     return f"{prefix}/output/ev/{name}/loadbalance"
+
+
+def heat_store_on_off_topic(prefix: str, name: str) -> str:
+    """Return the topic for the heat store boost on/off flag.
+
+    Corresponds to ``heat_stores.{name}.outputs.on_off``.
+
+    Args:
+        prefix: The ``mqtt.topic_prefix`` value from mimirheim config.
+        name: The heat store device name.
+
+    Returns:
+        e.g. ``"mimir/output/heat_store/dhw/on"``.
+    """
+    return f"{prefix}/output/heat_store/{name}/on"
 
 
 def pv_power_limit_topic(prefix: str, name: str) -> str:

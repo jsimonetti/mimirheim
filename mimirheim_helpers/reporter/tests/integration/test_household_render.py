@@ -203,10 +203,13 @@ def test_unknown_device_type_is_reported_as_other_not_folded_in() -> None:
     assert d["summary"]["other_kwh"] == pytest.approx(0.125)
 
 
-def test_heat_pump_counts_as_house_usage() -> None:
+@pytest.mark.parametrize(
+    "dtype", ["thermal_boiler", "space_heating_hp", "combi_heat_pump", "heat_store"]
+)
+def test_heat_pump_counts_as_house_usage(dtype: str) -> None:
     """Thermal device types are consumption, not an unknown source."""
     out = {"schedule": [
-        _step("2026-10-01T10:00:00Z", {"hp": {"type": "space_heating_hp", "kw": -2.0}}, imp=2.0),
+        _step("2026-10-01T10:00:00Z", {"hp": {"type": dtype, "kw": -2.0}}, imp=2.0),
     ]}
     d = _payload({}, out)
     assert d["load"][0] == pytest.approx(2.0)
@@ -362,11 +365,14 @@ def test_day_baseline_follows_the_solver_step_by_step(fixture_inp: dict, fixture
     """Each day's baseline is the solver's own per step: base load minus PV,
     at the import or export price.
 
-    The fixture predates per-array forecasts: it has two arrays and only the
-    summed series, which the solver then used as it stood.
+    The fixture has two arrays whose per-array forecasts never reach either
+    array's ceiling, so the summed series is what the solver used.
     """
     sched = fixture_out["schedule"]
-    assert len(fixture_inp["config"]["pv_arrays"]) == 2 and "pv_forecasts" not in fixture_inp
+    arrays = fixture_inp["config"]["pv_arrays"]
+    assert len(arrays) == 2
+    for name, series in fixture_inp["pv_forecasts"].items():
+        assert max(series) <= arrays[name]["max_power_kw"]
     per_step = []
     for t, s in enumerate(sched):
         pv = fixture_inp["pv_forecast"][t]

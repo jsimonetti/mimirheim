@@ -1,0 +1,5296 @@
+{
+  "strategy": "minimize_cost",
+  "strategy_degraded": false,
+  "solve_time_utc": "2026-06-21T00:00:00Z",
+  "objective_value": -21.9004308409192,
+  "solve_status": "optimal",
+  "dispatch_suppressed": false,
+  "naive_cost_eur": -2.48160175,
+  "optimised_cost_eur": -3.467546879533561,
+  "soc_credit_eur": 1.5869868750000007,
+  "heat_credit_eur": 0.23585695616246946,
+  "schedule": [
+    {
+      "t": 0,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.35,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.40789473684210525,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 48.0
+        }
+      }
+    },
+    {
+      "t": 1,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.35,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.3157894736842105,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 48.0
+        }
+      }
+    },
+    {
+      "t": 2,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.35,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.22368421052631576,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.99999999999785
+        }
+      }
+    },
+    {
+      "t": 3,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.35,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.13157894736842105,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.999999999995715
+        }
+      }
+    },
+    {
+      "t": 4,
+      "grid_import_kw": 0.19999999999999996,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.15000000000000002,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.09210526315789472,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 48.0
+        }
+      }
+    },
+    {
+      "t": 5,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.35,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.99999999999785
+        }
+      }
+    },
+    {
+      "t": 6,
+      "grid_import_kw": 0.35,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.99999999999785
+        }
+      }
+    },
+    {
+      "t": 7,
+      "grid_import_kw": 0.35,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.99999999999785
+        }
+      }
+    },
+    {
+      "t": 8,
+      "grid_import_kw": 0.35,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.9999999999957
+        }
+      }
+    },
+    {
+      "t": 9,
+      "grid_import_kw": 0.35,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.9999999999957
+        }
+      }
+    },
+    {
+      "t": 10,
+      "grid_import_kw": 0.35,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.9999999999957
+        }
+      }
+    },
+    {
+      "t": 11,
+      "grid_import_kw": 0.35,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.99999999999355
+        }
+      }
+    },
+    {
+      "t": 12,
+      "grid_import_kw": 0.35,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.99999999999142
+        }
+      }
+    },
+    {
+      "t": 13,
+      "grid_import_kw": 0.35,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.9999999999957
+        }
+      }
+    },
+    {
+      "t": 14,
+      "grid_import_kw": 0.35,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.99999999999355
+        }
+      }
+    },
+    {
+      "t": 15,
+      "grid_import_kw": 0.35,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.99999999999142
+        }
+      }
+    },
+    {
+      "t": 16,
+      "grid_import_kw": 0.35,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.9999999999957
+        }
+      }
+    },
+    {
+      "t": 17,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": -0.016000000000000014,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0038000000000000026,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.366,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.9999999999957
+        }
+      }
+    },
+    {
+      "t": 18,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": -0.382,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.094525,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.732,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.99999999999355
+        }
+      }
+    },
+    {
+      "t": 19,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": -0.745,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.2714625,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 1.095,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.9999999999914
+        }
+      }
+    },
+    {
+      "t": 20,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": -1.105,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.5338999999999999,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 1.455,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.99999999999355
+        }
+      }
+    },
+    {
+      "t": 21,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": -1.4620000000000002,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.8811249999999998,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 1.812,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.9999999999914
+        }
+      }
+    },
+    {
+      "t": 22,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": -1.8129999999999995,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 1.3117124999999996,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 2.163,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.99999999998925
+        }
+      }
+    },
+    {
+      "t": 23,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": -2.159,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 1.8244749999999994,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 2.509,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.9999999999914
+        }
+      }
+    },
+    {
+      "t": 24,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 7.246999999999999,
+      "devices": {
+        "bat": {
+          "kw": 5.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.5086855263157891,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 2.847,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.99999999998925
+        }
+      }
+    },
+    {
+      "t": 25,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 4.511004999999998,
+      "devices": {
+        "bat": {
+          "kw": 1.9330049999999988,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 3.178,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.9999999999871
+        }
+      }
+    },
+    {
+      "t": 26,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 2.8999999999999995,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 3.5,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.999999999984965
+        }
+      }
+    },
+    {
+      "t": 27,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 3.2119999999999997,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 3.812,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.999999999982826
+        }
+      }
+    },
+    {
+      "t": 28,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 3.514,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 4.114,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.9999999999807
+        }
+      }
+    },
+    {
+      "t": 29,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 3.805,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 4.405,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.99999999997859
+        }
+      }
+    },
+    {
+      "t": 30,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 4.0840000000000005,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 4.684,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.99999999997648
+        }
+      }
+    },
+    {
+      "t": 31,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 4.3500000000000005,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 4.95,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.999999999974385
+        }
+      }
+    },
+    {
+      "t": 32,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 4.852,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 5.202,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.9999999999723
+        }
+      }
+    },
+    {
+      "t": 33,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 5.090000000000001,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 5.44,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.99999999997023
+        }
+      }
+    },
+    {
+      "t": 34,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 5.313000000000001,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 5.663,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.999999999968175
+        }
+      }
+    },
+    {
+      "t": 35,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 5.521000000000001,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 5.871,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.99999999998495
+        }
+      }
+    },
+    {
+      "t": 36,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 5.525955555555556,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 6.062,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": -0.18604444444444443,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.99999999998495
+        }
+      }
+    },
+    {
+      "t": 37,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 5.700955555555556,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 6.237,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": -0.18604444444444443,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.99999999998495
+        }
+      }
+    },
+    {
+      "t": 38,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 5.858955555555555,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 6.395,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": -0.18604444444444443,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.99999999998495
+        }
+      }
+    },
+    {
+      "t": 39,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 5.998955555555555,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 6.535,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": -0.18604444444444443,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.99999999998495
+        }
+      }
+    },
+    {
+      "t": 40,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 6.120955555555555,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 6.657,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": -0.18604444444444443,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.99999999998495
+        }
+      }
+    },
+    {
+      "t": 41,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 6.224955555557554,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 6.761,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": -0.18604444444244622,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.999999999982805
+        }
+      }
+    },
+    {
+      "t": 42,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 6.310955555555556,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 6.847,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": -0.18604444444444443,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.999999999982805
+        }
+      }
+    },
+    {
+      "t": 43,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 6.377955555555555,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 0.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 6.914,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": -0.18604444444444443,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 47.999999999982805
+        }
+      }
+    },
+    {
+      "t": 44,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": -5.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 1.1874999999999998,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 6.962,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": -1.6120000000000003,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": true,
+          "planned_temp_c": 49.532919254641186
+        }
+      }
+    },
+    {
+      "t": 45,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": -5.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 2.3749999999999996,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 6.99,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": -1.6400000000000008,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": true,
+          "planned_temp_c": 51.095938843739134
+        }
+      }
+    },
+    {
+      "t": 46,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": -5.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 3.5624999999999996,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 7.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": -1.6500000000000008,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": true,
+          "planned_temp_c": 52.662858934518084
+        }
+      }
+    },
+    {
+      "t": 47,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": -5.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 4.749999999999999,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 6.99,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": -1.6400000000000008,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": true,
+          "planned_temp_c": 54.20923565528389
+        }
+      }
+    },
+    {
+      "t": 48,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": -5.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 5.937499999999999,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 6.962,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": -1.6120000000000003,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": true,
+          "planned_temp_c": 55.715847187096756
+        }
+      }
+    },
+    {
+      "t": 49,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": -5.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 7.124999999999999,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 6.914,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": -1.564,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": true,
+          "planned_temp_c": 57.16144182349608
+        }
+      }
+    },
+    {
+      "t": 50,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": -5.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 8.3125,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 6.847,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": -1.4970000000000012,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 58.525975693131244
+        }
+      }
+    },
+    {
+      "t": 51,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": -3.7982631578947346,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 9.214587499999999,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 6.761,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": -2.6127368421052655,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": true,
+          "planned_temp_c": 61.08141165834915
+        }
+      }
+    },
+    {
+      "t": 52,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": -3.307,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 6.657,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": -3.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": true,
+          "planned_temp_c": 64.03718866921595
+        }
+      }
+    },
+    {
+      "t": 53,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 5.021716404617692,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 6.535,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": -1.163283595382308,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 65.0
+        }
+      }
+    },
+    {
+      "t": 54,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 5.7717472222242225,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 6.395,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": -0.27325277777577694,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 65.0
+        }
+      }
+    },
+    {
+      "t": 55,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 5.613747222222223,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 6.237,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": -0.2732527777777771,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 65.0
+        }
+      }
+    },
+    {
+      "t": 56,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 5.438747222222223,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 6.062,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": -0.2732527777777771,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 65.0
+        }
+      }
+    },
+    {
+      "t": 57,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 5.247747222224223,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 5.871,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": -0.27325277777577694,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 65.0
+        }
+      }
+    },
+    {
+      "t": 58,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 5.039747222222223,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 5.663,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": -0.2732527777777771,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 65.0
+        }
+      }
+    },
+    {
+      "t": 59,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 4.816747222222223,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 5.44,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": -0.2732527777777771,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 65.0
+        }
+      }
+    },
+    {
+      "t": 60,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 4.852,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 5.202,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 64.70625000000214
+        }
+      }
+    },
+    {
+      "t": 61,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 4.6000000000000005,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 4.95,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 64.41433593750213
+        }
+      }
+    },
+    {
+      "t": 62,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 4.3340000000000005,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 4.684,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 64.12424633789274
+        }
+      }
+    },
+    {
+      "t": 63,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 4.055000000000001,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 4.405,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 63.83596979828307
+        }
+      }
+    },
+    {
+      "t": 64,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 3.764,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 4.114,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 63.5494949870438
+        }
+      }
+    },
+    {
+      "t": 65,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 3.4619999999999997,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 3.812,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 63.26481064337477
+        }
+      }
+    },
+    {
+      "t": 66,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 3.15,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 3.5,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 62.981905576853684
+        }
+      }
+    },
+    {
+      "t": 67,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 2.8279999999999994,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 3.178,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 62.70076866699835
+        }
+      }
+    },
+    {
+      "t": 68,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 2.247,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 2.847,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 62.42138886282961
+        }
+      }
+    },
+    {
+      "t": 69,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 1.9089999999999998,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 2.509,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 62.14375518243693
+        }
+      }
+    },
+    {
+      "t": 70,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 1.5629999999999997,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 2.163,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 61.8678567125467
+        }
+      }
+    },
+    {
+      "t": 71,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 1.2120000000000002,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 1.812,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 61.59368260809328
+        }
+      }
+    },
+    {
+      "t": 72,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.8550000000000001,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 1.455,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 61.3212220917927
+        }
+      }
+    },
+    {
+      "t": 73,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.495,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 1.095,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 61.05046445371899
+        }
+      }
+    },
+    {
+      "t": 74,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.132,
+      "devices": {
+        "bat": {
+          "kw": 0.0,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 10.0,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.732,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 60.78139905088325
+        }
+      }
+    },
+    {
+      "t": 75,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.234,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 9.938421052631579,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.366,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 60.514015306815224
+        }
+      }
+    },
+    {
+      "t": 76,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.6,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 9.780526315789473,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 60.24830271114763
+        }
+      }
+    },
+    {
+      "t": 77,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.6,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 9.622631578947368,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 59.98425081920296
+        }
+      }
+    },
+    {
+      "t": 78,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.6,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 9.464736842105264,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 59.721849251582945
+        }
+      }
+    },
+    {
+      "t": 79,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.6,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 9.306842105263158,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 59.46108769376055
+        }
+      }
+    },
+    {
+      "t": 80,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.6,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 9.148947368421053,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 59.201955895674544
+        }
+      }
+    },
+    {
+      "t": 81,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.6,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 8.991052631578949,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 58.94444367132658
+        }
+      }
+    },
+    {
+      "t": 82,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.6,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 8.833157894736843,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 58.688540898380786
+        }
+      }
+    },
+    {
+      "t": 83,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.6,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 8.675263157894738,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 58.43423751776591
+        }
+      }
+    },
+    {
+      "t": 84,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.6,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 8.517368421052634,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 58.18152353327987
+        }
+      }
+    },
+    {
+      "t": 85,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.6,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 8.359473684210528,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 57.93038901119687
+        }
+      }
+    },
+    {
+      "t": 86,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.6,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 8.201578947368423,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 57.68082407987689
+        }
+      }
+    },
+    {
+      "t": 87,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.6,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 8.043684210526319,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.6,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 57.43281892937766
+        }
+      }
+    },
+    {
+      "t": 88,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.35,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 7.951578947368423,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 57.18636381106905
+        }
+      }
+    },
+    {
+      "t": 89,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.35,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 7.859473684210529,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 56.94144903724987
+        }
+      }
+    },
+    {
+      "t": 90,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.35,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 7.767368421052634,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 56.69806498076706
+        }
+      }
+    },
+    {
+      "t": 91,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.35,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 7.67526315789474,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 56.45620207463726
+        }
+      }
+    },
+    {
+      "t": 92,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.35,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 7.583157894736845,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 56.215850811670784
+        }
+      }
+    },
+    {
+      "t": 93,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.35,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 7.491052631578951,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 55.97700174409784
+        }
+      }
+    },
+    {
+      "t": 94,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.35,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 7.398947368421056,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 55.73964548319723
+        }
+      }
+    },
+    {
+      "t": 95,
+      "grid_import_kw": 0.0,
+      "grid_export_kw": 0.0,
+      "devices": {
+        "bat": {
+          "kw": 0.35,
+          "type": "battery",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": 7.306842105263161,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "roof": {
+          "kw": 0.0,
+          "type": "pv",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "house": {
+          "kw": -0.35,
+          "type": "static_load",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": null,
+          "planned_temp_c": null
+        },
+        "dhw": {
+          "kw": 0.0,
+          "type": "heat_store",
+          "power_limit_kw": null,
+          "zero_exchange_active": null,
+          "on_off_active": null,
+          "loadbalance_active": null,
+          "pv_is_curtailed": null,
+          "soc_kwh": null,
+          "on": false,
+          "planned_temp_c": 55.703772698927246
+        }
+      }
+    }
+  ],
+  "deferrable_recommended_starts": {},
+  "battery_care": {}
+}

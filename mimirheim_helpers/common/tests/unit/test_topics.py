@@ -138,6 +138,10 @@ def test_thermal_boiler_temp_topic() -> None:
     assert topics.thermal_boiler_temp_topic("mimir", "dhw_boiler") == "mimir/input/thermal_boiler/dhw_boiler/temp_c"
 
 
+def test_heat_store_temp_topic() -> None:
+    assert topics.heat_store_temp_topic("mimir", "dhw") == "mimir/input/heat_store/dhw/temp_c"
+
+
 def test_space_heating_heat_needed_topic() -> None:
     assert (
         topics.space_heating_heat_needed_topic("mimir", "sh_hp")
@@ -206,6 +210,10 @@ def test_ev_exchange_mode_topic() -> None:
 def test_ev_loadbalance_topic() -> None:
     from helper_common.topics import ev_loadbalance_topic
     assert ev_loadbalance_topic("mimir", "ev_charger") == "mimir/output/ev/ev_charger/loadbalance"
+
+
+def test_heat_store_on_off_topic() -> None:
+    assert topics.heat_store_on_off_topic("mimir", "dhw") == "mimir/output/heat_store/dhw/on"
 
 
 def test_pv_power_limit_topic() -> None:

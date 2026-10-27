@@ -18,7 +18,8 @@ def _step(devices: dict, imp: float = 0.0, exp: float = 0.0) -> dict:
 
 
 @pytest.mark.parametrize(
-    "dtype", ["ev_charger", "thermal_boiler", "space_heating_hp", "combi_heat_pump"]
+    "dtype",
+    ["ev_charger", "thermal_boiler", "space_heating_hp", "combi_heat_pump", "heat_store"],
 )
 def test_consuming_device_types_count_as_load(dtype: str) -> None:
     """A heat-pump (or EV, boiler...) house no longer reads as using 0 kWh."""

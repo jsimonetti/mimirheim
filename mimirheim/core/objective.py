@@ -28,7 +28,7 @@ from typing import Any
 
 from mimirheim.config.schema import BalancedWeightsConfig, MimirheimConfig
 from mimirheim.core.bundle import SolveBundle
-from mimirheim.core.confidence import weight_by_confidence
+from mimirheim.core.confidence import running_min_reference_prices, weight_by_confidence
 from mimirheim.core.context import ModelContext
 from mimirheim.devices.grid import Grid
 
@@ -208,6 +208,7 @@ class ObjectiveBuilder:
                 terms.extend(self._wear_terms(d, t))
 
         terms.extend(self._terminal_soc_terms(ctx, devices, bundle))
+        terms.extend(self._saved_electricity_terms(ctx, devices, bundle))
         terms.extend(self._exchange_shaping_terms(ctx, grid, config))
         return terms
 
@@ -276,6 +277,9 @@ class ObjectiveBuilder:
         and V2H-capable EV when plugged in) — see ``_terminal_soc_terms`` for
         the coefficient and why the division by ``dt`` is necessary.
 
+        Devices that save normal-program electricity (heat stores) add a
+        negative term for that saving — see ``_saved_electricity_terms``.
+
         The confidence weighting means that steps with low-quality forecasts
         contribute less to the objective. A step with confidence=0 is treated
         as economically neutral: the solver is indifferent to the actions taken
@@ -318,7 +322,10 @@ class ObjectiveBuilder:
         minimise the full net cost subject to the minimum import found.
 
         Phase 1 (executed inside this method):
-            Minimise ``Σ_t import[t]``. ``ctx.solver.solve()`` is called here
+            Minimise ``Σ_t import[t] − avoided``, where ``avoided`` is the
+            normal-program import saved by heat stores (see
+            ``_avoided_import_terms``); zero without heat stores.
+            ``ctx.solver.solve()`` is called here
             to find the optimal total import I*. Two outcomes fall short of
             that and both set ``strategy_degraded``: a time-limited incumbent
             ("feasible") is locked as I* although it is an achievable volume
@@ -327,8 +334,8 @@ class ObjectiveBuilder:
             objective and this method returns early.
 
         Phase 2 (set up here; executed by the caller):
-            Add a hard constraint ``Σ_t import[t] <= I* + ε`` to preserve
-            the minimum import, then minimise the confidence-weighted net cost
+            Add a hard constraint ``Σ_t import[t] − avoided <= I* + ε`` to
+            preserve the minimum import, then minimise the confidence-weighted net cost
             (import cost minus export revenue) plus device wear cost plus
             terminal SoC value — exactly the same objective as
             ``_minimize_cost``. This shifts imports to the cheapest time slots
@@ -368,11 +375,27 @@ class ObjectiveBuilder:
         """
         phase_budget = config.solver.time_limit_seconds / 2.0
 
-        # Phase 1: minimise total import.
+        # Phase 1: minimise total import, net of import avoided by devices that
+        # save normal-program electricity (heat stores).
         import_vars = [grid.import_[t] for t in ctx.T]
         import_sum: Any = import_vars[0]
         for v in import_vars[1:]:
             import_sum = import_sum + v
+
+        avoided_terms = self._avoided_import_terms(ctx, devices)
+        avoided: Any = None
+        if avoided_terms:
+            # avoided: normal-program import avoided over the horizon, summed
+            # over steps in kW like import_sum. Non-negative because every
+            # saved quantity is. A variable tied to the sum by an equality
+            # constraint, so its value can be read after phase 1 and the same
+            # quantity locked in phase 2.
+            avoided = ctx.solver.add_var(lb=0.0)
+            avoided_sum: Any = avoided_terms[0]
+            for term in avoided_terms[1:]:
+                avoided_sum = avoided_sum + term
+            ctx.solver.add_constraint(avoided == avoided_sum)
+            import_sum = import_sum - avoided
 
         ctx.solver.set_objective_minimize(import_sum)
         phase_1_status = ctx.solver.solve(time_limit_seconds=phase_budget)
@@ -421,6 +444,8 @@ class ObjectiveBuilder:
         # The slack prevents numeric infeasibility if the phase-1 optimal value
         # is fractionally below the sum of individual var_value readings.
         i_star = sum(ctx.solver.var_value(v) for v in import_vars)
+        if avoided is not None:
+            i_star -= ctx.solver.var_value(avoided)
 
         # Build the same sum a second time rather than reusing import_sum.
         # mip.minimize() mutates the expression it is handed, stamping a sense
@@ -431,6 +456,11 @@ class ObjectiveBuilder:
         import_sum_for_constr: Any = import_vars[0]
         for v in import_vars[1:]:
             import_sum_for_constr = import_sum_for_constr + v
+        # Lock the quantity phase 1 minimised. Locking grid import alone would
+        # let phase 2 drop a PV boost and export the power for revenue, which
+        # leaves grid import unchanged but undoes the avoided import.
+        if avoided is not None:
+            import_sum_for_constr = import_sum_for_constr - avoided
         ctx.solver.add_constraint(import_sum_for_constr <= i_star + 1e-4)
 
         # Phase 2: minimise confidence-weighted net cost subject to the locked-in
@@ -463,7 +493,14 @@ class ObjectiveBuilder:
 
             cost_obj      = Σ_t confidence[t] × (price[t] × import[t]
                                                   − export_price[t] × export[t])
-            self_suf_obj  = Σ_t import[t]   (minimising import = more self-sufficient)
+            self_suf_obj  = Σ_t import[t] − avoided
+                            (minimising import = more self-sufficient)
+
+        ``avoided`` is the normal-program import saved by heat stores, see
+        ``_avoided_import_terms``.
+
+        Terminal SoC value and saved-electricity value terms are added
+        unscaled, outside the weighted blend.
 
         Normalising weights allows intuitive per-dimension tuning: doubling
         ``cost_weight`` shifts the blend toward cost minimisation without
@@ -497,9 +534,13 @@ class ObjectiveBuilder:
             if not isinstance(economic, (int, float)):
                 cost_terms.append(cw * economic)
 
-        # Self-sufficiency component: minimise total grid import.
+        # Self-sufficiency component: minimise total grid import, net of
+        # import avoided by heat stores. The credit is scaled by sw like the
+        # import term it offsets.
         for t in ctx.T:
             cost_terms.append(sw * grid.import_[t])
+        for term in self._avoided_import_terms(ctx, devices):
+            cost_terms.append(-sw * term)
 
         # Device wear cost terms (unconditional, not confidence-weighted).
         for t in ctx.T:
@@ -509,6 +550,9 @@ class ObjectiveBuilder:
         # Terminal SoC value: preserves stored energy across the horizon
         # boundary. Same semantics as in _minimize_cost.
         cost_terms.extend(self._terminal_soc_terms(ctx, devices, bundle))
+        # Saved normal-program electricity (heat stores). Unscaled by cw, like
+        # the terminal SoC value above.
+        cost_terms.extend(self._saved_electricity_terms(ctx, devices, bundle))
         cost_terms.extend(self._exchange_shaping_terms(ctx, grid, config))
 
         self._set_objective(ctx, cost_terms)
@@ -609,4 +653,100 @@ class ObjectiveBuilder:
             # Subtract from the minimisation objective: makes the solver prefer
             # higher terminal SoC. The coefficient is in EUR/(kWh·step).
             terms.append(-terminal_value_coeff * soc_var)
+        return terms
+
+    def _saved_electricity_terms(
+        self,
+        ctx: ModelContext,
+        devices: list[Any],
+        bundle: SolveBundle,
+    ) -> list[Any]:
+        """Build value terms for normal-program electricity saved by devices.
+
+        A device that exposes ``saved_electricity_kwh(t)`` (a heat store)
+        reports the normal-program electricity its boost heat saves per step,
+        in kWh_e, and through ``terminal_saved_electricity_kwh(ctx)`` the
+        saving still held at the end of the horizon. Each is priced at the
+        reference price
+
+            p_ref[t] = max(0, min over s <= t of confidence[s] × import_price[s])
+
+        and the end-of-horizon quantity at ``p_ref`` of the last step. The
+        terms are negative so the minimiser prefers more saving.
+
+        ``p_ref`` is precomputed from the inputs, so it adds no variables or
+        constraints. It is not the price at step t: a plan free to choose when
+        boost heat is consumed would otherwise pick the evening peak, which
+        the physical store cannot do. See
+        mimirheim/docs/adr/0001-boost-heat-valued-at-running-minimum-price.md and
+        IMPLEMENTATION_DETAILS.md §8, subsection "Heat store boost and running
+        minimum price".
+
+        Saved quantities are energies in kWh, so each coefficient is divided
+        by ``dt`` to match the per-step price-times-power terms, for the same
+        reason as in ``_terminal_soc_terms``.
+
+        Args:
+            ctx: The current solve context.
+            devices: All non-grid devices. Only devices with a
+                ``saved_electricity_kwh`` method contribute terms.
+            bundle: Runtime inputs with import prices and per-step confidence.
+
+        Returns:
+            A list of linear expressions, empty when no device saves
+            normal-program electricity.
+        """
+        savers = [d for d in devices if hasattr(d, "saved_electricity_kwh")]
+        if not savers:
+            return []
+
+        p_ref = running_min_reference_prices(
+            [bundle.horizon_prices[t] for t in ctx.T],
+            [bundle.horizon_confidence[t] for t in ctx.T],
+        )
+
+        terms: list[Any] = []
+        for d in savers:
+            for t in ctx.T:
+                if p_ref[t] == 0.0:
+                    continue
+                terms.append(-(p_ref[t] / ctx.dt) * d.saved_electricity_kwh(t))
+            terminal = d.terminal_saved_electricity_kwh(ctx)
+            if terminal is not None and p_ref[-1] != 0.0:
+                terms.append(-(p_ref[-1] / ctx.dt) * terminal)
+        return terms
+
+    @staticmethod
+    def _avoided_import_terms(ctx: ModelContext, devices: list[Any]) -> list[Any]:
+        """Build import-avoided volume terms for normal-program electricity saved.
+
+        The volume counterpart of ``_saved_electricity_terms``: the same
+        per-step and end-of-horizon quantities, unpriced, for the strategies
+        that minimise import volume (``minimize_consumption`` phase 1 and the
+        self-sufficiency part of ``balanced``). Each quantity is divided by
+        ``dt`` so that it is in the same per-step kW units as ``import[t]``.
+
+        A grid boost never lowers the import volume: with ``boost.cop`` at most
+        ``normal_cop``, one kWh imported saves at most one kWh of normal
+        program import, and less once standby losses are counted.
+
+        Args:
+            ctx: The current solve context.
+            devices: All non-grid devices. Only devices with a
+                ``saved_electricity_kwh`` method contribute terms.
+
+        Returns:
+            A list of non-negative linear expressions in kW, to be subtracted
+            from the import volume. Empty when no device saves normal-program
+            electricity.
+        """
+        terms: list[Any] = []
+        for d in devices:
+            if not hasattr(d, "saved_electricity_kwh"):
+                continue
+            for t in ctx.T:
+                terms.append((1.0 / ctx.dt) * d.saved_electricity_kwh(t))
+            terminal = d.terminal_saved_electricity_kwh(ctx)
+            if terminal is not None:
+                terms.append((1.0 / ctx.dt) * terminal)
         return terms

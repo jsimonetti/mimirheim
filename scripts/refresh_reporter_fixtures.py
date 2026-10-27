@@ -58,6 +58,7 @@ _FIXTURE_TS = "2026-04-03T15-30-00Z"
 #   garage_pv     on_off + zero_export      -> on_off_active
 #   car           v2h + loadbalance, plugged-> loadbalance_active, soc_kwh
 #   dishwasher    scheduling window         -> deferrable_recommended_starts
+#   dhw           heat store                -> planned_temp_c
 #   base_load     static forecast           -> a non-controllable series
 #
 # 96 steps, so the charts and the step table have a realistic amount to show,
@@ -116,6 +117,13 @@ _CONFIG: dict = {
         }
     },
     "static_loads": {"base_load": {"topic_forecast": "mimir/input/base_load/forecast"}},
+    "heat_stores": {
+        "dhw": {
+            "volume_liters": 200.0, "normal_cop": 2.5, "normal_setpoint_c": 50.0,
+            "ambient_c": 18.0, "drift_k_per_hour": 0.8,
+            "boost": {"power_kw": 3.0, "max_temp_c": 65.0},
+        }
+    },
     "deferrable_loads": {
         "dishwasher": {
             "power_profile": [1.8, 1.8, 0.6, 0.6],
@@ -141,6 +149,10 @@ def _solar_curve(peak_kw: float, peak_hour: float, width_h: float) -> list[float
 def _fixture_case() -> tuple[SolveBundle, MimirheimConfig]:
     """Build the bundle and config for the reporter fixture."""
     prices = [round(0.14 + 0.16 * ((i * 7) % _STEPS) / _STEPS, 4) for i in range(_STEPS)]
+    # Per-array series are required with more than one array; the summed
+    # series must match their sum.
+    roof_kw = _solar_curve(4.5, 13.5, 6.0)
+    garage_kw = _solar_curve(1.0, 13.5, 6.0)
     bundle = {
         "strategy": "minimize_cost",
         "solve_time_utc": _T0.isoformat(),
@@ -148,11 +160,13 @@ def _fixture_case() -> tuple[SolveBundle, MimirheimConfig]:
         "horizon_prices": prices,
         "horizon_export_prices": [round(p - 0.06, 4) for p in prices],
         "horizon_confidence": [1.0] * _STEPS,
-        "pv_forecast": _solar_curve(5.5, 13.5, 6.0),
+        "pv_forecast": [round(r + g, 3) for r, g in zip(roof_kw, garage_kw, strict=True)],
+        "pv_forecasts": {"roof_pv": roof_kw, "garage_pv": garage_kw},
         "base_load_forecast": [
             round(0.35 + 0.25 * ((i % 12) / 12), 3) for i in range(_STEPS)
         ],
         "battery_inputs": {"home_battery": {"soc_kwh": 4.6}},
+        "heat_store_inputs": {"dhw": {"current_temp_c": 51.0}},
         "ev_inputs": {
             "car": {
                 "soc_kwh": 21.0,

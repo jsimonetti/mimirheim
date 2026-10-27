@@ -48,6 +48,7 @@ _LOAD_TYPES = frozenset(
         "deferrable_load",
         "ev_charger",
         "thermal_boiler",
+        "heat_store",
         "space_heating_hp",
         "combi_heat_pump",
     }
@@ -170,11 +171,12 @@ class MqttPublisher:
         5. EV closed-loop topics: exchange mode and load-balance command.
         6. Battery exchange-mode topics.
         7. Hybrid inverter exchange-mode topics.
-        8. Recommended start times for deferrable loads the solver scheduled.
+        8. Heat store boost on/off topics.
+        9. Recommended start times for deferrable loads the solver scheduled.
 
-        Items 4 to 8 are published only for devices whose configuration
-        declares the matching capability and output topic, so a minimal
-        installation sees only the first three.
+        Items 4 to 7 and 9 are published only for devices whose configuration
+        declares the matching capability and output topic. Item 8 is published
+        for every heat store, whose on/off topic is always derived.
 
         Everything is retained, so the broker holds the latest value for
         subscribers that connect later. When the schedule is empty only item 1
@@ -247,7 +249,7 @@ class MqttPublisher:
                 retain=True,
             )
 
-            # 3-7. Per-device topics.
+            # 3-8. Per-device topics.
             #
             # One pass over the devices, dispatching on type. The setpoint
             # topic is published for every device; the control topics that
@@ -257,9 +259,15 @@ class MqttPublisher:
             # answerable in one place.
             prefix = self._config.mqtt.topic_prefix
             for device_name, setpoint in current.devices.items():
+                payload: dict[str, object] = {"kw": setpoint.kw, "type": setpoint.type}
+                if setpoint.type == "heat_store":
+                    # A diverter follows kw; a relay follows on; planned_temp_c
+                    # shows what the plan expects of the store.
+                    payload["on"] = setpoint.on
+                    payload["planned_temp_c"] = setpoint.planned_temp_c
                 self._client.publish(
                     f"{prefix}/device/{device_name}/setpoint",
-                    json.dumps({"kw": setpoint.kw, "type": setpoint.type}),
+                    json.dumps(payload),
                     qos=1,
                     retain=True,
                 )
@@ -267,10 +275,10 @@ class MqttPublisher:
                 if handler is not None:
                     handler(self, device_name, setpoint)
 
-            # 8. Deferrable load recommended-start output topics.
+            # 9. Deferrable load recommended-start output topics.
             self._publish_deferrable_recommended_starts(result)
 
-        # 9. Full-charge policy status, outside the schedule guard: the floor
+        # 10. Full-charge policy status, outside the schedule guard: the floor
         # and the last-full timestamp are true whether or not this solve
         # produced a schedule, and mimirheim reads this topic back on startup.
         self.publish_battery_care(result)
@@ -618,6 +626,18 @@ class MqttPublisher:
             return
         self._publish_bool(cfg.outputs.exchange_mode, sp.zero_exchange_active)
 
+    def _publish_heat_store_controls(self, name: str, sp: DeviceSetpoint) -> None:
+        """Publish the boost on/off topic for one heat store.
+
+        Args:
+            name: Device name, used to look the heat store up in config.
+            sp: The heat store's setpoint for the current step.
+        """
+        cfg = self._config.heat_stores.get(name)
+        if cfg is None:
+            return
+        self._publish_bool(cfg.outputs.on_off, sp.on)
+
     # Device type to control-topic publisher. Types absent from this table
     # (static loads, deferrable loads, the three heat pump types) have no
     # control topics beyond the generic setpoint.
@@ -626,6 +646,7 @@ class MqttPublisher:
         "ev_charger": _publish_ev_controls,
         "battery": _publish_battery_controls,
         "hybrid_inverter": _publish_hybrid_inverter_controls,
+        "heat_store": _publish_heat_store_controls,
     }
 
     def publish_last_solve_status(
@@ -673,6 +694,7 @@ class MqttPublisher:
                 "naive_cost_eur": round(result.naive_cost_eur, 4),
                 "optimised_cost_eur": round(result.optimised_cost_eur, 4),
                 "soc_credit_eur": round(result.soc_credit_eur, 4),
+                "heat_credit_eur": round(result.heat_credit_eur, 4),
                 "grid_import_kwh": summary["grid_import_kwh"],
                 "grid_export_kwh": summary["grid_export_kwh"],
                 "self_sufficiency_pct": summary["self_sufficiency_pct"],

@@ -1219,3 +1219,88 @@ class TestForecastTemplateRendering:
         result = _render_template(template_str, payload)
 
         assert result == {"forecast": []}
+
+
+# ---------------------------------------------------------------------------
+# Heat store on/off output
+# ---------------------------------------------------------------------------
+
+
+def _make_config_heat_store() -> MimirheimConfig:
+    """Config with one heat store and derived output topics."""
+    return MimirheimConfig.model_validate({
+        "mqtt": {"host": "localhost", "client_id": "mimir-test", "topic_prefix": "mimir"},
+        "outputs": {
+            "schedule": "mimir/schedule",
+            "current": "mimir/current",
+            "last_solve": "mimir/status/last_solve",
+            "availability": "mimir/status/availability",
+        },
+        "homeassistant": {"enabled": True, "device_name": "Test mimirheim"},
+        "grid": {"import_limit_kw": 10.0, "export_limit_kw": 5.0},
+        "heat_stores": {
+            "dhw": {
+                "volume_liters": 200.0,
+                "normal_cop": 2.5,
+                "normal_setpoint_c": 50.0,
+                "ambient_c": 18.0,
+                "drift_k_per_hour": 0.8,
+                "boost": {"power_kw": 3.0, "max_temp_c": 65.0},
+            }
+        },
+    })
+
+
+def test_heat_store_on_off_binary_sensor_published() -> None:
+    """The heat store on/off flag is advertised as a binary sensor on its derived topic."""
+    components = _publish_and_get_components(_make_config_heat_store())
+    matching = {k: v for k, v in components.items() if k.endswith("_dhw_boost_on")}
+    assert len(matching) == 1
+    entity = next(iter(matching.values()))
+    assert entity["platform"] == "binary_sensor"
+    assert entity["state_topic"] == "mimir/output/heat_store/dhw/on"
+    assert entity["payload_on"] == "true"
+    assert entity["payload_off"] == "false"
+
+
+def test_heat_store_has_setpoint_sensor() -> None:
+    """A heat store gets a setpoint sensor like every other device."""
+    components = _publish_and_get_components(_make_config_heat_store())
+    entity = components["mimir-test_dhw_setpoint_kw"]
+    assert entity["platform"] == "sensor"
+    assert entity["state_topic"] == "mimir/device/dhw/setpoint"
+    assert entity["json_attributes_topic"] == "mimir/schedule"
+
+
+def test_heat_store_template_renders_power_and_planned_temperature() -> None:
+    """The heat store forecast carries kw and planned_temp_c per step, not soc_kwh."""
+    template_str = _publish_and_get_components(_make_config_heat_store())[
+        "mimir-test_dhw_setpoint_kw"
+    ]["json_attributes_template"]
+    payload = {
+        "schedule": [
+            {
+                "t": i,
+                "ts": f"2026-05-31T{i:02d}:00:00Z",
+                "devices": {
+                    "dhw": {
+                        "kw": -1.5 * i,
+                        "type": "heat_store",
+                        "on": i > 0,
+                        "planned_temp_c": 50.0 + i,
+                        "soc_kwh": None,
+                    }
+                },
+            }
+            for i in range(3)
+        ]
+    }
+
+    steps = _render_template(template_str, payload)["forecast"]
+
+    assert len(steps) == 3
+    for i, step in enumerate(steps):
+        assert set(step) == {"kw", "planned_temp_c", "ts"}
+        assert step["kw"] == pytest.approx(-1.5 * i)
+        assert step["planned_temp_c"] == pytest.approx(50.0 + i)
+        assert step["ts"] == payload["schedule"][i]["ts"]

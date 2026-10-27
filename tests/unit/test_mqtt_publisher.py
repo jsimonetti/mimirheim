@@ -451,7 +451,7 @@ def test_battery_zero_export_mode_not_published_when_not_configured() -> None:
 
 
 def test_last_solve_status_includes_cost_fields() -> None:
-    """publish_last_solve_status() includes naive_cost_eur, optimised_cost_eur and soc_credit_eur when solve succeeds."""
+    """publish_last_solve_status() includes the cost fields and both credits when solve succeeds."""
     mock_client = MagicMock()
     publisher = MqttPublisher(client=mock_client, config=_make_config())
 
@@ -462,6 +462,7 @@ def test_last_solve_status_includes_cost_fields() -> None:
         naive_cost_eur=1.23,
         optimised_cost_eur=0.45,
         soc_credit_eur=0.12,
+        heat_credit_eur=0.34,
         schedule=[
             ScheduleStep(
                 t=0,
@@ -483,6 +484,7 @@ def test_last_solve_status_includes_cost_fields() -> None:
     assert payload["naive_cost_eur"] == pytest.approx(1.23, abs=1e-4)
     assert payload["optimised_cost_eur"] == pytest.approx(0.45, abs=1e-4)
     assert payload["soc_credit_eur"] == pytest.approx(0.12, abs=1e-4)
+    assert payload["heat_credit_eur"] == pytest.approx(0.34, abs=1e-4)
 
 
 def test_last_solve_status_includes_schedule_metrics_import_heavy() -> None:
@@ -580,6 +582,7 @@ def test_last_solve_status_error_omits_cost_fields() -> None:
     assert "naive_cost_eur" not in payload
     assert "optimised_cost_eur" not in payload
     assert "soc_credit_eur" not in payload
+    assert "heat_credit_eur" not in payload
 
 
 # ---------------------------------------------------------------------------
@@ -1970,3 +1973,104 @@ def test_published_load_types_match_the_reporter() -> None:
     this keeps the two lists from drifting apart.
     """
     assert _LOAD_TYPES == REPORTER_LOAD_TYPES
+
+
+# ---------------------------------------------------------------------------
+# Heat store setpoint and on/off topic
+# ---------------------------------------------------------------------------
+
+
+def _make_config_with_heat_store() -> MimirheimConfig:
+    """Config with one heat store; its on/off topic is derived from the name."""
+    return MimirheimConfig.model_validate({
+        "mqtt": {"host": "localhost", "client_id": "test", "topic_prefix": "mimir"},
+        "grid": {"import_limit_kw": 10.0, "export_limit_kw": 5.0},
+        "heat_stores": {
+            "dhw": {
+                "volume_liters": 200.0,
+                "normal_cop": 2.5,
+                "normal_setpoint_c": 50.0,
+                "ambient_c": 18.0,
+                "drift_k_per_hour": 0.8,
+                "boost": {"power_kw": 3.0, "max_temp_c": 65.0},
+            }
+        },
+    })
+
+
+def _make_result_with_heat_store(on: bool) -> SolveResult:
+    """SolveResult with a heat store setpoint carrying the on flag and temperature."""
+    step = ScheduleStep(
+        t=0,
+        grid_import_kw=0.0,
+        grid_export_kw=1.0,
+        devices={
+            "dhw": DeviceSetpoint(
+                kw=-2.0 if on else -1.0,
+                type="heat_store",
+                on=on,
+                planned_temp_c=53.2,
+            )
+        },
+    )
+    return SolveResult(
+        strategy="minimize_cost",
+        objective_value=0.0,
+        solve_status="optimal",
+        schedule=[step] * 4,
+    )
+
+
+def _payloads(mock_client: MagicMock, topic: str) -> list[object]:
+    return [c for c in mock_client.publish.call_args_list if c.args[0] == topic]
+
+
+def test_heat_store_setpoint_carries_kw_on_and_planned_temperature() -> None:
+    mock_client = MagicMock()
+    publisher = MqttPublisher(client=mock_client, config=_make_config_with_heat_store())
+
+    publisher.publish_result(_make_result_with_heat_store(on=True))
+
+    calls = _payloads(mock_client, "mimir/device/dhw/setpoint")
+    assert len(calls) == 1
+    payload = json.loads(calls[0].args[1])
+    assert payload == {"kw": -2.0, "type": "heat_store", "on": True, "planned_temp_c": 53.2}
+
+
+@pytest.mark.parametrize(("on", "expected"), [(True, "true"), (False, "false")])
+def test_heat_store_on_flag_published_retained_on_derived_topic(
+    on: bool, expected: str
+) -> None:
+    mock_client = MagicMock()
+    publisher = MqttPublisher(client=mock_client, config=_make_config_with_heat_store())
+
+    publisher.publish_result(_make_result_with_heat_store(on=on))
+
+    calls = _payloads(mock_client, "mimir/output/heat_store/dhw/on")
+    assert len(calls) == 1
+    assert calls[0].args[1] == expected
+    assert calls[0].kwargs.get("retain") is True
+    assert calls[0].kwargs.get("qos") == 1
+
+
+def test_heat_store_schedule_carries_on_per_step() -> None:
+    mock_client = MagicMock()
+    publisher = MqttPublisher(client=mock_client, config=_make_config_with_heat_store())
+
+    publisher.publish_result(_make_result_with_heat_store(on=True))
+
+    schedule = json.loads(_payloads(mock_client, "mimir/strategy/schedule")[0].args[1])
+    for step in schedule["schedule"]:
+        assert step["devices"]["dhw"]["on"] is True
+        assert step["devices"]["dhw"]["planned_temp_c"] == 53.2
+
+
+def test_non_heat_store_setpoint_payload_is_unchanged() -> None:
+    """Other devices keep the two-field setpoint payload."""
+    mock_client = MagicMock()
+    publisher = MqttPublisher(client=mock_client, config=_make_config())
+
+    publisher.publish_result(_make_result())
+
+    payload = json.loads(_payloads(mock_client, "mimir/device/bat/setpoint")[0].args[1])
+    assert payload == {"kw": -1.0, "type": "battery"}

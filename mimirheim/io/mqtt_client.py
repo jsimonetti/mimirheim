@@ -66,6 +66,7 @@ from mimirheim.io.input_parser import (
     parse_current_indoor_temp,
     parse_datetime,
     parse_ev_inputs,
+    parse_heat_store_temp,
     parse_hybrid_inverter_soc,
     parse_outdoor_temp_forecast,
     parse_power_forecast,
@@ -654,6 +655,11 @@ class MqttClient:
         for tb_cfg in config.thermal_boilers.values():
             if tb_cfg.inputs is not None:
                 handlers[tb_cfg.inputs.topic_current_temp] = parse_thermal_boiler_temp
+
+        # Heat store temperature topics. Always present: the derived topic is
+        # filled in by config validation when not set explicitly.
+        for hs_cfg in config.heat_stores.values():
+            handlers[hs_cfg.inputs.topic_current_temp] = parse_heat_store_temp
 
         # Space heating heat pump demand topics (plan 26).
         for sh_cfg in config.space_heating_hps.values():
