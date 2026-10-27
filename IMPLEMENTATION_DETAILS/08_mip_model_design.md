@@ -251,23 +251,21 @@ This enforces that at every time step, total production equals total consumption
 
 ## Thermal boiler and DHW tank dynamics
 
-`ThermalBoilerDevice` and the DHW portion of `CombiHeatPumpDevice` share the same first-order lumped-capacitance tank model. Tank temperature at each step is a decision variable bounded by the configured safety limits:
+`ThermalBoilerDevice` and the DHW portion of `CombiHeatPumpDevice` share the same tank model. Tank temperature at each step is a decision variable, held between the minimum temperature and the setpoint by explicit constraints:
 
 ```
-T_tank[t] ∈ [min_temp_c, max_temp_c]
+min_temp_c <= T_tank[t] <= setpoint_c
 ```
 
-The tank dynamics are modelled as a discrete-time energy balance. Let $V$ be the tank volume (litres), $c_p = 0.001163$ kWh/(litre·K) be the specific heat of water, and $L$ be the heat loss coefficient (kW/K):
+The variable itself is declared with 5 K of slack on either side; the hard limits are constraints rather than variable bounds so the dynamics cannot push past a tightened bound.
 
-$$T_{tank}[t] = T_{tank}[t-1] + \frac{\Delta t}{V \cdot c_p} \left( P_{heat}[t] - L \cdot (T_{tank}[t-1] - T_{amb}) \right)$$
+The tank dynamics are a constant-rate balance. Let $V$ be the tank volume (`volume_liters`), $c_p = 4186 / 3.6 \times 10^6$ kWh/(litre·K) the specific heat of water, and $C = V \cdot c_p$ the tank heat capacity in kWh/K:
 
-This is linearised by moving all $T_{tank}$ terms to the left:
+$$T_{tank}[t] = T_{tank}[t-1] - r_{cool} \cdot \Delta t + \frac{P_{el} \cdot \text{COP} \cdot \Delta t}{C} \cdot on[t]$$
 
-$$T_{tank}[t] - \alpha \cdot T_{tank}[t-1] = \frac{\Delta t}{V \cdot c_p} \cdot P_{heat}[t] + \beta_{loss}$$
+where $r_{cool}$ is `cooling_rate_k_per_hour` (standby losses and expected hot water draws together, independent of tank temperature), $P_{el}$ is `elec_power_kw` and COP is `cop` (`cop_dhw` for the combi heat pump). The initial condition $T_{tank}[-1]$ is `current_temp_c` from the MQTT sensor reading.
 
-where $\alpha = 1 - \Delta t \cdot L / (V \cdot c_p)$ is the heat retention factor and $\beta_{loss}$ encodes the ambient heat loss term. The initial condition uses `current_temp_c` from the MQTT sensor reading.
-
-The element/boiler is controlled by a binary variable `on[t]`. When on, `P_heat[t] = element_power_kw * cop`. A minimum run-time constraint (if `min_run_steps > 0`) links consecutive `on[t]` values via a Big-M constraint that requires at least `min_run_steps` of operation once switched on, preventing unrealistic short cycling.
+The heater is controlled by a binary variable `on[t]`; when on it draws `elec_power_kw`. A minimum run-time constraint (if `min_run_steps > 1`) requires at least `min_run_steps` consecutive steps of operation once switched on, preventing unrealistic short cycling.
 
 **Minimum run-time via a start sentinel** (used whenever `min_run_steps > 1`). A binary `start[t]` detects the off-to-on transition and propagates the run length forward:
 
@@ -290,7 +288,7 @@ on[t+τ]  >= start[t]   for τ in 1..min_run_steps-1, where t+τ < horizon
 `SpaceHeatingDevice` supports two modes configured via `SpaceHeatingConfig.mode`:
 
 - **On/off** — `hp_on[t] ∈ {0, 1}`. Heat output at step $t$ is `hp_on[t] * elec_power_kw * cop`. An optional `min_run_steps` constraint prevents frequent cycling.
-- **SOS2 (modulating)** — An SOS2 set allows the heat pump to operate at any power level between `min_power_fraction * elec_power_kw` and `elec_power_kw`, or be completely off. SOS2 encodes a piecewise linear function without additional binaries; only two adjacent breakpoint weights are non-zero at any feasible solution.
+- **Power stages (SOS2, modulating)** — configured through `stages`, a list of operating points with `elec_kw` and `cop`. Stage 0 is the zero-power off sentinel. One SOS2 set of weights per step interpolates between two adjacent stages, so the heat pump can run at any point on the piecewise linear power curve or be completely off. An `hp_on[t]` binary equal to the sum of the non-sentinel weights carries the minimum run constraint.
 
 **Degree-days path (no BTM):** When `building_thermal` is not configured, a single constraint requires the total heat delivered over the horizon to meet the demand `heat_needed_kwh`:
 

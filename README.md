@@ -186,7 +186,7 @@ A hybrid inverter combines battery storage with a directly coupled PV input. The
 
 ### Thermal boiler
 
-An electric resistance boiler with a hot-water tank. Tank temperature is tracked as a decision variable across the horizon. The solver may run the boiler element (`on[t] = 1`) at any step to raise the tank temperature, subject to a minimum tank temperature (to satisfy DHW demand) and a maximum temperature (safety limit). The binary `on[t]` variable incurs a minimum run-time constraint to avoid short cycling.
+An electric immersion heater or heat pump DHW boiler with a hot-water tank. Tank temperature is tracked as a decision variable across the horizon. The solver may run the heater (`on[t] = 1`) at any step to raise the tank temperature, keeping it between `min_temp_c` (to satisfy DHW demand) and `setpoint_c` (the target temperature, never exceeded). The tank cools at a constant `cooling_rate_k_per_hour`, which covers both standby losses and expected hot water draws. An optional `min_run_steps` constraint on `on[t]` avoids short cycling.
 
 ### Heat store
 
@@ -218,7 +218,7 @@ Under `minimize_consumption` and in the self-sufficiency part of `balanced`, the
 A heat pump that delivers space heating only (no DHW). Two dispatch modes are supported:
 
 - **On/off** — a binary `hp_on[t]` variable; heat output at full COP when on.
-- **SOS2 (modulating)** — a Special Ordered Set of Type 2 variable that allows continuous power modulation between a minimum and maximum operating point.
+- **Power stages (SOS2, modulating)** — a list of `stages` (electrical power and COP per operating point) and a Special Ordered Set of Type 2 that allows continuous modulation between adjacent stages. Stage 0 is the zero-power off point.
 
 If `building_thermal` is configured, indoor temperature is tracked as a decision variable and the degree-days heat demand constraint is replaced by the BTM thermal dynamics model (see [§2](#2-mathematical-model)).
 
@@ -993,13 +993,14 @@ The departure target is supplied at runtime via the EV state MQTT payload (not c
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `capacity_litres` | float > 0 | — | Tank volume in litres. |
-| `min_temp_c` | float | — | Minimum tank temperature required to satisfy DHW demand (°C). |
-| `max_temp_c` | float | — | Maximum permissible tank temperature (°C). |
-| `heat_loss_coeff_kw_per_k` | float > 0 | — | Tank heat loss coefficient (kW/K). |
-| `element_power_kw` | float > 0 | — | Electrical power of the heating element (kW). |
-| `cop` | float > 0 | 1.0 | Coefficient of performance (1.0 for pure resistance). |
-| `min_run_steps` | int ≥ 0 | 0 | Minimum consecutive steps the element must run once switched on (avoids short cycling). |
+| `volume_liters` | float > 0 | — | Water volume of the tank in litres. |
+| `elec_power_kw` | float > 0 | — | Rated electrical power of the heating element or heat pump compressor (kW). Constant draw while on. |
+| `cop` | float > 0 | 1.0 | Coefficient of performance (1.0 for a resistive element; 2 or more for a heat pump). |
+| `setpoint_c` | float | — | Target hot water temperature (°C). The solver never heats the tank above it. |
+| `min_temp_c` | float | 40.0 | Minimum tank temperature required to satisfy DHW demand (°C). Must be below `setpoint_c`. |
+| `cooling_rate_k_per_hour` | float ≥ 0 | — | Tank temperature drop in K/hour while the heater is off, combining standby losses and expected hot water draws. |
+| `min_run_steps` | int ≥ 0 | 0 | Minimum consecutive steps the heater must run once switched on (avoids short cycling). 0 or 1 disables it. |
+| `wear_cost_eur_per_kwh` | float ≥ 0 | 0.0 | Cycling cost per kWh of electrical consumption, for heat pump compressors. |
 | `inputs.topic_current_temp` | string or null | derived | MQTT topic for the current tank temperature (plain float, °C). Derived as `{prefix}/input/thermal_boiler/{name}/temp_c`. |
 
 #### `heat_stores` (dict, keyed by device name)
@@ -1022,11 +1023,11 @@ The departure target is supplied at runtime via the EV state MQTT payload (not c
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `elec_power_kw` | float > 0 | — | Electrical input power at full operation (kW). |
-| `cop` | float > 0 | — | Coefficient of performance for space heating. |
-| `mode` | `on_off` or `sos2` | `on_off` | Dispatch mode. `on_off`: binary on/off; `sos2`: continuous modulation. |
-| `min_power_fraction` | float ∈ (0, 1] | 0.3 | Minimum operating point as a fraction of `elec_power_kw` (SOS2 mode only). |
-| `min_run_steps` | int ≥ 0 | 0 | Minimum consecutive running steps (on/off mode only). |
+| `elec_power_kw` | float > 0 or null | null | Electrical input power for on/off mode (kW). Set together with `cop`; mutually exclusive with `stages`. |
+| `cop` | float > 0 or null | null | Coefficient of performance for on/off mode. |
+| `stages` | list or null | null | Operating points for power-stage (SOS2) mode, each with `elec_kw` and `cop`. At least two entries; the first must be the off point (`elec_kw: 0.0`, `cop: 0.0`) and `elec_kw` must strictly increase. Mutually exclusive with `elec_power_kw` and `cop`. |
+| `min_run_steps` | int ≥ 0 | 4 | Minimum consecutive running steps once started, in both modes. 0 or 1 disables it. |
+| `wear_cost_eur_per_kwh` | float ≥ 0 | 0.0 | Cycling cost per kWh of electrical consumption. |
 | `inputs.topic_heat_needed_kwh` | string or null | derived | MQTT topic for the heat demand over the horizon (plain float, kWh). Required when `building_thermal` is not configured. Derived as `{prefix}/input/space_heating/{name}/heat_needed_kwh`. |
 | `inputs.topic_heat_produced_today_kwh` | string or null | derived | MQTT topic for the cumulative heat produced today (plain float, kWh). Informational only; the solver does not read this topic. Derived as `{prefix}/input/space_heating/{name}/heat_produced_today_kwh`. |
 | `building_thermal` | object or null | null | Optional building thermal model (BTM). When set, replaces the degree-days demand constraint with first-order temperature dynamics. |
@@ -1046,14 +1047,15 @@ The departure target is supplied at runtime via the EV state MQTT payload (not c
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `capacity_litres` | float > 0 | — | DHW tank volume in litres. |
-| `min_temp_c` | float | — | Minimum DHW tank temperature (°C). |
-| `max_temp_c` | float | — | Maximum DHW tank temperature (°C). |
-| `heat_loss_coeff_kw_per_k` | float > 0 | — | DHW tank heat loss coefficient (kW/K). |
-| `elec_power_kw` | float > 0 | — | Electrical input power at full operation (kW). |
+| `elec_power_kw` | float > 0 | — | Electrical input power at full operation (kW), the same in both modes. |
 | `cop_dhw` | float > 0 | — | COP when operating in DHW mode. |
 | `cop_sh` | float > 0 | — | COP when operating in SH mode. |
-| `min_run_steps` | int ≥ 0 | 0 | Minimum consecutive steps per operating mode. |
+| `volume_liters` | float > 0 | — | DHW tank volume in litres. |
+| `setpoint_c` | float | — | DHW target temperature (°C). The solver never heats the tank above it. |
+| `min_temp_c` | float | 40.0 | Minimum DHW tank temperature (°C). Must be below `setpoint_c`. |
+| `cooling_rate_k_per_hour` | float ≥ 0 | — | DHW tank temperature drop in K/hour, combining standby losses and expected hot water draws. |
+| `min_run_steps` | int ≥ 0 | 4 | Minimum consecutive running steps once started, across both modes combined. A mode switch within a run counts as continuous operation. |
+| `wear_cost_eur_per_kwh` | float ≥ 0 | 0.0 | Cycling cost per kWh of electrical consumption. |
 | `inputs.topic_current_temp` | string or null | derived | MQTT topic for the current DHW tank temperature (plain float, °C). Derived as `{prefix}/input/combi_hp/{name}/temp_c`. |
 | `inputs.topic_heat_needed_kwh` | string or null | derived | MQTT topic for the SH heat demand over the horizon (plain float, kWh). Required when `building_thermal` is not configured. Derived as `{prefix}/input/combi_hp/{name}/sh_heat_needed_kwh`. |
 | `building_thermal` | object or null | null | Optional building thermal model. Same structure and semantics as for `space_heating_hps`. Only SH mode is affected; DHW tank dynamics are independent. |
