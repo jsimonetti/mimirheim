@@ -259,6 +259,22 @@ class ThermalBoilerInputs(BaseModel):
     )
 
 
+class HeatStoreInputs(BaseModel):
+    """Live heat store state, validated at the system boundary.
+
+    Attributes:
+        current_temp_c: Current store temperature in degrees Celsius, as read
+            from the store sensor. The solver derives the boost heat present at
+            the start of the horizon from it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    current_temp_c: float = Field(
+        description="Current store temperature in °C, as read from sensor."
+    )
+
+
 class DeferrableWindow(BaseModel):
     """Time window within which a deferrable load must run.
 
@@ -389,6 +405,10 @@ class SolveBundle(BaseModel):
         default_factory=dict,
         description="Live thermal boiler state keyed by device name.",
     )
+    heat_store_inputs: dict[str, HeatStoreInputs] = Field(
+        default_factory=dict,
+        description="Live heat store state keyed by device name.",
+    )
     space_heating_inputs: dict[str, SpaceHeatingInputs] = Field(
         default_factory=dict,
         description="Live space heating demand keyed by device name.",
@@ -494,6 +514,9 @@ class DeviceSetpoint(BaseModel):
         soc_kwh: Terminal state of charge in kWh at the end of this time step.
             Populated for storage devices (batteries, EV chargers, hybrid
             inverters) only. None for all other device types.
+        planned_temp_c: Planned store temperature in degrees Celsius at the
+            end of this time step. Populated for heat stores only. None for all
+            other device types.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -506,6 +529,7 @@ class DeviceSetpoint(BaseModel):
     loadbalance_active: bool | None = None
     pv_is_curtailed: bool | None = None
     soc_kwh: float | None = None
+    planned_temp_c: float | None = None
 
 
 class ScheduleStep(BaseModel):

@@ -2551,6 +2551,86 @@ class ThermalBoilerConfig(BaseModel):
             )
         return self
 
+
+class HeatStoreBoostConfig(BaseModel):
+    """Boost hardware of a heat store: the element or heat pump mode mimirheim may request.
+
+    Attributes:
+        power_kw: Electrical power of the boost in kW. The plan may request any
+            power between zero and this value in each step.
+        max_temp_c: Boost maximum temperature in degrees Celsius. The plan
+            never boosts the store above this temperature.
+        cop: Coefficient of performance of the boost. 1.0 for a resistive
+            element; above 1 for a heat pump PV mode.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    power_kw: float = Field(gt=0, description="Electrical power of the boost in kW.")
+    max_temp_c: float = Field(description="Boost maximum temperature in °C.")
+    cop: float = Field(
+        gt=0,
+        default=1.0,
+        description="Coefficient of performance of the boost. 1.0 = resistive; above 1 = heat pump.",
+    )
+
+
+class HeatStoreConfig(BaseModel):
+    """Configuration for a heat store: a water store that mimirheim can only boost.
+
+    A heat store (DHW tank, pool, hot tub) keeps its own normal program, which
+    heats it to the normal setpoint without mimirheim. Mimirheim plans only the
+    boost: extra heating on top of the normal program, up to
+    ``boost.max_temp_c``, when electricity is cheap. Unlike
+    ``ThermalBoilerConfig``, which replaces the heating program, a heat store
+    never takes it over.
+
+    Attributes:
+        volume_liters: Water volume of the store in litres. Converted to heat
+            capacity with the same water constant as thermal boilers.
+        normal_cop: Coefficient of performance of the normal program. Converts
+            boost heat into the normal-program electricity it saves.
+        normal_setpoint_c: Temperature in degrees Celsius to which the normal
+            program heats the store.
+        ambient_c: Temperature around the store in degrees Celsius. Heat
+            losses are proportional to the difference with this temperature.
+        drift_k_per_hour: Idle cooldown in K/hour at the normal setpoint,
+            standby loss only, excluding hot water draws.
+        boost: Boost hardware parameters.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    volume_liters: float = Field(gt=0, description="Water volume of the store in litres.")
+    normal_cop: float = Field(
+        gt=0, description="Coefficient of performance of the normal program.",
+    )
+    normal_setpoint_c: float = Field(
+        description="Temperature in °C to which the normal program heats the store.",
+    )
+    ambient_c: float = Field(description="Temperature around the store in °C.")
+    drift_k_per_hour: float = Field(
+        gt=0,
+        description="Idle cooldown in K/hour at the normal setpoint, standby loss only (no draws).",
+    )
+    boost: HeatStoreBoostConfig = Field(description="Boost hardware parameters.")
+
+    @model_validator(mode="after")
+    def _validate_temp_order(self) -> "HeatStoreConfig":
+        """Validate ambient_c < normal_setpoint_c < boost.max_temp_c."""
+        if self.ambient_c >= self.normal_setpoint_c:
+            raise ValueError(
+                f"ambient_c ({self.ambient_c}) must be strictly less than "
+                f"normal_setpoint_c ({self.normal_setpoint_c})."
+            )
+        if self.normal_setpoint_c >= self.boost.max_temp_c:
+            raise ValueError(
+                f"normal_setpoint_c ({self.normal_setpoint_c}) must be strictly less "
+                f"than boost.max_temp_c ({self.boost.max_temp_c})."
+            )
+        return self
+
+
 class HeatingStage(BaseModel):
     """A single operating point on a heat pump's electrical-to-thermal power curve.
 
@@ -2863,6 +2943,7 @@ class MimirheimConfig(BaseModel):
     static_loads: dict[str, StaticLoadConfig] = Field(default_factory=dict)
     hybrid_inverters: dict[str, HybridInverterConfig] = Field(default_factory=dict)
     thermal_boilers: dict[str, ThermalBoilerConfig] = Field(default_factory=dict)
+    heat_stores: dict[str, HeatStoreConfig] = Field(default_factory=dict)
     space_heating_hps: dict[str, SpaceHeatingConfig] = Field(default_factory=dict)
     combi_heat_pumps: dict[str, CombiHeatPumpConfig] = Field(default_factory=dict)
     grid: GridConfig
@@ -2894,6 +2975,7 @@ class MimirheimConfig(BaseModel):
             *self.static_loads,
             *self.hybrid_inverters,
             *self.thermal_boilers,
+            *self.heat_stores,
             *self.space_heating_hps,
             *self.combi_heat_pumps,
         ]

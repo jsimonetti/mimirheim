@@ -61,7 +61,10 @@ _REPORTER_DISPLAYED_FIELDS: frozenset[str] = frozenset(
 # Each entry must have a comment explaining why.
 _REPORTER_EXPLICITLY_EXCLUDED_FIELDS: frozenset[str] = frozenset(
     {
-        # None currently.
+        # planned_temp_c is the planned heat store temperature. The reporter
+        # has no temperature chart or column yet; heat store reporting is not
+        # part of the heat store feature's first ticket.
+        "planned_temp_c",
     }
 )
 

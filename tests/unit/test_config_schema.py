@@ -2931,3 +2931,102 @@ def test_soc_ratchet_hold_bounds() -> None:
         SocRatchetConfig(enabled=True, hold_hours=-0.25)
     with pytest.raises(ValidationError):
         SocRatchetConfig(enabled=True, hold_hours=24.25)
+
+
+# ---------------------------------------------------------------------------
+# HeatStoreConfig validation
+# ---------------------------------------------------------------------------
+
+
+def _heat_store_data(**overrides: object) -> dict:
+    base: dict = {
+        "volume_liters": 200.0,
+        "normal_cop": 2.5,
+        "normal_setpoint_c": 50.0,
+        "ambient_c": 18.0,
+        "drift_k_per_hour": 0.8,
+        "boost": {"power_kw": 3.0, "max_temp_c": 65.0},
+    }
+    base.update(overrides)
+    return base
+
+
+def test_heat_store_minimal_config_valid() -> None:
+    """A heat store with only required fields validates; boost.cop defaults to 1.0."""
+    from mimirheim.config.schema import HeatStoreConfig
+
+    cfg = HeatStoreConfig.model_validate(_heat_store_data())
+    assert cfg.boost.cop == 1.0
+    assert cfg.boost.power_kw == 3.0
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["volume_liters", "normal_cop", "drift_k_per_hour"],
+)
+@pytest.mark.parametrize("value", [0.0, -1.0])
+def test_heat_store_rejects_non_positive_quantities(field: str, value: float) -> None:
+    """Physical quantities on the heat store must be strictly positive."""
+    from mimirheim.config.schema import HeatStoreConfig
+
+    with pytest.raises(ValidationError):
+        HeatStoreConfig.model_validate(_heat_store_data(**{field: value}))
+
+
+@pytest.mark.parametrize("field", ["power_kw", "cop"])
+@pytest.mark.parametrize("value", [0.0, -1.0])
+def test_heat_store_rejects_non_positive_boost_quantities(field: str, value: float) -> None:
+    """Boost power and boost COP must be strictly positive."""
+    from mimirheim.config.schema import HeatStoreConfig
+
+    boost = {"power_kw": 3.0, "max_temp_c": 65.0, field: value}
+    with pytest.raises(ValidationError):
+        HeatStoreConfig.model_validate(_heat_store_data(boost=boost))
+
+
+@pytest.mark.parametrize("ambient_c", [50.0, 55.0])
+def test_heat_store_rejects_ambient_at_or_above_setpoint(ambient_c: float) -> None:
+    """ambient_c >= normal_setpoint_c leaves no temperature difference to drive losses."""
+    from mimirheim.config.schema import HeatStoreConfig
+
+    with pytest.raises(ValidationError):
+        HeatStoreConfig.model_validate(_heat_store_data(ambient_c=ambient_c))
+
+
+@pytest.mark.parametrize("max_temp_c", [50.0, 45.0])
+def test_heat_store_rejects_boost_max_at_or_below_setpoint(max_temp_c: float) -> None:
+    """normal_setpoint_c >= boost.max_temp_c leaves no room to boost."""
+    from mimirheim.config.schema import HeatStoreConfig
+
+    boost = {"power_kw": 3.0, "max_temp_c": max_temp_c}
+    with pytest.raises(ValidationError):
+        HeatStoreConfig.model_validate(_heat_store_data(boost=boost))
+
+
+def test_heat_store_rejects_unknown_fields() -> None:
+    """Unknown fields are rejected on the heat store and on its boost block."""
+    from mimirheim.config.schema import HeatStoreConfig
+
+    with pytest.raises(ValidationError):
+        HeatStoreConfig.model_validate(_heat_store_data(setpoint_c=55.0))
+    boost = {"power_kw": 3.0, "max_temp_c": 65.0, "min_run_steps": 4}
+    with pytest.raises(ValidationError):
+        HeatStoreConfig.model_validate(_heat_store_data(boost=boost))
+
+
+def test_heat_store_name_must_be_unique_across_sections() -> None:
+    """A heat store may not share its name with another device."""
+    from mimirheim.config.schema import MimirheimConfig
+
+    raw = _base_no_outputs()
+    raw["heat_stores"] = {"dhw": _heat_store_data()}
+    raw["thermal_boilers"] = {
+        "dhw": {
+            "volume_liters": 200.0,
+            "elec_power_kw": 2.0,
+            "setpoint_c": 60.0,
+            "cooling_rate_k_per_hour": 2.0,
+        }
+    }
+    with pytest.raises(ValidationError):
+        MimirheimConfig.model_validate(raw)

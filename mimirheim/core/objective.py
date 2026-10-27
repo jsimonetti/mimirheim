@@ -28,7 +28,7 @@ from typing import Any
 
 from mimirheim.config.schema import BalancedWeightsConfig, MimirheimConfig
 from mimirheim.core.bundle import SolveBundle
-from mimirheim.core.confidence import weight_by_confidence
+from mimirheim.core.confidence import running_min_reference_prices, weight_by_confidence
 from mimirheim.core.context import ModelContext
 from mimirheim.devices.grid import Grid
 
@@ -208,6 +208,7 @@ class ObjectiveBuilder:
                 terms.extend(self._wear_terms(d, t))
 
         terms.extend(self._terminal_soc_terms(ctx, devices, bundle))
+        terms.extend(self._saved_electricity_terms(ctx, devices, bundle))
         terms.extend(self._exchange_shaping_terms(ctx, grid, config))
         return terms
 
@@ -275,6 +276,9 @@ class ObjectiveBuilder:
         A terminal SoC value term is also added for each storage device (battery
         and V2H-capable EV when plugged in) — see ``_terminal_soc_terms`` for
         the coefficient and why the division by ``dt`` is necessary.
+
+        Devices that save normal-program electricity (heat stores) add a
+        negative term for that saving — see ``_saved_electricity_terms``.
 
         The confidence weighting means that steps with low-quality forecasts
         contribute less to the objective. A step with confidence=0 is treated
@@ -465,6 +469,9 @@ class ObjectiveBuilder:
                                                   − export_price[t] × export[t])
             self_suf_obj  = Σ_t import[t]   (minimising import = more self-sufficient)
 
+        Terminal SoC value and saved-electricity value terms are added
+        unscaled, outside the weighted blend.
+
         Normalising weights allows intuitive per-dimension tuning: doubling
         ``cost_weight`` shifts the blend toward cost minimisation without
         changing the scale of the objective.
@@ -509,6 +516,9 @@ class ObjectiveBuilder:
         # Terminal SoC value: preserves stored energy across the horizon
         # boundary. Same semantics as in _minimize_cost.
         cost_terms.extend(self._terminal_soc_terms(ctx, devices, bundle))
+        # Saved normal-program electricity (heat stores). Unscaled by cw, like
+        # the terminal SoC value above; see TODO_BALANCED_DEVICE_VALUE_SCALING.md.
+        cost_terms.extend(self._saved_electricity_terms(ctx, devices, bundle))
         cost_terms.extend(self._exchange_shaping_terms(ctx, grid, config))
 
         self._set_objective(ctx, cost_terms)
@@ -609,4 +619,65 @@ class ObjectiveBuilder:
             # Subtract from the minimisation objective: makes the solver prefer
             # higher terminal SoC. The coefficient is in EUR/(kWh·step).
             terms.append(-terminal_value_coeff * soc_var)
+        return terms
+
+    def _saved_electricity_terms(
+        self,
+        ctx: ModelContext,
+        devices: list[Any],
+        bundle: SolveBundle,
+    ) -> list[Any]:
+        """Build value terms for normal-program electricity saved by devices.
+
+        A device that exposes ``saved_electricity_kwh(t)`` (a heat store)
+        reports the normal-program electricity its boost heat saves per step,
+        in kWh_e, and through ``terminal_saved_electricity_kwh(ctx)`` the
+        saving still held at the end of the horizon. Each is priced at the
+        reference price
+
+            p_ref[t] = max(0, min over s <= t of confidence[s] × import_price[s])
+
+        and the end-of-horizon quantity at ``p_ref`` of the last step. The
+        terms are negative so the minimiser prefers more saving.
+
+        ``p_ref`` is precomputed from the inputs, so it adds no variables or
+        constraints. It is not the price at step t: a plan free to choose when
+        boost heat is consumed would otherwise pick the evening peak, which
+        the physical store cannot do. See
+        mimirheim/docs/adr/0001-boost-heat-valued-at-running-minimum-price.md and
+        IMPLEMENTATION_DETAILS.md §8, subsection "Heat store boost and running
+        minimum price".
+
+        Saved quantities are energies in kWh, so each coefficient is divided
+        by ``dt`` to match the per-step price-times-power terms, for the same
+        reason as in ``_terminal_soc_terms``.
+
+        Args:
+            ctx: The current solve context.
+            devices: All non-grid devices. Only devices with a
+                ``saved_electricity_kwh`` method contribute terms.
+            bundle: Runtime inputs with import prices and per-step confidence.
+
+        Returns:
+            A list of linear expressions, empty when no device saves
+            normal-program electricity.
+        """
+        savers = [d for d in devices if hasattr(d, "saved_electricity_kwh")]
+        if not savers:
+            return []
+
+        p_ref = running_min_reference_prices(
+            [bundle.horizon_prices[t] for t in ctx.T],
+            [bundle.horizon_confidence[t] for t in ctx.T],
+        )
+
+        terms: list[Any] = []
+        for d in savers:
+            for t in ctx.T:
+                if p_ref[t] == 0.0:
+                    continue
+                terms.append(-(p_ref[t] / ctx.dt) * d.saved_electricity_kwh(t))
+            terminal = d.terminal_saved_electricity_kwh(ctx)
+            if terminal is not None and p_ref[-1] != 0.0:
+                terms.append(-(p_ref[-1] / ctx.dt) * terminal)
         return terms

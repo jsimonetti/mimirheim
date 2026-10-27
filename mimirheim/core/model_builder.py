@@ -39,6 +39,7 @@ from mimirheim.devices.battery import Battery
 from mimirheim.devices.deferrable_load import DeferrableLoad
 from mimirheim.devices.ev import EvDevice
 from mimirheim.devices.grid import Grid
+from mimirheim.devices.heat_store import HeatStoreDevice
 from mimirheim.devices.hybrid_inverter import HybridInverterDevice
 from mimirheim.devices.pv import PvDevice, PvInputs, clip_forecast
 from mimirheim.devices.static_load import StaticLoad, StaticLoadInputs
@@ -346,6 +347,10 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
         ThermalBoilerDevice(name=name, config=cfg)
         for name, cfg in config.thermal_boilers.items()
     ]
+    heat_stores = [
+        HeatStoreDevice(name=name, config=cfg)
+        for name, cfg in config.heat_stores.items()
+    ]
     space_heating_hps = [
         SpaceHeatingDevice(name=name, config=cfg)
         for name, cfg in config.space_heating_hps.items()
@@ -357,7 +362,8 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
 
     all_devices: list[Any] = [
         *batteries, *pv_devices, *ev_devices, *deferrable_loads, *static_loads,
-        *hybrid_inverters, *thermal_boilers, *space_heating_hps, *combi_heat_pumps,
+        *hybrid_inverters, *thermal_boilers, *heat_stores, *space_heating_hps,
+        *combi_heat_pumps,
     ]
 
     # bat_system_mode[t] / ev_shared_mode[t]: shared charge/discharge direction
@@ -502,6 +508,15 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
                 f"bundle.thermal_boiler_inputs."
             )
         tb.add_constraints(ctx, inputs=tb_inputs)
+
+    for hs in heat_stores:
+        hs_inputs = bundle.heat_store_inputs.get(hs.name)
+        if hs_inputs is None:
+            raise ValueError(
+                f"Heat store {hs.name!r} appears in config but has no entry in "
+                f"bundle.heat_store_inputs."
+            )
+        hs.add_constraints(ctx, inputs=hs_inputs)
 
     for sh in space_heating_hps:
         sh_inputs = bundle.space_heating_inputs.get(sh.name)
@@ -741,6 +756,12 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
             device_setpoints[tb.name] = DeviceSetpoint(
                 kw=_eval_net_power(ctx, tb.net_power(t)),
                 type="thermal_boiler",
+            )
+        for hs in heat_stores:
+            device_setpoints[hs.name] = DeviceSetpoint(
+                kw=_eval_net_power(ctx, hs.net_power(t)),
+                type="heat_store",
+                planned_temp_c=hs.planned_temp_c(ctx, t),
             )
         for sh in space_heating_hps:
             device_setpoints[sh.name] = DeviceSetpoint(
