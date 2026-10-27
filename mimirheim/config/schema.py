@@ -112,8 +112,11 @@ class ObjectivesConfig(BaseModel):
             cost and self-sufficiency weights default to 1.0.
         min_dispatch_gain_eur: Minimum cost benefit in EUR required to dispatch
             storage devices. When the projected saving over the naive baseline
-            (base load covered by grid, storage idle) is below this value,
-            mimirheim publishes an idle schedule instead. Set to 0.0 (the default)
+            (base load covered by grid, storage idle, heat store boost off) is
+            below this value, mimirheim publishes an idle schedule instead. The
+            saving is ``naive_cost_eur - (optimised_cost_eur - heat_credit_eur)``,
+            so the value of a heat store boost counts towards it; battery
+            ``soc_credit_eur`` does not. Set to 0.0 (the default)
             to disable the check. Applies only to ``minimize_cost`` and
             ``balanced`` strategies. Has no effect when an EV with an active
             charge deadline is connected, or when a deferrable load has an
@@ -138,7 +141,10 @@ class ObjectivesConfig(BaseModel):
         ge=0.0,
         description=(
             "Minimum benefit in EUR over the naive baseline required for mimirheim to dispatch "
-            "storage. Below this threshold an idle schedule is published instead. "
+            "storage. The benefit is naive_cost_eur - (optimised_cost_eur - heat_credit_eur): "
+            "the value of a heat store boost counts, battery soc_credit_eur does not. "
+            "Below this threshold an idle schedule is published instead, with every heat "
+            "store boost off. "
             "0.0 (default) disables the check. Applies to minimize_cost and balanced only."
         ),
     )

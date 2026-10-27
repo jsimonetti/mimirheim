@@ -451,7 +451,7 @@ def test_battery_zero_export_mode_not_published_when_not_configured() -> None:
 
 
 def test_last_solve_status_includes_cost_fields() -> None:
-    """publish_last_solve_status() includes naive_cost_eur, optimised_cost_eur and soc_credit_eur when solve succeeds."""
+    """publish_last_solve_status() includes the cost fields and both credits when solve succeeds."""
     mock_client = MagicMock()
     publisher = MqttPublisher(client=mock_client, config=_make_config())
 
@@ -462,6 +462,7 @@ def test_last_solve_status_includes_cost_fields() -> None:
         naive_cost_eur=1.23,
         optimised_cost_eur=0.45,
         soc_credit_eur=0.12,
+        heat_credit_eur=0.34,
         schedule=[
             ScheduleStep(
                 t=0,
@@ -483,6 +484,7 @@ def test_last_solve_status_includes_cost_fields() -> None:
     assert payload["naive_cost_eur"] == pytest.approx(1.23, abs=1e-4)
     assert payload["optimised_cost_eur"] == pytest.approx(0.45, abs=1e-4)
     assert payload["soc_credit_eur"] == pytest.approx(0.12, abs=1e-4)
+    assert payload["heat_credit_eur"] == pytest.approx(0.34, abs=1e-4)
 
 
 def test_last_solve_status_includes_schedule_metrics_import_heavy() -> None:
@@ -580,6 +582,7 @@ def test_last_solve_status_error_omits_cost_fields() -> None:
     assert "naive_cost_eur" not in payload
     assert "optimised_cost_eur" not in payload
     assert "soc_credit_eur" not in payload
+    assert "heat_credit_eur" not in payload
 
 
 # ---------------------------------------------------------------------------

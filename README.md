@@ -601,9 +601,19 @@ On success:
   "status": "ok",
   "solve_status": "optimal",
   "strategy_degraded": false,
+  "dispatch_suppressed": false,
+  "naive_cost_eur": 2.1534,
+  "optimised_cost_eur": 1.8021,
+  "soc_credit_eur": 0.2117,
+  "heat_credit_eur": 0.0912,
+  "grid_import_kwh": 9.84,
+  "grid_export_kwh": 3.12,
+  "self_sufficiency_pct": 61.3,
   "generated_at": "2026-03-30T14:15:00+00:00"
 }
 ```
+
+The cost fields cover the whole horizon. `naive_cost_eur` is the grid cost with no storage dispatch and every heat store boost off; `optimised_cost_eur` is the grid cost of the optimised plan. `soc_credit_eur` estimates the value of the change in stored battery energy. `heat_credit_eur` is the value of the normal-program electricity the planned heat store boosts save, priced at the running minimum import price as in the objective, minus the same value with the boost off, so heat already in the store at solve start does not count. When `dispatch_suppressed` is true, all four figures describe the plan that was suppressed, not the idle schedule.
 
 On failure (infeasible, exception, stale inputs):
 ```json
@@ -1000,7 +1010,7 @@ The departure target is supplied at runtime via the EV state MQTT payload (not c
 |---|---|---|---|
 | `balanced_weights.cost_weight` | float ≥ 0 | 1.0 | Weight on revenue/cost terms when strategy is `balanced`. |
 | `balanced_weights.self_sufficiency_weight` | float ≥ 0 | 1.0 | Weight on grid import penalty. |
-| `min_dispatch_gain_eur` | float ≥ 0 | 0.0 | Minimum projected saving in EUR required to dispatch storage. Below this threshold mimirheim publishes an idle schedule. 0.0 disables. |
+| `min_dispatch_gain_eur` | float ≥ 0 | 0.0 | Minimum projected saving in EUR required to dispatch storage. The saving is `naive_cost_eur - (optimised_cost_eur - heat_credit_eur)`: the value of a heat store boost counts towards it, battery `soc_credit_eur` does not. Below this threshold mimirheim publishes an idle schedule, with batteries, EV chargers, deferrable loads, hybrid inverters and heat store boosts off. 0.0 disables. |
 | `exchange_shaping_weight` | float ≥ 0 | 0.0 | Weight for the optional secondary term `lambda × Σ_t(import_t + export_t)`. Breaks solver indifference on flat or near-symmetric tariffs by favouring lower total exchange. Must be orders of magnitude smaller than typical prices (e.g. `1e-4`). 0.0 disables. |
 
 #### `constraints` (optional)

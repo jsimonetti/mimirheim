@@ -694,6 +694,7 @@ class MqttPublisher:
                 "naive_cost_eur": round(result.naive_cost_eur, 4),
                 "optimised_cost_eur": round(result.optimised_cost_eur, 4),
                 "soc_credit_eur": round(result.soc_credit_eur, 4),
+                "heat_credit_eur": round(result.heat_credit_eur, 4),
                 "grid_import_kwh": summary["grid_import_kwh"],
                 "grid_export_kwh": summary["grid_export_kwh"],
                 "self_sufficiency_pct": summary["self_sufficiency_pct"],
