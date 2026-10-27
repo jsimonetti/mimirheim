@@ -346,6 +346,43 @@ thermal_boilers:
     #   topic_current_temp: "homeassistant/sensor/boiler_temp/state"
 
 # ---------------------------------------------------------------------------
+# Heat stores
+# ---------------------------------------------------------------------------
+# Named map. Models a heat store: a DHW tank, pool or hot tub whose own normal
+# program keeps it at the normal setpoint. Unlike thermal_boilers, mimirheim
+# never takes over that program. It only plans a boost on top of it, through a
+# resistive element or a heat pump boost mode, when electricity is clearly cheap
+# (PV surplus or a negative import price).
+#
+# Boost heat is valued as the normal-program electricity it saves, priced at
+# the running minimum import price, so the plan never heats from the grid at a
+# positive price expecting a later price peak. The normal program's own
+# consumption stays in the base load forecast.
+
+heat_stores:
+  dhw_tank:
+    volume_liters: 200.0      # water volume of the store
+    normal_cop: 3.0           # COP of the normal program (1.0 for a resistive normal program)
+    normal_setpoint_c: 50.0   # temperature the normal program maintains
+    ambient_c: 18.0           # temperature around the store, assumed constant
+    drift_k_per_hour: 0.5     # idle cooldown at the normal setpoint; standby loss only, no draws
+
+    boost:
+      power_kw: 2.0           # electrical power of the element or heat pump boost
+      max_temp_c: 75.0        # boost maximum temperature; never boosted above this
+      cop: 1.0                # 1.0 = resistive element (default); >1 = heat pump boost mode.
+                              # A heat pump boost has no minimum run protection.
+      # Planned power, in percent of power_kw, at or above which the on/off
+      # flag is true. A relay runs at full power or not at all. Default: 50.
+      on_threshold_pct: 50.0
+
+    # Topics derived by default:
+    #   inputs.topic_current_temp -> mimir/input/heat_store/dhw_tank/temp_c (required, retained)
+    #   outputs.on_off            -> mimir/output/heat_store/dhw_tank/on ("true"/"false", retained)
+    # Override: inputs:
+    #   topic_current_temp: "homeassistant/sensor/dhw_tank_temp/state"
+
+# ---------------------------------------------------------------------------
 # Space heating heat pumps (plan 26)
 # ---------------------------------------------------------------------------
 # Named map. Models a space heating heat pump using the degree-days demand

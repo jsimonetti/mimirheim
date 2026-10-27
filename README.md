@@ -150,7 +150,7 @@ Confidence is applied to revenue/cost terms only, never to constraints. Physical
 
 > **Maturity note** — Battery, PV and deferrable loads are the most
 > thoroughly tested and deployed device types.
-> EV chargers, hybrid inverters and all thermal devices (boiler, space
+> EV chargers, hybrid inverters and all thermal devices (boiler, heat store, space
 > heating HP, combi heat pump) are implemented and unit-tested but have seen limited
 > real-world deployment. If you run mimirheim with any of these devices, feedback and bug reports
 > are very welcome. Pull requests with additional integration tests or golden scenarios are
@@ -166,6 +166,7 @@ Confidence is applied to revenue/cost terms only, never to constraints. Physical
 | Grid | `grid` | `import[t]`, `export[t]` |
 | Hybrid inverter | `hybrid_inverters` | `charge_seg[t,i]`, `discharge_seg[t,i]`, `soc[t]`, `pv[t]` (clipped forecast) |
 | Thermal boiler | `thermal_boilers` | `T_tank[t]`, `on[t]` (binary) |
+| Heat store | `heat_stores` | `boost_kw[t]`, `heat[t]` (boost heat in kWh, continuous) |
 | Space heating HP | `space_heating_hps` | `hp_on[t]` (on/off) or SOS2 mode variable; optional `T_indoor[t]` (BTM) |
 | Combi heat pump | `combi_heat_pumps` | `T_tank[t]`, `dhw_mode[t]`, `sh_mode[t]`, `hp_on[t]`; optional `T_indoor[t]` (BTM) |
 
@@ -186,6 +187,31 @@ A hybrid inverter combines battery storage with a directly coupled PV input. The
 ### Thermal boiler
 
 An electric resistance boiler with a hot-water tank. Tank temperature is tracked as a decision variable across the horizon. The solver may run the boiler element (`on[t] = 1`) at any step to raise the tank temperature, subject to a minimum tank temperature (to satisfy DHW demand) and a maximum temperature (safety limit). The binary `on[t]` variable incurs a minimum run-time constraint to avoid short cycling.
+
+### Heat store
+
+A heat store is a thermal store (DHW tank, pool, hot tub) with its own normal program that keeps it at the normal setpoint without mimirheim. mimirheim never replaces the normal program, which is the difference with a thermal boiler. It only plans a boost: extra heating on top of what the normal program does, through a resistive element or a heat pump boost mode, up to `boost.max_temp_c`. The plan boosts when electricity is clearly cheap, typically PV surplus that would be exported for little money, or a negative import price.
+
+The boost is planned together with the battery, PV, deferrable loads and the grid, so they do not compete for the same surplus. The planned boost power is continuous between zero and `boost.power_kw`; the device adds no binary variables, so solve time stays close to the solve without it.
+
+**Valuation.** Boost heat is valued as the normal-program electricity it saves. Each kWh of boost heat that covers the store's standby loss, or that refills the store toward the normal setpoint after a large draw, spares the normal program `1 / normal_cop` kWh of electricity. mimirheim prices that saved electricity at the running minimum of the confidence-weighted import price up to that step, clamped at zero:
+
+```
+p_ref[t] = max(0, min over s <= t of confidence[s] * import_price[s])
+```
+
+Boost heat left in the store at the end of the horizon is priced at `p_ref` of the last step. The running minimum is deliberately conservative: the plan never counts on banking boost heat for an evening price peak, so it does not heat from the grid at a positive price expecting a saving that cannot happen. Under `minimize_cost` it does boost from the grid when the import price is negative. See [mimirheim/docs/adr/0001-boost-heat-valued-at-running-minimum-price.md](mimirheim/docs/adr/0001-boost-heat-valued-at-running-minimum-price.md) for the decision and IMPLEMENTATION_DETAILS §8, subsection "Heat store boost and running minimum price", for the model.
+
+Under `minimize_consumption` and in the self-sufficiency part of `balanced`, the saved electricity counts as grid import avoided (see [§4](#4-objectives-and-strategy)). The value of the boost is reported as `heat_credit_eur` in [`outputs.last_solve`](#outputslast_solve).
+
+**Approximations.** The heat store model makes the following simplifications:
+
+- A relay switches the element at full power or not at all, while the plan uses any power between zero and `boost.power_kw`. The `on` flag rounds each step at `boost.on_threshold_pct`.
+- Hot water draws are not modelled. `drift_k_per_hour` covers standby loss only. A draw shows up in the next temperature reading, and the next solve plans from it.
+- The ambient temperature around the store is constant.
+- The normal program's consumption stays in the base load forecast. When boost heat displaces it, real consumption is lower than forecast, which biases battery and export planning slightly.
+- Boost heat is undervalued when prices rise after it is stored. Every solve restarts the running minimum from the current step, which softens this.
+- A heat pump boost has no minimum run time or short-cycling protection. Protect the compressor in the device or in the automation that follows the plan.
 
 ### Space heating heat pump
 
@@ -215,6 +241,8 @@ The active optimisation strategy is read from the MQTT topic `{prefix}/input/str
 | `minimize_cost` | Maximise revenue and minimise import cost. Default. |
 | `minimize_consumption` | Minimise grid import first, maximise revenue within that envelope (two solves). |
 | `balanced` | Equal weighting of cost and grid import minimisation; user-configurable weights. |
+
+With a heat store configured, the import volume that `minimize_consumption` minimises and that the self-sufficiency part of `balanced` penalises is grid import net of the normal-program electricity the boost saves. A PV boost therefore counts as import avoided. Under `minimize_consumption`, a grid boost is refused because it increases total import, provided `boost.cop` is at most `normal_cop`; the configuration does not enforce this, and with a higher boost COP a grid boost really lowers import.
 
 ### Balanced weights
 
@@ -477,6 +505,14 @@ Published retained. Required for each configured thermal boiler that has `inputs
 58.3
 ```
 
+### Heat store temperature — topic from `heat_stores.*.inputs.topic_current_temp`
+
+Published retained. Required for each configured heat store: the solve waits until it has published once. Payload is a plain numeric string or JSON number representing the current store temperature in degrees Celsius:
+
+```
+54.2
+```
+
 ### Space heating demand — topic from `space_heating_hps.*.inputs.topic_heat_needed_kwh`
 
 Published retained. Required for each configured space heating HP that has `inputs` configured. Payload is a plain numeric string representing the heat energy demand for the horizon in kWh:
@@ -590,6 +626,16 @@ Published retained for each device in the current step (`t=0`):
 ```
 
 HA automations can subscribe directly to `mimirheim/device/home_battery/setpoint` rather than parsing the full schedule JSON.
+
+A heat store setpoint carries two extra fields, which also appear per step in the schedule:
+
+```json
+{"kw": -2.0, "type": "heat_store", "on": true, "planned_temp_c": 61.4}
+```
+
+- `kw` is the planned boost power. It follows the sign convention above, so a 2 kW boost publishes `-2.0`; negate it to drive a power diverter.
+- `on` is true when the planned boost power is at least `boost.on_threshold_pct` percent of `boost.power_kw`. It is also published as `"true"`/`"false"` on the retained topic `heat_stores.*.outputs.on_off`, for relay-switched elements.
+- `planned_temp_c` is the planned store temperature at the end of the step.
 
 ### `outputs.last_solve`
 
@@ -956,6 +1002,22 @@ The departure target is supplied at runtime via the EV state MQTT payload (not c
 | `min_run_steps` | int ≥ 0 | 0 | Minimum consecutive steps the element must run once switched on (avoids short cycling). |
 | `inputs.topic_current_temp` | string or null | derived | MQTT topic for the current tank temperature (plain float, °C). Derived as `{prefix}/input/thermal_boiler/{name}/temp_c`. |
 
+#### `heat_stores` (dict, keyed by device name)
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `volume_liters` | float > 0 | — | Water volume of the store in litres. |
+| `normal_cop` | float > 0 | — | COP of the normal program. Converts boost heat into the normal-program electricity it saves. |
+| `normal_setpoint_c` | float | — | Normal setpoint: the temperature the normal program maintains (°C). Must be above `ambient_c` and below `boost.max_temp_c`. |
+| `ambient_c` | float | — | Temperature around the store (°C). Heat losses grow with the difference to it. |
+| `drift_k_per_hour` | float > 0 | — | Idle cooldown at the normal setpoint (K/hour), standby loss only, excluding hot water draws. |
+| `boost.power_kw` | float > 0 | — | Electrical power of the boost (kW). The plan may request any power between zero and this value. |
+| `boost.max_temp_c` | float | — | Boost maximum temperature (°C). The plan never boosts the store above it. |
+| `boost.cop` | float > 0 | 1.0 | COP of the boost. 1.0 for a resistive element; above 1 for a heat pump boost mode. |
+| `boost.on_threshold_pct` | float ∈ (0, 100] | 50 | Planned boost power, in percent of `boost.power_kw`, at or above which the `on` flag is true. |
+| `inputs.topic_current_temp` | string or null | derived | MQTT topic for the current store temperature (plain float, °C). Derived as `{prefix}/input/heat_store/{name}/temp_c`. |
+| `outputs.on_off` | string or null | derived | MQTT topic for the boost on/off flag (`"true"`/`"false"`, retained). Derived as `{prefix}/output/heat_store/{name}/on`. |
+
 #### `space_heating_hps` (dict, keyed by device name)
 
 | Field | Type | Default | Description |
@@ -1068,6 +1130,7 @@ a Home Assistant entity topic) or when sharing a topic between multiple instance
 | `deferrable_loads.{name}.topic_window_latest` | `{p}/input/deferrable/{name}/window_latest` |
 | `deferrable_loads.{name}.topic_committed_start_time` | `{p}/input/deferrable/{name}/committed_start` |
 | `thermal_boilers.{name}.inputs.topic_current_temp` | `{p}/input/thermal_boiler/{name}/temp_c` |
+| `heat_stores.{name}.inputs.topic_current_temp` | `{p}/input/heat_store/{name}/temp_c` |
 | `space_heating_hps.{name}.inputs.topic_heat_needed_kwh` | `{p}/input/space_heating/{name}/heat_needed_kwh` |
 | `space_heating_hps.{name}.inputs.topic_heat_produced_today_kwh` | `{p}/input/space_heating/{name}/heat_produced_today_kwh` |
 | `space_heating_hps.{name}.building_thermal.inputs.topic_current_indoor_temp_c` | `{p}/input/space_heating/{name}/btm/indoor_temp_c` |
@@ -1089,6 +1152,7 @@ a Home Assistant entity topic) or when sharing a topic between multiple instance
 | `pv_arrays.{name}.outputs.zero_export_mode` | `{p}/output/pv/{name}/zero_export_mode` |
 | `pv_arrays.{name}.outputs.on_off_mode` | `{p}/output/pv/{name}/on_off_mode` |
 | `deferrable_loads.{name}.topic_recommended_start_time` | `{p}/output/deferrable/{name}/recommended_start` |
+| `heat_stores.{name}.outputs.on_off` | `{p}/output/heat_store/{name}/on` |
 
 Device output topics are derived for all devices regardless of whether the
 corresponding capability is enabled. A disabled capability means the topic is
@@ -1120,6 +1184,7 @@ Battery SOC, EV state, and thermal device readings are required before mimirheim
 | `{hybrid_inverters.*.inputs.soc.topic}` (when `inputs` is configured) |
 | `{hybrid_inverters.*.topic_pv_forecast}` |
 | `{thermal_boilers.*.inputs.topic_current_temp}` (when `inputs` is configured) |
+| `{heat_stores.*.inputs.topic_current_temp}` |
 | `{space_heating_hps.*.inputs.topic_heat_needed_kwh}` (when `inputs` is configured) |
 | `{space_heating_hps.*.building_thermal.inputs.topic_current_indoor_temp_c}` (when BTM `inputs` is configured) |
 | `{space_heating_hps.*.building_thermal.inputs.topic_outdoor_temp_forecast_c}` (when BTM `inputs` is configured) |
@@ -1194,6 +1259,8 @@ Discovery payloads are published retained on every broker connection. The follow
 
 The last row is repeated for every configured device across all device sections.
 
+For each heat store, a `{name} boost on` binary sensor (device class `running`) follows `heat_stores.*.outputs.on_off`.
+
 All entities use `outputs.availability` as their `availability_topic`, so they appear as unavailable in HA when mimirheim is offline.
 
 ### Forecast attributes for charting
@@ -1203,6 +1270,8 @@ Every setpoint sensor and the grid sensor carry a `forecast` JSON attribute deri
 For battery and EV charger setpoint sensors, each entry contains:
 - `kw` — scheduled power in kW (negative = charging, positive = discharging)
 - `soc_kwh` — terminal state of charge in kWh at the end of the step
+
+For heat store setpoint sensors, each entry contains `kw` and `planned_temp_c`, the planned store temperature at the end of the step.
 
 For all other device setpoint sensors, each entry contains only `kw`. For the grid sensor, each entry contains `import` and `export` (both in kW, rounded to 3 decimal places).
 
