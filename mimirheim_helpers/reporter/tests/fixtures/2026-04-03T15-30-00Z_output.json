@@ -8,6 +8,7 @@
   "naive_cost_eur": -4.85931,
   "optimised_cost_eur": -1.177589,
   "soc_credit_eur": 7.4429,
+  "heat_credit_eur": -0.0,
   "deferrable_recommended_starts": {
     "dishwasher": "2026-04-03T19:00:00Z"
   },

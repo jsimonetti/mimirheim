@@ -32,6 +32,7 @@ from mimirheim.core.bundle import (
     SolveBundle,
     SolveResult,
 )
+from mimirheim.core.confidence import running_min_reference_prices
 from mimirheim.core.context import ModelContext
 from mimirheim.core.objective import ObjectiveBuilder
 from mimirheim.core.solver_backend import CBCSolverBackend
@@ -39,7 +40,7 @@ from mimirheim.devices.battery import Battery
 from mimirheim.devices.deferrable_load import DeferrableLoad
 from mimirheim.devices.ev import EvDevice
 from mimirheim.devices.grid import Grid
-from mimirheim.devices.heat_store import HeatStoreDevice
+from mimirheim.devices.heat_store import HeatStoreDevice, boost_off_trajectory
 from mimirheim.devices.hybrid_inverter import HybridInverterDevice
 from mimirheim.devices.pv import PvDevice, PvInputs, clip_forecast
 from mimirheim.devices.static_load import StaticLoad, StaticLoadInputs
@@ -825,6 +826,7 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
         ),
         optimised_cost_eur=_compute_optimised_cost(bundle, schedule, dt),
         soc_credit_eur=_compute_soc_credit(bundle, schedule, config),
+        heat_credit_eur=_compute_heat_credit(ctx, heat_stores, bundle),
         schedule=schedule,
         deferrable_recommended_starts=deferrable_recommended_starts,
         battery_care=battery_care,
@@ -922,6 +924,58 @@ def _compute_optimised_cost(
         - step.grid_export_kw * bundle.horizon_export_prices[step.t] * dt
         for step in schedule
     )
+
+
+def _compute_heat_credit(
+    ctx: ModelContext, heat_stores: list[HeatStoreDevice], bundle: SolveBundle
+) -> float:
+    """Compute the value of the normal-program electricity the boost saves.
+
+    Priced exactly as in the objective (see
+    ``ObjectiveBuilder._saved_electricity_terms``): saved kWh_e at step t at
+    the running minimum reference price ``p_ref[t]``, and the heat left at the
+    end of the horizon at ``p_ref`` of the last step. The same value for the
+    store with the boost off is subtracted, so heat present at solve start,
+    which the boost-off baseline also uses up, does not count.
+
+    Args:
+        ctx: The solved model context.
+        heat_stores: Heat store devices in this solve.
+        bundle: Solve inputs providing prices, confidence and store
+            temperatures.
+
+    Returns:
+        Heat credit in EUR, summed across all heat stores. Zero when there are
+        none.
+    """
+    if not heat_stores:
+        return 0.0
+
+    p_ref = running_min_reference_prices(
+        [bundle.horizon_prices[t] for t in ctx.T],
+        [bundle.horizon_confidence[t] for t in ctx.T],
+    )
+
+    credit = 0.0
+    for hs in heat_stores:
+        planned = sum(
+            p_ref[t] * _eval_net_power(ctx, hs.saved_electricity_kwh(t)) for t in ctx.T
+        )
+        terminal = hs.terminal_saved_electricity_kwh(ctx)
+        if terminal is not None:
+            planned += p_ref[-1] * _eval_net_power(ctx, terminal)
+
+        baseline = boost_off_trajectory(
+            hs.config,
+            bundle.heat_store_inputs[hs.name].current_temp_c,
+            ctx.dt,
+            len(ctx.T),
+        )
+        boost_off = sum(p * kwh for p, kwh in zip(p_ref, baseline.saved_kwh_e, strict=True))
+        boost_off += p_ref[-1] * baseline.terminal_saved_kwh_e
+
+        credit += planned - boost_off
+    return credit
 
 
 def _avg_discharge_efficiency(

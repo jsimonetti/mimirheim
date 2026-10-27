@@ -10,12 +10,15 @@ only through the normal-program electricity that boost heat saves.
 The device reports that saved electricity in kWh_e through
 ``saved_electricity_kwh`` and ``terminal_saved_electricity_kwh``. It does not
 know about prices or strategies; ``ObjectiveBuilder`` prices the quantities.
+``boost_off_trajectory`` gives the same quantities with the boost off, the
+baseline for ``heat_credit_eur`` and the idle plan when dispatch is suppressed.
 
 The module does not import from ``mimirheim.io``. The current store temperature
 is passed as a ``HeatStoreInputs`` argument to ``add_constraints``. All solver
 interactions go through ``ModelContext.solver``.
 """
 
+from dataclasses import dataclass
 from typing import Any
 
 from mimirheim.config.schema import HeatStoreConfig
@@ -29,6 +32,94 @@ _WATER_THERMAL_CAP_KWH_PER_LITRE_K: float = 4186 / 3600 / 1000  # kWh/(L·K)
 # Solver noise allowance for the on/off flag, kW. A plan at exactly the
 # threshold can come back a few ULPs below it and must still read as on.
 _ON_TOLERANCE_KW: float = 1e-6
+
+
+@dataclass(frozen=True)
+class BoostOffTrajectory:
+    """What a heat store does over the horizon with the boost off.
+
+    This is the baseline for ``heat_credit_eur`` and the plan published when
+    dispatch is suppressed. Heat present at solve start is used up in place of
+    the normal program as fast as the standby loss allows, which is what the
+    model does with it when there is no boost.
+
+    Attributes:
+        boost_heat_kwh: Boost heat above the normal setpoint at the end of each
+            step, kWh_th.
+        saved_kwh_e: Normal-program electricity saved during each step, kWh_e.
+        terminal_saved_kwh_e: Normal-program electricity saved after the
+            horizon by the heat left at the last step, kWh_e.
+        temp_c: Store temperature at the end of each step, degrees Celsius.
+    """
+
+    boost_heat_kwh: list[float]
+    saved_kwh_e: list[float]
+    terminal_saved_kwh_e: float
+    temp_c: list[float]
+
+
+def boost_off_trajectory(
+    config: HeatStoreConfig, current_temp_c: float, dt: float, n_steps: int
+) -> BoostOffTrajectory:
+    """Simulate a heat store with the boost off.
+
+    Uses the same heat balance and losses as ``HeatStoreDevice``. Below the
+    setpoint the temperature stays at ``current_temp_c``: the normal program
+    owns the gap and the model does not track it.
+
+    Args:
+        config: Static heat store configuration.
+        current_temp_c: Live store temperature at solve start, degrees Celsius.
+        dt: Step duration in hours.
+        n_steps: Number of steps in the horizon.
+
+    Returns:
+        The boost-off trajectory over ``n_steps`` steps.
+    """
+    cap = config.volume_liters * _WATER_THERMAL_CAP_KWH_PER_LITRE_K
+    setpoint = config.normal_setpoint_c
+    standby_kwh, loss_frac = _loss_per_step(config, cap, dt)
+
+    heat = max(0.0, cap * (current_temp_c - setpoint))
+    gap_kwh = max(0.0, cap * (setpoint - current_temp_c))
+    boost_heat_kwh: list[float] = []
+    saved_kwh_e: list[float] = []
+    temp_c: list[float] = []
+    for _ in range(n_steps):
+        available = (1.0 - loss_frac) * heat
+        consumed = min(standby_kwh, available)
+        heat = available - consumed
+        boost_heat_kwh.append(heat)
+        saved_kwh_e.append(consumed / config.normal_cop)
+        temp_c.append(setpoint + (heat - gap_kwh) / cap)
+    return BoostOffTrajectory(
+        boost_heat_kwh=boost_heat_kwh,
+        saved_kwh_e=saved_kwh_e,
+        terminal_saved_kwh_e=heat / config.normal_cop,
+        temp_c=temp_c,
+    )
+
+
+def _loss_per_step(config: HeatStoreConfig, cap: float, dt: float) -> tuple[float, float]:
+    """Split the store's standing loss into a constant and a proportional part.
+
+    Loss is linear in temperature: drift_k_per_hour at the setpoint, scaled by
+    (T - ambient) / (setpoint - ambient). Split into the loss at the setpoint
+    (a constant the normal program covers when there is no boost heat) and an
+    extra loss proportional to the heat above it.
+
+    Args:
+        config: Static heat store configuration.
+        cap: Heat capacity of the stored water, kWh per kelvin.
+        dt: Step duration in hours.
+
+    Returns:
+        ``(standby_kwh, loss_frac)``: heat lost per step at the setpoint in
+        kWh_th, and the fraction of boost heat lost per step on top of that.
+    """
+    standby_kwh = cap * config.drift_k_per_hour * dt
+    loss_frac = config.drift_k_per_hour / (config.normal_setpoint_c - config.ambient_c) * dt
+    return standby_kwh, loss_frac
 
 
 class HeatStoreDevice:
@@ -124,21 +215,18 @@ class HeatStoreDevice:
         cap = self._cap_kwh_per_k
         setpoint = cfg.normal_setpoint_c
 
-        # Loss is linear in temperature: drift_k_per_hour at the setpoint,
-        # scaled by (T - ambient) / (setpoint - ambient). Split into the loss
-        # at the setpoint (a constant the normal program covers when there is
-        # no boost heat) and an extra loss proportional to the heat above it.
         #   standby_kwh: heat lost per step at the setpoint, kWh_th.
         #   loss_frac:   fraction of boost heat lost per step on top of that.
-        standby_kwh = cap * cfg.drift_k_per_hour * ctx.dt
-        loss_frac = cfg.drift_k_per_hour / (setpoint - cfg.ambient_c) * ctx.dt
+        standby_kwh, loss_frac = _loss_per_step(cfg, cap, ctx.dt)
 
         start_heat = max(0.0, cap * (inputs.current_temp_c - setpoint))
         self._gap_kwh = max(0.0, cap * (setpoint - inputs.current_temp_c))
 
-        # no_boost_heat: boost heat the store would hold at the end of each
-        # step with the boost off, kWh_th. Used for the temperature ceiling.
-        no_boost_heat = start_heat
+        # no_boost_heat[t]: boost heat the store would hold at the end of step
+        # t with the boost off, kWh_th. Used for the temperature ceiling.
+        no_boost_heat = boost_off_trajectory(
+            cfg, inputs.current_temp_c, ctx.dt, len(ctx.T)
+        ).boost_heat_kwh
         ceiling_heat = cap * (cfg.boost.max_temp_c - setpoint)
 
         gap_filled: Any = 0.0
@@ -163,8 +251,7 @@ class HeatStoreDevice:
             # Temperature ceiling: max(boost.max_temp_c, temperature with no
             # boost). The no-boost term keeps a store that starts above the
             # limit feasible; it allows no boost until the store cools below it.
-            no_boost_heat = max(0.0, (1.0 - loss_frac) * no_boost_heat - standby_kwh)
-            ctx.solver.add_constraint(self._heat[t] <= max(ceiling_heat, no_boost_heat))
+            ctx.solver.add_constraint(self._heat[t] <= max(ceiling_heat, no_boost_heat[t]))
 
             gap_filled = gap_filled + self._gap_fill[t]
 

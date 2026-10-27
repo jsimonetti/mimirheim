@@ -725,6 +725,15 @@ class SolveResult(BaseModel):
             ``optimised_cost_eur`` to compare fairly against ``naive_cost_eur``:
             ``effective_cost = optimised_cost_eur - soc_credit_eur``.
             Zero for infeasible solves.
+        heat_credit_eur: Value in EUR of the normal-program electricity that
+            the planned boost saves across all heat stores, priced exactly as
+            in the objective: the running minimum reference price per step,
+            and the last step's reference price for the heat left at the end
+            of the horizon. The same value with the boost off is subtracted,
+            so heat present at solve start does not inflate it. The
+            ``min_dispatch_gain_eur`` check subtracts it from
+            ``optimised_cost_eur``. Zero without heat stores and for
+            infeasible solves.
         schedule: Ordered list of ScheduleStep objects, one per time step in
             the horizon. Empty if the solve was infeasible.
         deferrable_recommended_starts: Solver-chosen start datetimes for
@@ -784,6 +793,15 @@ class SolveResult(BaseModel):
             "Estimated future value in EUR of the net change in stored energy over the "
             "horizon. avg_import_price * soc_delta_cell_kwh * avg_discharge_eff per device. "
             "Subtract from optimised_cost_eur for a fair comparison against naive_cost_eur."
+        ),
+    )
+    heat_credit_eur: float = Field(
+        default=0.0,
+        description=(
+            "Value in EUR of the normal-program electricity saved by the planned "
+            "heat store boost, priced at the running minimum reference price, minus "
+            "the same value with the boost off. Subtracted from optimised_cost_eur "
+            "in the min_dispatch_gain_eur check."
         ),
     )
     schedule: list[ScheduleStep]

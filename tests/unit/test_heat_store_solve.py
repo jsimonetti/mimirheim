@@ -369,3 +369,66 @@ def test_balanced_self_sufficiency_part_credits_saved_electricity() -> None:
 
     assert max(_boost_kw(cost)) < 1e-6
     assert sum(_boost_kw(balanced)) * _DT > 2.0
+
+
+# ---------------------------------------------------------------------------
+# heat_credit_eur
+# ---------------------------------------------------------------------------
+
+
+def test_heat_credit_is_zero_without_heat_stores() -> None:
+    config = MimirheimConfig.model_validate({
+        "mqtt": {"host": "localhost", "client_id": "test"},
+        "grid": {"import_limit_kw": 20.0, "export_limit_kw": 20.0},
+        "static_loads": {"base": {}},
+    })
+    bundle = SolveBundle(
+        strategy="minimize_cost",
+        solve_time_utc=datetime(2026, 6, 1, 10, tzinfo=timezone.utc),
+        horizon_prices=[0.25] * 4,
+        horizon_export_prices=[0.02] * 4,
+        horizon_confidence=[1.0] * 4,
+        pv_forecast=[0.0] * 4,
+        base_load_forecast=[0.5] * 4,
+    )
+
+    assert build_and_solve(bundle, config).heat_credit_eur == 0.0
+
+
+def test_heat_credit_values_the_planned_boost_heat() -> None:
+    """At a flat 0.25 import price and normal_cop 2.5 boost heat is worth 0.10/kWh_th.
+
+    The credit covers the heat left at the end (read from the planned
+    temperature) plus at most one standby loss per step used up in place of
+    the normal program.
+    """
+    result = build_and_solve(_surplus_day(), _config())
+
+    value_per_kwh_th = 0.25 / 2.5
+    terminal_heat = _THERMAL_CAP_KWH_PER_K * (_temps(result)[-1] - 50.0)
+    standby_kwh = _THERMAL_CAP_KWH_PER_K * 0.8 * _DT
+    assert terminal_heat > 1.0
+    assert result.heat_credit_eur >= value_per_kwh_th * terminal_heat - 1e-6
+    assert result.heat_credit_eur <= value_per_kwh_th * (terminal_heat + 8 * standby_kwh) + 1e-6
+
+
+def test_hot_store_without_a_planned_boost_has_no_heat_credit() -> None:
+    """Heat present at solve start is in the boost-off baseline too."""
+    bundle = _bundle(import_prices=[0.25] * 8, pv_kw=[0.0] * 8, temp_c=60.0)
+    result = build_and_solve(bundle, _config())
+
+    assert max(_boost_kw(result)) < 1e-6
+    assert result.heat_credit_eur == pytest.approx(0.0, abs=1e-9)
+
+
+def test_hot_store_credit_counts_only_the_boost() -> None:
+    """A 60 C start with PV surplus: the credit is below that of a 50 C start.
+
+    The 65 C limit leaves less room above the starting heat, and the starting
+    heat itself is in the baseline, so the credit cannot exceed the 50 C case.
+    """
+    cold = build_and_solve(_surplus_day(), _config())
+    hot = build_and_solve(_surplus_day(temp_c=60.0), _config())
+
+    assert hot.heat_credit_eur > 0.0
+    assert hot.heat_credit_eur < cold.heat_credit_eur
