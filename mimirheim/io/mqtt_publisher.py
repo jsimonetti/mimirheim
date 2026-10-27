@@ -48,6 +48,7 @@ _LOAD_TYPES = frozenset(
         "deferrable_load",
         "ev_charger",
         "thermal_boiler",
+        "heat_store",
         "space_heating_hp",
         "combi_heat_pump",
     }

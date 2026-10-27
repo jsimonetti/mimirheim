@@ -203,10 +203,13 @@ def test_unknown_device_type_is_reported_as_other_not_folded_in() -> None:
     assert d["summary"]["other_kwh"] == pytest.approx(0.125)
 
 
-def test_heat_pump_counts_as_house_usage() -> None:
+@pytest.mark.parametrize(
+    "dtype", ["thermal_boiler", "space_heating_hp", "combi_heat_pump", "heat_store"]
+)
+def test_heat_pump_counts_as_house_usage(dtype: str) -> None:
     """Thermal device types are consumption, not an unknown source."""
     out = {"schedule": [
-        _step("2026-10-01T10:00:00Z", {"hp": {"type": "space_heating_hp", "kw": -2.0}}, imp=2.0),
+        _step("2026-10-01T10:00:00Z", {"hp": {"type": dtype, "kw": -2.0}}, imp=2.0),
     ]}
     d = _payload({}, out)
     assert d["load"][0] == pytest.approx(2.0)

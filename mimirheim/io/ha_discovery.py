@@ -168,7 +168,8 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
     # No state_class: solver output, not a hardware measurement (see the grid
     # sensor above). json_attributes_topic/template expose the full per-device
     # forecast array sourced from outputs.schedule, enabling apexcharts-card
-    # dashboards without the reporter chart_topic.
+    # dashboards without the reporter chart_topic. Storage devices add their
+    # planned SOC and heat stores their planned temperature to each step.
 
     storage_device_names: set[str] = {
         *config.batteries,
@@ -184,6 +185,7 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
         *config.static_loads,
         *config.hybrid_inverters,
         *config.thermal_boilers,
+        *config.heat_stores,
         *config.space_heating_hps,
         *config.combi_heat_pumps,
     ]
@@ -196,6 +198,15 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
                 "{%- for s in value_json.schedule -%}"
                 f'{{%- set ns.f = ns.f + [{{"kw": s.devices["{device_name}"].kw | round(3), '
                 f'"soc_kwh": s.devices["{device_name}"].soc_kwh | round(3), "ts": s.ts}}] -%}}'
+                "{%- endfor -%}"
+                '{{ {"forecast": ns.f} | tojson }}'
+            )
+        elif device_name in config.heat_stores:
+            attr_template = (
+                "{%- set ns = namespace(f=[]) -%}"
+                "{%- for s in value_json.schedule -%}"
+                f'{{%- set ns.f = ns.f + [{{"kw": s.devices["{device_name}"].kw | round(3), '
+                f'"planned_temp_c": s.devices["{device_name}"].planned_temp_c | round(2), "ts": s.ts}}] -%}}'
                 "{%- endfor -%}"
                 '{{ {"forecast": ns.f} | tojson }}'
             )
