@@ -787,6 +787,16 @@ HEAT_STORE_BOOST_FORM_SPEC = FormSpec(
     }
 )
 
+HEAT_STORE_INPUTS_FORM_SPEC = FormSpec(
+    fields={
+        "topic_current_temp": FieldSpec(
+            label="Current temperature topic",
+            description="MQTT topic publishing the current store temperature in degrees C, retained.",
+            tier=Tier.EXPERT,
+        ),
+    }
+)
+
 HEAT_STORE_CONFIG_FORM_SPEC = FormSpec(
     fields={
         "volume_liters": FieldSpec(
@@ -817,6 +827,12 @@ HEAT_STORE_CONFIG_FORM_SPEC = FormSpec(
             description="Boost hardware parameters.",
             tier=Tier.BASIC,
             nested_form_spec=HEAT_STORE_BOOST_FORM_SPEC,
+        ),
+        "inputs": FieldSpec(
+            label="Input topics",
+            description="MQTT input topic configuration for the live store temperature.",
+            tier=Tier.EXPERT,
+            nested_form_spec=HEAT_STORE_INPUTS_FORM_SPEC,
         ),
     }
 )

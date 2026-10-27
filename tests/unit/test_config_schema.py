@@ -3014,6 +3014,44 @@ def test_heat_store_rejects_unknown_fields() -> None:
         HeatStoreConfig.model_validate(_heat_store_data(boost=boost))
 
 
+def test_heat_store_temp_topic_derived_when_inputs_omitted() -> None:
+    """inputs.topic_current_temp derives to {prefix}/input/heat_store/{name}/temp_c."""
+    from mimirheim.config.schema import MimirheimConfig
+
+    raw = _base_no_outputs()
+    raw["heat_stores"] = {"dhw": _heat_store_data()}
+    config = MimirheimConfig.model_validate(raw)
+    assert config.heat_stores["dhw"].inputs.topic_current_temp == "mimir/input/heat_store/dhw/temp_c"
+
+
+def test_heat_store_explicit_temp_topic_overrides_derivation() -> None:
+    """An explicit inputs.topic_current_temp is kept as configured."""
+    from mimirheim.config.schema import MimirheimConfig
+
+    raw = _base_no_outputs()
+    raw["heat_stores"] = {
+        "dhw": _heat_store_data(inputs={"topic_current_temp": "ha/sensor/dhw_temp/state"}),
+    }
+    config = MimirheimConfig.model_validate(raw)
+    assert config.heat_stores["dhw"].inputs.topic_current_temp == "ha/sensor/dhw_temp/state"
+
+
+def test_heat_store_inputs_cannot_be_disabled() -> None:
+    """The temperature input is required: inputs: null is rejected."""
+    from mimirheim.config.schema import HeatStoreConfig
+
+    with pytest.raises(ValidationError):
+        HeatStoreConfig.model_validate(_heat_store_data(inputs=None))
+
+
+def test_heat_store_inputs_reject_unknown_fields() -> None:
+    """Unknown fields in the inputs block are rejected."""
+    from mimirheim.config.schema import HeatStoreConfig
+
+    with pytest.raises(ValidationError):
+        HeatStoreConfig.model_validate(_heat_store_data(inputs={"topic_temp": "x"}))
+
+
 def test_heat_store_name_must_be_unique_across_sections() -> None:
     """A heat store may not share its name with another device."""
     from mimirheim.config.schema import MimirheimConfig

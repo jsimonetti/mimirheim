@@ -2575,6 +2575,28 @@ class HeatStoreBoostConfig(BaseModel):
     )
 
 
+class HeatStoreInputsConfig(BaseModel):
+    """MQTT input topic configuration for a heat store device.
+
+    Attributes:
+        topic_current_temp: MQTT topic publishing the current store temperature
+            in degrees Celsius. The payload must be a plain numeric string or
+            a JSON number. The topic must be retained so mimirheim receives the
+            most recent value on reconnect. The solve waits until it has
+            published once.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    topic_current_temp: str | None = Field(
+        default=None,
+        description=(
+            "MQTT topic publishing the current store temperature in °C, retained. "
+            "Defaults to '{mqtt.topic_prefix}/input/heat_store/{name}/temp_c' when not set."
+        ),
+    )
+
+
 class HeatStoreConfig(BaseModel):
     """Configuration for a heat store: a water store that mimirheim can only boost.
 
@@ -2597,6 +2619,8 @@ class HeatStoreConfig(BaseModel):
         drift_k_per_hour: Idle cooldown in K/hour at the normal setpoint,
             standby loss only, excluding hot water draws.
         boost: Boost hardware parameters.
+        inputs: MQTT input topics for the live store temperature. Always
+            present: the device cannot plan without a starting temperature.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -2614,6 +2638,10 @@ class HeatStoreConfig(BaseModel):
         description="Idle cooldown in K/hour at the normal setpoint, standby loss only (no draws).",
     )
     boost: HeatStoreBoostConfig = Field(description="Boost hardware parameters.")
+    inputs: HeatStoreInputsConfig = Field(
+        default_factory=HeatStoreInputsConfig,
+        description="MQTT input topic configuration for the live store temperature. Required: the solve waits for the first temperature message.",
+    )
 
     @model_validator(mode="after")
     def _validate_temp_order(self) -> "HeatStoreConfig":
@@ -3096,6 +3124,10 @@ class MimirheimConfig(BaseModel):
         for name, cfg in self.thermal_boilers.items():
             if cfg.inputs is not None and cfg.inputs.topic_current_temp is None:
                 cfg.inputs.topic_current_temp = _topics.thermal_boiler_temp_topic(p, name)
+
+        for name, cfg in self.heat_stores.items():
+            if cfg.inputs.topic_current_temp is None:
+                cfg.inputs.topic_current_temp = _topics.heat_store_temp_topic(p, name)
 
         for name, cfg in self.space_heating_hps.items():
             if cfg.inputs is not None:
