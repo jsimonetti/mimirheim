@@ -26,6 +26,10 @@ from mimirheim.core.context import ModelContext
 # Identical constant to ThermalBoilerDevice — shared physics.
 _WATER_THERMAL_CAP_KWH_PER_LITRE_K: float = 4186 / 3600 / 1000  # kWh/(L·K)
 
+# Solver noise allowance for the on/off flag, kW. A plan at exactly the
+# threshold can come back a few ULPs below it and must still read as on.
+_ON_TOLERANCE_KW: float = 1e-6
+
 
 class HeatStoreDevice:
     """Models the boost of one heat store as a MILP sub-problem.
@@ -247,3 +251,20 @@ class HeatStoreDevice:
         filled = sum(ctx.solver.var_value(self._gap_fill[s]) for s in range(t + 1))
         gap_left = max(0.0, self._gap_kwh - filled)
         return self.config.normal_setpoint_c + (heat - gap_left) / self._cap_kwh_per_k
+
+    def boost_on(self, ctx: ModelContext, t: int) -> bool:
+        """Whether the relay on/off flag is on at step t after a solve.
+
+        True when the planned boost power is at least ``boost.on_threshold_pct``
+        percent of ``boost.power_kw``.
+
+        Args:
+            ctx: The solved model context.
+            t: Zero-based time step index.
+
+        Returns:
+            True when the boost should be switched on.
+        """
+        boost = self.config.boost
+        threshold_kw = boost.power_kw * boost.on_threshold_pct / 100.0
+        return ctx.solver.var_value(self._boost_kw[t]) >= threshold_kw - _ON_TOLERANCE_KW

@@ -2562,6 +2562,10 @@ class HeatStoreBoostConfig(BaseModel):
             never boosts the store above this temperature.
         cop: Coefficient of performance of the boost. 1.0 for a resistive
             element; above 1 for a heat pump PV mode.
+        on_threshold_pct: Planned boost power, as a percentage of
+            ``power_kw``, at or above which the published on/off flag is true.
+            A relay switches the element at full power or not at all, so this
+            sets how a partial-power step is rounded.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -2572,6 +2576,15 @@ class HeatStoreBoostConfig(BaseModel):
         gt=0,
         default=1.0,
         description="Coefficient of performance of the boost. 1.0 = resistive; above 1 = heat pump.",
+    )
+    on_threshold_pct: float = Field(
+        gt=0,
+        le=100,
+        default=50.0,
+        description=(
+            "Planned boost power, in percent of power_kw, at or above which the "
+            "on/off flag is true. Must be greater than 0 and at most 100."
+        ),
     )
 
 
@@ -2593,6 +2606,27 @@ class HeatStoreInputsConfig(BaseModel):
         description=(
             "MQTT topic publishing the current store temperature in °C, retained. "
             "Defaults to '{mqtt.topic_prefix}/input/heat_store/{name}/temp_c' when not set."
+        ),
+    )
+
+
+class HeatStoreOutputsConfig(BaseModel):
+    """MQTT output topic configuration for a heat store device.
+
+    Attributes:
+        on_off: Topic to publish the boost on/off flag (``"true"`` or
+            ``"false"``), retained, for relay-switched elements. Always set:
+            defaults to ``"{mqtt.topic_prefix}/output/heat_store/{name}/on"``
+            when not provided explicitly.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    on_off: str | None = Field(
+        default=None,
+        description=(
+            "MQTT topic for the boost on/off boolean flag, retained. "
+            "Defaults to '{mqtt.topic_prefix}/output/heat_store/{name}/on' when not set."
         ),
     )
 
@@ -2621,6 +2655,8 @@ class HeatStoreConfig(BaseModel):
         boost: Boost hardware parameters.
         inputs: MQTT input topics for the live store temperature. Always
             present: the device cannot plan without a starting temperature.
+        outputs: MQTT output topics. The on/off topic is always derived, so
+            the flag is always published.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -2641,6 +2677,10 @@ class HeatStoreConfig(BaseModel):
     inputs: HeatStoreInputsConfig = Field(
         default_factory=HeatStoreInputsConfig,
         description="MQTT input topic configuration for the live store temperature. Required: the solve waits for the first temperature message.",
+    )
+    outputs: HeatStoreOutputsConfig = Field(
+        default_factory=HeatStoreOutputsConfig,
+        description="MQTT output topic configuration for the boost on/off flag.",
     )
 
     @model_validator(mode="after")
@@ -3128,6 +3168,8 @@ class MimirheimConfig(BaseModel):
         for name, cfg in self.heat_stores.items():
             if cfg.inputs.topic_current_temp is None:
                 cfg.inputs.topic_current_temp = _topics.heat_store_temp_topic(p, name)
+            if cfg.outputs.on_off is None:
+                cfg.outputs.on_off = _topics.heat_store_on_off_topic(p, name)
 
         for name, cfg in self.space_heating_hps.items():
             if cfg.inputs is not None:

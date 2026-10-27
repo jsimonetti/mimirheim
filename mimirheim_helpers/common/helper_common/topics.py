@@ -546,6 +546,21 @@ def ev_loadbalance_topic(prefix: str, name: str) -> str:
     return f"{prefix}/output/ev/{name}/loadbalance"
 
 
+def heat_store_on_off_topic(prefix: str, name: str) -> str:
+    """Return the topic for the heat store boost on/off flag.
+
+    Corresponds to ``heat_stores.{name}.outputs.on_off``.
+
+    Args:
+        prefix: The ``mqtt.topic_prefix`` value from mimirheim config.
+        name: The heat store device name.
+
+    Returns:
+        e.g. ``"mimir/output/heat_store/dhw/on"``.
+    """
+    return f"{prefix}/output/heat_store/{name}/on"
+
+
 def pv_power_limit_topic(prefix: str, name: str) -> str:
     """Return the topic for the PV array production limit setpoint.
 

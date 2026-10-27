@@ -514,6 +514,13 @@ class DeviceSetpoint(BaseModel):
         soc_kwh: Terminal state of charge in kWh at the end of this time step.
             Populated for storage devices (batteries, EV chargers, hybrid
             inverters) only. None for all other device types.
+        on: For heat stores only. True when the planned boost power is at
+            least ``boost.on_threshold_pct`` percent of ``boost.power_kw``, so
+            a relay-switched element should be on for this step. None for all
+            other device types.
+
+            Maps to the ``outputs.on_off`` topic: ``"true"`` when on,
+            ``"false"`` when off.
         planned_temp_c: Planned store temperature in degrees Celsius at the
             end of this time step. Populated for heat stores only. None for all
             other device types.
@@ -529,6 +536,7 @@ class DeviceSetpoint(BaseModel):
     loadbalance_active: bool | None = None
     pv_is_curtailed: bool | None = None
     soc_kwh: float | None = None
+    on: bool | None = None
     planned_temp_c: float | None = None
 
 

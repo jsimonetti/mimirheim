@@ -212,6 +212,10 @@ def test_ev_loadbalance_topic() -> None:
     assert ev_loadbalance_topic("mimir", "ev_charger") == "mimir/output/ev/ev_charger/loadbalance"
 
 
+def test_heat_store_on_off_topic() -> None:
+    assert topics.heat_store_on_off_topic("mimir", "dhw") == "mimir/output/heat_store/dhw/on"
+
+
 def test_pv_power_limit_topic() -> None:
     from helper_common.topics import pv_power_limit_topic
     assert pv_power_limit_topic("mimir", "roof_pv") == "mimir/output/pv/roof_pv/power_limit_kw"

@@ -103,6 +103,7 @@ def _result() -> SolveResult:
                     "dhw": DeviceSetpoint(
                         kw=-3.0,
                         type="heat_store",
+                        on=True,
                         planned_temp_c=52.5 + t,
                     ),
                 },

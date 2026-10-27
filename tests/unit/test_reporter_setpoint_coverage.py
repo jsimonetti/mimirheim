@@ -65,6 +65,10 @@ _REPORTER_EXPLICITLY_EXCLUDED_FIELDS: frozenset[str] = frozenset(
         # has no temperature chart or column yet; heat store reporting is not
         # part of the heat store feature's first ticket.
         "planned_temp_c",
+        # on is the heat store boost on/off flag. It is a rounding of the
+        # heat store's kw against boost.on_threshold_pct, so the kw column
+        # already shows the decision; it is published for relay automations.
+        "on",
     }
 )
 

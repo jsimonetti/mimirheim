@@ -784,6 +784,11 @@ HEAT_STORE_BOOST_FORM_SPEC = FormSpec(
             description="Coefficient of performance of the boost. 1.0 = resistive; above 1 = heat pump.",
             tier=Tier.EXPERT,
         ),
+        "on_threshold_pct": FieldSpec(
+            label="On threshold (%)",
+            description="Planned boost power, in percent of boost power, at or above which the on/off flag is true.",
+            tier=Tier.EXPERT,
+        ),
     }
 )
 
@@ -792,6 +797,16 @@ HEAT_STORE_INPUTS_FORM_SPEC = FormSpec(
         "topic_current_temp": FieldSpec(
             label="Current temperature topic",
             description="MQTT topic publishing the current store temperature in degrees C, retained.",
+            tier=Tier.EXPERT,
+        ),
+    }
+)
+
+HEAT_STORE_OUTPUTS_FORM_SPEC = FormSpec(
+    fields={
+        "on_off": FieldSpec(
+            label="On/off topic",
+            description="MQTT topic for the boost on/off boolean flag, retained.",
             tier=Tier.EXPERT,
         ),
     }
@@ -833,6 +848,12 @@ HEAT_STORE_CONFIG_FORM_SPEC = FormSpec(
             description="MQTT input topic configuration for the live store temperature.",
             tier=Tier.EXPERT,
             nested_form_spec=HEAT_STORE_INPUTS_FORM_SPEC,
+        ),
+        "outputs": FieldSpec(
+            label="Output topics",
+            description="MQTT output topic configuration for the boost on/off flag.",
+            tier=Tier.EXPERT,
+            nested_form_spec=HEAT_STORE_OUTPUTS_FORM_SPEC,
         ),
     }
 )

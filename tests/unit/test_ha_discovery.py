@@ -1219,3 +1219,35 @@ class TestForecastTemplateRendering:
         result = _render_template(template_str, payload)
 
         assert result == {"forecast": []}
+
+
+# ---------------------------------------------------------------------------
+# Heat store on/off output
+# ---------------------------------------------------------------------------
+
+
+def test_heat_store_on_off_binary_sensor_published() -> None:
+    """The heat store on/off flag is advertised as a binary sensor on its derived topic."""
+    config = MimirheimConfig.model_validate({
+        "mqtt": {"host": "localhost", "client_id": "mimir-test", "topic_prefix": "mimir"},
+        "homeassistant": {"enabled": True, "device_name": "Test mimirheim"},
+        "grid": {"import_limit_kw": 10.0, "export_limit_kw": 5.0},
+        "heat_stores": {
+            "dhw": {
+                "volume_liters": 200.0,
+                "normal_cop": 2.5,
+                "normal_setpoint_c": 50.0,
+                "ambient_c": 18.0,
+                "drift_k_per_hour": 0.8,
+                "boost": {"power_kw": 3.0, "max_temp_c": 65.0},
+            }
+        },
+    })
+    components = _publish_and_get_components(config)
+    matching = {k: v for k, v in components.items() if k.endswith("_dhw_boost_on")}
+    assert len(matching) == 1
+    entity = next(iter(matching.values()))
+    assert entity["platform"] == "binary_sensor"
+    assert entity["state_topic"] == "mimir/output/heat_store/dhw/on"
+    assert entity["payload_on"] == "true"
+    assert entity["payload_off"] == "false"

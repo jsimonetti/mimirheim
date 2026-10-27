@@ -27,6 +27,7 @@ def _config(
     *,
     normal_cop: float = 2.5,
     boost_cop: float = 1.0,
+    on_threshold_pct: float = 50.0,
     with_pv: bool = True,
     strategy_weights: dict[str, float] | None = None,
 ) -> MimirheimConfig:
@@ -41,7 +42,12 @@ def _config(
                 "normal_setpoint_c": 50.0,
                 "ambient_c": 18.0,
                 "drift_k_per_hour": 0.8,
-                "boost": {"power_kw": 3.0, "max_temp_c": 65.0, "cop": boost_cop},
+                "boost": {
+                    "power_kw": 3.0,
+                    "max_temp_c": 65.0,
+                    "cop": boost_cop,
+                    "on_threshold_pct": on_threshold_pct,
+                },
             }
         },
     }
@@ -113,6 +119,38 @@ def test_schedule_carries_boost_power_and_planned_temperature() -> None:
         assert setpoint.type == "heat_store"
         assert setpoint.kw <= 1e-9
         assert setpoint.planned_temp_c is not None
+
+
+def test_schedule_carries_on_flag_matching_the_planned_power() -> None:
+    result = build_and_solve(_surplus_day(), _config())
+
+    for step in result.schedule:
+        setpoint = step.devices["dhw"]
+        assert setpoint.on is (-setpoint.kw >= 1.5)
+
+
+@pytest.mark.parametrize(
+    ("on_threshold_pct", "surplus_kw", "expected_on"),
+    [
+        (50.0, 1.49, False),
+        (50.0, 1.5, True),
+        (25.0, 0.74, False),
+        (25.0, 0.75, True),
+    ],
+)
+def test_on_flag_turns_on_at_the_configured_threshold(
+    on_threshold_pct: float, surplus_kw: float, expected_on: bool
+) -> None:
+    """A one-step surplus is boosted exactly; on flips at threshold * power_kw.
+
+    Grid power at 0.25 is worth more than the heat it buys, so the plan boosts
+    exactly the PV surplus and no more.
+    """
+    bundle = _bundle(import_prices=[0.25], pv_kw=[0.5 + surplus_kw])
+    result = build_and_solve(bundle, _config(on_threshold_pct=on_threshold_pct))
+
+    assert _boost_kw(result)[0] == pytest.approx(surplus_kw, abs=1e-6)
+    assert result.schedule[0].devices["dhw"].on is expected_on
 
 
 def test_no_grid_boost_at_positive_prices_ahead_of_an_evening_peak() -> None:

@@ -383,6 +383,19 @@ def publish_discovery(client: Any, config: MimirheimConfig) -> None:
                 "device_class": "running",
             })
 
+    # --- Heat store output sensors ---
+    # Mirrors the boost on/off flag for relay-switched elements; same
+    # no-state_class reasoning as the PV output sensors above.
+
+    for name, hs_cfg in config.heat_stores.items():
+        _add(f"{device_id}_{name}_boost_on", "binary_sensor", {
+            "name": f"{name} boost on",
+            "state_topic": hs_cfg.outputs.on_off,
+            "payload_on": "true",
+            "payload_off": "false",
+            "device_class": "running",
+        })
+
     payload: dict[str, Any] = {
         "device": {
             "identifiers": [device_id],

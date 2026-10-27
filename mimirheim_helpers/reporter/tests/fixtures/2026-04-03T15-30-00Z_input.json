@@ -869,7 +869,14 @@
         "boost": {
           "power_kw": 3.0,
           "max_temp_c": 65.0,
-          "cop": 1.0
+          "cop": 1.0,
+          "on_threshold_pct": 50.0
+        },
+        "inputs": {
+          "topic_current_temp": "mimir/input/heat_store/dhw/temp_c"
+        },
+        "outputs": {
+          "on_off": "mimir/output/heat_store/dhw/on"
         }
       }
     },
