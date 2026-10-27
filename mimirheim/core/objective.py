@@ -517,7 +517,7 @@ class ObjectiveBuilder:
         # boundary. Same semantics as in _minimize_cost.
         cost_terms.extend(self._terminal_soc_terms(ctx, devices, bundle))
         # Saved normal-program electricity (heat stores). Unscaled by cw, like
-        # the terminal SoC value above; see TODO_BALANCED_DEVICE_VALUE_SCALING.md.
+        # the terminal SoC value above.
         cost_terms.extend(self._saved_electricity_terms(ctx, devices, bundle))
         cost_terms.extend(self._exchange_shaping_terms(ctx, grid, config))
 
