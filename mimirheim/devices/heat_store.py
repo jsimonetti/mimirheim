@@ -21,7 +21,10 @@ from typing import Any
 from mimirheim.config.schema import HeatStoreConfig
 from mimirheim.core.bundle import HeatStoreInputs
 from mimirheim.core.context import ModelContext
-from mimirheim.devices.thermal_boiler import _WATER_THERMAL_CAP_KWH_PER_LITRE_K
+
+# Specific heat capacity of water: 4186 J/(kg·K) = 4186/3600/1000 kWh/(L·K).
+# Identical constant to ThermalBoilerDevice — shared physics.
+_WATER_THERMAL_CAP_KWH_PER_LITRE_K: float = 4186 / 3600 / 1000  # kWh/(L·K)
 
 
 class HeatStoreDevice:
