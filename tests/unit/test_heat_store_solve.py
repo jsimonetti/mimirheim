@@ -318,3 +318,54 @@ def test_missing_heat_store_input_is_rejected() -> None:
 
     with pytest.raises(ValueError, match="dhw"):
         build_and_solve(bundle, _config())
+
+
+def test_minimize_consumption_boosts_pv_surplus_rather_than_export_it() -> None:
+    """Saved electricity counts as import avoided in phase 1.
+
+    Export at 0.20 pays more than the boost heat is worth at 0.25 / 2.5 = 0.10
+    per kWh of PV, so ``minimize_cost`` exports. Under ``minimize_consumption``
+    the boost avoids normal-program import, which phase 1 counts, and phase 2
+    must keep it: the lock covers grid import minus saved electricity, not
+    grid import alone.
+    """
+    cost = build_and_solve(_surplus_day(export_prices=[0.20] * 8), _config())
+    consumption = build_and_solve(
+        _surplus_day(export_prices=[0.20] * 8, strategy="minimize_consumption"),
+        _config(),
+    )
+
+    assert max(_boost_kw(cost)) < 1e-6
+    assert consumption.solve_status == "optimal"
+    assert sum(_boost_kw(consumption)) * _DT > 2.0
+
+
+def test_minimize_consumption_does_not_boost_from_the_grid_at_positive_prices() -> None:
+    """A grid kWh buys at most 1 / normal_cop kWh_e of saving, so import rises."""
+    bundle = _bundle(
+        import_prices=[0.20] * 4 + [0.45] * 4,
+        pv_kw=[0.0] * 8,
+        strategy="minimize_consumption",
+    )
+    result = build_and_solve(bundle, _config(normal_cop=1.2))
+
+    assert result.solve_status == "optimal"
+    assert max(_boost_kw(result)) < 1e-6
+
+
+def test_balanced_self_sufficiency_part_credits_saved_electricity() -> None:
+    """Export at 0.24 beats the priced saving alone, but not with the volume credit.
+
+    Per kW of PV surplus: export earns cw * 0.24 = 0.12, the priced saving is
+    0.25 / 2.5 = 0.10, and the volume credit adds sw / 2.5 = 0.20. Without the
+    credit the plan exports, as ``minimize_cost`` does on the same day.
+    """
+    weights = {"cost_weight": 1.0, "self_sufficiency_weight": 1.0}
+    cost = build_and_solve(_surplus_day(export_prices=[0.24] * 8), _config())
+    balanced = build_and_solve(
+        _surplus_day(export_prices=[0.24] * 8, strategy="balanced"),
+        _config(strategy_weights=weights),
+    )
+
+    assert max(_boost_kw(cost)) < 1e-6
+    assert sum(_boost_kw(balanced)) * _DT > 2.0
