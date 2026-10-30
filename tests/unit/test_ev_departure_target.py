@@ -87,7 +87,7 @@ def test_parse_unknown_field_is_rejected() -> None:
 _SOLVE_START = datetime.now(timezone.utc)
 
 
-def _ev_config() -> MimirheimConfig:
+def _ev_config(**ev_extra: float) -> MimirheimConfig:
     return MimirheimConfig.model_validate(
         {
             "mqtt": {"host": "localhost", "client_id": "test"},
@@ -98,6 +98,7 @@ def _ev_config() -> MimirheimConfig:
                     "charge_segments": [{"power_max_kw": 8.0, "efficiency": 1.0}],
                     "discharge_segments": [],
                     "inputs": {"soc": {"unit": "kwh"}},
+                    **ev_extra,
                 }
             },
             "static_loads": {"base": {}},
@@ -457,3 +458,66 @@ def test_future_deadline_inside_first_step_blocks_all_dispatch() -> None:
     assert result.solve_status in ("optimal", "feasible")
     for step in result.schedule:
         assert step.devices["car"].kw == pytest.approx(0.0, abs=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# Derate-aware deliverability clamp
+# ---------------------------------------------------------------------------
+
+_DERATE = {"reduce_charge_above_soc_kwh": 40.0, "reduce_charge_min_kw": 2.0}
+
+
+def _derated_snapshot(config: MimirheimConfig, soc: float, target: float) -> SolveBundle:
+    """Assemble a bundle via readiness for a 1-hour departure window."""
+    state = ReadinessState(config)
+    now = datetime.now(timezone.utc)
+    steps = [now + timedelta(hours=h) for h in range(3)]
+    state.update(
+        "mimir/input/prices",
+        [
+            PriceStep(ts=ts, import_eur_per_kwh=0.25, export_eur_per_kwh=0.10)
+            for ts in steps
+        ],
+    )
+    state.update(
+        "mimir/input/baseload/base/forecast",
+        [PowerForecastStep(ts=ts, kw=0.5) for ts in steps],
+    )
+    window = now + timedelta(hours=1)
+    state.update(
+        "mimir/input/ev/car/soc",
+        parse_ev_inputs(
+            (
+                f'{{"soc": {soc}, "target_soc_kwh": {target},'
+                f' "window_latest": "{window.isoformat()}"}}'
+            ).encode()
+        ),
+    )
+    state.update("mimir/input/ev/car/plugged_in", True)
+    assert state.is_ready(), state.not_ready_reason()
+    return state.snapshot()
+
+
+def test_derated_clamp_lowers_target_to_what_the_solver_reaches() -> None:
+    """With derating the clamp stops at the stepped derate-line energy.
+
+    From 50 kWh with a ceiling line 8 - 0.3 * (soc - 40) kW, four 15-minute
+    steps deliver 4.4651 kWh (flat 8 kW would deliver 8 kWh). The clamped
+    target must be reachable: the solve stays feasible and meets it.
+    """
+    config = _ev_config(**_DERATE)
+    bundle = _derated_snapshot(config, soc=50.0, target=60.0)
+    target = bundle.ev_inputs["car"].target_soc_kwh
+    assert target == pytest.approx(54.4651, abs=1e-3)
+
+    result = build_and_solve(bundle, config)
+    assert result.solve_status in ("optimal", "feasible")
+    delivered = -sum(s.devices["car"].kw for s in result.schedule[:4]) * 0.25
+    assert 50.0 + delivered >= target - 1e-6
+
+
+def test_without_derating_clamp_is_flat() -> None:
+    """No derating: from 50 kWh, 4 steps at 8 kW capped at capacity (60)."""
+    config = _ev_config()
+    bundle = _derated_snapshot(config, soc=50.0, target=60.0)
+    assert bundle.ev_inputs["car"].target_soc_kwh == pytest.approx(58.0)

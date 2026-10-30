@@ -889,6 +889,8 @@ Each `charge_segments` / `discharge_segments` entry:
 | `charge_segments` | list (min 1) | — | Efficiency segments for charging. |
 | `discharge_segments` | list | `[]` | Efficiency segments for V2H discharge. Empty = no V2H. |
 | `wear_cost_eur_per_kwh` | float ≥ 0 | 0.0 | Degradation cost per kWh throughput. |
+| `reduce_charge_above_soc_kwh` | float or null | null | SOC in kWh above which the maximum charge power decreases linearly to `reduce_charge_min_kw` at `capacity_kwh`. Strictly between `min_soc_kwh` and `capacity_kwh`. Set together with `reduce_charge_min_kw`. Mirrors the battery field of the same name. |
+| `reduce_charge_min_kw` | float or null | null | Maximum charge power in kW at `capacity_kwh`. Strictly greater than 0 and strictly less than the sum of the `charge_segments` `power_max_kw` values. Set together with `reduce_charge_above_soc_kwh`. Mirrors the battery field of the same name. |
 | `capabilities.staged_power` | bool | false | Hardware only accepts discrete power stages. |
 | `capabilities.zero_export_mode` | bool | false | EV charger has a boolean zero-export mode register. When true, the charger autonomously prevents grid export using local CT measurements. mimirheim publishes true/false once per solve cycle. |
 | `outputs.zero_export_mode` | string or null | derived | MQTT topic for the zero-export mode flag. Only published when `capabilities.zero_export_mode` is true. Derived as `{prefix}/output/ev/{name}/exchange_mode`. |
@@ -902,6 +904,17 @@ The departure target is supplied at runtime via the EV state MQTT payload (not c
 |---|---|---|
 | `target_soc_kwh` | float ≥ 0 or null | Required SOC at departure (hard constraint). Omit or set null when no trip is planned. |
 | `window_latest` | ISO 8601 UTC datetime or null | Departure deadline by which `target_soc_kwh` must be reached. |
+
+##### EV charge derating
+
+Many vehicles reduce their charge power as the pack nears full. Setting `reduce_charge_above_soc_kwh` and `reduce_charge_min_kw` models this as a linear taper, in the same way as for batteries: full charge power up to the threshold, then a straight line down to `reduce_charge_min_kw` at `capacity_kwh`. The departure target is clamped to what the taper allows the vehicle to reach before the deadline.
+
+With a taper configured, the planned charge power is what the vehicle actually draws, and it can fall below `min_charge_kw` near the top. The published setpoint is what is offered to the charger: when a charge is active it is floored at `min_charge_kw`, so the EVSE stays at its minimum current while the vehicle tapers on its own.
+
+Two limitations apply when fitting the parameters:
+
+- The power limit is evaluated at the SOC at the start of each 15-minute step. A steep taper is therefore modelled somewhat optimistically; for a Nissan Leaf the modelled final stretch comes out roughly a third shorter than measured. Fit the parameters with that in mind.
+- The taper ends at `capacity_kwh`. Set `capacity_kwh` to the SOC at which charging actually stops, not the nominal pack size. A car that stops at 95.1% on its own scale should have `capacity_kwh` set to that SOC.
 
 #### `deferrable_loads` (dict, keyed by device name)
 

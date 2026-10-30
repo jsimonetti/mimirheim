@@ -38,6 +38,9 @@ logger = logging.getLogger("mimirheim.publisher")
 
 _STEP_HOURS: float = 15 / 60.0
 
+# Delivered EV charge power above this counts as an active charge.
+_EV_ACTIVE_TOLERANCE_KW: float = 1e-3
+
 # Device types whose negative ``kw`` is energy the house consumes. Kept in step
 # with ``_LOAD_TYPES`` in the reporter's ``metrics.py`` so the published
 # self-sufficiency and the reports agree. Batteries and hybrid inverters are
@@ -259,7 +262,7 @@ class MqttPublisher:
             for device_name, setpoint in current.devices.items():
                 self._client.publish(
                     f"{prefix}/device/{device_name}/setpoint",
-                    json.dumps({"kw": setpoint.kw, "type": setpoint.type}),
+                    json.dumps({"kw": self._setpoint_kw(device_name, setpoint), "type": setpoint.type}),
                     qos=1,
                     retain=True,
                 )
@@ -578,6 +581,35 @@ class MqttPublisher:
         # ha_discovery uses to advertise the entity keeps the two in step.
         if cfg.has_is_curtailed_output:
             self._publish_bool(cfg.outputs.is_curtailed, sp.pv_is_curtailed)
+
+    def _setpoint_kw(self, name: str, sp: DeviceSetpoint) -> float:
+        """Return the power to publish on the device setpoint topic.
+
+        For an EV charger with charge derating and ``min_charge_kw`` configured,
+        an active charge is floored at ``min_charge_kw``: the planned delivered
+        power can fall below the EVSE minimum in the derated zone, but the
+        EVSE cannot be offered less. All other devices publish ``sp.kw``.
+
+        Args:
+            name: Device name.
+            sp: The device's setpoint for the current step.
+
+        Returns:
+            Power in kW, negative when charging.
+        """
+        if sp.type != "ev_charger":
+            return sp.kw
+        cfg = self._config.ev_chargers.get(name)
+        if (
+            cfg is None
+            or cfg.min_charge_kw is None
+            or cfg.reduce_charge_above_soc_kwh is None
+        ):
+            return sp.kw
+        delivered_kw = -sp.kw
+        if delivered_kw <= _EV_ACTIVE_TOLERANCE_KW:
+            return sp.kw
+        return -max(delivered_kw, cfg.min_charge_kw)
 
     def _publish_ev_controls(self, name: str, sp: DeviceSetpoint) -> None:
         """Publish the closed-loop control topics for one EV charger.

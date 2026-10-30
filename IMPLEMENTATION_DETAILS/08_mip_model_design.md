@@ -376,6 +376,29 @@ Discharge derating is the mirror image, with slope `slope_d = (reduce_discharge_
 
 Both constraints are safe to add unconditionally: outside the derated region the right-hand side exceeds the segment-bound maximum power, so the constraint is slack and has no effect. Both are evaluated against the **start-of-step** SOC (`soc_prev`, i.e. `soc[t-1]` or the initial reading at `t=0`), because that is what a real inverter observes when deciding how much power to allow for the step. Using the end-of-step SOC (`soc[t]`) would create a circular dependency between the power decision and the resulting SOC — still linear and solvable, but not physically what the inverter does.
 
+## EV charge derating
+
+`EvConfig` accepts the same `reduce_charge_above_soc_kwh`/`reduce_charge_min_kw` pair as `BatteryConfig`. The ceiling line is built by `charge_derate_line` in `mimirheim/devices/ev.py` from the two points `(reduce_charge_above_soc_kwh, sum of charge_segments power_max_kw)` and `(capacity_kwh, reduce_charge_min_kw)`. The constraint has the same form as the battery's (see "Power derating near SOC extremes") and is evaluated against start-of-step SOC. The deliverability clamp for the departure target uses the same line through `max_charge_energy_kwh`, stepping the SOC with the solver's per-step bound and filling segments highest-efficiency first, so a clamped target is exactly reachable.
+
+**Delivered power versus setpoint.** `charge_seg[t, i]` is the delivered power: what the vehicle draws. It is bounded by the ceiling line and drives the SOC balance, the power balance and the wear cost. The setpoint published to the EVSE is computed after the solve in the publisher as `max(delivered, min_charge_kw)` when `delivered` exceeds a small tolerance, and 0 otherwise. No solver variable represents it, because it drives nothing physical. Without derating the two coincide.
+
+**Known limitation: start-of-step optimism.** The ceiling is evaluated at start-of-step SOC and steps are 15 minutes, so the model lets the vehicle charge at the higher power for a whole step even as its SOC climbs into the taper. A steep taper is therefore modelled somewhat optimistically (roughly a third too short for the Nissan Leaf sessions that motivated the feature). Parameters should be fitted with that in mind. End-of-step SOC would create a circular dependency between power and SOC and is not used.
+
+**Calibration.** The taper ends at `capacity_kwh`, so `capacity_kwh` should be the SOC at which charging actually stops, not the nominal pack size.
+
+### EV charge derating floor relaxation
+
+When `min_charge_kw` is set, the solver requires `delivered >= min_charge_kw` while charging. In the derated zone the ceiling falls below `min_charge_kw`, and a vehicle can keep charging below it while the EVSE stays at its minimum current. The unrelaxed floor would make the model infeasible there, so it is relaxed in that zone only.
+
+The relaxation is added only when derating and `min_charge_kw` are both set and `min_charge_kw > reduce_charge_min_kw`; otherwise the ceiling never falls below the floor. `derate_floor_relaxed[t]` is a binary that is 1 when the start-of-step SOC is at or above `soc_break`, the SOC at which the ceiling line crosses `min_charge_kw`: `soc_break = (min_charge_kw - rhs_c) / slope_c`. Two Big-M constraints link it to the SOC:
+
+```
+soc_prev - soc_break <= big_m * relaxed[t]
+soc_break - soc_prev <= big_m * (1 - relaxed[t])
+```
+
+`big_m = capacity_kwh - min_soc_kwh` is the largest possible gap, so the inactive side is always slack. `relaxed[t]` is subtracted from the floor's indicator term (`min_charge_kw * (active[t] - relaxed[t])`, and the analogous V2H form), which removes the floor in the derated zone and leaves it unchanged in the normal zone. Dropping the floor everywhere instead would allow unphysical sub-floor delivered power in the normal zone, which is why the relaxation is region-specific.
+
 ## EV availability gate
 
 `EvDevice.add_constraints` (`mimirheim/devices/ev.py`) forces all charge (and V2H discharge, if configured) variables to zero for every step when `inputs.available` is `False`, and adds no SOC tracking constraint at all for that solve.
