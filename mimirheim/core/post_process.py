@@ -29,13 +29,21 @@ from datetime import datetime
 
 from mimirheim.config.schema import MimirheimConfig
 from mimirheim.core.bundle import DeviceSetpoint, ScheduleStep, SolveBundle, SolveResult
+from mimirheim.devices.heat_store import boost_off_trajectory
 
 logger = logging.getLogger("mimirheim.post_process")
 
 # Device types whose kw setpoint is set to zero in an idle schedule. PV and
 # static_load setpoints are derived from forecasts and are independent of the
-# dispatch decision; they are preserved unchanged.
-_CONTROLLABLE_TYPES: frozenset[str] = frozenset({"battery", "ev_charger", "deferrable_load", "hybrid_inverter"})
+# dispatch decision; they are preserved unchanged. A heat store boost is
+# discretionary on top of its own normal program, so it is idled too.
+_CONTROLLABLE_TYPES: frozenset[str] = frozenset(
+    {"battery", "ev_charger", "deferrable_load", "hybrid_inverter", "heat_store"}
+)
+
+# Step duration in hours. mimirheim always solves on 15-minute steps; see
+# model_builder._dt_from_horizon.
+_STEP_HOURS: float = 0.25
 
 # Strategies for which the gain threshold is meaningful. The threshold compares
 # EUR costs, so it is only applicable when the objective involves EUR. The
@@ -49,16 +57,20 @@ def apply_gain_threshold(
 ) -> SolveResult:
     """Replace the schedule with an idle one if the gain is below the configured threshold.
 
-    The gain is defined as ``naive_cost_eur - optimised_cost_eur``: how much
+    The gain is defined as
+    ``naive_cost_eur - (optimised_cost_eur - heat_credit_eur)``: how much
     cheaper the optimised schedule is compared to doing nothing (grid covers
-    base load minus PV, storage stays idle).
+    base load minus PV, storage stays idle, heat store boost off). The heat
+    credit is the value of the normal-program electricity the boost saves,
+    which the grid cash flow alone does not show. Battery ``soc_credit_eur``
+    is not included.
 
     When the gain is below ``config.objectives.min_dispatch_gain_eur``, cycling
     storage would cause wear for a benefit too small to justify it. In that
     case this function returns a new ``SolveResult`` whose schedule is idle
     (all controllable device setpoints zero) and whose ``dispatch_suppressed``
-    flag is ``True``. The ``naive_cost_eur`` and ``optimised_cost_eur`` fields
-    are preserved from the original solve so the status topic still reports the
+    flag is ``True``. The ``naive_cost_eur``, ``optimised_cost_eur`` and
+    ``heat_credit_eur`` fields are preserved from the original solve so the status topic still reports the
     quantitative reason for suppression.
 
     Suppression is bypassed unconditionally when:
@@ -107,7 +119,7 @@ def apply_gain_threshold(
     ):
         return result
 
-    gain = result.naive_cost_eur - result.optimised_cost_eur
+    gain = result.naive_cost_eur - (result.optimised_cost_eur - result.heat_credit_eur)
 
     # Only suppress when gain is a small positive number. Negative gain means
     # the solver had a good reason to spend more than the naive baseline (e.g.
@@ -122,7 +134,7 @@ def apply_gain_threshold(
         gain,
         threshold,
     )
-    return _build_idle_result(result)
+    return _build_idle_result(result, bundle, config)
 
 
 def _has_active_deadline(bundle: SolveBundle) -> bool:
@@ -174,13 +186,18 @@ def _is_future(dt: datetime, reference: datetime) -> bool:
     return dt > reference
 
 
-def _build_idle_result(result: SolveResult) -> SolveResult:
+def _build_idle_result(
+    result: SolveResult, bundle: SolveBundle, config: MimirheimConfig
+) -> SolveResult:
     """Build a SolveResult whose schedule idles all controllable devices.
 
     Every device type in ``_CONTROLLABLE_TYPES`` is set to 0 kW: batteries,
-    EV chargers, deferrable loads and hybrid inverters. Suppression exists to
-    avoid cycling storage for a gain too small to justify the wear, and those
-    are the devices whose dispatch is discretionary.
+    EV chargers, deferrable loads, hybrid inverters and heat store boosts.
+    Suppression exists to avoid cycling storage for a gain too small to
+    justify the wear, and those are the devices whose dispatch is
+    discretionary. A heat store also has its boost flag switched off and its
+    planned temperature replaced by the boost-off cooling curve, so the
+    published temperature matches the idle plan.
 
     Everything else keeps the setpoint the solver chose. For PV and static
     loads that is because they are forecasts rather than decisions. For the
@@ -192,17 +209,32 @@ def _build_idle_result(result: SolveResult) -> SolveResult:
     Grid import and export are recomputed from the power balance to reflect
     the reduced dispatch.
 
-    The ``naive_cost_eur`` and ``optimised_cost_eur`` fields from the original
-    result are preserved. They represent what the solver found, not what the
+    The ``naive_cost_eur``, ``optimised_cost_eur`` and ``heat_credit_eur``
+    fields from the original result are preserved. They represent what the solver found, not what the
     idle schedule costs. This gives operators visibility into the quantitative
     reason for suppression on the status topic.
 
     Args:
         result: The original solved ``SolveResult``. Not mutated.
+        bundle: The solve inputs used to produce ``result``. Provides the
+            live heat store temperatures.
+        config: Static system configuration. Provides the heat store models.
 
     Returns:
         A new ``SolveResult`` with an idle schedule and ``dispatch_suppressed=True``.
     """
+    # Boost-off temperature per step for every heat store in the schedule.
+    idle_temps_c: dict[str, list[float]] = {
+        name: boost_off_trajectory(
+            hs_cfg,
+            bundle.heat_store_inputs[name].current_temp_c,
+            _STEP_HOURS,
+            len(result.schedule),
+        ).temp_c
+        for name, hs_cfg in config.heat_stores.items()
+        if name in bundle.heat_store_inputs
+    }
+
     idle_schedule: list[ScheduleStep] = []
 
     for step in result.schedule:
@@ -217,12 +249,20 @@ def _build_idle_result(result: SolveResult) -> SolveResult:
                 # closed-loop flags still hold their build_and_solve defaults
                 # here; copying them keeps this function from deciding
                 # something that is not its business.
+                #
+                # A heat store boost goes off and its temperature follows the
+                # boost-off cooling curve instead of the suppressed plan.
+                is_heat_store = sp.type == "heat_store"
                 idle_devices[name] = DeviceSetpoint(
                     kw=0.0,
                     type=sp.type,
                     power_limit_kw=sp.power_limit_kw,
                     zero_exchange_active=sp.zero_exchange_active,
                     loadbalance_active=sp.loadbalance_active,
+                    on=False if is_heat_store else sp.on,
+                    planned_temp_c=(
+                        idle_temps_c[name][step.t] if is_heat_store else sp.planned_temp_c
+                    ),
                 )
             else:
                 idle_devices[name] = sp

@@ -224,8 +224,10 @@ One other component installs an objective and solves: `_probe_care_targets` in `
 Internally it branches on `bundle.strategy`:
 
 - **`minimize_cost`** — weighted objective dominated by `confidence[t] × (import_price[t] × import[t] − export_price[t] × export[t])`. Import and export penalties derived from `constraints` block are added.
-- **`minimize_consumption`** — lexicographic two-solve: first minimise total grid import (Phase 1), then minimise full net cost subject to the import bound found in Phase 1 (Phase 2). Phase 2 uses the same objective as `minimize_cost`, so export revenue and device wear are still optimised within the import constraint. If Phase 1 finds no solution there is no bound to lock and no variable values to read, so the lock is skipped, Phase 2 solves for cost alone, and `SolveResult.strategy_degraded` is set. The same flag is set when Phase 1 returns a time-limited incumbent: the lock is applied, but to an achievable volume rather than a proven minimum. Either way the schedule is published under the requested strategy name, and the flag is what says the strategy's guarantee was not delivered.
-- **`balanced`** — weighted combination of cost and self-sufficiency terms using `balanced_weights` from config.
+- **`minimize_consumption`** — lexicographic two-solve: first minimise total grid import, net of the normal-program import that heat stores save (Phase 1), then minimise full net cost subject to the bound on that same quantity found in Phase 1 (Phase 2). Phase 2 uses the same objective as `minimize_cost`, so export revenue and device wear are still optimised within the import constraint. If Phase 1 finds no solution there is no bound to lock and no variable values to read, so the lock is skipped, Phase 2 solves for cost alone, and `SolveResult.strategy_degraded` is set. The same flag is set when Phase 1 returns a time-limited incumbent: the lock is applied, but to an achievable volume rather than a proven minimum. Either way the schedule is published under the requested strategy name, and the flag is what says the strategy's guarantee was not delivered.
+- **`balanced`** — weighted combination of cost and self-sufficiency terms using `balanced_weights` from config. The self-sufficiency term is grid import net of the normal-program import that heat stores save.
+
+Heat store saved electricity is priced at the running minimum import price in all three strategies; see "Heat store boost and running minimum price" below.
 
 All three modes add:
 - Device wear terms from `device.objective_terms(t)` for each device
@@ -249,23 +251,21 @@ This enforces that at every time step, total production equals total consumption
 
 ## Thermal boiler and DHW tank dynamics
 
-`ThermalBoilerDevice` and the DHW portion of `CombiHeatPumpDevice` share the same first-order lumped-capacitance tank model. Tank temperature at each step is a decision variable bounded by the configured safety limits:
+`ThermalBoilerDevice` and the DHW portion of `CombiHeatPumpDevice` share the same tank model. Tank temperature at each step is a decision variable, held between the minimum temperature and the setpoint by explicit constraints:
 
 ```
-T_tank[t] ∈ [min_temp_c, max_temp_c]
+min_temp_c <= T_tank[t] <= setpoint_c
 ```
 
-The tank dynamics are modelled as a discrete-time energy balance. Let $V$ be the tank volume (litres), $c_p = 0.001163$ kWh/(litre·K) be the specific heat of water, and $L$ be the heat loss coefficient (kW/K):
+The variable itself is declared with 5 K of slack on either side; the hard limits are constraints rather than variable bounds so the dynamics cannot push past a tightened bound.
 
-$$T_{tank}[t] = T_{tank}[t-1] + \frac{\Delta t}{V \cdot c_p} \left( P_{heat}[t] - L \cdot (T_{tank}[t-1] - T_{amb}) \right)$$
+The tank dynamics are a constant-rate balance. Let $V$ be the tank volume (`volume_liters`), $c_p = 4186 / 3.6 \times 10^6$ kWh/(litre·K) the specific heat of water, and $C = V \cdot c_p$ the tank heat capacity in kWh/K:
 
-This is linearised by moving all $T_{tank}$ terms to the left:
+$$T_{tank}[t] = T_{tank}[t-1] - r_{cool} \cdot \Delta t + \frac{P_{el} \cdot \text{COP} \cdot \Delta t}{C} \cdot on[t]$$
 
-$$T_{tank}[t] - \alpha \cdot T_{tank}[t-1] = \frac{\Delta t}{V \cdot c_p} \cdot P_{heat}[t] + \beta_{loss}$$
+where $r_{cool}$ is `cooling_rate_k_per_hour` (standby losses and expected hot water draws together, independent of tank temperature), $P_{el}$ is `elec_power_kw` and COP is `cop` (`cop_dhw` for the combi heat pump). The initial condition $T_{tank}[-1]$ is `current_temp_c` from the MQTT sensor reading.
 
-where $\alpha = 1 - \Delta t \cdot L / (V \cdot c_p)$ is the heat retention factor and $\beta_{loss}$ encodes the ambient heat loss term. The initial condition uses `current_temp_c` from the MQTT sensor reading.
-
-The element/boiler is controlled by a binary variable `on[t]`. When on, `P_heat[t] = element_power_kw * cop`. A minimum run-time constraint (if `min_run_steps > 0`) links consecutive `on[t]` values via a Big-M constraint that requires at least `min_run_steps` of operation once switched on, preventing unrealistic short cycling.
+The heater is controlled by a binary variable `on[t]`; when on it draws `elec_power_kw`. A minimum run-time constraint (if `min_run_steps > 1`) requires at least `min_run_steps` consecutive steps of operation once switched on, preventing unrealistic short cycling.
 
 **Minimum run-time via a start sentinel** (used whenever `min_run_steps > 1`). A binary `start[t]` detects the off-to-on transition and propagates the run length forward:
 
@@ -288,7 +288,7 @@ on[t+τ]  >= start[t]   for τ in 1..min_run_steps-1, where t+τ < horizon
 `SpaceHeatingDevice` supports two modes configured via `SpaceHeatingConfig.mode`:
 
 - **On/off** — `hp_on[t] ∈ {0, 1}`. Heat output at step $t$ is `hp_on[t] * elec_power_kw * cop`. An optional `min_run_steps` constraint prevents frequent cycling.
-- **SOS2 (modulating)** — An SOS2 set allows the heat pump to operate at any power level between `min_power_fraction * elec_power_kw` and `elec_power_kw`, or be completely off. SOS2 encodes a piecewise linear function without additional binaries; only two adjacent breakpoint weights are non-zero at any feasible solution.
+- **Power stages (SOS2, modulating)** — configured through `stages`, a list of operating points with `elec_kw` and `cop`. Stage 0 is the zero-power off sentinel. One SOS2 set of weights per step interpolates between two adjacent stages, so the heat pump can run at any point on the piecewise linear power curve or be completely off. An `hp_on[t]` binary equal to the sum of the non-sentinel weights carries the minimum run constraint.
 
 **Degree-days path (no BTM):** When `building_thermal` is not configured, a single constraint requires the total heat delivered over the horizon to meet the demand `heat_needed_kwh`:
 
@@ -341,6 +341,72 @@ These are hard bounds in the solver, not soft constraints. If the comfort band c
 **Linearity.** The BTM introduces no bilinear or non-linear terms. `P_heat[t]` is itself a linear expression in existing HP variables (binary × affine, or SOS2), and the ODE coefficients $\alpha$, $\beta_{out}$, $\Delta t / C$ are all scalar constants computed before the model is built. The BTM adds exactly $H$ continuous variables and $H$ equality constraints.
 
 **Outdoor forecast format.** The `outdoor_temp_forecast_c` list is already at 15-minute resolution — one value per solver step. No resampling is applied. If the list is shorter than the active horizon, `add_constraints()` raises `ValueError` with the device name, which the solve loop catches and logs before skipping the solve.
+
+## Heat store boost and running minimum price
+
+`HeatStoreDevice` (`mimirheim/devices/heat_store.py`) models a heat store: a DHW tank, pool or hot tub whose normal program keeps it at the normal setpoint without mimirheim. Unlike `ThermalBoilerDevice`, it never replaces that program. It plans only the boost, extra heating on top of the normal program up to `boost.max_temp_c`, and values boost heat as the normal-program electricity it saves. The device adds no binary variables, so solve time stays close to the solve without it.
+
+**State in energy, not temperature.** The state variable is `heat[t]`, the boost heat held above the normal setpoint at the end of step $t$, in kWh_th, with $C = V \cdot 4186 / 3.6 \times 10^6$ kWh/K the heat capacity of `volume_liters` of water (the same constant as the thermal boiler). Temperature is derived from it for the bounds and the outputs. Keeping the state in kWh lets a store that reports a state of charge instead of a temperature (a phase-change store) be added later without changing the model.
+
+**Losses.** The standby loss is linear in temperature: at temperature $T$ the store cools at `drift_k_per_hour` $\cdot (T - T_{amb}) / (T_{set} - T_{amb})$ K/h, so `drift_k_per_hour` is the idle cooldown at the normal setpoint. The loss splits into two parts:
+
+- `standby_kwh` $= C \cdot$ `drift_k_per_hour` $\cdot \Delta t$: the heat lost per step at the normal setpoint. Without boost heat, the normal program supplies it. This part is what boost heat can replace.
+- `loss_frac` $=$ `drift_k_per_hour` $/ (T_{set} - T_{amb}) \cdot \Delta t$: the fraction of boost heat lost per step on top of that, because the store runs hotter than the normal setpoint.
+
+**Heat balance.** For each step, with `prior` the starting boost heat at $t = 0$ and `heat[t-1]` after:
+
+```
+heat[t] = (1 - loss_frac) * prior + boost.cop * dt * boost_kw[t] - consumed[t] - gap_fill[t]
+consumed[t] <= standby_kwh
+Σ_t gap_fill[t] <= gap_kwh
+heat[t] <= max(C * (boost.max_temp_c - normal_setpoint_c), no_boost_heat[t])
+```
+
+- `boost_kw[t]` is the electrical boost power in kW, continuous in `[0, boost.power_kw]`, and enters the power balance as `net_power(t) = -boost_kw[t]`.
+- `consumed[t]` is boost heat used up in place of the normal program. It is bounded by `standby_kwh` because that is all the normal program would have supplied in the step: hot water draws are not modelled, so the standby loss is the only demand boost heat can displace.
+- `gap_fill[t]` is boost heat delivered into the gap below the normal setpoint present at solve start (`gap_kwh` $= C \cdot \max(0, T_{set} - T_0)$). After a large draw the normal program would buy that heat now, so filling it with PV surplus counts as saved electricity at once.
+- The loss is taken on the heat held at the start of the step (explicit step), so heat delivered and consumed within the same step is not charged a loss.
+- The ceiling is `max(boost.max_temp_c, temperature with no boost)`. A store that starts above the limit, for example after a legionella cycle, stays feasible, and no boost is possible until it has cooled below the limit. `no_boost_heat[t]` comes from `boost_off_trajectory`, the same simulation that drives the heat credit baseline.
+
+Heat present at solve start above the normal setpoint counts as boost heat. Its value is a constant the plan cannot change.
+
+**Saved electricity.** The device reports, through `saved_electricity_kwh(t)`, the normal-program electricity saved per step in kWh_e, `(consumed[t] + gap_fill[t]) / normal_cop`, and through `terminal_saved_electricity_kwh(ctx)` the saving still held at the last step, `heat[T-1] / normal_cop`. It does not know about prices or strategies: `ObjectiveBuilder` prices these quantities, so pricing lives in one place for all strategies.
+
+**Running minimum price.** Saved electricity at step $t$ is priced at
+
+$$p_{ref}[t] = \max\left(0, \min_{s \le t} c[s] \cdot p^{im}[s]\right)$$
+
+and the end-of-horizon quantity at $p_{ref}$ of the last step. `running_min_reference_prices` in `mimirheim/core/confidence.py` precomputes the curve from the inputs, so it adds no variables or constraints. Each coefficient is divided by `dt`, for the same reason as the terminal SoC value: the quantities are energies, while the grid terms are price times power per step.
+
+The price is not the import price at step $t$. Physically, boost heat displaces normal-program electricity as soon as the store loses heat, but forcing that timing in the model needs a binary per step. Without it the plan is free to choose when boost heat is consumed, and at the real price it would choose the evening peak: it would heat from the grid at a loss, expecting a saving that cannot happen. The running minimum is the largest non-increasing curve that never exceeds the confidence-weighted price, so consuming early is never worth less than consuming late, and the free choice of the plan coincides with the physical behaviour. The minimum is taken over the confidence-weighted price, the same scaling as the grid cost terms, so it never increases when confidence rises later in the horizon. The clamp at zero keeps heat from being worth less than nothing. See `mimirheim/docs/adr/0001-boost-heat-valued-at-running-minimum-price.md` for the options considered.
+
+For the same reason the heat store does not expose `terminal_soc_var`: that hook values stored energy at the mean import price, which re-creates the peak exploit at the horizon edge.
+
+Two consequences of the curve. Boost heat is undervalued when prices rise after it is stored; the rolling horizon softens this, because every solve restarts the running minimum from the current step. And one step with a negative price or zero confidence sets $p_{ref}$ to zero for the rest of the horizon, so after that step boost heat is worth nothing in the cost objective.
+
+**Strategies.**
+
+- `minimize_cost` and `minimize_consumption` Phase 2 subtract the priced terms from the cost.
+- `minimize_consumption` Phase 1 minimises grid import net of import avoided: `Σ_t import[t] - avoided`, where `avoided` is a non-negative variable tied by an equality constraint to the same per-step and end-of-horizon quantities divided by `dt`, unpriced. The Phase 2 lock is `Σ_t import[t] - avoided <= I* + 1e-4`, the same quantity Phase 1 minimised. Locking grid import alone would let Phase 2 drop a PV boost for export revenue and undo Phase 1. The variable and the constraint exist only when a heat store is configured.
+- `balanced` subtracts `sw ×` the same volume credit in the self-sufficiency part, scaled like the import term it offsets; an unscaled volume credit would count the saving twice. The priced terms are added unscaled, the same as the battery end-of-horizon value.
+
+A grid boost at a positive price never lowers the import volume while `boost.cop <= normal_cop`: one kWh imported saves at most one kWh of normal-program import, and less once standby losses are counted. At `boost.cop == normal_cop` a boost consumed within the same step is a zero-gain tie. The configuration does not enforce `boost.cop <= normal_cop`; above it, Phase 1 boosts from the grid because the import volume really drops.
+
+**Heat credit and dispatch gain.** `SolveResult.heat_credit_eur` (computed by `_compute_heat_credit` in `model_builder.py`) is the planned saved electricity priced at $p_{ref}$ as in the objective, end of horizon included, minus the same value for the boost-off trajectory. The boost-off baseline uses up starting heat at the standby loss, so heat present at solve start does not inflate the credit. The EUR value is $p_{ref} \cdot$ kWh; the objective's division by `dt` is a per-step power scaling and does not apply here. The credit uses confidence-weighted prices, while `naive_cost_eur` and `optimised_cost_eur` use raw prices.
+
+The `min_dispatch_gain_eur` check computes the gain as `naive_cost_eur - (optimised_cost_eur - heat_credit_eur)`. The naive baseline has every heat store boost off. Without the credit, a profitable boost that forgoes some export revenue would make the plan look less worthwhile and trigger idling. When the plan is suppressed, the boost goes off with the rest of the storage dispatch: `kw` is 0, `on` is false, and `planned_temp_c` follows the boost-off trajectory.
+
+**Outputs.** Each step of the schedule carries `kw` (the net power, so a 2 kW boost is `-2.0`), `on` and `planned_temp_c`. `on` is true when the planned boost power is at least `boost.on_threshold_pct` percent of `boost.power_kw`, with a 1e-6 kW allowance so a plan exactly at the threshold reads as on. `planned_temp_c` is derived from `heat[t]`, less any part of the starting gap the boost has not filled by step $t$; it assumes an unfilled gap stays open, because the normal program is not modelled.
+
+**Approximations.**
+
+- A relay runs the element at full power or not at all. The model plans a continuous power; the `on` flag rounds it at `boost.on_threshold_pct`.
+- Hot water draws are not modelled. `drift_k_per_hour` covers standby loss only. A draw shows up in the next temperature reading, and the next solve plans from it.
+- The ambient temperature around the store is constant over the horizon.
+- The normal program's consumption stays in the base load forecast. Boost heat that displaces it lowers real consumption without lowering the forecast, which biases battery and export planning slightly.
+- Boost heat is undervalued when prices rise after it is stored (see above).
+- A heat pump boost has no minimum run time or short-cycling protection. The compressor must be protected in the device or in the automation that follows the plan.
+- At the last horizon step the solver may skip part of the standby loss, because the end-of-horizon value ties with consuming the heat. The tie is objective-neutral.
 
 ## Full-charge target probe (two-phase witness solve)
 

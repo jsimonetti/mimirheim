@@ -540,3 +540,76 @@ def test_a_dip_during_the_hold_starts_it_over(monkeypatch) -> None:
     current["now"] = t0 + timedelta(hours=2, minutes=30)
     state.update("mimir/input/battery/bat/soc", 9.8)  # only 1h30 since the dip
     assert "bat" not in state._last_full_utc
+
+
+# ---------------------------------------------------------------------------
+# Heat store temperature
+# ---------------------------------------------------------------------------
+
+_HS_TOPIC = "mimir/input/heat_store/dhw/temp_c"
+
+
+def _heat_store_config() -> MimirheimConfig:
+    """Minimal config with one battery and one heat store with a derived temperature topic."""
+    from mimirheim.config.schema import HeatStoreConfig
+
+    base = _make_config()
+    return MimirheimConfig(
+        mqtt=base.mqtt,
+        outputs=base.outputs,
+        grid=base.grid,
+        batteries=base.batteries,
+        heat_stores={
+            "dhw": HeatStoreConfig.model_validate({
+                "volume_liters": 200.0,
+                "normal_cop": 2.5,
+                "normal_setpoint_c": 50.0,
+                "ambient_c": 18.0,
+                "drift_k_per_hour": 0.8,
+                "boost": {"power_kw": 3.0, "max_temp_c": 65.0},
+            })
+        },
+    )
+
+
+def test_heat_store_temp_topic_blocks_readiness_until_first_message() -> None:
+    """The solve waits for the heat store temperature, and the reason names the topic."""
+    state = ReadinessState(_heat_store_config())
+    _feed_all(state)
+    assert not state.is_ready()
+    assert _HS_TOPIC in state.not_ready_reason()
+
+    state.update(_HS_TOPIC, 47.5)
+    assert state.is_ready()
+
+
+def test_heat_store_temp_reaches_the_solve_bundle() -> None:
+    """The latest temperature is carried in bundle.heat_store_inputs for that store."""
+    state = ReadinessState(_heat_store_config())
+    _feed_all(state)
+    state.update(_HS_TOPIC, 47.5)
+    state.update(_HS_TOPIC, 51.0)
+
+    bundle = state.snapshot()
+    assert bundle.heat_store_inputs["dhw"].current_temp_c == pytest.approx(51.0)
+
+
+def test_heat_store_temp_has_no_staleness_window(monkeypatch) -> None:
+    """A temperature received long ago still satisfies readiness: the retained value is authoritative."""
+    from mimirheim.core import readiness as readiness_module
+
+    long_ago = datetime.now(UTC) - timedelta(days=7)
+
+    class _Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return long_ago
+
+    state = ReadinessState(_heat_store_config())
+    monkeypatch.setattr(readiness_module, "datetime", _Clock)
+    state.update(_HS_TOPIC, 47.5)
+    monkeypatch.undo()
+
+    _feed_all(state)
+    assert state.is_ready()
+    assert state.snapshot().heat_store_inputs["dhw"].current_temp_c == pytest.approx(47.5)

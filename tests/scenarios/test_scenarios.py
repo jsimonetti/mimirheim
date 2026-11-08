@@ -69,6 +69,7 @@ def test_golden_scenario(
     assert result.naive_cost_eur == pytest.approx(golden.naive_cost_eur, abs=1e-6)
     assert result.optimised_cost_eur == pytest.approx(golden.optimised_cost_eur, abs=1e-6)
     assert result.soc_credit_eur == pytest.approx(golden.soc_credit_eur, abs=1e-6)
+    assert result.heat_credit_eur == pytest.approx(golden.heat_credit_eur, abs=1e-6)
 
     # Compare schedule step-by-step.
     assert len(result.schedule) == len(golden.schedule)
@@ -78,14 +79,13 @@ def test_golden_scenario(
         assert step.grid_export_kw == pytest.approx(g_step.grid_export_kw, abs=1e-4)
         assert set(step.devices.keys()) == set(g_step.devices.keys())
         for name, setpoint in step.devices.items():
-            assert setpoint.type == g_step.devices[name].type
-            assert setpoint.kw == pytest.approx(
-                g_step.devices[name].kw, abs=1e-4
-            ), (
+            g_dev = g_step.devices[name]
+            assert setpoint.type == g_dev.type
+            assert setpoint.kw == pytest.approx(g_dev.kw, abs=1e-4), (
                 f"step={step.t} device={name!r}: "
-                f"{setpoint.kw} != {g_step.devices[name].kw}"
+                f"{setpoint.kw} != {g_dev.kw}"
             )
-            g_soc = g_step.devices[name].soc_kwh
+            g_soc = g_dev.soc_kwh
             if g_soc is None:
                 assert setpoint.soc_kwh is None, (
                     f"step={step.t} device={name!r}: "
@@ -95,4 +95,21 @@ def test_golden_scenario(
                 assert setpoint.soc_kwh == pytest.approx(g_soc, abs=1e-4), (
                     f"step={step.t} device={name!r}: "
                     f"{setpoint.soc_kwh} != {g_soc}"
+                )
+            # Heat store fields: absent in the golden means the result must not
+            # carry them either. A plain comparison covers on, which is exact.
+            assert setpoint.on == g_dev.on, (
+                f"step={step.t} device={name!r}: "
+                f"on {setpoint.on} != {g_dev.on}"
+            )
+            g_temp = g_dev.planned_temp_c
+            if g_temp is None:
+                assert setpoint.planned_temp_c is None, (
+                    f"step={step.t} device={name!r}: "
+                    f"gained a planned temperature of {setpoint.planned_temp_c}"
+                )
+            else:
+                assert setpoint.planned_temp_c == pytest.approx(g_temp, abs=1e-4), (
+                    f"step={step.t} device={name!r}: "
+                    f"{setpoint.planned_temp_c} != {g_temp}"
                 )

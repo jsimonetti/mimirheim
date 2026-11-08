@@ -2931,3 +2931,196 @@ def test_soc_ratchet_hold_bounds() -> None:
         SocRatchetConfig(enabled=True, hold_hours=-0.25)
     with pytest.raises(ValidationError):
         SocRatchetConfig(enabled=True, hold_hours=24.25)
+
+
+# ---------------------------------------------------------------------------
+# HeatStoreConfig validation
+# ---------------------------------------------------------------------------
+
+
+def _heat_store_data(**overrides: object) -> dict:
+    base: dict = {
+        "volume_liters": 200.0,
+        "normal_cop": 2.5,
+        "normal_setpoint_c": 50.0,
+        "ambient_c": 18.0,
+        "drift_k_per_hour": 0.8,
+        "boost": {"power_kw": 3.0, "max_temp_c": 65.0},
+    }
+    base.update(overrides)
+    return base
+
+
+def test_heat_store_minimal_config_valid() -> None:
+    """A heat store with only required fields validates; boost.cop defaults to 1.0."""
+    from mimirheim.config.schema import HeatStoreConfig
+
+    cfg = HeatStoreConfig.model_validate(_heat_store_data())
+    assert cfg.boost.cop == 1.0
+    assert cfg.boost.power_kw == 3.0
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["volume_liters", "normal_cop", "drift_k_per_hour"],
+)
+@pytest.mark.parametrize("value", [0.0, -1.0])
+def test_heat_store_rejects_non_positive_quantities(field: str, value: float) -> None:
+    """Physical quantities on the heat store must be strictly positive."""
+    from mimirheim.config.schema import HeatStoreConfig
+
+    with pytest.raises(ValidationError):
+        HeatStoreConfig.model_validate(_heat_store_data(**{field: value}))
+
+
+@pytest.mark.parametrize("field", ["power_kw", "cop"])
+@pytest.mark.parametrize("value", [0.0, -1.0])
+def test_heat_store_rejects_non_positive_boost_quantities(field: str, value: float) -> None:
+    """Boost power and boost COP must be strictly positive."""
+    from mimirheim.config.schema import HeatStoreConfig
+
+    boost = {"power_kw": 3.0, "max_temp_c": 65.0, field: value}
+    with pytest.raises(ValidationError):
+        HeatStoreConfig.model_validate(_heat_store_data(boost=boost))
+
+
+@pytest.mark.parametrize("ambient_c", [50.0, 55.0])
+def test_heat_store_rejects_ambient_at_or_above_setpoint(ambient_c: float) -> None:
+    """ambient_c >= normal_setpoint_c leaves no temperature difference to drive losses."""
+    from mimirheim.config.schema import HeatStoreConfig
+
+    with pytest.raises(ValidationError):
+        HeatStoreConfig.model_validate(_heat_store_data(ambient_c=ambient_c))
+
+
+@pytest.mark.parametrize("max_temp_c", [50.0, 45.0])
+def test_heat_store_rejects_boost_max_at_or_below_setpoint(max_temp_c: float) -> None:
+    """normal_setpoint_c >= boost.max_temp_c leaves no room to boost."""
+    from mimirheim.config.schema import HeatStoreConfig
+
+    boost = {"power_kw": 3.0, "max_temp_c": max_temp_c}
+    with pytest.raises(ValidationError):
+        HeatStoreConfig.model_validate(_heat_store_data(boost=boost))
+
+
+def test_heat_store_rejects_unknown_fields() -> None:
+    """Unknown fields are rejected on the heat store and on its boost block."""
+    from mimirheim.config.schema import HeatStoreConfig
+
+    with pytest.raises(ValidationError):
+        HeatStoreConfig.model_validate(_heat_store_data(setpoint_c=55.0))
+    boost = {"power_kw": 3.0, "max_temp_c": 65.0, "min_run_steps": 4}
+    with pytest.raises(ValidationError):
+        HeatStoreConfig.model_validate(_heat_store_data(boost=boost))
+
+
+def test_heat_store_temp_topic_derived_when_inputs_omitted() -> None:
+    """inputs.topic_current_temp derives to {prefix}/input/heat_store/{name}/temp_c."""
+    from mimirheim.config.schema import MimirheimConfig
+
+    raw = _base_no_outputs()
+    raw["heat_stores"] = {"dhw": _heat_store_data()}
+    config = MimirheimConfig.model_validate(raw)
+    assert config.heat_stores["dhw"].inputs.topic_current_temp == "mimir/input/heat_store/dhw/temp_c"
+
+
+def test_heat_store_explicit_temp_topic_overrides_derivation() -> None:
+    """An explicit inputs.topic_current_temp is kept as configured."""
+    from mimirheim.config.schema import MimirheimConfig
+
+    raw = _base_no_outputs()
+    raw["heat_stores"] = {
+        "dhw": _heat_store_data(inputs={"topic_current_temp": "ha/sensor/dhw_temp/state"}),
+    }
+    config = MimirheimConfig.model_validate(raw)
+    assert config.heat_stores["dhw"].inputs.topic_current_temp == "ha/sensor/dhw_temp/state"
+
+
+def test_heat_store_on_threshold_defaults_to_50_pct() -> None:
+    """boost.on_threshold_pct defaults to 50."""
+    from mimirheim.config.schema import HeatStoreConfig
+
+    cfg = HeatStoreConfig.model_validate(_heat_store_data())
+    assert cfg.boost.on_threshold_pct == 50.0
+
+
+@pytest.mark.parametrize("pct", [0.1, 100.0])
+def test_heat_store_on_threshold_accepts_values_in_range(pct: float) -> None:
+    """boost.on_threshold_pct accepts any value in (0, 100]."""
+    from mimirheim.config.schema import HeatStoreConfig
+
+    boost = {"power_kw": 3.0, "max_temp_c": 65.0, "on_threshold_pct": pct}
+    cfg = HeatStoreConfig.model_validate(_heat_store_data(boost=boost))
+    assert cfg.boost.on_threshold_pct == pct
+
+
+@pytest.mark.parametrize("pct", [0.0, -10.0, 100.1])
+def test_heat_store_on_threshold_rejects_values_out_of_range(pct: float) -> None:
+    """boost.on_threshold_pct outside (0, 100] is rejected."""
+    from mimirheim.config.schema import HeatStoreConfig
+
+    boost = {"power_kw": 3.0, "max_temp_c": 65.0, "on_threshold_pct": pct}
+    with pytest.raises(ValidationError):
+        HeatStoreConfig.model_validate(_heat_store_data(boost=boost))
+
+
+def test_heat_store_on_off_topic_derived_when_outputs_omitted() -> None:
+    """outputs.on_off derives to {prefix}/output/heat_store/{name}/on."""
+    from mimirheim.config.schema import MimirheimConfig
+
+    raw = _base_no_outputs()
+    raw["heat_stores"] = {"dhw": _heat_store_data()}
+    config = MimirheimConfig.model_validate(raw)
+    assert config.heat_stores["dhw"].outputs.on_off == "mimir/output/heat_store/dhw/on"
+
+
+def test_heat_store_explicit_on_off_topic_overrides_derivation() -> None:
+    """An explicit outputs.on_off is kept as configured."""
+    from mimirheim.config.schema import MimirheimConfig
+
+    raw = _base_no_outputs()
+    raw["heat_stores"] = {"dhw": _heat_store_data(outputs={"on_off": "ha/switch/dhw_boost/set"})}
+    config = MimirheimConfig.model_validate(raw)
+    assert config.heat_stores["dhw"].outputs.on_off == "ha/switch/dhw_boost/set"
+
+
+def test_heat_store_outputs_reject_unknown_fields() -> None:
+    """Unknown fields in the outputs block are rejected."""
+    from mimirheim.config.schema import HeatStoreConfig
+
+    with pytest.raises(ValidationError):
+        HeatStoreConfig.model_validate(_heat_store_data(outputs={"on": "x"}))
+
+
+def test_heat_store_inputs_cannot_be_disabled() -> None:
+    """The temperature input is required: inputs: null is rejected."""
+    from mimirheim.config.schema import HeatStoreConfig
+
+    with pytest.raises(ValidationError):
+        HeatStoreConfig.model_validate(_heat_store_data(inputs=None))
+
+
+def test_heat_store_inputs_reject_unknown_fields() -> None:
+    """Unknown fields in the inputs block are rejected."""
+    from mimirheim.config.schema import HeatStoreConfig
+
+    with pytest.raises(ValidationError):
+        HeatStoreConfig.model_validate(_heat_store_data(inputs={"topic_temp": "x"}))
+
+
+def test_heat_store_name_must_be_unique_across_sections() -> None:
+    """A heat store may not share its name with another device."""
+    from mimirheim.config.schema import MimirheimConfig
+
+    raw = _base_no_outputs()
+    raw["heat_stores"] = {"dhw": _heat_store_data()}
+    raw["thermal_boilers"] = {
+        "dhw": {
+            "volume_liters": 200.0,
+            "elec_power_kw": 2.0,
+            "setpoint_c": 60.0,
+            "cooling_rate_k_per_hour": 2.0,
+        }
+    }
+    with pytest.raises(ValidationError):
+        MimirheimConfig.model_validate(raw)

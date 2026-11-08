@@ -6,7 +6,7 @@ How the engineering skills should consume this repo's domain documentation when 
 
 - **`CONTEXT-MAP.md`** at the repo root: it points at one `CONTEXT.md` per modeled context. Read each one relevant to the topic.
 - **`docs/adr/`** at the repo root (system-wide decisions), if it exists.
-- **`<package>/docs/adr/`**: context-scoped ADRs. Currently only `mimirheim_shared/docs/adr/` exists.
+- **`<package>/docs/adr/`**: context-scoped ADRs. Currently `mimirheim_shared/docs/adr/` and `mimirheim/docs/adr/` exist.
 
 If any of these files don't exist, proceed silently. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill creates them lazily when terms or decisions actually get resolved.
 
@@ -17,8 +17,9 @@ If any of these files don't exist, proceed silently. Don't flag their absence; d
 ├── CONTEXT-MAP.md
 ├── docs/adr/                     ← system-wide decisions (not created yet)
 ├── mimirheim/
-│   ├── CONTEXT.md                ← solver/device domain (not modeled yet)
+│   ├── CONTEXT.md                ← solver/device domain (partially modeled: heat stores)
 │   └── docs/adr/
+│       └── 0001-boost-heat-valued-at-running-minimum-price.md
 ├── mimirheim_helpers/
 │   ├── CONTEXT.md                ← individual helper domains (not modeled yet)
 │   └── docs/adr/

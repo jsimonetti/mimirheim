@@ -55,6 +55,7 @@ from mimirheim.core.bundle import (
     CombiHeatPumpInputs,
     DeferrableWindow,
     EvInputs,
+    HeatStoreInputs,
     HybridInverterInputs,
     PowerForecastStep,
     PriceStep,
@@ -194,6 +195,11 @@ class ReadinessState:
         for tb_cfg in config.thermal_boilers.values():
             if tb_cfg.inputs is not None:
                 self._sensor_topics.add(tb_cfg.inputs.topic_current_temp)
+
+        # Heat store current temperature: presence-only sensor check. The
+        # temperature is always required; there is no opt-out.
+        for hs_cfg in config.heat_stores.values():
+            self._sensor_topics.add(hs_cfg.inputs.topic_current_temp)
 
         # Space heating demand (plan 26): presence-only sensor check.
         # When BTM is also configured, the indoor temp and outdoor forecast
@@ -717,6 +723,16 @@ class ReadinessState:
                     current_temp_c=temp_entry[0],
                 )
 
+            # Heat store inputs: current store temperature.
+            heat_store_inputs: dict[str, HeatStoreInputs] = {}
+            for name, cfg in self._config.heat_stores.items():
+                temp_entry = self._entries.get(cfg.inputs.topic_current_temp)
+                if temp_entry is None:
+                    continue
+                heat_store_inputs[name] = HeatStoreInputs(
+                    current_temp_c=temp_entry[0],
+                )
+
             # Space heating inputs (plan 26): demand + optional BTM fields.
             space_heating_inputs: dict[str, SpaceHeatingInputs] = {}
             for name, cfg in self._config.space_heating_hps.items():
@@ -794,6 +810,7 @@ class ReadinessState:
                 deferrable_start_times=deferrable_start_times,
                 hybrid_inverter_inputs=hybrid_inverter_inputs,
                 thermal_boiler_inputs=thermal_boiler_inputs,
+                heat_store_inputs=heat_store_inputs,
                 space_heating_inputs=space_heating_inputs,
                 combi_hp_inputs=combi_hp_inputs,
             )

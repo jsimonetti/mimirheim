@@ -454,6 +454,31 @@ def parse_thermal_boiler_temp(payload: bytes | str) -> float:
         ) from exc
 
 
+def parse_heat_store_temp(payload: bytes | str) -> float:
+    """Parse a heat store temperature payload.
+
+    The payload must be a plain numeric string or a JSON number representing
+    the current store temperature in degrees Celsius. Used for the
+    ``inputs.topic_current_temp`` topic declared in a ``HeatStoreConfig``.
+
+    Args:
+        payload: Raw MQTT payload from the store temperature sensor topic.
+
+    Returns:
+        Current store temperature as a float in degrees Celsius.
+
+    Raises:
+        ValueError: If the payload cannot be parsed as a number.
+    """
+    text = _decode(payload).strip()
+    try:
+        return float(text)
+    except ValueError as exc:
+        raise ValueError(
+            f"Heat store temperature payload is not a valid number: {text!r}"
+        ) from exc
+
+
 def parse_space_heating_demand(payload: bytes | str) -> float:
     """Parse a space heating demand payload.
 

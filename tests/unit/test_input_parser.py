@@ -11,6 +11,7 @@ import pytest
 from mimirheim.io.input_parser import (
     parse_battery_inputs,
     parse_datetime,
+    parse_heat_store_temp,
     parse_power_forecast,
     parse_price_steps,
     parse_strategy,
@@ -233,3 +234,20 @@ def test_parse_battery_care_rejects_malformed_json() -> None:
 
     with pytest.raises(ValueError):
         parse_battery_care(b"{nope")
+
+
+def test_parse_heat_store_temp_accepts_plain_number() -> None:
+    """A plain numeric payload parses to the store temperature in degrees C."""
+    assert parse_heat_store_temp(b"52.5") == pytest.approx(52.5)
+
+
+def test_parse_heat_store_temp_tolerates_whitespace() -> None:
+    """Surrounding whitespace is tolerated."""
+    assert parse_heat_store_temp(" 48 \n") == pytest.approx(48.0)
+
+
+@pytest.mark.parametrize("payload", [b"", b"warm", b'{"temp": 50}'])
+def test_parse_heat_store_temp_rejects_invalid_payload(payload: bytes) -> None:
+    """A payload that is not a number raises ValueError."""
+    with pytest.raises(ValueError):
+        parse_heat_store_temp(payload)

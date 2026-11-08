@@ -25,6 +25,7 @@ from mimirheim.core.bundle import (
     DeviceSetpoint,
     DeferrableWindow,
     EvInputs,
+    HeatStoreInputs,
     ScheduleStep,
     SolveBundle,
     SolveResult,
@@ -410,3 +411,129 @@ def test_idle_schedule_grid_balance_correct_with_hybrid_inverter() -> None:
         assert step.grid_import_kw == pytest.approx(1.0)
         assert step.grid_export_kw == pytest.approx(0.0)
 
+
+
+# ---------------------------------------------------------------------------
+# Heat store: heat credit in the gain and idle boost
+# ---------------------------------------------------------------------------
+
+
+def _heat_store_config(threshold: float) -> MimirheimConfig:
+    """A 200 L store at a 50 C setpoint with a 3 kW resistive boost."""
+    return MimirheimConfig.model_validate({
+        "mqtt": {"host": "localhost", "client_id": "test"},
+        "grid": {"import_limit_kw": 10.0, "export_limit_kw": 5.0},
+        "heat_stores": {
+            "dhw": {
+                "volume_liters": 200.0,
+                "normal_cop": 2.5,
+                "normal_setpoint_c": 50.0,
+                "ambient_c": 18.0,
+                "drift_k_per_hour": 0.8,
+                "boost": {"power_kw": 3.0, "max_temp_c": 65.0},
+            }
+        },
+        "objectives": {"min_dispatch_gain_eur": threshold},
+    })
+
+
+def _heat_store_bundle(temp_c: float) -> SolveBundle:
+    n = 4
+    return SolveBundle(
+        strategy="minimize_cost",
+        solve_time_utc=_NOW,
+        horizon_prices=[0.20] * n,
+        horizon_export_prices=[0.05] * n,
+        horizon_confidence=[1.0] * n,
+        pv_forecast=[4.0] * n,
+        base_load_forecast=[1.0] * n,
+        heat_store_inputs={"dhw": HeatStoreInputs(current_temp_c=temp_c)},
+    )
+
+
+def _heat_store_result(
+    naive_cost: float, optimised_cost: float, heat_credit: float
+) -> SolveResult:
+    """Four steps of a full 3 kW boost from PV surplus."""
+    schedule = [
+        ScheduleStep(
+            t=t,
+            grid_import_kw=0.0,
+            grid_export_kw=0.0,
+            devices={
+                "dhw": DeviceSetpoint(
+                    kw=-3.0, type="heat_store", on=True, planned_temp_c=53.0 + 3.0 * t
+                ),
+                "pv": DeviceSetpoint(kw=4.0, type="pv"),
+                "load": DeviceSetpoint(kw=-1.0, type="static_load"),
+            },
+        )
+        for t in range(4)
+    ]
+    return SolveResult(
+        strategy="minimize_cost",
+        objective_value=-0.1,
+        solve_status="optimal",
+        naive_cost_eur=naive_cost,
+        optimised_cost_eur=optimised_cost,
+        heat_credit_eur=heat_credit,
+        schedule=schedule,
+    )
+
+
+def test_heat_credit_lifts_a_profitable_boost_above_the_threshold() -> None:
+    """Raw gain 0.02 is below 0.10; with the 0.15 heat credit it is 0.17."""
+    config = _heat_store_config(threshold=0.10)
+    res = _heat_store_result(naive_cost=1.00, optimised_cost=0.98, heat_credit=0.15)
+
+    out = apply_gain_threshold(res, _heat_store_bundle(temp_c=50.0), config)
+
+    assert out is res
+    assert not out.dispatch_suppressed
+
+
+def test_heat_credit_turns_a_negative_raw_gain_into_a_suppressible_one() -> None:
+    """Boosting forgoes export revenue, so the raw gain is negative.
+
+    Raw gain -0.05 alone would bypass suppression. With the 0.08 heat credit
+    the gain is 0.03, below the 0.10 threshold, so the plan is idled.
+    """
+    config = _heat_store_config(threshold=0.10)
+    res = _heat_store_result(naive_cost=1.00, optimised_cost=1.05, heat_credit=0.08)
+
+    out = apply_gain_threshold(res, _heat_store_bundle(temp_c=50.0), config)
+
+    assert out.dispatch_suppressed
+
+
+def test_idle_schedule_switches_the_heat_store_boost_off() -> None:
+    config = _heat_store_config(threshold=0.10)
+    res = _heat_store_result(naive_cost=1.00, optimised_cost=0.99, heat_credit=0.0)
+
+    out = apply_gain_threshold(res, _heat_store_bundle(temp_c=50.0), config)
+
+    assert out.dispatch_suppressed
+    for step in out.schedule:
+        sp = step.devices["dhw"]
+        assert sp.type == "heat_store"
+        assert sp.kw == pytest.approx(0.0)
+        assert sp.on is False
+        # With the boost off a store at the setpoint stays there.
+        assert sp.planned_temp_c == pytest.approx(50.0)
+        # pv 4.0 - load 1.0, the boost no longer draws: all surplus exported.
+        assert step.grid_export_kw == pytest.approx(3.0)
+        assert step.grid_import_kw == pytest.approx(0.0)
+
+
+def test_idle_heat_store_temperature_follows_the_boost_off_cooling() -> None:
+    """A store starting at 60 C cools with the boost off instead of keeping the plan."""
+    config = _heat_store_config(threshold=0.10)
+    res = _heat_store_result(naive_cost=1.00, optimised_cost=0.99, heat_credit=0.0)
+
+    out = apply_gain_threshold(res, _heat_store_bundle(temp_c=60.0), config)
+
+    temps = [step.devices["dhw"].planned_temp_c for step in out.schedule]
+    assert all(t is not None for t in temps)
+    assert temps[0] < 60.0
+    assert all(a > b for a, b in zip(temps, temps[1:], strict=False))
+    assert temps[-1] > 50.0

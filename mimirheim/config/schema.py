@@ -112,8 +112,11 @@ class ObjectivesConfig(BaseModel):
             cost and self-sufficiency weights default to 1.0.
         min_dispatch_gain_eur: Minimum cost benefit in EUR required to dispatch
             storage devices. When the projected saving over the naive baseline
-            (base load covered by grid, storage idle) is below this value,
-            mimirheim publishes an idle schedule instead. Set to 0.0 (the default)
+            (base load covered by grid, storage idle, heat store boost off) is
+            below this value, mimirheim publishes an idle schedule instead. The
+            saving is ``naive_cost_eur - (optimised_cost_eur - heat_credit_eur)``,
+            so the value of a heat store boost counts towards it; battery
+            ``soc_credit_eur`` does not. Set to 0.0 (the default)
             to disable the check. Applies only to ``minimize_cost`` and
             ``balanced`` strategies. Has no effect when an EV with an active
             charge deadline is connected, or when a deferrable load has an
@@ -138,7 +141,10 @@ class ObjectivesConfig(BaseModel):
         ge=0.0,
         description=(
             "Minimum benefit in EUR over the naive baseline required for mimirheim to dispatch "
-            "storage. Below this threshold an idle schedule is published instead. "
+            "storage. The benefit is naive_cost_eur - (optimised_cost_eur - heat_credit_eur): "
+            "the value of a heat store boost counts, battery soc_credit_eur does not. "
+            "Below this threshold an idle schedule is published instead, with every heat "
+            "store boost off. "
             "0.0 (default) disables the check. Applies to minimize_cost and balanced only."
         ),
     )
@@ -2551,6 +2557,154 @@ class ThermalBoilerConfig(BaseModel):
             )
         return self
 
+
+class HeatStoreBoostConfig(BaseModel):
+    """Boost hardware of a heat store: the element or heat pump mode mimirheim may request.
+
+    Attributes:
+        power_kw: Electrical power of the boost in kW. The plan may request any
+            power between zero and this value in each step.
+        max_temp_c: Boost maximum temperature in degrees Celsius. The plan
+            never boosts the store above this temperature.
+        cop: Coefficient of performance of the boost. 1.0 for a resistive
+            element; above 1 for a heat pump PV mode.
+        on_threshold_pct: Planned boost power, as a percentage of
+            ``power_kw``, at or above which the published on/off flag is true.
+            A relay switches the element at full power or not at all, so this
+            sets how a partial-power step is rounded.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    power_kw: float = Field(gt=0, description="Electrical power of the boost in kW.")
+    max_temp_c: float = Field(description="Boost maximum temperature in °C.")
+    cop: float = Field(
+        gt=0,
+        default=1.0,
+        description="Coefficient of performance of the boost. 1.0 = resistive; above 1 = heat pump.",
+    )
+    on_threshold_pct: float = Field(
+        gt=0,
+        le=100,
+        default=50.0,
+        description=(
+            "Planned boost power, in percent of power_kw, at or above which the "
+            "on/off flag is true. Must be greater than 0 and at most 100."
+        ),
+    )
+
+
+class HeatStoreInputsConfig(BaseModel):
+    """MQTT input topic configuration for a heat store device.
+
+    Attributes:
+        topic_current_temp: MQTT topic publishing the current store temperature
+            in degrees Celsius. The payload must be a plain numeric string or
+            a JSON number. The topic must be retained so mimirheim receives the
+            most recent value on reconnect. The solve waits until it has
+            published once.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    topic_current_temp: str | None = Field(
+        default=None,
+        description=(
+            "MQTT topic publishing the current store temperature in °C, retained. "
+            "Defaults to '{mqtt.topic_prefix}/input/heat_store/{name}/temp_c' when not set."
+        ),
+    )
+
+
+class HeatStoreOutputsConfig(BaseModel):
+    """MQTT output topic configuration for a heat store device.
+
+    Attributes:
+        on_off: Topic to publish the boost on/off flag (``"true"`` or
+            ``"false"``), retained, for relay-switched elements. Always set:
+            defaults to ``"{mqtt.topic_prefix}/output/heat_store/{name}/on"``
+            when not provided explicitly.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    on_off: str | None = Field(
+        default=None,
+        description=(
+            "MQTT topic for the boost on/off boolean flag, retained. "
+            "Defaults to '{mqtt.topic_prefix}/output/heat_store/{name}/on' when not set."
+        ),
+    )
+
+
+class HeatStoreConfig(BaseModel):
+    """Configuration for a heat store: a water store that mimirheim can only boost.
+
+    A heat store (DHW tank, pool, hot tub) keeps its own normal program, which
+    heats it to the normal setpoint without mimirheim. Mimirheim plans only the
+    boost: extra heating on top of the normal program, up to
+    ``boost.max_temp_c``, when electricity is cheap. Unlike
+    ``ThermalBoilerConfig``, which replaces the heating program, a heat store
+    never takes it over.
+
+    Attributes:
+        volume_liters: Water volume of the store in litres. Converted to heat
+            capacity with the same water constant as thermal boilers.
+        normal_cop: Coefficient of performance of the normal program. Converts
+            boost heat into the normal-program electricity it saves.
+        normal_setpoint_c: Temperature in degrees Celsius to which the normal
+            program heats the store.
+        ambient_c: Temperature around the store in degrees Celsius. Heat
+            losses are proportional to the difference with this temperature.
+        drift_k_per_hour: Idle cooldown in K/hour at the normal setpoint,
+            standby loss only, excluding hot water draws.
+        boost: Boost hardware parameters.
+        inputs: MQTT input topics for the live store temperature. Always
+            present: the device cannot plan without a starting temperature.
+        outputs: MQTT output topics. The on/off topic is always derived, so
+            the flag is always published.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    volume_liters: float = Field(gt=0, description="Water volume of the store in litres.")
+    normal_cop: float = Field(
+        gt=0, description="Coefficient of performance of the normal program.",
+    )
+    normal_setpoint_c: float = Field(
+        description="Temperature in °C to which the normal program heats the store.",
+    )
+    ambient_c: float = Field(description="Temperature around the store in °C.")
+    drift_k_per_hour: float = Field(
+        gt=0,
+        description="Idle cooldown in K/hour at the normal setpoint, standby loss only (no draws).",
+    )
+    boost: HeatStoreBoostConfig = Field(description="Boost hardware parameters.")
+    inputs: HeatStoreInputsConfig = Field(
+        default_factory=HeatStoreInputsConfig,
+        description="MQTT input topic configuration for the live store temperature. Required: the solve waits for the first temperature message.",
+    )
+    outputs: HeatStoreOutputsConfig = Field(
+        default_factory=HeatStoreOutputsConfig,
+        description="MQTT output topic configuration for the boost on/off flag.",
+    )
+
+    @model_validator(mode="after")
+    def _validate_temp_order(self) -> "HeatStoreConfig":
+        """Validate ambient_c < normal_setpoint_c < boost.max_temp_c."""
+        if self.ambient_c >= self.normal_setpoint_c:
+            raise ValueError(
+                f"ambient_c ({self.ambient_c}) must be strictly less than "
+                f"normal_setpoint_c ({self.normal_setpoint_c})."
+            )
+        if self.normal_setpoint_c >= self.boost.max_temp_c:
+            raise ValueError(
+                f"normal_setpoint_c ({self.normal_setpoint_c}) must be strictly less "
+                f"than boost.max_temp_c ({self.boost.max_temp_c})."
+            )
+        return self
+
+
 class HeatingStage(BaseModel):
     """A single operating point on a heat pump's electrical-to-thermal power curve.
 
@@ -2863,6 +3017,7 @@ class MimirheimConfig(BaseModel):
     static_loads: dict[str, StaticLoadConfig] = Field(default_factory=dict)
     hybrid_inverters: dict[str, HybridInverterConfig] = Field(default_factory=dict)
     thermal_boilers: dict[str, ThermalBoilerConfig] = Field(default_factory=dict)
+    heat_stores: dict[str, HeatStoreConfig] = Field(default_factory=dict)
     space_heating_hps: dict[str, SpaceHeatingConfig] = Field(default_factory=dict)
     combi_heat_pumps: dict[str, CombiHeatPumpConfig] = Field(default_factory=dict)
     grid: GridConfig
@@ -2894,6 +3049,7 @@ class MimirheimConfig(BaseModel):
             *self.static_loads,
             *self.hybrid_inverters,
             *self.thermal_boilers,
+            *self.heat_stores,
             *self.space_heating_hps,
             *self.combi_heat_pumps,
         ]
@@ -3014,6 +3170,12 @@ class MimirheimConfig(BaseModel):
         for name, cfg in self.thermal_boilers.items():
             if cfg.inputs is not None and cfg.inputs.topic_current_temp is None:
                 cfg.inputs.topic_current_temp = _topics.thermal_boiler_temp_topic(p, name)
+
+        for name, cfg in self.heat_stores.items():
+            if cfg.inputs.topic_current_temp is None:
+                cfg.inputs.topic_current_temp = _topics.heat_store_temp_topic(p, name)
+            if cfg.outputs.on_off is None:
+                cfg.outputs.on_off = _topics.heat_store_on_off_topic(p, name)
 
         for name, cfg in self.space_heating_hps.items():
             if cfg.inputs is not None:

@@ -49,6 +49,7 @@ keeps the arithmetic true by construction:
     ``static_load``,
     ``deferrable_load``,
     ``thermal_boiler``,
+    ``heat_store``,
     ``space_heating_hp``,
     ``combi_heat_pump``     Consumption (part of house usage).
     anything else           Not broken out: negative ``kw`` counts as house
@@ -86,6 +87,7 @@ _LOAD_TYPES = frozenset(
         "static_load",
         "deferrable_load",
         "thermal_boiler",
+        "heat_store",
         "space_heating_hp",
         "combi_heat_pump",
     }

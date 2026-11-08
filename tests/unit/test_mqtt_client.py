@@ -167,6 +167,32 @@ class TestMultiTopicPrices:
         assert "b/prices" in subscribed_topics
 
 
+class TestHeatStoreTemperature:
+    def test_heat_store_temp_topic_is_dispatched_to_its_parser(self) -> None:
+        """The derived heat store temperature topic is parsed with parse_heat_store_temp."""
+        from mimirheim.config.schema import HeatStoreConfig
+        from mimirheim.io.input_parser import parse_heat_store_temp
+
+        config = MimirheimConfig(
+            mqtt=MqttConfig(host="localhost", client_id="test"),
+            grid=GridConfig(import_limit_kw=10.0, export_limit_kw=5.0),
+            heat_stores={
+                "dhw": HeatStoreConfig.model_validate({
+                    "volume_liters": 200.0,
+                    "normal_cop": 2.5,
+                    "normal_setpoint_c": 50.0,
+                    "ambient_c": 18.0,
+                    "drift_k_per_hour": 0.8,
+                    "boost": {"power_kw": 3.0, "max_temp_c": 65.0},
+                })
+            },
+        )
+        client = MqttClient(config, MagicMock(spec=ReadinessState), MagicMock(), MagicMock(), _CONFIG_PATH)
+
+        topic = config.heat_stores["dhw"].inputs.topic_current_temp
+        assert client._topic_handlers[topic] is parse_heat_store_temp
+
+
 class TestFaultLogging:
     """A failure on the paho network thread must be logged, not propagated."""
 

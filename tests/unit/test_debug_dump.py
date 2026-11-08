@@ -100,6 +100,12 @@ def _result() -> SolveResult:
                         on_off_active=True,
                         pv_is_curtailed=True,
                     ),
+                    "dhw": DeviceSetpoint(
+                        kw=-3.0,
+                        type="heat_store",
+                        on=True,
+                        planned_temp_c=52.5 + t,
+                    ),
                 },
             )
             for t in range(2)

@@ -1,0 +1,53 @@
+# Summer day with PV surplus, a battery and one heat store (DHW tank).
+#
+# PV peaks well above house load and battery charge power, and the midday
+# export price is near zero. The battery is too small to absorb the whole
+# surplus, so the solver should boost the heat store from surplus PV during
+# the day. Import prices stay positive all day, so the boost value (running
+# minimum import price / normal_cop) never exceeds the import price and the
+# solver should never boost from the grid. The battery starts nearly empty, so
+# the night load is imported at positive prices without a boost. The midday
+# export price has a slight V shape so no two surplus steps tie.
+
+mqtt:
+  host: localhost
+  client_id: mimir-test
+
+outputs:
+  schedule: mimir/schedule
+  current: mimir/current
+  last_solve: mimir/status
+  availability: mimir/status/availability
+
+grid:
+  import_limit_kw: 17.0
+  export_limit_kw: 17.0
+
+batteries:
+  bat:
+    capacity_kwh: 10.0
+    charge_segments:
+      - power_max_kw: 5.0
+        efficiency: 0.95
+    discharge_segments:
+      - power_max_kw: 5.0
+        efficiency: 0.95
+    wear_cost_eur_per_kwh: 0.005
+
+pv_arrays:
+  roof:
+    max_power_kw: 8.0
+
+static_loads:
+  house: {}
+
+heat_stores:
+  dhw:
+    volume_liters: 200.0
+    normal_cop: 2.5
+    normal_setpoint_c: 50.0
+    ambient_c: 18.0
+    drift_k_per_hour: 0.8
+    boost:
+      power_kw: 3.0
+      max_temp_c: 65.0
