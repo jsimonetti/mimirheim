@@ -31,6 +31,8 @@ def _config(
     wear_cost: float = 0.0,
     min_charge_kw: float | None = None,
     min_discharge_kw: float | None = None,
+    reduce_charge_above_soc_kwh: float | None = None,
+    reduce_charge_min_kw: float | None = None,
 ) -> EvConfig:
     return EvConfig(
         capacity_kwh=capacity_kwh,
@@ -40,6 +42,8 @@ def _config(
         wear_cost_eur_per_kwh=wear_cost,
         min_charge_kw=min_charge_kw,
         min_discharge_kw=min_discharge_kw,
+        reduce_charge_above_soc_kwh=reduce_charge_above_soc_kwh,
+        reduce_charge_min_kw=reduce_charge_min_kw,
     )
 
 
@@ -447,3 +451,171 @@ def test_ev_charge_only_can_still_idle_with_min_charge_kw() -> None:
 
     charge = ctx.solver.var_value(ev.charge_seg[0, 0])
     assert charge < 1e-6, f"charge-only charger cannot idle: charge={charge:.4f}"
+
+
+# ---------------------------------------------------------------------------
+# Charge derating (ev-charge-taper ticket 02)
+# ---------------------------------------------------------------------------
+
+
+def _config_with_charge_derating(
+    reduce_charge_above_soc_kwh: float,
+    reduce_charge_min_kw: float,
+    capacity_kwh: float = 40.0,
+    min_soc_kwh: float = 5.0,
+    charge_segs: list[EfficiencySegment] | None = None,
+    min_charge_kw: float | None = None,
+) -> EvConfig:
+    return _config(
+        capacity_kwh=capacity_kwh,
+        min_soc_kwh=min_soc_kwh,
+        charge_segs=charge_segs or [_seg(11.0)],
+        min_charge_kw=min_charge_kw,
+        reduce_charge_above_soc_kwh=reduce_charge_above_soc_kwh,
+        reduce_charge_min_kw=reduce_charge_min_kw,
+    )
+
+
+def test_ev_charge_derating_no_effect_below_threshold() -> None:
+    """Below reduce_charge_above_soc_kwh, delivered power is unaffected."""
+    ctx = _make_ctx(horizon=1)
+    cfg = _config_with_charge_derating(
+        reduce_charge_above_soc_kwh=30.0, reduce_charge_min_kw=2.0
+    )
+    ev = EvDevice(name="ev", config=cfg)
+    ev.add_variables(ctx)
+    ev.add_constraints(ctx, inputs=_inputs(soc_kwh=25.0), solve_time_utc=_now())
+
+    ctx.solver.set_objective_minimize(-ev.charge_seg[0, 0])
+    ctx.solver.solve()
+
+    charged = ctx.solver.var_value(ev.charge_seg[0, 0])
+    assert charged > 10.9, f"Expected ~11 kW below derating threshold, got {charged:.4f}"
+
+
+def test_ev_charge_derating_limits_power_near_full() -> None:
+    """Above reduce_charge_above_soc_kwh, delivered power is capped by the linear bound.
+
+    capacity=40, reduce_charge_above=30, reduce_charge_min=2, max=11:
+    slope = (2 - 11) / (40 - 30) = -0.9 kW/kWh
+    At soc_prev=35: ceiling = 11 + (-0.9) * (35 - 30) = 11 - 4.5 = 6.5 kW
+    """
+    ctx = _make_ctx(horizon=1)
+    cfg = _config_with_charge_derating(
+        reduce_charge_above_soc_kwh=30.0, reduce_charge_min_kw=2.0
+    )
+    ev = EvDevice(name="ev", config=cfg)
+    ev.add_variables(ctx)
+    ev.add_constraints(ctx, inputs=_inputs(soc_kwh=35.0), solve_time_utc=_now())
+
+    ctx.solver.set_objective_minimize(-ev.charge_seg[0, 0])
+    ctx.solver.solve()
+
+    charged = ctx.solver.var_value(ev.charge_seg[0, 0])
+    assert abs(charged - 6.5) < 0.01, (
+        f"Expected 6.5 kW charge at SOC=35 kWh (derating), got {charged:.4f}"
+    )
+
+
+def test_ev_charge_derating_reaches_target_sooner_than_undiscounted_plan() -> None:
+    """A target near capacity_kwh forces earlier charging when derating is configured.
+
+    Without derating the full 11 kW is available right up to capacity_kwh, so an
+    objective that prefers charging as late as possible (minimising sum(t * power))
+    can wait until the final steps. With derating active, the power available near
+    capacity_kwh is far lower, so the same objective is forced to shift charging to
+    earlier steps to still reach the target in time.
+    """
+    solve_time = _now()
+    horizon = 40  # 10 hours at 15-minute steps
+    window_latest = solve_time + timedelta(hours=10)
+
+    def _first_charging_step(derated: bool) -> int:
+        ctx = _make_ctx(horizon=horizon)
+        cfg = (
+            _config_with_charge_derating(
+                reduce_charge_above_soc_kwh=30.0, reduce_charge_min_kw=2.0
+            )
+            if derated
+            else _config(capacity_kwh=40.0, min_soc_kwh=5.0, charge_segs=[_seg(11.0)])
+        )
+        ev = EvDevice(name="ev", config=cfg)
+        ev.add_variables(ctx)
+        ev.add_constraints(
+            ctx,
+            inputs=_inputs(
+                soc_kwh=5.0, target_soc_kwh=38.0, window_latest=window_latest
+            ),
+            solve_time_utc=solve_time,
+        )
+        # Prefer charging as late as possible; only the reachability constraint
+        # and (when present) the derate ceiling force charging earlier.
+        obj = sum(-t * ev.charge_seg[t, 0] for t in ctx.T)
+        ctx.solver.set_objective_minimize(obj)
+        status = ctx.solver.solve()
+        assert status in ("optimal", "feasible")
+        assert ctx.solver.var_value(ev.soc[ctx.T[-1]]) >= 38.0 - 1e-6
+
+        for t in ctx.T:
+            if ctx.solver.var_value(ev.charge_seg[t, 0]) > 1e-3:
+                return t
+        raise AssertionError("expected at least one charging step")
+
+    first_step_plain = _first_charging_step(derated=False)
+    first_step_derated = _first_charging_step(derated=True)
+
+    assert first_step_derated < first_step_plain, (
+        f"derated plan should start charging earlier: derated starts at step "
+        f"{first_step_derated}, plain plan starts at step {first_step_plain}"
+    )
+
+
+def test_ev_min_charge_kw_floor_enforced_in_normal_derate_zone() -> None:
+    """Below the SOC where the derate ceiling crosses min_charge_kw, the floor still holds.
+
+    capacity=40, reduce_charge_above=30, reduce_charge_min=2, max=11, min_charge_kw=4:
+    at soc_prev=25 (below reduce_charge_above_soc_kwh) the ceiling is 11 kW, well
+    above the 4 kW floor, so the normal all-or-nothing floor must still apply.
+    """
+    ctx = _make_ctx(horizon=1)
+    cfg = _config_with_charge_derating(
+        reduce_charge_above_soc_kwh=30.0,
+        reduce_charge_min_kw=2.0,
+        min_charge_kw=4.0,
+    )
+    ev = EvDevice(name="ev", config=cfg)
+    ev.add_variables(ctx)
+    ev.add_constraints(ctx, inputs=_inputs(soc_kwh=25.0), solve_time_utc=_now())
+
+    ctx.solver.add_constraint(ev.charge_seg[0, 0] >= 0.1)
+    ctx.solver.add_constraint(ev.charge_seg[0, 0] <= 3.9)
+    status = ctx.solver.solve()
+    assert status == "infeasible", (
+        "charge in (0, min_charge_kw) must be infeasible in the normal zone"
+    )
+
+
+def test_ev_min_charge_kw_floor_relaxed_in_derated_zone() -> None:
+    """Where the derate ceiling falls below min_charge_kw, the floor is relaxed.
+
+    capacity=40, reduce_charge_above=30, reduce_charge_min=2, max=11, min_charge_kw=4:
+    slope = (2 - 11) / (40 - 30) = -0.9 kW/kWh
+    At soc_prev=38: ceiling = 11 - 0.9 * (38 - 30) = 3.8 kW, below the 4 kW floor.
+    A delivered power of 3.0 kW (below the floor, below the ceiling) must be feasible.
+    """
+    ctx = _make_ctx(horizon=1)
+    cfg = _config_with_charge_derating(
+        reduce_charge_above_soc_kwh=30.0,
+        reduce_charge_min_kw=2.0,
+        min_charge_kw=4.0,
+    )
+    ev = EvDevice(name="ev", config=cfg)
+    ev.add_variables(ctx)
+    ev.add_constraints(ctx, inputs=_inputs(soc_kwh=38.0), solve_time_utc=_now())
+
+    ctx.solver.add_constraint(ev.charge_seg[0, 0] == 3.0)
+    status = ctx.solver.solve()
+    assert status in ("optimal", "feasible"), (
+        "charge below min_charge_kw must be feasible in the derated zone"
+    )
+    assert abs(ctx.solver.var_value(ev.charge_seg[0, 0]) - 3.0) < 1e-6

@@ -1444,6 +1444,8 @@ class EvConfig(BaseModel):
             does not support discharging back to the home.
         wear_cost_eur_per_kwh: Degradation cost per kWh throughput.
         capabilities: Hardware capability flags. See EvCapabilitiesConfig.
+        reduce_charge_above_soc_kwh: SOC threshold above which charge is derated.
+        reduce_charge_min_kw: Minimum charge power at capacity_kwh when derated.
         outputs: MQTT output topic configuration. See EvOutputsConfig.
         inputs: MQTT input topics for live EV state readings.
     """
@@ -1476,6 +1478,26 @@ class EvConfig(BaseModel):
     capabilities: EvCapabilitiesConfig = Field(
         default_factory=EvCapabilitiesConfig,
         description="Hardware capability flags.",
+    )
+    reduce_charge_above_soc_kwh: float | None = Field(
+        default=None,
+        description=(
+            "SOC level in kWh above which max charge power begins to decrease "
+            "linearly to reduce_charge_min_kw at capacity_kwh. Must be strictly "
+            "between min_soc_kwh and capacity_kwh. Must be set together with "
+            "reduce_charge_min_kw."
+        ),
+    )
+    reduce_charge_min_kw: float | None = Field(
+        default=None,
+        ge=0.0,
+        description=(
+            "Max charge power in kW at full capacity (capacity_kwh). The charge "
+            "power limit decreases linearly from the sum of charge_segments "
+            "power_max_kw values at reduce_charge_above_soc_kwh to this value at "
+            "capacity_kwh. Must be strictly greater than 0 and strictly less than "
+            "that sum. Must be set together with reduce_charge_above_soc_kwh."
+        ),
     )
     min_charge_kw: float | None = Field(
         default=None,
@@ -1510,6 +1532,40 @@ class EvConfig(BaseModel):
         default_factory=EvInputsConfig,
         description="MQTT input topic configuration for EV state readings. Defaults to an empty model so topics are derived with percent unit. Set to null to opt out of MQTT inputs entirely.",
     )
+
+    @model_validator(mode="after")
+    def _validate_derating(self) -> "EvConfig":
+        """Validate that charge derating fields are set together and within valid ranges.
+
+        Duplicates BatteryConfig._validate_derating rather than sharing a helper
+        (see TODO_DERATING_VALIDATOR_DRIFT.md for the planned reconvergence). The
+        "max charge power" here is sum(charge_segments.power_max_kw), since
+        EvConfig has no single max_charge_kw field.
+        """
+        max_charge_kw = sum(s.power_max_kw for s in self.charge_segments)
+
+        charge_set = (
+            self.reduce_charge_above_soc_kwh is not None,
+            self.reduce_charge_min_kw is not None,
+        )
+        if charge_set[0] != charge_set[1]:
+            raise ValueError(
+                "reduce_charge_above_soc_kwh and reduce_charge_min_kw must be "
+                "set together or both left as None."
+            )
+        if self.reduce_charge_above_soc_kwh is not None:
+            if not (self.min_soc_kwh < self.reduce_charge_above_soc_kwh < self.capacity_kwh):
+                raise ValueError(
+                    f"reduce_charge_above_soc_kwh ({self.reduce_charge_above_soc_kwh}) "
+                    f"must be strictly between min_soc_kwh ({self.min_soc_kwh}) and "
+                    f"capacity_kwh ({self.capacity_kwh})."
+                )
+            if not (0.0 < self.reduce_charge_min_kw < max_charge_kw):
+                raise ValueError(
+                    f"reduce_charge_min_kw ({self.reduce_charge_min_kw}) must be "
+                    f"strictly between 0 and max_charge_kw ({max_charge_kw})."
+                )
+        return self
 
     @property
     def has_exchange_mode_output(self) -> bool:

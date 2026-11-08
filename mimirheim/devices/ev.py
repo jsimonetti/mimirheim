@@ -98,6 +98,42 @@ def _deadline_to_step(dt_value: datetime, solve_time: datetime, dt_hours: float)
     return int(delta_hours / dt_hours + 1e-9) - 1
 
 
+def charge_derate_line(config: EvConfig) -> tuple[float, float] | None:
+    """Return the charge ceiling line ``(slope, intercept)`` or None.
+
+    The ceiling on total charge power in kW at start-of-step SOC ``s`` is
+    ``slope * s + intercept``. Shared by the solver constraint and the
+    deliverability clamp so the two cannot diverge.
+    """
+    if config.reduce_charge_above_soc_kwh is None:
+        return None
+    max_charge_kw = sum(s.power_max_kw for s in config.charge_segments)
+    slope = (config.reduce_charge_min_kw - max_charge_kw) / (
+        config.capacity_kwh - config.reduce_charge_above_soc_kwh
+    )
+    return slope, max_charge_kw - slope * config.reduce_charge_above_soc_kwh
+
+
+def max_charge_energy_kwh(config: EvConfig, soc_start_kwh: float, dt_hours: float) -> float:
+    """Return the most energy the solver can store in one step, in kWh.
+
+    The power cap is the full segment power, or the derate line at
+    start-of-step SOC when that is lower, filled highest-efficiency segment
+    first (the energy-maximising allocation). Does not apply the
+    ``capacity_kwh`` limit; callers cap the resulting SOC.
+    """
+    line = charge_derate_line(config)
+    remaining_kw = sum(s.power_max_kw for s in config.charge_segments)
+    if line is not None:
+        remaining_kw = min(remaining_kw, line[0] * soc_start_kwh + line[1])
+    stored_kwh = 0.0
+    for seg in sorted(config.charge_segments, key=lambda s: s.efficiency, reverse=True):
+        kw = min(seg.power_max_kw, max(remaining_kw, 0.0))
+        stored_kwh += kw * seg.efficiency * dt_hours
+        remaining_kw -= kw
+    return stored_kwh
+
+
 class EvDevice:
     """Models an EV charger with optional V2H discharge as a MILP sub-problem.
 
@@ -138,6 +174,11 @@ class EvDevice:
         # state. active[t] is 1 when the charger runs at step t and 0 when it
         # is at rest. See _needs_active_binary and add_constraints.
         self._active: dict[int, Any] = {}
+        # Populated only when min_charge_kw must be relaxed inside the charge
+        # derating zone. 1 when start-of-step SOC is far enough into the
+        # derated zone that the ceiling is below min_charge_kw. See
+        # _needs_derate_floor_relaxation and add_constraints.
+        self._derate_floor_relaxed: dict[int, Any] = {}
         self._dt: float = 0.25
         # Set to True by add_constraints when the vehicle is plugged in.
         # Used by terminal_soc_var to determine whether the SOC variable
@@ -218,6 +259,17 @@ class EvDevice:
             for t in ctx.T:
                 self._active[t] = ctx.solver.add_var(lb=0.0, ub=1.0, integer=True)
 
+        # derate_floor_relaxed[t]: region-indicator binary, 1 when start-of-step
+        # SOC is far enough into the derated zone that the ceiling itself falls
+        # below min_charge_kw, 0 otherwise. Declared only when the floor would
+        # otherwise conflict with the ceiling. See IMPLEMENTATION_DETAILS.md §8,
+        # subsection "EV charge derating floor relaxation".
+        if self._needs_derate_floor_relaxation():
+            for t in ctx.T:
+                self._derate_floor_relaxed[t] = ctx.solver.add_var(
+                    lb=0.0, ub=1.0, integer=True
+                )
+
     def _needs_active_binary(self) -> bool:
         """Return True when a minimum power floor requires an explicit idle state.
 
@@ -239,6 +291,24 @@ class EvDevice:
                 and self.config.min_discharge_kw is not None
             )
         return self.config.min_charge_kw is not None
+
+    def _needs_derate_floor_relaxation(self) -> bool:
+        """Return True when the derate ceiling can fall below min_charge_kw.
+
+        Only relevant when charge derating and min_charge_kw are both
+        configured, and only matters when the ceiling at capacity_kwh
+        (reduce_charge_min_kw) is actually below the floor — otherwise the
+        floor and the ceiling never conflict and the normal all-or-nothing
+        floor already behaves correctly everywhere.
+
+        Returns:
+            True if add_variables should declare the region-indicator binary.
+        """
+        return (
+            self.config.reduce_charge_above_soc_kwh is not None
+            and self.config.min_charge_kw is not None
+            and self.config.min_charge_kw > self.config.reduce_charge_min_kw
+        )
 
     def add_constraints(
         self,
@@ -393,6 +463,15 @@ class EvDevice:
             # (active[t])" for why mode[t] alone cannot express these and for
             # the constraint shapes below (V2H-with-both-floors,
             # charge-only-with-a-floor, and at-most-one-floor-on-V2H).
+            # relaxed[t]: 0 in the normal zone (floor below applies as-is), 1
+            # once the derate ceiling has fallen below min_charge_kw (floor
+            # subtracted out below, see the region-indicator Big-M constraints
+            # added after this loop). .get(t, 0) defaults to the "always
+            # normal zone" constant 0 when _needs_derate_floor_relaxation() is
+            # False, so configs without this interaction keep today's floor
+            # shape unchanged.
+            relaxed = self._derate_floor_relaxed.get(t, 0)
+
             if t in self._active:
                 if has_v2h:
                     ctx.solver.add_constraint(
@@ -404,7 +483,7 @@ class EvDevice:
                     ctx.solver.add_constraint(
                         total_charge
                         >= self.config.min_charge_kw
-                        * (self.mode[t] + self._active[t] - 1)
+                        * (self.mode[t] + self._active[t] - 1 - relaxed)
                     )
                     ctx.solver.add_constraint(
                         total_discharge
@@ -416,18 +495,63 @@ class EvDevice:
                         total_charge <= max_charge_kw * self._active[t]
                     )
                     ctx.solver.add_constraint(
-                        total_charge >= self.config.min_charge_kw * self._active[t]
+                        total_charge
+                        >= self.config.min_charge_kw * (self._active[t] - relaxed)
                     )
             elif has_v2h:
                 if self.config.min_charge_kw is not None:
                     ctx.solver.add_constraint(
-                        total_charge >= self.config.min_charge_kw * self.mode[t]
+                        total_charge
+                        >= self.config.min_charge_kw * (self.mode[t] - relaxed)
                     )
                 if self.config.min_discharge_kw is not None:
                     ctx.solver.add_constraint(
                         total_discharge
                         >= self.config.min_discharge_kw * (1 - self.mode[t])
                     )
+
+        # Power derating near full capacity: linear charge power reduction
+        # evaluated against start-of-step SOC, identical in shape to the
+        # Battery device's charge derating. See IMPLEMENTATION_DETAILS.md §8,
+        # subsection "Power derating near SOC extremes" for the two-point
+        # derivation and why start-of-step SOC.
+        derate_line = charge_derate_line(self.config)
+        if derate_line is not None:
+            slope_c, rhs_c = derate_line
+            for t in ctx.T:
+                soc_prev = inputs.soc_kwh if t == 0 else self.soc[t - 1]
+                total_charge = sum(
+                    self.charge_seg[t, i]
+                    for i in range(len(self.config.charge_segments))
+                )
+                # total_charge[t], in kW, may not exceed the ceiling line
+                # evaluated at soc_prev; slack (non-binding) below the
+                # threshold since rhs_c then exceeds max_charge_kw.
+                ctx.solver.add_constraint(total_charge - slope_c * soc_prev <= rhs_c)
+
+        # Region-indicator binary linking derate_floor_relaxed[t] to start-of-step
+        # SOC: 1 once the ceiling at soc_prev has fallen below min_charge_kw, 0
+        # below that point. soc_break is the SOC at which the ceiling line
+        # crosses min_charge_kw. See IMPLEMENTATION_DETAILS.md §8, subsection
+        # "EV charge derating floor relaxation" for the Big-M derivation.
+        if self._needs_derate_floor_relaxation():
+            soc_break = (
+                (self.config.min_charge_kw - rhs_c) / slope_c
+            )
+            # big_m bounds the largest possible gap between soc_prev and
+            # soc_break, so the inactive side of each Big-M pair is always slack.
+            big_m = self.config.capacity_kwh - self.config.min_soc_kwh
+            for t in ctx.T:
+                soc_prev = inputs.soc_kwh if t == 0 else self.soc[t - 1]
+                relaxed = self._derate_floor_relaxed[t]
+                # relaxed[t]=0 forces soc_prev <= soc_break (normal zone);
+                # relaxed[t]=1 forces soc_prev >= soc_break (relaxed zone).
+                ctx.solver.add_constraint(
+                    soc_prev - soc_break <= big_m * relaxed
+                )
+                ctx.solver.add_constraint(
+                    soc_break - soc_prev <= big_m * (1 - relaxed)
+                )
 
         # Target SOC window constraint: a hard lower bound on soc[window_step],
         # not a penalty, because a partially-charged vehicle that cannot
