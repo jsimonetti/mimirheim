@@ -920,7 +920,7 @@ def _avg_discharge_efficiency(
 
     Returns:
         A scalar efficiency in (0, 1]. Returns 1.0 when neither model is
-        provided (charge-only devices or unconfigured EVs).
+        provided.
     """
     if segments:
         total_kw = sum(s.power_max_kw for s in segments)
@@ -974,6 +974,9 @@ def _compute_soc_credit(
     cell figure back to AC, which is what makes the credit comparable with
     ``optimised_cost_eur``.
 
+    A charge-only EV charger (no ``discharge_segments``) is not storage from
+    the household's point of view and is left out, as is an unplugged EV.
+
     For a battery or an EV charger the single discharge efficiency already
     spans the whole cell-to-AC path. A hybrid inverter splits that path into
     a cell-level ``battery_discharge_efficiency`` and a separate
@@ -1020,6 +1023,10 @@ def _compute_soc_credit(
         ev_cfg = config.ev_chargers.get(name)
         terminal_soc = _terminal_soc_kwh(schedule, name)
         if ev_cfg is None or terminal_soc is None:
+            continue
+        # A charge-only EV (no V2H) can never return energy to the house, so
+        # what it charges is consumption, like a deferrable load, not storage.
+        if not ev_cfg.discharge_segments:
             continue
         discharge_eff = _avg_discharge_efficiency(
             ev_cfg.discharge_segments,

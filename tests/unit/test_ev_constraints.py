@@ -179,6 +179,37 @@ def test_ev_no_discharge_without_discharge_segments() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Terminal SOC value
+# ---------------------------------------------------------------------------
+
+
+def test_ev_charge_only_has_no_terminal_soc_var() -> None:
+    """A plugged-in charge-only EV must not expose a terminal SOC variable.
+
+    The terminal value prices stored energy at the average import price
+    because it can displace grid import later. A charge-only car can never
+    return energy to the house, so valuing its SOC would reward charging past
+    the target whenever the price is below the horizon average.
+    """
+    ctx = _make_ctx()
+    ev = EvDevice(name="ev", config=_config(discharge_segs=[]))
+    ev.add_variables(ctx)
+    ev.add_constraints(ctx, inputs=_inputs(available=True), solve_time_utc=_now())
+
+    assert ev.terminal_soc_var(ctx) is None
+
+
+def test_ev_v2h_has_terminal_soc_var() -> None:
+    """A plugged-in V2H EV keeps its terminal SOC variable at the last step."""
+    ctx = _make_ctx()
+    ev = EvDevice(name="ev", config=_config(discharge_segs=[_seg(7.4)]))
+    ev.add_variables(ctx)
+    ev.add_constraints(ctx, inputs=_inputs(available=True), solve_time_utc=_now())
+
+    assert ev.terminal_soc_var(ctx) is ev.soc[ctx.T[-1]]
+
+
+# ---------------------------------------------------------------------------
 # Wear cost
 # ---------------------------------------------------------------------------
 

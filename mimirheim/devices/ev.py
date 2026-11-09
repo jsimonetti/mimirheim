@@ -443,26 +443,31 @@ class EvDevice:
     def terminal_soc_var(self, ctx: ModelContext) -> Any | None:
         """Return the solver variable for the vehicle's SOC at the last step.
 
-        Returns ``None`` when the vehicle is not plugged in. In that case the
-        SOC tracking constraints are absent, making the SOC variables free
-        (unconstrained). Attaching a terminal value to a free variable would
-        cause the solver to set it to an arbitrary extreme without any physical
-        meaning.
+        The terminal value prices each kWh retained at the end of the horizon
+        at the average import price, because a V2H-capable vehicle can
+        discharge it later to displace grid import. Without that value the
+        solver could drain a V2H vehicle near the end of the horizon.
 
-        When the vehicle is available (plugged in), the SOC at the last step
-        carries the same end-of-horizon value semantics as the battery: each
-        kWh retained avoids having to re-charge at the average import price
-        after the horizon ends. This is relevant for V2H-capable vehicles that
-        could otherwise be drained near the end of the horizon.
+        Returns ``None`` in two cases:
+
+        - The vehicle is not plugged in. The SOC tracking constraints are then
+          absent, making the SOC variables free (unconstrained). Attaching a
+          terminal value to a free variable would cause the solver to set it
+          to an arbitrary extreme without any physical meaning.
+        - The charger has no discharge segments (charge-only). Energy charged
+          into the vehicle can never return to the house, so it has no future
+          value to the household. Valuing it would reward charging beyond the
+          target whenever the price is below the horizon average. The target
+          SOC alone decides how much is charged.
 
         Args:
             ctx: The current solve context. Used to identify the last step.
 
         Returns:
-            The solver variable ``soc[T-1]`` if the vehicle is available,
-            otherwise ``None``.
+            The solver variable ``soc[T-1]`` if the vehicle is available and
+            V2H-capable, otherwise ``None``.
         """
-        if not self._available:
+        if not self._available or not self.config.discharge_segments:
             return None
         return self.soc.get(ctx.T[-1])
 

@@ -8,7 +8,7 @@ build_and_solve: what it guards is the ceiling model_builder picks per array,
 which is not visible from _compute_naive_cost alone.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -583,6 +583,87 @@ def test_soc_credit_skips_an_unavailable_ev() -> None:
     )
 
     assert credit == 0.0
+
+
+def test_soc_credit_skips_a_charge_only_ev() -> None:
+    """Energy charged into a car without V2H is consumption, not storage.
+
+    It can never be discharged to displace grid import, so it has no future
+    value to the household. Before the guard, an empty discharge segment list
+    fell back to an efficiency of 1.0 and credited the car above a battery.
+    """
+    config = MimirheimConfig.model_validate(
+        {
+            "mqtt": {"host": "localhost", "client_id": "test"},
+            "grid": {"import_limit_kw": 20.0, "export_limit_kw": 20.0},
+            "ev_chargers": {
+                "ev": {
+                    "capacity_kwh": 40.0,
+                    "charge_segments": [{"power_max_kw": 4.0, "efficiency": 0.95}],
+                }
+            },
+        }
+    )
+    bundle = _storage_bundle().model_copy(update={"battery_inputs": {}})
+
+    credit = _compute_soc_credit(
+        bundle,
+        _one_step("ev", "ev_charger", kw=-4.0, soc_kwh=2.95),
+        config,
+    )
+
+    assert credit == 0.0
+
+
+def test_charge_only_ev_is_charged_to_its_target_and_not_credited() -> None:
+    """End to end: the reproduction from issue #209.
+
+    Two hours at 0.30 EUR/kWh, then two at 0.10, with a charge-only car that
+    needs 10 kWh before the end of the horizon. The car must be charged with
+    exactly the energy it needs, in the cheap hours, and contribute nothing to
+    soc_credit_eur. Valuing the terminal SOC drove the solver to charge 22 kWh,
+    and the credit then reported the extra energy as a saving.
+    """
+    t0 = datetime(2026, 11, 1, 18, tzinfo=timezone.utc)
+    horizon = 16
+    config = MimirheimConfig.model_validate(
+        {
+            "mqtt": {"host": "localhost", "client_id": "test"},
+            "grid": {"import_limit_kw": 17.0, "export_limit_kw": 17.0},
+            "static_loads": {"base": {}},
+            "ev_chargers": {
+                "car": {
+                    "capacity_kwh": 60.0,
+                    "min_soc_kwh": 5.0,
+                    "charge_segments": [{"power_max_kw": 11.0, "efficiency": 1.0}],
+                }
+            },
+        }
+    )
+    bundle = SolveBundle(
+        solve_time_utc=t0,
+        horizon_prices=[0.30] * 8 + [0.10] * 8,
+        horizon_export_prices=[0.05] * horizon,
+        horizon_confidence=[1.0] * horizon,
+        pv_forecast=[0.0] * horizon,
+        base_load_forecast=[0.5] * horizon,
+        ev_inputs={
+            "car": EvInputs(
+                soc_kwh=20.0,
+                available=True,
+                target_soc_kwh=30.0,
+                window_latest=t0 + timedelta(hours=4),
+            )
+        },
+    )
+
+    result = build_and_solve(bundle, config)
+
+    assert result.schedule[-1].devices["car"].soc_kwh == pytest.approx(30.0, abs=1e-4)
+    # All 10 kWh in the cheap hours: 0.5 kW base load at 0.30 for two hours,
+    # then 0.5 kW base load plus 10 kWh of charging at 0.10.
+    assert result.optimised_cost_eur == pytest.approx(0.30 + 0.10 + 1.00, abs=1e-4)
+    assert result.soc_credit_eur == 0.0
 
 
 def test_soc_credit_of_a_battery_follows_the_solver_soc() -> None:
