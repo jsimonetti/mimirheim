@@ -12,7 +12,8 @@ renders the page from that dump pair, and holds every day against the solver.
 The case exercises every clipping path: a staged array whose forecast exceeds
 its highest register and dips below zero at night, a hybrid inverter whose
 panels exceed ``max_pv_kw``, and storage valued three ways (a battery, the
-hybrid, a plugged-in EV). The hybrid's forecast stays at or above zero: the
+hybrid, a plugged-in V2H EV), next to a charge-only EV that must not be valued
+as storage. The hybrid's forecast stays at or above zero: the
 core does not clip a negative one, and the solve comes out infeasible.
 """
 from __future__ import annotations
@@ -70,6 +71,11 @@ _CONFIG = {
             "discharge_segments": [{"power_max_kw": 7.0, "efficiency": 0.91}],
             "capabilities": {"v2h": True},
         },
+        # Charge-only: what it charges is consumption, never stored energy.
+        "van": {
+            "capacity_kwh": 40.0, "min_soc_kwh": 4.0,
+            "charge_segments": [{"power_max_kw": 7.0, "efficiency": 0.92}],
+        },
     },
     "static_loads": {"base": {}},
 }
@@ -107,7 +113,13 @@ def _bundle() -> SolveBundle:
         "base_load_forecast": [round(0.6 + 0.4 * (17 <= _local_hour(i) < 22), 3) for i in range(_STEPS)],
         "battery_inputs": {"battery": {"soc_kwh": 2.0}},
         "hybrid_inverter_inputs": {"hybrid": {"soc_kwh": 3.0, "pv_forecast_kw": panels}},
-        "ev_inputs": {"car": {"soc_kwh": 30.0, "available": True}},
+        "ev_inputs": {
+            "car": {"soc_kwh": 30.0, "available": True},
+            "van": {
+                "soc_kwh": 10.0, "available": True, "target_soc_kwh": 20.0,
+                "window_latest": (_T0 + timedelta(hours=10)).isoformat(),
+            },
+        },
     })
 
 
@@ -169,9 +181,13 @@ def test_each_days_baseline_is_the_solvers(solved) -> None:
 
 def test_the_days_stored_energy_adds_up_to_the_solvers_credit(solved) -> None:
     """What each day leaves in storage, summed, is the solver's soc_credit_eur:
-    same devices, same cell-side SOC, same discharge efficiencies, same price."""
+    same devices, same cell-side SOC, same discharge efficiencies, same price.
+    The charge-only van gains SOC but is consumption, so neither counts it."""
     _, _, result, payload = solved
     assert result.soc_credit_eur != 0.0
+    # Without this the van leaving its SOC alone would value it at zero on
+    # both sides, passing green while proving nothing about the exclusion.
+    assert result.schedule[-1].devices["van"].soc_kwh > 10.0
     total = sum(d["summary"]["stored"] for d in payload["days"])
     assert total == pytest.approx(result.soc_credit_eur, abs=1e-3)
 
