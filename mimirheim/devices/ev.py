@@ -457,8 +457,9 @@ class EvDevice:
         - The charger has no discharge segments (charge-only). Energy charged
           into the vehicle can never return to the house, so it has no future
           value to the household. Valuing it would reward charging beyond the
-          target whenever the price is below the horizon average. The target
-          SOC alone decides how much is charged.
+          target whenever the price is below the horizon average. Without the
+          terminal value, energy beyond the target is charged only when that
+          lowers the cost on its own, for example at a negative import price.
 
         Args:
             ctx: The current solve context. Used to identify the last step.
