@@ -64,15 +64,15 @@ ARG S6_OVERLAY_VERSION=3.2.3.2
 # nothing in this repository changed. Dependabot's `docker` ecosystem updates
 # these digests, so bumps become reviewable commits rather than silent drift.
 # ---------------------------------------------------------------------------
-FROM ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 AS uvbin
-FROM ghcr.io/hassio-addons/base:stable@sha256:e3624401ddd4941b20bf0273d3a1b3d4a0d9061f4034fa3e4722bcc38c8bb4b2 AS bashio
+FROM ghcr.io/astral-sh/uv:0.13.8@sha256:5cc1805e2426484abca4ad46ea783bab281fdb225fd82d8ce6d66a81254bac85 AS uvbin
+FROM ghcr.io/hassio-addons/base:stable@sha256:79fd58d9d7f2820e8b2e7d2b11a24e22b96ae7a48569af3372183592a1b22974 AS bashio
 
 # ---------------------------------------------------------------------------
 # Stage 1: deps-only venv — rebuilt only when pyproject.toml or uv.lock change.
 # Third-party packages are large; keeping them in a separate stage means a
 # source-only change never invalidates this cached layer.
 # ---------------------------------------------------------------------------
-FROM python:3.14-slim-bookworm@sha256:48b13b003dda20b16f9442b8475aa05fe21bf6579a8c881db92ffb4d8fd20f83 AS deps-builder
+FROM python:3.14-slim-bookworm@sha256:3fe1a0b6c2d6b2ebb572906cdabeca75aeb558c0c17db5ffefbcf8094871c32b AS deps-builder
 
 WORKDIR /build
 
@@ -157,7 +157,7 @@ RUN find /app/.venv/lib/python*/site-packages \
 # Stage 2: wheel builder — rebuilt on every source change, but produces only
 # a small wheel (~2 MB). No venv needed here; uv build is self-contained.
 # ---------------------------------------------------------------------------
-FROM python:3.14-slim-bookworm@sha256:48b13b003dda20b16f9442b8475aa05fe21bf6579a8c881db92ffb4d8fd20f83 AS wheel-builder
+FROM python:3.14-slim-bookworm@sha256:3fe1a0b6c2d6b2ebb572906cdabeca75aeb558c0c17db5ffefbcf8094871c32b AS wheel-builder
 
 WORKDIR /build
 
@@ -171,7 +171,7 @@ RUN --mount=from=uvbin,source=/uv,target=/usr/local/bin/uv \
 # ---------------------------------------------------------------------------
 # Stage 3: final image
 # ---------------------------------------------------------------------------
-FROM python:3.14-slim-bookworm@sha256:48b13b003dda20b16f9442b8475aa05fe21bf6579a8c881db92ffb4d8fd20f83
+FROM python:3.14-slim-bookworm@sha256:3fe1a0b6c2d6b2ebb572906cdabeca75aeb558c0c17db5ffefbcf8094871c32b
 
 ARG S6_OVERLAY_VERSION
 ARG TARGETARCH
