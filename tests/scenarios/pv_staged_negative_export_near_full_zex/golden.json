@@ -2,11 +2,11 @@
   "strategy": "minimize_cost",
   "strategy_degraded": false,
   "solve_time_utc": "2026-04-07T13:00:00Z",
-  "objective_value": -4.9866588699999985,
+  "objective_value": -4.98665887,
   "solve_status": "optimal",
   "dispatch_suppressed": false,
   "naive_cost_eur": 0.395,
-  "optimised_cost_eur": 0.00319999999999991,
+  "optimised_cost_eur": 0.003199999999999931,
   "soc_credit_eur": 0.011874999999999957,
   "schedule": [
     {
@@ -48,18 +48,18 @@
     },
     {
       "t": 1,
-      "grid_import_kw": 0.0011999999999985531,
+      "grid_import_kw": 0.0011999999999988975,
       "grid_export_kw": 0.0,
       "devices": {
         "bat": {
-          "kw": 0.048800000000001446,
+          "kw": 0.048800000000001106,
           "type": "battery",
           "power_limit_kw": null,
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
           "pv_is_curtailed": null,
-          "soc_kwh": 4.9239999999999995
+          "soc_kwh": 4.924
         },
         "solar_roof": {
           "kw": 0.0,
@@ -85,23 +85,23 @@
     },
     {
       "t": 2,
-      "grid_import_kw": 0.05,
+      "grid_import_kw": 0.0,
       "grid_export_kw": 0.0,
       "devices": {
         "bat": {
-          "kw": 0.0,
+          "kw": -0.32,
           "type": "battery",
           "power_limit_kw": null,
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
           "pv_is_curtailed": null,
-          "soc_kwh": 4.9239999999999995
+          "soc_kwh": 5.0
         },
         "solar_roof": {
-          "kw": 0.0,
+          "kw": 0.37,
           "type": "pv",
-          "power_limit_kw": 0.0,
+          "power_limit_kw": 0.37,
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,
@@ -122,11 +122,11 @@
     },
     {
       "t": 3,
-      "grid_import_kw": 0.0,
+      "grid_import_kw": 0.05,
       "grid_export_kw": 0.0,
       "devices": {
         "bat": {
-          "kw": -0.31999999999999995,
+          "kw": 0.0,
           "type": "battery",
           "power_limit_kw": null,
           "zero_exchange_active": null,
@@ -136,9 +136,9 @@
           "soc_kwh": 5.0
         },
         "solar_roof": {
-          "kw": 0.37,
+          "kw": 0.0,
           "type": "pv",
-          "power_limit_kw": 0.37,
+          "power_limit_kw": 0.0,
           "zero_exchange_active": null,
           "on_off_active": null,
           "loadbalance_active": null,

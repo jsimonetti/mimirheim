@@ -48,9 +48,10 @@ class RatelimitError(FetchError):
     Attributes:
         reset_at: UTC datetime after which the next request may be sent,
             as reported by the API in the ``ratelimit.retry-at`` field.
+            None when the API omits that field.
     """
 
-    def __init__(self, message: str, reset_at: datetime) -> None:
+    def __init__(self, message: str, reset_at: datetime | None) -> None:
         super().__init__(message)
         self.reset_at = reset_at
 
@@ -68,8 +69,9 @@ async def fetch_array(
 
     Calls the forecast.solar estimate endpoint for one array and returns the
     ``Estimate.watts`` dict with all keys converted to UTC-aware datetimes.
-    The forecast.solar library requests UTC timestamps from the API
-    (``time=utc``); the keys arrive as naive strings and are made aware here.
+    The forecast.solar library requests ISO 8601 timestamps from the API
+    (``time=iso8601``), so the keys carry the site's UTC offset and are
+    converted to UTC here.
 
     The caller is responsible for converting watts to kW and applying
     confidence decay.
@@ -95,7 +97,8 @@ async def fetch_array(
             The original exception is available as ``__cause__``.
         RatelimitError: If the API returns a 429 rate-limit response. This is
             a subclass of ``FetchError``. ``reset_at`` carries the UTC datetime
-            after which the next request may be sent.
+            after which the next request may be sent, or None if the API did
+            not report one.
     """
     kwargs: dict = dict(
         latitude=latitude,
@@ -110,17 +113,26 @@ async def fetch_array(
     try:
         async with ForecastSolar(**kwargs) as forecast:
             estimate = await forecast.estimate()
-            # The library calls the API with time=utc, so the keys are UTC
-            # timestamps represented as naive datetimes (no tzinfo). Attach
-            # UTC here so all downstream code works in aware datetimes.
+            # The library calls the API with time=iso8601, so the keys carry
+            # the site's UTC offset. astimezone() converts the instant; a
+            # replace(tzinfo=...) would relabel local time as UTC and shift
+            # the forecast by the offset. Naive keys are treated as UTC.
             return {
-                ts.replace(tzinfo=timezone.utc): w
+                (
+                    ts.astimezone(timezone.utc)
+                    if ts.tzinfo is not None
+                    else ts.replace(tzinfo=timezone.utc)
+                ): w
                 for ts, w in estimate.watts.items()
             }
     except ForecastSolarRatelimitError as exc:
         raise RatelimitError(
             f"Rate limit exceeded: {exc}",
-            reset_at=exc.reset_at,
+            reset_at=(
+                exc.reset_at.astimezone(timezone.utc)
+                if exc.reset_at is not None
+                else None
+            ),
         ) from exc
     except ForecastSolarConnectionError as exc:
         raise FetchError(f"Connection error: {exc}") from exc

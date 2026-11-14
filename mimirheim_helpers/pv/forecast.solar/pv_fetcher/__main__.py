@@ -150,10 +150,14 @@ class PvFetcherDaemon(HelperDaemon):
                 # The rate limit is shared across all arrays. Attempting further
                 # arrays would produce more 429 responses. Abort and return the
                 # reset time so the base class suppresses future triggers.
+                # Without a reported reset time no suppression is set; the
+                # next trigger retries.
                 logger.warning(
                     "forecast.solar rate limit exceeded; aborting fetch cycle. "
-                    "Rate limit resets at %s UTC.",
-                    exc.reset_at.strftime("%H:%M:%S"),
+                    "Rate limit resets at %s.",
+                    exc.reset_at.strftime("%H:%M:%S UTC")
+                    if exc.reset_at is not None
+                    else "an unknown time",
                 )
                 return CycleResult(suppress_until=exc.reset_at)
             except FetchError:

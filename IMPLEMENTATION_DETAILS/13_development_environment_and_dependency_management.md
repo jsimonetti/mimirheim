@@ -10,15 +10,15 @@ mimirheim uses [uv](https://github.com/astral-sh/uv) for environment and depende
 
 - Written in Rust — environment creation and dependency resolution are significantly faster than pip.
 - `uv sync` creates `.venv` in the project root and installs all dependencies from the lockfile in one command. No manual venv creation step.
-- Dependency groups (`dev-dependencies`) separate production and development dependencies cleanly.
+- Dependency groups (`[dependency-groups]`) separate production and development dependencies cleanly.
 - `uv run` executes commands inside the managed environment without requiring explicit activation.
 - `uv.lock` is cross-platform and safe to commit. It is the source of truth for the resolved dependency graph.
 
 ## Common commands
 
 ```bash
-# First-time setup — creates .venv and installs all dependencies
-uv sync
+# First-time setup — creates .venv and installs core, dev and all helper dependencies
+uv sync --all-extras
 
 # Add a production dependency (updates pyproject.toml and uv.lock)
 uv add mip
@@ -35,26 +35,13 @@ uv run python -m mimirheim --config config.yaml
 
 ## Dependency groups
 
-`pyproject.toml` separates runtime and development dependencies:
+[`pyproject.toml`](../pyproject.toml) is the single source for dependency declarations and version constraints. This section describes its structure, not its contents; consult the file for the current list and floors.
 
-```toml
-[project]
-dependencies = [
-    "mip>=1.14",
-    "pydantic>=2.13.4",
-    "paho-mqtt>=2.0",
-    "pyyaml>=6.0",
-]
-
-[tool.uv]
-dev-dependencies = [
-    "pytest>=8.0",
-    "amqtt>=0.11",
-    "pytest-asyncio>=0.23",
-]
-```
-
-The `dev-dependencies` group is installed by `uv sync` by default in a development checkout. In a production deployment, `uv sync --no-dev` installs only the runtime dependencies.
+- `[project] dependencies` holds the runtime dependencies of the core solver. `pip install mimirheim` installs only these.
+- `[project.optional-dependencies]` holds an extra per helper (some with database-specific variants such as `-postgres` and `-mysql`), plus a `helpers` extra that combines them. A helper's third-party dependencies are never pulled in by the core install.
+- `[dependency-groups] dev` holds test and lint tooling. `uv sync` installs it by default in a development checkout; `uv sync --no-dev` omits it, as the container build does.
+- `mimirheim_shared` is a uv workspace member (`[tool.uv.workspace]` and `[tool.uv.sources]`), declared as a regular runtime dependency of core.
+- `[tool.uv] constraint-dependencies` bounds transitive dependencies that are not imported directly, for example to keep the resolver off vulnerable releases.
 
 ## `.venv` management
 

@@ -10,7 +10,7 @@ Tests verify:
 - Rate limit errors (ForecastSolarRatelimitError) are re-raised as RatelimitError.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -36,7 +36,8 @@ def _make_mock_context(estimate: MagicMock) -> AsyncMock:
 
 @pytest.mark.asyncio
 async def test_fetch_array_returns_watts_dict() -> None:
-    # The API returns naive UTC datetimes; fetch_array attaches timezone.utc.
+    # Naive keys (older forecast_solar releases requested time=utc) are
+    # treated as UTC; fetch_array attaches timezone.utc.
     ts_naive = datetime(2026, 3, 30, 12, 0, 0)
     ts_utc = datetime(2026, 3, 30, 12, 0, 0, tzinfo=timezone.utc)
     mock_estimate = _make_mock_estimate({ts_naive: 3000})
@@ -54,6 +55,31 @@ async def test_fetch_array_returns_watts_dict() -> None:
 
     assert ts_utc in result
     assert result[ts_utc] == 3000
+
+
+@pytest.mark.asyncio
+async def test_fetch_array_converts_offset_timestamps_to_utc() -> None:
+    # forecast_solar >= 6 requests time=iso8601, so keys carry the site's UTC
+    # offset. 12:00+01:00 is 11:00 UTC; relabelling it as 12:00 UTC would shift
+    # the whole forecast an hour late.
+    cet = timezone(timedelta(hours=1))
+    mock_estimate = _make_mock_estimate({datetime(2026, 11, 14, 12, 0, 0, tzinfo=cet): 3000})
+    mock_ctx = _make_mock_context(mock_estimate)
+
+    with patch("pv_fetcher.fetcher.ForecastSolar", return_value=mock_ctx):
+        result = await fetch_array(
+            api_key=None,
+            latitude=52.37,
+            longitude=4.89,
+            declination=35,
+            azimuth=0,
+            kwp=5.0,
+        )
+
+    [(ts, watts)] = result.items()
+    assert ts.utcoffset() == timedelta(0)
+    assert (ts.hour, ts.minute) == (11, 0)
+    assert watts == 3000
 
 
 @pytest.mark.asyncio

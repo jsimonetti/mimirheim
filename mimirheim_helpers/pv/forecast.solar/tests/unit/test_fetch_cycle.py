@@ -173,6 +173,23 @@ def test_run_cycle_returns_reset_at_on_ratelimit() -> None:
     assert result.suppress_until == datetime(2026, 3, 31, 16, 0, 0, tzinfo=timezone.utc)
 
 
+def test_ratelimit_without_reset_at_aborts_without_suppression() -> None:
+    """A ratelimit with no known reset time aborts the cycle but sets no suppression."""
+    daemon = _make_daemon()
+    client = _mqtt_client()
+
+    with patch(
+        "pv_fetcher.__main__.asyncio.run",
+        side_effect=_close_coro_and_raise(
+            RatelimitError("rate limit exceeded", reset_at=None)
+        ),
+    ):
+        result = daemon._run_cycle(client)
+
+    assert result == CycleResult(suppress_until=None)
+    client.publish.assert_not_called()
+
+
 def test_generic_fetch_error_continues_to_next_array() -> None:
     """A non-ratelimit FetchError for one array must not abort the other."""
     daemon = _make_daemon()
