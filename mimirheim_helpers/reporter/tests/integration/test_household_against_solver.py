@@ -78,6 +78,8 @@ _CONFIG = {
         },
     },
     "static_loads": {"base": {}},
+    # 1.5 kWh over an hour; its window opens at 01:00, after the naive van.
+    "deferrable_loads": {"dishwasher": {"power_profile": [2.0, 1.5, 1.5, 1.0]}},
 }
 
 
@@ -113,6 +115,12 @@ def _bundle() -> SolveBundle:
         "base_load_forecast": [round(0.6 + 0.4 * (17 <= _local_hour(i) < 22), 3) for i in range(_STEPS)],
         "battery_inputs": {"battery": {"soc_kwh": 2.0}},
         "hybrid_inverter_inputs": {"hybrid": {"soc_kwh": 3.0, "pv_forecast_kw": panels}},
+        "deferrable_windows": {
+            "dishwasher": {
+                "earliest": (_T0 + timedelta(hours=3)).isoformat(),
+                "latest": (_T0 + timedelta(hours=20)).isoformat(),
+            },
+        },
         "ev_inputs": {
             "car": {"soc_kwh": 30.0, "available": True},
             "van": {
@@ -137,12 +145,14 @@ def _slice(bundle: SolveBundle, i0: int, i1: int) -> SolveBundle:
 
 
 def _without_van(bundle: SolveBundle) -> tuple[SolveBundle, MimirheimConfig]:
-    """The case without the charge-only van: no flexible load in the baseline,
-    so the baseline depends on the inputs only."""
+    """The case without the charge-only van and the dishwasher: no flexible
+    load in the baseline, so the baseline depends on the inputs only."""
     cfg = json.loads(json.dumps(_CONFIG))
     del cfg["ev_chargers"]["van"]
+    del cfg["deferrable_loads"]
     d = bundle.model_dump()
     del d["ev_inputs"]["van"]
+    d["deferrable_windows"] = {}
     return SolveBundle.model_validate(d), MimirheimConfig.model_validate(cfg)
 
 
@@ -208,25 +218,32 @@ def test_each_days_baseline_is_the_solvers(solved_without_van) -> None:
     assert total == pytest.approx(result.naive_cost_eur, abs=1e-3)
 
 
-def test_the_naive_van_charges_at_full_power_from_the_first_step(solved, solved_without_van) -> None:
-    """The van takes its planned energy at full power from the first step, in
-    the baseline as in the solver. That is all within the first day's night
-    hours, where there is no PV, so its cost adds to that day's baseline
-    unchanged, and the later days are the same as without the van."""
+def test_each_days_baseline_adds_the_solvers_naive_flexible_load(solved, solved_without_van) -> None:
+    """Each day's baseline is the input-only baseline plus the solver's own
+    naive flexible load in that day's steps: the van at full power from the
+    first step, the dishwasher from the first step of its window. Both fall in
+    night hours without PV, so their cost adds to the day unchanged."""
     bundle, config, result, payload = solved
     _, _, _, without = solved_without_van
     flex = _naive_flexible_load_kw(
         bundle, config, result.schedule, result.deferrable_recommended_starts, 0.25
     )
-    first_day = payload["days"][0]
-    # Guard the case: the van charges, and only within the first day's steps.
-    assert sum(flex) > 0.0
-    assert all(kw == 0.0 for kw in flex[first_day["i1"]:])
+    # Guard the case: the van starts at once at its full 7 kW, the dishwasher
+    # sits at its window's first step (step 12, 01:00 local) in the baseline,
+    # and the plan moved it, so a baseline that followed the plan would differ.
     assert flex[0] == pytest.approx(7.0)
-    van_eur = sum(kw * bundle.horizon_prices[t] * 0.25 for t, kw in enumerate(flex))
+    assert flex[12:16] == pytest.approx([2.0, 1.5, 1.5, 1.0])
+    assert "dishwasher" in result.deferrable_recommended_starts
+    planned = [-step.devices["dishwasher"].kw for step in result.schedule]
+    assert planned[12] != pytest.approx(2.0)
+    assert all(kw == 0.0 for kw in flex[16:])
     for day, base in zip(payload["days"], without["days"], strict=True):
-        extra = van_eur if day is first_day else 0.0
-        assert day["summary"]["naive"] == pytest.approx(base["summary"]["naive"] + extra, abs=1e-3)
+        extra = sum(
+            flex[t] * bundle.horizon_prices[t] * 0.25 for t in range(day["i0"], day["i1"])
+        )
+        assert day["summary"]["naive"] == pytest.approx(
+            base["summary"]["naive"] + extra, abs=1e-3
+        ), day["date"]
 
 
 def test_the_days_stored_energy_adds_up_to_the_solvers_credit(solved) -> None:

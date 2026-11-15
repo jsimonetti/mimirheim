@@ -67,7 +67,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable
-from datetime import datetime, tzinfo
+from datetime import UTC, datetime, tzinfo
 from typing import Any
 
 from reporter.metrics import (
@@ -182,7 +182,10 @@ def _build_payload(
         "has_storage": has_storage,
         "other_kwh": round(other_kwh, 3),
     }
-    days = _days(inp, schedule, splits, step_h, tz=tz, earlier=earlier)
+    days = _days(
+        inp, schedule, splits, step_h, tz=tz, earlier=earlier,
+        deferrable_starts=out.get("deferrable_recommended_starts") or {},
+    )
     return {**series, "summary": summary, "days": days}
 
 
@@ -194,6 +197,7 @@ def _days(
     *,
     tz: tzinfo | None,
     earlier: Iterable[tuple[dict[str, Any], dict[str, Any]]],
+    deferrable_starts: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Split the plan at local midnight into at most ``_MAX_DAYS`` days.
 
@@ -209,8 +213,9 @@ def _days(
     Money per day:
         - cash: the plan's grid cash flow over the day's steps, exactly the
           per-step terms of the solver's ``optimised_cost_eur``.
-        - ``naive``: the solver's no-storage baseline per step (base load minus
-          clipped PV, at the import or export price), so the days add up to
+        - ``naive``: the solver's no-storage baseline per step (base load plus
+          flexible loads run the naive way, minus clipped PV, at the import or
+          export price), so the days add up to
           the solver's own ``naive_cost_eur``. Deliberately not scaled to it:
           a mirror that drifts from the core should show, not be hidden.
         - ``stored``: the value of the energy the day leaves in storage for the
@@ -230,7 +235,7 @@ def _days(
     starts = [0] + [i for i in range(1, len(local)) if local[i].date() != local[i - 1].date()]
     ranges = list(zip(starts, [*starts[1:], len(schedule)], strict=True))[:_MAX_DAYS]
 
-    naive_steps = _naive_steps(inp, schedule, step_h)
+    naive_steps = _naive_steps(inp, schedule, step_h, deferrable_starts)
     avg_price = sum(_num(s.get("import_price_eur_per_kwh")) for s in schedule) / len(schedule)
     discharge = _discharge_path(inp)
     capacity = _storage_capacity_kwh(inp)
@@ -381,6 +386,7 @@ def _naive_steps(
     inp: dict[str, Any],
     schedule: list[dict[str, Any]],
     step_h: float,
+    starts: dict[str, Any] | None = None,
 ) -> list[float]:
     """The solver's no-storage baseline cost, step by step.
 
@@ -415,7 +421,7 @@ def _naive_steps(
         (hybrid_inputs[name]["pv_forecast_kw"], float(c["max_pv_kw"]), float(c["inverter_efficiency"]))
         for name, c in hybrids.items()
     ]
-    flexible = _naive_flexible_kw(inp, schedule, step_h)
+    flexible = _naive_flexible_kw(inp, schedule, step_h, starts or {})
     result = []
     for t, s in enumerate(schedule):
         pv = 0.0
@@ -432,11 +438,15 @@ def _naive_flexible_kw(
     inp: dict[str, Any],
     schedule: list[dict[str, Any]],
     step_h: float,
+    starts: dict[str, Any],
 ) -> list[float]:
     """AC power per step that flexible loads draw in the solver's naive
     baseline, as ``mimirheim.core.model_builder``'s ``_naive_flexible_load_kw``
     computes it: a plugged-in charge-only EV charges at full power from the
-    first step until its cell holds what the plan's last step holds."""
+    first step until its cell holds what the plan's last step holds; a
+    deferrable load with a recommended start (``starts``) runs its profile
+    from the first step of its window; any other deferrable load draws what
+    the plan draws."""
     cfg = (inp.get("config") or {}).get("ev_chargers") or {}
     load = [0.0] * len(schedule)
     if not schedule:
@@ -457,7 +467,40 @@ def _naive_flexible_kw(
             share = min(1.0, needed / per_step)
             load[t] += full_kw * share
             needed -= per_step * share
+    dl_cfg = (inp.get("config") or {}).get("deferrable_loads") or {}
+    windows = inp.get("deferrable_windows") or {}
+    names = {
+        name
+        for step in schedule
+        for name, sp in (step.get("devices") or {}).items()
+        if (sp or {}).get("type") == "deferrable_load"
+    }
+    solve = _parse_utc(inp.get("solve_time_utc"))
+    for name in names:
+        c, window = dl_cfg.get(name), windows.get(name)
+        earliest = _parse_utc((window or {}).get("earliest"))
+        if name in starts and c is not None and earliest is not None and solve is not None:
+            first = max(0, int((earliest - solve).total_seconds() / 3600.0 / step_h))
+            for i, kw in enumerate(c.get("power_profile") or []):
+                if first + i < len(load):
+                    load[first + i] += float(kw)
+            continue
+        for t, step in enumerate(schedule):
+            sp = (step.get("devices") or {}).get(name)
+            if sp is not None:
+                load[t] += max(0.0, -_num(sp.get("kw")))
     return load
+
+
+def _parse_utc(value: Any) -> datetime | None:
+    """An ISO 8601 timestamp from a dump as an aware UTC datetime, or None."""
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
 def _deliverable_kw(array: dict[str, Any]) -> float:
