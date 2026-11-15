@@ -32,52 +32,80 @@ _AMS = ZoneInfo("Europe/Amsterdam")
 _T0 = datetime(2026, 11, 2, 7, 0, tzinfo=UTC)  # 08:00 Amsterdam
 _PRICES = [0.30] * 8 + [0.10] * 24
 _HORIZON = 16
-_CONFIG = MimirheimConfig.model_validate({
+_CONFIG = {
     "mqtt": {"host": "localhost", "client_id": "ev-session"},
     "grid": {"import_limit_kw": 17.0, "export_limit_kw": 17.0},
     "static_loads": {"base": {}},
-    "ev_chargers": {
-        "car": {
-            "capacity_kwh": 60.0, "min_soc_kwh": 5.0,
-            "charge_segments": [{"power_max_kw": 11.0, "efficiency": 1.0}],
-        },
-    },
-})
+}
+_CAR = {
+    "capacity_kwh": 60.0, "min_soc_kwh": 5.0,
+    "charge_segments": [{"power_max_kw": 11.0, "efficiency": 1.0}],
+}
 
 
-def _bundle(k: int, soc_kwh: float) -> SolveBundle:
-    """The solve made ``k`` quarter hours after plug-in."""
-    return SolveBundle.model_validate({
-        "solve_time_utc": (_T0 + timedelta(minutes=15 * k)).isoformat(),
-        "triggered_at_utc": (_T0 + timedelta(minutes=15 * k)).isoformat(),
+def _config(ev: bool, dishwasher: bool) -> MimirheimConfig:
+    cfg = dict(_CONFIG)
+    if ev:
+        cfg["ev_chargers"] = {"car": _CAR}
+    if dishwasher:
+        cfg["deferrable_loads"] = {"dishwasher": {"power_profile": [2.0]}}
+    return MimirheimConfig.model_validate(cfg)
+
+
+def _bundle(
+    t0: datetime, k: int, soc_kwh: float, *, ev: bool, dishwasher: str
+) -> SolveBundle:
+    """The solve made ``k`` quarter hours after ``t0``. ``dishwasher`` is
+    "window" while it waits, "ran" with its committed start, or ""."""
+    now = t0 + timedelta(minutes=15 * k)
+    data: dict = {
+        "solve_time_utc": now.isoformat(),
+        "triggered_at_utc": now.isoformat(),
         "horizon_prices": _PRICES[k:k + _HORIZON],
         "horizon_export_prices": [0.05] * _HORIZON,
         "horizon_confidence": [1.0] * _HORIZON,
         "pv_forecast": [0.0] * _HORIZON,
         "base_load_forecast": [0.5] * _HORIZON,
-        "ev_inputs": {
+    }
+    if ev:
+        data["ev_inputs"] = {
             "car": {
                 "soc_kwh": soc_kwh, "available": True, "target_soc_kwh": 30.0,
-                "window_latest": (_T0 + timedelta(hours=4)).isoformat(),
+                "window_latest": (t0 + timedelta(hours=4)).isoformat(),
             },
-        },
-    })
+        }
+    if dishwasher == "window":
+        data["deferrable_windows"] = {
+            # Must finish by 10:15, so 10:00 is its only cheap start.
+            "dishwasher": {"earliest": t0.isoformat(), "latest": (t0 + timedelta(minutes=135)).isoformat()},
+        }
+    elif dishwasher == "ran":
+        data["deferrable_start_times"] = {"dishwasher": (t0 + timedelta(hours=2)).isoformat()}
+    return SolveBundle.model_validate(data)
 
 
-def _replay(tmp: Path, quarters: int) -> list[tuple[dict, dict, SolveResult]]:
-    """Solve every quarter hour from plug-in, taking each plan's first step as
-    what happened, and return the dump pairs with their results."""
+def _replay(
+    tmp: Path, quarters: int, *, t0: datetime = _T0, ev: bool = True, dishwasher: bool = False,
+) -> list[tuple[dict, dict, SolveResult]]:
+    """Solve every quarter hour from ``t0``, taking each plan's first step as
+    what happened, and return the dump pairs with their results. The
+    dishwasher's automation commits the start once the plan runs it."""
+    config = _config(ev, dishwasher)
     pairs = []
     soc = 20.0
+    state = "window" if dishwasher else ""
     for k in range(quarters + 1):
-        bundle = _bundle(k, soc)
-        result = build_and_solve(bundle, _CONFIG)
+        bundle = _bundle(t0, k, soc, ev=ev, dishwasher=state)
+        result = build_and_solve(bundle, config)
         assert result.solve_status == "optimal"
-        paths = debug_dump(bundle, result, _CONFIG, tmp / f"{k:02d}", max_dumps=0)
+        paths = debug_dump(bundle, result, config, tmp / f"{k:02d}", max_dumps=0)
         assert paths is not None
         inp, out = (json.loads(Path(p).read_text()) for p in paths)
         pairs.append((inp, out, result))
-        soc = result.schedule[0].devices["car"].soc_kwh
+        if ev:
+            soc = result.schedule[0].devices["car"].soc_kwh
+        if state == "window" and result.schedule[0].devices["dishwasher"].kw < 0.0:
+            state = "ran"
     return pairs
 
 
@@ -101,3 +129,36 @@ def test_the_saving_of_waiting_for_cheap_hours_survives_into_history(
     assert first_plan.schedule[-1].devices["car"].soc_kwh == pytest.approx(30.0, abs=1e-4)
     summary = _today(pairs)
     assert summary["saving"] == pytest.approx(2.00, abs=1e-3)
+
+
+def test_a_session_carries_across_midnight(tmp_path: Path) -> None:
+    """Plugged in at 23:00 the evening before: the naive car charges then, at
+    0.30 EUR/kWh, and has its 10 kWh before midnight. The real car waits for
+    the cheap hours after 01:00. Today's baseline must not charge the naive
+    car a second time just because the date changed."""
+    t0 = datetime(2026, 11, 2, 22, 0, tzinfo=UTC)  # 23:00 Amsterdam
+    pairs = _replay(tmp_path, 10, t0=t0)  # rendered at 01:30
+    inp, out, result = pairs[-1]
+    summary = _today(pairs)
+    # Today's quarters are 00:00 to 01:15 from history and the current plan
+    # from 01:30. The naive car owes nothing in any of them, so today's
+    # baseline is the base load alone: 0.5 kW at each step's price.
+    today = [step for step in out["schedule"] if step["t"] < "2026-11-03T23:00"]
+    base = 0.5 * 0.25 * (
+        sum(_PRICES[4:10]) + sum(s["import_price_eur_per_kwh"] for s in today)
+    )
+    assert summary["naive"] == pytest.approx(base, abs=1e-3)
+
+
+def test_the_saving_of_a_delayed_dishwasher_survives_its_run(tmp_path: Path) -> None:
+    """A one-quarter 2 kW dishwasher with a window from 08:00. The plan runs
+    it at 10:00 at 0.10 EUR/kWh instead of 08:00 at 0.30; the automation then
+    commits the start and clears the window. Once it has run, today's saving
+    must still be what the delay saved: 0.5 kWh x 0.20 EUR/kWh."""
+    pairs = _replay(tmp_path, 10, ev=False, dishwasher=True)
+    started = [r.deferrable_recommended_starts.get("dishwasher") for _, _, r in pairs]
+    # Guard the replay: every plan up to 10:00 scheduled it for 10:00, and the
+    # plans after it saw it as run.
+    assert started[0] == _T0 + timedelta(hours=2)
+    assert started[-1] is None
+    assert _today(pairs)["saving"] == pytest.approx(0.10, abs=1e-3)
