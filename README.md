@@ -1000,7 +1000,7 @@ The departure target is supplied at runtime via the EV state MQTT payload (not c
 |---|---|---|---|
 | `balanced_weights.cost_weight` | float ≥ 0 | 1.0 | Weight on revenue/cost terms when strategy is `balanced`. |
 | `balanced_weights.self_sufficiency_weight` | float ≥ 0 | 1.0 | Weight on grid import penalty. |
-| `min_dispatch_gain_eur` | float ≥ 0 | 0.0 | Minimum projected saving in EUR required to dispatch storage. Below this threshold mimirheim publishes an idle schedule. 0.0 disables. |
+| `min_dispatch_gain_eur` | float ≥ 0 | 0.0 | Minimum projected saving in EUR required to dispatch storage. Below this threshold mimirheim publishes an idle schedule. 0.0 disables. The saving is measured against the naive baseline (`naive_cost_eur`): storage idle, a plugged-in charge-only EV charged at full power from the first step with the energy the plan gives it, and a scheduled deferrable load started at the start of its window. Not applied while an EV charge deadline is active or a deferrable load has a window, is running, or has a committed start. |
 | `exchange_shaping_weight` | float ≥ 0 | 0.0 | Weight for the optional secondary term `lambda × Σ_t(import_t + export_t)`. Breaks solver indifference on flat or near-symmetric tariffs by favouring lower total exchange. Must be orders of magnitude smaller than typical prices (e.g. `1e-4`). 0.0 disables. |
 
 #### `constraints` (optional)
