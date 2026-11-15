@@ -348,7 +348,7 @@ class ReporterDaemon(MqttDaemon):
         local date, the same time zone the view splits days in, and the view
         counts only steps on today's date. The window opens twelve hours
         before local midnight so the naive car of a session plugged in last
-        evening, and a dishwasher scheduled then, carry into today (see
+        evening carries into today (see
         ``baseline.naive_overrides``); a session that began before that starts
         at the first pair. The margin also covers a clock change since
         midnight. Unreadable pairs are skipped.
