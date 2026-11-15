@@ -447,7 +447,7 @@ def _fixture_import_limit_kw(config_path: Path) -> float:
 
 class TestOperationalState:
     """Operational State is published/cleared in lockstep with the Descriptor
-    on this connection; see mimirheim_shared/CONTEXT.md's Operational State
+    on this connection; see mimirheim_shared/GLOSSARY.md's Operational State
     entry and ADR-0010.
     """
 

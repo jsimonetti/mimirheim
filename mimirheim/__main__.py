@@ -309,7 +309,7 @@ def _build_paho_client(mqtt: MqttConfig) -> paho.Client:
 def _run_awaiting_configuration(mqtt: MqttConfig, config_path: Path, detail: str) -> None:
     """Serve the Config Service protocol without running mimirheim's own function.
 
-    See ``mimirheim_shared/CONTEXT.md``'s Awaiting Configuration entry and
+    See ``mimirheim_shared/GLOSSARY.md``'s Awaiting Configuration entry and
     ADR-0009/ADR-0011: no solve loop, no data topics, no schedule — only
     Descriptor discovery, Operational State, ``get_current_values``,
     ``validate_and_write``, and ``restart_request`` over a connection built

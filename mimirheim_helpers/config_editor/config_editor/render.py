@@ -300,7 +300,7 @@ def build_tabs(descriptor: Descriptor, values: dict[str, Any] | None = None) -> 
     This only partitions the Descriptor's top-level fields: a nested
     object's or collection entry's own fields are not Tab/Subtab-aware,
     since the two-level hierarchy is a top-of-form navigation aid, not a
-    per-nesting-level concept (see `mimirheim_shared.CONTEXT.md`'s Tab/
+    per-nesting-level concept (see `mimirheim_shared.GLOSSARY.md`'s Tab/
     Subtab entries).
 
     Args:

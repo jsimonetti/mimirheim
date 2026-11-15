@@ -65,7 +65,7 @@ GET_CURRENT_VALUES_REQUEST_TOPIC = get_current_values_request_topic(OWNER_ID)
 GET_CURRENT_VALUES_RESPONSE_TOPIC = get_current_values_response_topic(OWNER_ID)
 
 # The well-known, retained topic mimirheim core's Operational State is
-# published to (see mimirheim_shared/CONTEXT.md's Operational State entry
+# published to (see mimirheim_shared/GLOSSARY.md's Operational State entry
 # and ADR-0010).
 STATE_TOPIC = state_topic(OWNER_ID)
 
@@ -179,7 +179,7 @@ def operational_state_payload_bytes() -> bytes:
 
     Published once mimirheim core's configuration validates in full and it is
     running its own function (the solve loop). See
-    ``mimirheim_shared/CONTEXT.md``'s Operational entry and ADR-0010.
+    ``mimirheim_shared/GLOSSARY.md``'s Operational entry and ADR-0010.
 
     Returns:
         UTF-8 encoded JSON bytes.
@@ -192,7 +192,7 @@ def awaiting_configuration_state_payload(detail: str) -> bytes:
 
     Published while mimirheim core's configuration fails full validation (or
     does not exist yet), alongside the Descriptor. See
-    ``mimirheim_shared/CONTEXT.md``'s Awaiting Configuration entry and
+    ``mimirheim_shared/GLOSSARY.md``'s Awaiting Configuration entry and
     ADR-0009/ADR-0011.
 
     Args:

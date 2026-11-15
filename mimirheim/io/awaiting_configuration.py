@@ -1,6 +1,6 @@
 """MQTT wiring for mimirheim core's Awaiting Configuration Operational State.
 
-See ``mimirheim_shared/CONTEXT.md``'s Awaiting Configuration entry and
+See ``mimirheim_shared/GLOSSARY.md``'s Awaiting Configuration entry and
 ADR-0009/ADR-0011: while ``mimirheim.yaml`` does not yet fully validate (or
 does not exist), mimirheim core has no valid ``MimirheimConfig`` to derive
 business topic names, device topics, or a solve loop from. This module

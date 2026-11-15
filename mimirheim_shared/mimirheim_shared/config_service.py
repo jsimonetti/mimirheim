@@ -454,7 +454,7 @@ def state_topic(owner_id: str) -> str:
     """Return the well-known retained topic a Config Owner's Operational State is published to.
 
     Published and cleared in lockstep with the Descriptor (see
-    ``mimirheim_shared/CONTEXT.md``'s Operational State entry and
+    ``mimirheim_shared/GLOSSARY.md``'s Operational State entry and
     ``mimirheim_shared/docs/adr/0010``), but on its own topic rather than a
     field of the Descriptor: the Descriptor describes what a Config Owner
     *can* be configured as, never whether it is currently running.
@@ -471,7 +471,7 @@ def state_topic(owner_id: str) -> str:
 class OperationalState(BaseModel):
     """The payload a Config Owner publishes retained, describing its Operational State.
 
-    See ``mimirheim_shared/CONTEXT.md``'s Operational State, Awaiting
+    See ``mimirheim_shared/GLOSSARY.md``'s Operational State, Awaiting
     Configuration, and Operational entries, and ADR-0010 and ADR-0011.
 
     Attributes:
@@ -504,7 +504,7 @@ def operational_state_payload(state: OperationalState) -> bytes:
 def restart_request_topic(owner_id: str) -> str:
     """Return the well-known topic a Config Owner accepts a Restart Request on.
 
-    See ``mimirheim_shared/CONTEXT.md``'s Restart Request entry and
+    See ``mimirheim_shared/GLOSSARY.md``'s Restart Request entry and
     ADR-0012: a Config Owner acts on this request by clearing its Descriptor
     and Operational State, disconnecting gracefully, and exiting, relying on
     its container supervisor to start a fresh process.

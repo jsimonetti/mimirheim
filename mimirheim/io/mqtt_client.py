@@ -16,7 +16,7 @@ This module is deliberately thin. Its only responsibilities are:
    ``on_restart_requested`` callback supplied by ``__main__.py`` so the solve
    loop exits and the container supervisor restarts the process (ADR-0012).
    This class is only used while mimirheim core is Operational (a fully
-   valid ``MimirheimConfig``, see ``mimirheim_shared/CONTEXT.md``'s
+   valid ``MimirheimConfig``, see ``mimirheim_shared/GLOSSARY.md``'s
    Operational entry); ``io.awaiting_configuration.AwaitingConfigurationClient``
    is its counterpart while Awaiting Configuration.
 

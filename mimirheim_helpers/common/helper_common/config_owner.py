@@ -22,7 +22,7 @@ existing ``MqttDaemon``/``HelperDaemon`` callbacks:
 (``operational``, or ``awaiting_configuration`` with a detail if
 constructed with ``awaiting_configuration_detail`` set), and a Restart
 Request received via ``handle_message`` is acknowledged and recorded on the
-public ``restart_requested`` event — see ``mimirheim_shared/CONTEXT.md``'s
+public ``restart_requested`` event — see ``mimirheim_shared/GLOSSARY.md``'s
 Operational State and Restart Request entries and ADR-0010/ADR-0012. Acting
 on a Restart Request (actually stopping and exiting) is the owning daemon's
 own responsibility; ``helper_common.daemon.MqttDaemon.run()`` polls
@@ -117,7 +117,7 @@ class ConfigOwnerSupport:
                 configuration does not currently validate, or does not
                 exist); this is the human-readable reason, published on the
                 Operational State topic instead of ``"operational"``. See
-                ``mimirheim_shared/CONTEXT.md``'s Awaiting Configuration
+                ``mimirheim_shared/GLOSSARY.md``'s Awaiting Configuration
                 entry and ADR-0009/ADR-0011. ``None`` (the default) means
                 this Config Owner is running its own function normally.
             apply_env_overrides: Callback applied to the on-disk

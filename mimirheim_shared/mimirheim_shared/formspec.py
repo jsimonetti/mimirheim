@@ -92,7 +92,7 @@ class FieldSpec(BaseModel):
     # so the Config Editor only renders it for a scalar leaf field.
     suggested_value: Any | None = None
     # The top-level navigable pane this field belongs to. Unset falls back to
-    # the default "General" tab (mimirheim_shared.CONTEXT.md's Tab entry),
+    # the default "General" tab (mimirheim_shared.GLOSSARY.md's Tab entry),
     # orthogonal to `group`: `group` still renders flat headings within
     # whichever Tab/Subtab pane a field lands in.
     tab: str | None = None
