@@ -50,3 +50,35 @@ def test_an_unplug_in_the_current_quarter_breaks_the_current_plan() -> None:
 
     assert len(entries) == 1
     assert breaks == [set(), {"car"}]
+
+
+def test_an_unplug_in_an_infeasible_dump_still_breaks_the_session() -> None:
+    """An infeasible solve dumps an empty schedule, but its input still saw
+    the car unplugged. That ends the session as well."""
+    infeasible_inp, _ = _pair("2026-11-02T07:15:00Z", "2026-11-02T07:16:00Z", False)
+    infeasible_inp["solve_time_utc"] = "2026-11-02T07:15:00Z"
+    pairs = [
+        _pair("2026-11-02T07:00:00Z", "2026-11-02T07:00:30Z", True),
+        (infeasible_inp, {"schedule": []}),
+        _pair("2026-11-02T07:15:00Z", "2026-11-02T07:20:00Z", True),
+    ]
+    first = datetime(2026, 11, 2, 7, 30, tzinfo=UTC)
+
+    entries, breaks = _earlier(pairs, first, UTC, "2026-11-02T07:30:30Z")
+
+    assert len(entries) == 2
+    assert breaks == [set(), {"car"}, set()]
+
+
+def test_without_the_current_trigger_time_same_quarter_unplugs_still_count() -> None:
+    """The current plan carries no trigger time: an unplug dumped earlier in
+    its quarter still ends the session."""
+    pairs = [
+        _pair("2026-11-02T07:15:00Z", "2026-11-02T07:15:30Z", True),
+        _pair("2026-11-02T07:30:00Z", "2026-11-02T07:31:00Z", False),
+    ]
+    first = datetime(2026, 11, 2, 7, 30, tzinfo=UTC)
+
+    _, breaks = _earlier(pairs, first, UTC, "")
+
+    assert breaks == [set(), {"car"}]

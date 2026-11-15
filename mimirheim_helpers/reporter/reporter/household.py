@@ -397,16 +397,21 @@ def _earlier(
     unplugged: list[tuple[datetime, str, str]] = []
     for pinp, pout in earlier:
         sched = pout.get("schedule") or []
-        if not sched:
+        # An infeasible solve dumps no schedule, but its input still saw the
+        # car: time it by its solve, which is its first step when there is one.
+        stamp = sched[0].get("t", "") if sched else str(pinp.get("solve_time_utc") or "")
+        if not stamp:
             continue
-        t = _as_local(sched[0].get("t", ""), tz)
+        t = _as_local(stamp, tz)
         made = str(pinp.get("triggered_at_utc") or "")
-        if t > first or (t == first and made >= made_now):
+        # Without this plan's trigger time, a pair of its own quarter counts
+        # as earlier: missing a quick unplug costs more than counting one.
+        if t > first or (t == first and made_now and made >= made_now):
             continue
         for name, ev in (pinp.get("ev_inputs") or {}).items():
             if not (ev or {}).get("available"):
                 unplugged.append((t, made, name))
-        if t == first:
+        if t == first or not sched:
             continue
         if t not in by_t or made > by_t[t][0]:
             by_t[t] = (made, sched[0], pinp, pout)
