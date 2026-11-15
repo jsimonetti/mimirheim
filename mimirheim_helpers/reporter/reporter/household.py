@@ -14,7 +14,9 @@ What this module does:
     - Split the plan at local midnight into at most three days, each with its
       own summary (see ``_days``). Today also counts its earlier quarter
       hours, read from the first step of today's earlier dump pairs, when the
-      caller passes them.
+      caller passes them. Pairs from before today count too: they carry the
+      naive car's plug-in session and the naive runs of deferrable loads
+      across midnight (``baseline.naive_overrides``).
     - Expose ``build_household_html(inp, out, tz=None, earlier=()) -> str`` as
       the sole public function.
 
@@ -25,7 +27,10 @@ What this module does not do:
       devices in the schedule; the page script only draws what it is given.
     - Invent its own economics. Energy totals come from ``metrics``; money per
       day is the solver's own per-step terms (grid cash flow, the naive
-      baseline), and the days add up to the solver's totals.
+      baseline). Without earlier pairs the days add up to the solver's
+      totals; with them, the naive car and naive deferrable runs follow the
+      whole session rather than this plan alone, so the naive figure of a
+      day can differ from this plan's share of ``naive_cost_eur``.
 
 Device types
 ------------
@@ -113,10 +118,14 @@ def build_household_html(
         out: Parsed SolveResult JSON (the ``*_output.json`` dump).
         tz: Time zone whose midnights split the plan into days. Defaults to
             the reporter's own local time zone.
-        earlier: Earlier dump pairs from today. The first step of each is what
-            the house was doing at that quarter hour, which turns "today" into
-            the whole day instead of only the rest of it. Any order; pairs
-            from other days or overlapping this plan are ignored.
+        earlier: Earlier dump pairs. The first step of each is what the house
+            was doing at that quarter hour, which turns "today" into the whole
+            day instead of only the rest of it. Pairs from before today are
+            not counted, but pass them anyway, back to the start of any EV
+            plug-in session or deferrable window still open: they carry the
+            naive baseline across midnight, and leaving them out restarts it
+            at today's first pair. Any order; pairs overlapping this plan are
+            ignored.
 
     Returns:
         A complete standalone HTML document string. Self-contained: no Plotly,
@@ -216,9 +225,11 @@ def _days(
           per-step terms of the solver's ``optimised_cost_eur``.
         - ``naive``: the solver's no-storage baseline per step (base load plus
           flexible loads run the naive way, minus clipped PV, at the import or
-          export price), so the days add up to
-          the solver's own ``naive_cost_eur``. Deliberately not scaled to it:
-          a mirror that drifts from the core should show, not be hidden.
+          export price), so without ``earlier`` the days add up to the
+          solver's own ``naive_cost_eur``. Deliberately not scaled to it: a
+          mirror that drifts from the core should show, not be hidden. With
+          ``earlier``, the naive flexible loads follow the session across
+          plans (``baseline.naive_overrides``) and the sum can differ.
         - ``stored``: the value of the energy the day leaves in storage for the
           next one: each battery's and hybrid inverter's cell-side SOC change,
           through its discharge path, at the plan's average import price.
