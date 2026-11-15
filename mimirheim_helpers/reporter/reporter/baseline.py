@@ -128,6 +128,7 @@ def naive_overrides(
     inp: dict[str, Any],
     out: dict[str, Any],
     step_h: float,
+    breaks: list[set[str]] | None = None,
 ) -> tuple[list[Overrides], Overrides]:
     """Naive flexible loads that carry across a run of consecutive plans.
 
@@ -149,6 +150,10 @@ def naive_overrides(
         inp: The current plan's input dump.
         out: The current plan's output dump.
         step_h: Step length in hours.
+        breaks: Per entry of ``history``, then one for the current plan, the
+            EVs seen unplugged since the entry before it in dumps that are not
+            part of ``history`` (an older dump of the same quarter). Each
+            ends that EV's session before the entry. None means no breaks.
 
     Returns:
         One ``Overrides`` per entry of ``history``, for that entry's first
@@ -169,8 +174,15 @@ def naive_overrides(
         return max(0.0, real.get(name, 0.0) + remaining - naive.get(name, 0.0))
 
     times = [parse_utc(pinp.get("solve_time_utc")) for pinp, _ in plans]
+    cuts = breaks if breaks is not None else [set() for _ in plans]
+
+    def restart(k: int) -> None:
+        for name in cuts[k]:
+            real[name] = naive[name] = 0.0
+
     per_quarter = []
     for k, (step, pinp, pout) in enumerate(history):
+        restart(k)
         # Quarters until the next dump: the naive car charges through a gap.
         here, there = times[k], times[k + 1]
         gap = 1
@@ -196,6 +208,7 @@ def naive_overrides(
         per_quarter.append(Overrides(needed))
 
     current = Overrides()
+    restart(len(history))
     for name, c in ((inp.get("config") or {}).get("ev_chargers") or {}).items():
         if c.get("discharge_segments"):
             continue
