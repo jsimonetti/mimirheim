@@ -15,8 +15,8 @@ What this module does:
       own summary (see ``_days``). Today also counts its earlier quarter
       hours, read from the first step of today's earlier dump pairs, when the
       caller passes them. Pairs from before today count too: they carry the
-      naive car's plug-in session and the naive runs of deferrable loads
-      across midnight (``baseline.naive_overrides``).
+      naive car's plug-in session across midnight
+      (``baseline.naive_overrides``).
     - Expose ``build_household_html(inp, out, tz=None, earlier=()) -> str`` as
       the sole public function.
 
@@ -28,8 +28,8 @@ What this module does not do:
     - Invent its own economics. Energy totals come from ``metrics``; money per
       day is the solver's own per-step terms (grid cash flow, the naive
       baseline). Without earlier pairs the days add up to the solver's
-      totals; with them, the naive car and naive deferrable runs follow the
-      whole session rather than this plan alone, so the naive figure of a
+      totals; with them, the naive car follows the whole plug-in session
+      rather than this plan alone, so the naive figure of a
       day can differ from this plan's share of ``naive_cost_eur``.
 
 Device types
@@ -122,7 +122,7 @@ def build_household_html(
             was doing at that quarter hour, which turns "today" into the whole
             day instead of only the rest of it. Pairs from before today are
             not counted, but pass them anyway, back to the start of any EV
-            plug-in session or deferrable window still open: they carry the
+            plug-in session still open: they carry the
             naive baseline across midnight, and leaving them out restarts it
             at today's first pair. Any order; pairs overlapping this plan are
             ignored.
@@ -228,8 +228,8 @@ def _days(
           export price), so without ``earlier`` the days add up to the
           solver's own ``naive_cost_eur``. Deliberately not scaled to it: a
           mirror that drifts from the core should show, not be hidden. With
-          ``earlier``, the naive flexible loads follow the session across
-          plans (``baseline.naive_overrides``) and the sum can differ.
+          ``earlier``, the naive car follows its session across plans
+          (``baseline.naive_overrides``) and the sum can differ.
         - ``stored``: the value of the energy the day leaves in storage for the
           next one: each battery's and hybrid inverter's cell-side SOC change,
           through its discharge path, at the plan's average import price.
@@ -380,8 +380,8 @@ def _earlier(
     Each earlier plan contributes its first step: what the house was doing at
     the quarter hour it was made. When two plans share a first step, the later
     one wins, as it is the one that was acted on. Quarters before today are
-    kept: the naive car and the naive runs of deferrable loads carry across
-    midnight (see ``baseline.naive_overrides``). Only today's are counted.
+    kept: the naive car carries across midnight (see
+    ``baseline.naive_overrides``). Only today's are counted.
     """
     by_t: dict[datetime, tuple[str, dict[str, Any], dict[str, Any], dict[str, Any]]] = {}
     for pinp, pout in earlier:

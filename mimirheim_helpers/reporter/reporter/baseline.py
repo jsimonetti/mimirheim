@@ -12,8 +12,8 @@ stitches the quarter hours already past from the first step of each earlier
 plan. Every plan's baseline starts its car and its scheduled loads afresh, so
 stitching those would make the naive car charge whenever the real one did and
 the naive dishwasher run whenever the real one ran. ``naive_overrides`` follows
-one naive car per plug-in session and moves each committed deferrable run to
-the start of its window, across the earlier plans, instead.
+one naive car per plug-in session across the earlier plans instead. Deferrable
+loads are left as planned in earlier quarters (see ``naive_overrides``).
 
 What this module does not do:
     - Read files, render anything, or import from ``mimirheim``.
@@ -35,12 +35,9 @@ class Overrides:
         ev_needed: Per charge-only EV, the cell energy in kWh the naive car
             still takes from the plan's first step, instead of the energy the
             plan itself gives the car.
-        deferrable_kw: Per deferrable load, the naive draw in kW at each step
-            of the plan, instead of the plan's own rule.
     """
 
     ev_needed: dict[str, float] = field(default_factory=dict)
-    deferrable_kw: dict[str, list[float]] = field(default_factory=dict)
 
 
 def ev_full_rate(charger: dict[str, Any], step_h: float) -> tuple[float, float]:
@@ -113,10 +110,6 @@ def naive_flexible_kw(
     windows = inp.get("deferrable_windows") or {}
     solve = parse_utc(inp.get("solve_time_utc"))
     for name in _deferrable_names(schedule):
-        if name in over.deferrable_kw:
-            for t, kw in enumerate(over.deferrable_kw[name][: len(load)]):
-                load[t] += kw
-            continue
         earliest = parse_utc((windows.get(name) or {}).get("earliest"))
         c = loads.get(name)
         if name in starts and c is not None and earliest is not None and solve is not None:
@@ -144,8 +137,10 @@ def naive_overrides(
     for as long as the gap lasts. Unplugging ends the session. The charger
     config of each plan sets that plan's rate.
 
-    Each deferrable load: each committed run is moved to the start of its
-    window (see ``_deferrable_cycles``). Any other draw is drawn as planned.
+    Deferrable loads are not tracked across plans. Earlier quarters draw
+    them as planned, so the saving of a shifted run leaves "today" once the
+    solver no longer has a recommended start for it: which window a run
+    belonged to cannot be told reliably from the dumps.
 
     Args:
         history: Earlier plans in time order, as ``(step, inp, out)`` with
@@ -159,9 +154,7 @@ def naive_overrides(
         One ``Overrides`` per entry of ``history``, for that entry's first
         step alone, and one for the current plan's whole schedule.
     """
-    plans = [(pinp, pout, [step]) for step, pinp, pout in history]
-    plans.append((inp, out, out.get("schedule") or []))
-    deferrable = _deferrable_cycles(plans, step_h)
+    plans = [(pinp, pout) for _, pinp, pout in history] + [(inp, out)]
     real: dict[str, float] = {}
     naive: dict[str, float] = {}
 
@@ -175,7 +168,7 @@ def naive_overrides(
         remaining = max(0.0, float(end) - float(ev["soc_kwh"]))
         return max(0.0, real.get(name, 0.0) + remaining - naive.get(name, 0.0))
 
-    times = [parse_utc(pinp.get("solve_time_utc")) for pinp, _, _ in plans]
+    times = [parse_utc(pinp.get("solve_time_utc")) for pinp, _ in plans]
     per_quarter = []
     for k, (step, pinp, pout) in enumerate(history):
         # Quarters until the next dump: the naive car charges through a gap.
@@ -200,9 +193,9 @@ def naive_overrides(
                 # Over a gap only the next reading tells what the car took.
                 after = _num(next_ev[name].get("soc_kwh"), after)
             real[name] = real.get(name, 0.0) + max(0.0, after - before)
-        per_quarter.append(Overrides(needed, deferrable[k]))
+        per_quarter.append(Overrides(needed))
 
-    current = Overrides(deferrable_kw=deferrable[-1])
+    current = Overrides()
     for name, c in ((inp.get("config") or {}).get("ev_chargers") or {}).items():
         if c.get("discharge_segments"):
             continue
@@ -221,99 +214,6 @@ def parse_utc(value: Any) -> datetime | None:
     except ValueError:
         return None
     return parsed.astimezone(UTC) if parsed.tzinfo else parsed.replace(tzinfo=UTC)
-
-
-def _deferrable_cycles(
-    plans: list[tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]],
-    step_h: float,
-) -> list[dict[str, list[float]]]:
-    """Each deferrable load's naive draw for the steps of each plan.
-
-    ``plans`` are ``(inp, out, steps)`` in time order, ``steps`` the steps of
-    that plan that count: the first alone for an earlier plan, all of them for
-    the current one.
-
-    A run is anchored on its committed start ``S`` (``deferrable_start_times``
-    in the input dump), rounded down to a step: the one fact the automation
-    reports about what really ran. A start counts when its run overlaps the
-    plans at hand; an older one is stale. The run's real draws, from ``S`` for
-    the length of the profile, are replaced by a naive run of the same
-    profile from the start of the window last seen before it, or from the
-    first plan if that window opened earlier. A window is used for one run
-    only. Without such a window the naive run starts at ``S`` itself: the
-    baseline then draws the run as the plan does.
-
-    Any other draw is drawn as planned. That includes a load whose automation
-    never publishes a committed start: its saving shows only in the current
-    plan, by the solver's own rule, until it runs.
-
-    Returns:
-        One dict per plan, mapping each deferrable load to its naive draw in
-        kW per step. A load without a committed run in reach is left out, so
-        the plan's own rule applies (``naive_flexible_kw``).
-    """
-    step = timedelta(hours=step_h)
-    times = [parse_utc(pinp.get("solve_time_utc")) for pinp, _, _ in plans]
-    known = [t for t in times if t is not None]
-    if not known:
-        return [{} for _ in plans]
-    first = known[0]
-    runs: dict[str, list[tuple[datetime, datetime, list[float]]]] = {}
-    window: dict[str, datetime | None] = {}
-    for k, (pinp, _, _) in enumerate(plans):
-        loads = (pinp.get("config") or {}).get("deferrable_loads") or {}
-        for name, w in (pinp.get("deferrable_windows") or {}).items():
-            earliest = parse_utc((w or {}).get("earliest"))
-            if earliest is not None and times[k] is not None:
-                window[name] = earliest
-        for name, value in (pinp.get("deferrable_start_times") or {}).items():
-            started = parse_utc(value)
-            profile = (loads.get(name) or {}).get("power_profile")
-            if started is None or not profile:
-                continue
-            # Round down to a step: an automation that starts a few minutes
-            # late still runs in the step the plan chose.
-            real = first + step * ((started - first) // step)
-            if real + step * len(profile) <= first:
-                continue  # stale: the run ended before the first plan
-            if any(r[0] == real for r in runs.get(name, [])):
-                continue
-            earliest = window.pop(name, None)
-            if earliest is None:
-                naive = real
-            else:
-                naive = min(real, max(first, first + step * ((earliest - first) // step)))
-            runs.setdefault(name, []).append((real, naive, [float(kw) for kw in profile]))
-
-    result: list[dict[str, list[float]]] = []
-    for k, (_, _, steps) in enumerate(plans):
-        draws: dict[str, list[float]] = {}
-        if times[k] is None:
-            result.append(draws)
-            continue
-        whens = [times[k] + step * i for i in range(len(steps))]
-        for name in _deferrable_names(steps):
-            mine = runs.get(name, [])
-            touched = any(
-                r[0] <= when < r[0] + step * len(r[2]) or r[1] <= when < r[1] + step * len(r[2])
-                for r in mine
-                for when in whens
-            )
-            if not touched:
-                continue
-            planned = _planned_draw(steps, name)
-            draw = []
-            for i, when in enumerate(whens):
-                value = planned[i]
-                for real, naive, profile in mine:
-                    if real <= when < real + step * len(profile):
-                        value -= profile[(when - real) // step]
-                    if naive <= when < naive + step * len(profile):
-                        value += profile[(when - naive) // step]
-                draw.append(max(0.0, value))
-            draws[name] = draw
-        result.append(draws)
-    return result
 
 
 def _first_step(earliest: datetime, solve: datetime, step_h: float) -> int:

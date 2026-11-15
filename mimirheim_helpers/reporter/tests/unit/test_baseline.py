@@ -109,28 +109,6 @@ def _current_naive(history: list, inp: dict, out: dict) -> list[float]:
     )
 
 
-def test_a_run_committed_without_a_schedule_draws_as_planned() -> None:
-    """The morning run was scheduled and is done. An afternoon run committed
-    straight away, never scheduled by the solver, is not that cycle's: the
-    baseline draws it as the plan does."""
-    morning = _dw_plan(
-        "2026-11-02T07:00:00Z", [0.0, 2.0],
-        window=("2026-11-02T07:00:00Z", "2026-11-02T09:00:00Z"),
-        recommended="2026-11-02T07:15:00Z",
-    )
-    ran = _dw_plan("2026-11-02T07:15:00Z", [2.0], committed="2026-11-02T07:15:00Z")
-    afternoon = _dw_plan("2026-11-02T12:00:00Z", [2.0], committed="2026-11-02T12:00:00Z")
-    inp, out = _dw_plan("2026-11-02T12:15:00Z", [0.0])
-
-    per_quarter, _ = naive_overrides(
-        [_entry(morning), _entry(ran), _entry(afternoon)], inp, out, 0.25
-    )
-
-    assert per_quarter[0].deferrable_kw["dishwasher"] == [2.0]  # naive at the window start
-    assert per_quarter[1].deferrable_kw["dishwasher"] == [0.0]  # the real run, replaced
-    assert per_quarter[2].deferrable_kw["dishwasher"] == [2.0]  # not that cycle's
-
-
 def test_a_cancelled_window_leaves_no_naive_run() -> None:
     """Scheduled for noon at 08:00, then cancelled at 09:00 before it ran:
     the plan never runs it, so neither does the baseline."""
@@ -198,27 +176,6 @@ def test_a_window_moved_beyond_the_horizon_leaves_no_naive_run() -> None:
     assert _current_naive([_entry(scheduled)], inp, out) == [0.0] * 16
 
 
-def test_a_missing_dump_mid_run_does_not_leak_into_a_later_run() -> None:
-    """A two-step run from 07:15 whose 07:30 dump is missing has ended by
-    07:45. A run committed at noon without a schedule is not part of it."""
-    two = [2.0, 2.0]
-    morning = _dw_plan(
-        "2026-11-02T07:00:00Z", [0.0, 2.0, 2.0],
-        window=("2026-11-02T07:00:00Z", "2026-11-02T09:00:00Z"),
-        recommended="2026-11-02T07:15:00Z", profile=two,
-    )
-    ran = _dw_plan("2026-11-02T07:15:00Z", [2.0, 2.0], committed="2026-11-02T07:15:00Z", profile=two)
-    noon = _dw_plan("2026-11-02T11:00:00Z", [2.0, 2.0], committed="2026-11-02T11:00:00Z", profile=two)
-    inp, out = _dw_plan("2026-11-02T11:15:00Z", [2.0, 0.0], committed="2026-11-02T11:00:00Z", profile=two)
-
-    per_quarter, current = naive_overrides(
-        [_entry(morning), _entry(ran), _entry(noon)], inp, out, 0.25
-    )
-
-    assert per_quarter[2].deferrable_kw["dishwasher"] == [2.0]
-    assert current.deferrable_kw["dishwasher"] == [2.0, 0.0]
-
-
 def test_a_stale_commit_does_not_keep_a_cancelled_window() -> None:
     """Yesterday's start time is still retained. A window scheduled for
     10:00 and cleared at 08:00 leaves no naive run."""
@@ -233,18 +190,22 @@ def test_a_stale_commit_does_not_keep_a_cancelled_window() -> None:
     assert _current_naive([_entry(scheduled)], inp, out) == [0.0] * 16
 
 
-def test_a_start_committed_minutes_late_is_still_the_scheduled_run() -> None:
-    """Planned for 07:15, the automation reports 07:18: still the run of the
-    window that opened at 07:00, moved there in the baseline."""
+def test_earlier_quarters_draw_deferrable_loads_as_planned() -> None:
+    """Deferrable loads are not followed across plans: an earlier quarter's
+    run is drawn when it ran, with no override from the session tracker."""
     morning = _dw_plan(
         "2026-11-02T07:00:00Z", [0.0, 2.0],
         window=("2026-11-02T07:00:00Z", "2026-11-02T09:00:00Z"),
         recommended="2026-11-02T07:15:00Z",
     )
-    ran = _dw_plan("2026-11-02T07:15:00Z", [2.0], committed="2026-11-02T07:18:00Z")
-    inp, out = _dw_plan("2026-11-02T07:30:00Z", [0.0], committed="2026-11-02T07:18:00Z")
+    ran = _dw_plan("2026-11-02T07:15:00Z", [2.0], committed="2026-11-02T07:15:00Z")
+    inp, out = _dw_plan("2026-11-02T07:30:00Z", [0.0], committed="2026-11-02T07:15:00Z")
+    history = [_entry(morning), _entry(ran)]
 
-    per_quarter, _ = naive_overrides([_entry(morning), _entry(ran)], inp, out, 0.25)
+    per_quarter, _ = naive_overrides(history, inp, out, 0.25)
 
-    assert per_quarter[0].deferrable_kw["dishwasher"] == [2.0]
-    assert per_quarter[1].deferrable_kw["dishwasher"] == [0.0]
+    drawn = [
+        naive_flexible_kw(pinp, [step], 0.25, {}, over)
+        for (step, pinp, _), over in zip(history, per_quarter, strict=True)
+    ]
+    assert drawn == [[0.0], [2.0]]
