@@ -341,7 +341,7 @@ class ReporterDaemon(MqttDaemon):
         logger.info("Refreshed household view: %s", dest)
 
     def _earlier_pairs(self, out: dict[str, Any]) -> list[tuple[dict[str, Any], dict[str, Any]]]:
-        """Dump pairs made before ``out``'s first step, from noon yesterday.
+        """Dump pairs from noon yesterday to the end of ``out``'s first quarter.
 
         The household view reads the first step of each to cover the hours of
         today that this plan no longer includes. "Today" is the reporter's
@@ -350,7 +350,11 @@ class ReporterDaemon(MqttDaemon):
         before local midnight so the naive car of a session plugged in last
         evening carries into today (see
         ``baseline.naive_overrides``); a session that began before that starts
-        at the first pair. Unreadable pairs are skipped.
+        at the first pair. Pairs triggered within this plan's own quarter
+        are included, this plan's among them: an older one may be the only
+        one that saw an EV unplugged, and the view keeps only those triggered
+        before this plan (``household._earlier``). Unreadable pairs are
+        skipped.
         """
         sched = out.get("schedule") or []
         if not sched:
@@ -363,13 +367,16 @@ class ReporterDaemon(MqttDaemon):
         midnight = datetime.combine(first.astimezone().date(), datetime.min.time())
         start = (midnight - _HISTORY_BEFORE_MIDNIGHT).astimezone(timezone.utc)
         lo = start.strftime("%Y-%m-%dT%H-%M-%S")
-        hi = first.strftime("%Y-%m-%dT%H-%M-%S")
+        # Dump names carry the trigger time, which within a quarter can be
+        # later than its first step: the window runs to the quarter's end.
+        end = first + timedelta(minutes=15)
+        hi = end.strftime("%Y-%m-%dT%H-%M-%S")
         dump_dir = self._reporter_config.dump_dir
         # Dump names start with their UTC date, so only the dates the window
         # touches are listed: the cost follows the day, not the retention.
         dates = [
             (start + timedelta(days=d)).date().isoformat()
-            for d in range((first.date() - start.date()).days + 1)
+            for d in range((end.date() - start.date()).days + 1)
         ]
         pairs = []
         inputs = sorted(path for d in dates for path in dump_dir.glob(f"{d}T*_input.json"))

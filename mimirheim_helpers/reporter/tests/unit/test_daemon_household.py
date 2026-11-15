@@ -151,8 +151,10 @@ def test_earlier_pairs_reach_back_to_noon_yesterday(tmp_path: Path) -> None:
 
     The window opens twelve hours before that, at 10:00 UTC yesterday, so a
     session plugged in last evening carries into today; the view itself
-    counts only today's date. This plan and later ones are not "earlier", and
-    a pair that cannot be read is skipped.
+    counts only today's date. Pairs triggered within this plan's own quarter
+    are passed: one may have seen the car unplugged, and the view keeps only
+    those triggered before this plan. Later quarters are not passed, and a
+    pair that cannot be read is skipped.
     """
     for ts_file in (
         "2026-09-30T09-45-00Z",  # before the window
@@ -160,7 +162,8 @@ def test_earlier_pairs_reach_back_to_noon_yesterday(tmp_path: Path) -> None:
         "2026-09-30T21-30-00Z",  # last evening
         "2026-10-01T05-00-00Z",
         "2026-10-01T09-45-00Z",
-        "2026-10-01T10-00-00Z",  # this plan
+        "2026-10-01T10-00-00Z",  # this plan's quarter: the view sorts it out
+        "2026-10-01T10-04-00Z",  # this plan's quarter, triggered again
         "2026-10-01T10-15-00Z",  # later
     ):
         _write_pair(tmp_path, ts_file)
@@ -175,6 +178,8 @@ def test_earlier_pairs_reach_back_to_noon_yesterday(tmp_path: Path) -> None:
         "2026-09-30T21-30-00Z",
         "2026-10-01T05-00-00Z",
         "2026-10-01T09-45-00Z",
+        "2026-10-01T10-00-00Z",
+        "2026-10-01T10-04-00Z",
     ]
     assert daemon._earlier_pairs({"schedule": []}) == []
 
