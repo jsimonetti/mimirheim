@@ -22,7 +22,12 @@ from mimirheim.core.bundle import (
     SolveBundle,
     SolveResult,
 )
-from mimirheim.core.model_builder import _compute_naive_cost, _compute_soc_credit, build_and_solve
+from mimirheim.core.model_builder import (
+    _compute_naive_cost,
+    _compute_soc_credit,
+    _naive_flexible_load_kw,
+    build_and_solve,
+)
 
 
 def _bundle(
@@ -664,6 +669,163 @@ def test_charge_only_ev_is_charged_to_its_target_and_not_credited() -> None:
     # then 0.5 kW base load plus 10 kWh of charging at 0.10.
     assert result.optimised_cost_eur == pytest.approx(0.30 + 0.10 + 1.00, abs=1e-4)
     assert result.soc_credit_eur == 0.0
+
+
+def _charge_only_ev_config(efficiency: float = 1.0) -> MimirheimConfig:
+    """A charge-only EV charger with one 11 kW segment, and a static base load."""
+    return MimirheimConfig.model_validate(
+        {
+            "mqtt": {"host": "localhost", "client_id": "test"},
+            "grid": {"import_limit_kw": 17.0, "export_limit_kw": 17.0},
+            "static_loads": {"base": {}},
+            "ev_chargers": {
+                "car": {
+                    "capacity_kwh": 60.0,
+                    "min_soc_kwh": 5.0,
+                    "charge_segments": [{"power_max_kw": 11.0, "efficiency": efficiency}],
+                }
+            },
+        }
+    )
+
+
+def _ev_schedule(soc_kwh: list[float]) -> list[ScheduleStep]:
+    """A schedule carrying only the car's SOC per step; power is irrelevant here."""
+    return [
+        ScheduleStep(
+            t=t,
+            grid_import_kw=0.0,
+            grid_export_kw=0.0,
+            devices={"car": DeviceSetpoint(kw=0.0, type="ev_charger", soc_kwh=soc)},
+        )
+        for t, soc in enumerate(soc_kwh)
+    ]
+
+
+def _ev_bundle(horizon: int, *, available: bool = True) -> SolveBundle:
+    return SolveBundle(
+        solve_time_utc=datetime(2026, 11, 1, 18, tzinfo=timezone.utc),
+        horizon_prices=[0.30] * horizon,
+        horizon_export_prices=[0.05] * horizon,
+        horizon_confidence=[1.0] * horizon,
+        pv_forecast=[0.0] * horizon,
+        base_load_forecast=[0.5] * horizon,
+        ev_inputs={"car": EvInputs(soc_kwh=20.0, available=available)},
+    )
+
+
+def test_naive_ev_charges_at_full_power_from_the_first_step() -> None:
+    """The naive car takes the plan's cell energy as fast as the charger allows.
+
+    The plan ends 10 kWh fuller. At 11 kW and 100% efficiency a quarter hour
+    adds 2.75 kWh, so three full steps add 8.25 kWh and the fourth delivers
+    the remaining 1.75 kWh at 7 kW. Nothing is drawn after that, whenever the
+    plan itself charged.
+    """
+    load = _naive_flexible_load_kw(
+        _ev_bundle(6),
+        _charge_only_ev_config(),
+        _ev_schedule([20.0, 20.0, 20.0, 20.0, 25.0, 30.0]),
+        {},
+        0.25,
+    )
+
+    assert load == pytest.approx([11.0, 11.0, 11.0, 7.0, 0.0, 0.0])
+
+
+def test_naive_ev_draws_charging_losses_from_the_grid() -> None:
+    """The naive car needs the same cell energy, so losses add to its draw.
+
+    At 90% a full 11 kW step adds 2.475 kWh to the cell. 4.95 kWh of cell
+    energy takes exactly two full steps.
+    """
+    load = _naive_flexible_load_kw(
+        _ev_bundle(3),
+        _charge_only_ev_config(efficiency=0.9),
+        _ev_schedule([20.0, 22.0, 24.95]),
+        {},
+        0.25,
+    )
+
+    assert load == pytest.approx([11.0, 11.0, 0.0])
+
+
+def test_naive_ev_is_idle_when_unplugged_or_not_charged() -> None:
+    """No energy delivered in the plan means no energy in the baseline."""
+    unplugged = _naive_flexible_load_kw(
+        _ev_bundle(2, available=False),
+        _charge_only_ev_config(),
+        _ev_schedule([5.0, 5.0]),
+        {},
+        0.25,
+    )
+    idle = _naive_flexible_load_kw(
+        _ev_bundle(2), _charge_only_ev_config(), _ev_schedule([20.0, 20.0]), {}, 0.25
+    )
+
+    assert unplugged == [0.0, 0.0]
+    assert idle == [0.0, 0.0]
+
+
+def test_naive_baseline_leaves_a_v2h_ev_to_the_soc_credit() -> None:
+    """A V2H car is storage: its energy is valued by soc_credit_eur instead."""
+    config = _storage_config()
+    bundle = _storage_bundle().model_copy(update={"battery_inputs": {}})
+
+    load = _naive_flexible_load_kw(
+        bundle, config, _one_step("ev", "ev_charger", kw=-4.0, soc_kwh=2.95), {}, 0.25
+    )
+
+    assert load == [0.0]
+
+
+def test_naive_cost_includes_the_flexible_load() -> None:
+    """The flexible load adds to base load before the import/export split."""
+    bundle = _bundle(
+        import_prices=[0.30, 0.30],
+        export_prices=[0.05, 0.05],
+        pv_forecast=[2.0, 0.0],
+        base_load_forecast=[0.5, 0.5],
+    )
+
+    cost = _compute_naive_cost(bundle, 2, 0.25, flexible_load_kw=[1.0, 1.0])
+
+    # Step 0: 0.5 + 1.0 - 2.0 = -0.5 kW exported. Step 1: 1.5 kW imported.
+    assert cost == pytest.approx(-0.5 * 0.05 * 0.25 + 1.5 * 0.30 * 0.25)
+
+
+def test_smart_charging_of_a_charge_only_ev_shows_as_a_saving() -> None:
+    """End to end: the #209 reproduction, with the car in the baseline.
+
+    Two hours at 0.30 EUR/kWh, then two at 0.10, and a car that needs 10 kWh.
+    The naive car charges the 10 kWh at once, at 0.30; the plan waits for 0.10.
+    The difference, 10 kWh x 0.20 EUR/kWh, is what smart charging saves.
+    """
+    t0 = datetime(2026, 11, 1, 18, tzinfo=timezone.utc)
+    horizon = 16
+    bundle = SolveBundle(
+        solve_time_utc=t0,
+        horizon_prices=[0.30] * 8 + [0.10] * 8,
+        horizon_export_prices=[0.05] * horizon,
+        horizon_confidence=[1.0] * horizon,
+        pv_forecast=[0.0] * horizon,
+        base_load_forecast=[0.5] * horizon,
+        ev_inputs={
+            "car": EvInputs(
+                soc_kwh=20.0,
+                available=True,
+                target_soc_kwh=30.0,
+                window_latest=t0 + timedelta(hours=4),
+            )
+        },
+    )
+
+    result = build_and_solve(bundle, _charge_only_ev_config())
+
+    # Base load 0.40 plus the car's 10 kWh at 0.30.
+    assert result.naive_cost_eur == pytest.approx(0.40 + 3.00, abs=1e-4)
+    saving = result.naive_cost_eur - (result.optimised_cost_eur - result.soc_credit_eur)
+    assert saving == pytest.approx(2.00, abs=1e-4)
 
 
 def test_soc_credit_of_a_battery_follows_the_solver_soc() -> None:
