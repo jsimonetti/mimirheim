@@ -311,6 +311,15 @@ class ControlConfig(BaseModel):
             remains enforcer for at least this many consecutive steps, unless
             it becomes ineligible (e.g. EV unplugs, headroom drops below
             margin). Default 2 steps (30 minutes at 15-minute resolution).
+        battery_idle_threshold_kw: Battery power, in kW, at or below which a
+            step counts as idle rather than charging or discharging. Solver
+            output carries small rounding noise; this threshold stops such
+            noise being read as a planned discharge. It decides whether a
+            battery at the top of its range is holding (idle or charging,
+            not eligible as enforcer) or discharging (eligible). A consumer
+            of the schedule that protects held steps from closed-loop control
+            should classify idle steps with the same threshold. Default
+            0.05 kW (50 W).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -345,6 +354,14 @@ class ControlConfig(BaseModel):
         description=(
             "Minimum consecutive steps a device remains enforcer once selected. "
             "Device becomes ineligible immediately if it loses availability or headroom."
+        ),
+    )
+    battery_idle_threshold_kw: float = Field(
+        default=0.05,
+        ge=0.0,
+        description=(
+            "Battery power in kW at or below which a step counts as idle. Decides whether "
+            "a full battery is holding (not eligible as enforcer) or discharging (eligible)."
         ),
     )
 
