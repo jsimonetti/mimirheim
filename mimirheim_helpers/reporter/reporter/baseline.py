@@ -140,15 +140,17 @@ def naive_overrides(
 
     Each EV: one naive car per plug-in session. From plug-in it charges at
     full power until it holds what the real car has taken so far plus what the
-    latest plan still gives it. Unplugging ends the session. The charger
+    latest plan still gives it. It keeps charging through a gap between dumps,
+    for as long as the gap lasts. Unplugging ends the session. The charger
     config of each plan sets that plan's rate.
 
-    Each deferrable load: one naive run per cycle. A cycle opens when a plan
-    first schedules the load for a window, and its naive run starts at that
-    window's first step, or at that plan's first step if the window opened
-    earlier. A later plan for the same window does not move it. From the
-    first cycle on, the load's draw in every plan is the naive run's, so a run
-    that has started or ended no longer follows the plan.
+    Each deferrable load: one naive run per cycle (see ``_deferrable_cycles``).
+    A cycle opens when a plan schedules the load for a window, and its naive
+    run starts at that window's first step, or at that plan's first step if
+    the window opened earlier. The real draws that follow belong to the cycle
+    until they add up to its profile's energy; those are replaced by the
+    naive run. Any other draw, such as a run committed without a schedule, is
+    drawn as planned.
 
     Args:
         history: Earlier plans in time order, as ``(step, inp, out)`` with
@@ -162,8 +164,9 @@ def naive_overrides(
         One ``Overrides`` per entry of ``history``, for that entry's first
         step alone, and one for the current plan's whole schedule.
     """
-    plans = [(pinp, pout) for _, pinp, pout in history] + [(inp, out)]
-    cycles = _deferrable_cycles(plans, step_h)
+    plans = [(pinp, pout, [step]) for step, pinp, pout in history]
+    plans.append((inp, out, out.get("schedule") or []))
+    deferrable = _deferrable_cycles(plans, step_h)
     real: dict[str, float] = {}
     naive: dict[str, float] = {}
 
@@ -177,29 +180,15 @@ def naive_overrides(
         remaining = max(0.0, float(end) - float(ev["soc_kwh"]))
         return max(0.0, real.get(name, 0.0) + remaining - naive.get(name, 0.0))
 
-    def deferrable(plan_inp: dict[str, Any], steps: list[dict[str, Any]]) -> dict[str, list[float]]:
-        solve = parse_utc(plan_inp.get("solve_time_utc"))
-        if solve is None:
-            return {}
-        times = [solve + timedelta(hours=step_h * t) for t in range(len(steps))]
-        result = {}
-        for name, runs in cycles.items():
-            if name not in _deferrable_names(steps):
-                continue
-            planned = _planned_draw(steps, name)
-            draw = []
-            for t, when in enumerate(times):
-                run = next((r for r in reversed(runs) if r[0] <= when), None)
-                if run is None:
-                    draw.append(planned[t])
-                    continue
-                offset = round((when - run[0]) / timedelta(hours=step_h))
-                draw.append(run[1][offset] if offset < len(run[1]) else 0.0)
-            result[name] = draw
-        return result
-
+    times = [parse_utc(pinp.get("solve_time_utc")) for pinp, _, _ in plans]
     per_quarter = []
-    for step, pinp, pout in history:
+    for k, (step, pinp, pout) in enumerate(history):
+        # Quarters until the next dump: the naive car charges through a gap.
+        here, there = times[k], times[k + 1]
+        gap = 1
+        if here is not None and there is not None:
+            gap = max(1, round((there - here) / timedelta(hours=step_h)))
+        next_ev = (plans[k + 1][0].get("ev_inputs") or {})
         chargers = (pinp.get("config") or {}).get("ev_chargers") or {}
         needed: dict[str, float] = {}
         for name, c in chargers.items():
@@ -209,20 +198,22 @@ def naive_overrides(
             if due is None:
                 continue
             needed[name] = due
-            naive[name] = naive.get(name, 0.0) + min(due, ev_full_rate(c, step_h)[1])
+            naive[name] = naive.get(name, 0.0) + min(due, ev_full_rate(c, step_h)[1] * gap)
             before = float(pinp["ev_inputs"][name]["soc_kwh"])
-            after = ((step.get("devices") or {}).get(name) or {}).get("soc_kwh")
-            real[name] = real.get(name, 0.0) + max(0.0, _num(after, before) - before)
-        per_quarter.append(Overrides(needed, deferrable(pinp, [step])))
+            after = _num(((step.get("devices") or {}).get(name) or {}).get("soc_kwh"), before)
+            if gap > 1 and (next_ev.get(name) or {}).get("available"):
+                # Over a gap only the next reading tells what the car took.
+                after = _num(next_ev[name].get("soc_kwh"), after)
+            real[name] = real.get(name, 0.0) + max(0.0, after - before)
+        per_quarter.append(Overrides(needed, deferrable[k]))
 
-    current = Overrides()
+    current = Overrides(deferrable_kw=deferrable[-1])
     for name, c in ((inp.get("config") or {}).get("ev_chargers") or {}).items():
         if c.get("discharge_segments"):
             continue
         due = owed(inp, out, name)
         if due is not None:
             current.ev_needed[name] = due
-    current.deferrable_kw = deferrable(inp, out.get("schedule") or [])
     return per_quarter, current
 
 
@@ -238,32 +229,92 @@ def parse_utc(value: Any) -> datetime | None:
 
 
 def _deferrable_cycles(
-    plans: list[tuple[dict[str, Any], dict[str, Any]]],
+    plans: list[tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]],
     step_h: float,
-) -> dict[str, list[tuple[datetime, list[float]]]]:
-    """Each deferrable load's naive runs as ``(start, profile)`` in time order.
+) -> list[dict[str, list[float]]]:
+    """Each deferrable load's naive draw for the steps of each plan.
 
-    A run opens when a plan schedules the load for a window not seen before.
+    ``plans`` are ``(inp, out, steps)`` in time order, ``steps`` the steps of
+    that plan that count: the first alone for an earlier plan, all of them for
+    the current one.
+
+    A cycle opens when a plan schedules the load (gives it a recommended
+    start) for a window not seen before. Its naive run starts at the window's
+    first step, or at that plan's first step if the window opened earlier.
+    A cycle whose real run has not started is dropped when a later plan
+    schedules a different window (the window moved), or neither schedules,
+    runs nor commits the load (the window was cancelled): the plan then never
+    delivers it, so neither does the baseline.
+
+    The real draws that follow belong to the latest cycle until they add up
+    to its profile's energy. Those are replaced by the naive run; any other
+    draw is drawn as planned.
+
+    Returns:
+        One dict per plan, mapping every deferrable load in its steps to its
+        naive draw in kW per step.
     """
     step = timedelta(hours=step_h)
-    cycles: dict[str, list[tuple[datetime, list[float]]]] = {}
-    seen: dict[str, Any] = {}
-    for pinp, pout in plans:
+    cycles: dict[str, list[dict[str, Any]]] = {}
+    # owned[(plan, step, name)]: kW of that real draw that belongs to a cycle.
+    owned: dict[tuple[int, int, str], float] = {}
+    for k, (pinp, pout, steps) in enumerate(plans):
         solve = parse_utc(pinp.get("solve_time_utc"))
         loads = (pinp.get("config") or {}).get("deferrable_loads") or {}
         windows = pinp.get("deferrable_windows") or {}
-        for name in pout.get("deferrable_recommended_starts") or {}:
+        recommended = pout.get("deferrable_recommended_starts") or {}
+        committed = pinp.get("deferrable_start_times") or {}
+        whole = pout.get("schedule") or steps
+        for name in _deferrable_names(whole):
+            runs = cycles.setdefault(name, [])
+            pending = bool(runs) and runs[-1]["consumed"] <= 1e-9
             window = windows.get(name) or {}
             earliest = parse_utc(window.get("earliest"))
             profile = (loads.get(name) or {}).get("power_profile")
-            if solve is None or earliest is None or not profile:
-                continue
-            if seen.get(name) == window.get("earliest"):
-                continue
-            seen[name] = window.get("earliest")
-            start = solve + step * _first_step(earliest, solve, step_h)
-            cycles.setdefault(name, []).append((start, [float(kw) for kw in profile]))
-    return cycles
+            if name in recommended and solve is not None and earliest is not None and profile:
+                if not runs or runs[-1]["key"] != window.get("earliest"):
+                    if pending:
+                        runs.pop()
+                    runs.append({
+                        "key": window.get("earliest"),
+                        "start": solve + step * _first_step(earliest, solve, step_h),
+                        "profile": [float(kw) for kw in profile],
+                        "total": sum(float(kw) for kw in profile) * step_h,
+                        "consumed": 0.0,
+                    })
+            elif pending and name not in windows and name not in committed and not any(
+                _planned_draw(whole, name)
+            ):
+                runs.pop()
+            for i, kw in enumerate(_planned_draw(steps, name)):
+                if kw <= 0.0 or not runs:
+                    continue
+                room = runs[-1]["total"] - runs[-1]["consumed"]
+                if room <= 1e-9:
+                    continue
+                take = min(kw, room / step_h)
+                runs[-1]["consumed"] += take * step_h
+                owned[(k, i, name)] = take
+
+    result: list[dict[str, list[float]]] = []
+    for k, (pinp, _, steps) in enumerate(plans):
+        solve = parse_utc(pinp.get("solve_time_utc"))
+        draws: dict[str, list[float]] = {}
+        for name in _deferrable_names(steps):
+            planned = _planned_draw(steps, name)
+            draw = []
+            for i, kw in enumerate(planned):
+                value = kw - owned.get((k, i, name), 0.0)
+                if solve is not None:
+                    when = solve + step * i
+                    for run in cycles.get(name, []):
+                        offset = round((when - run["start"]) / step)
+                        if 0 <= offset < len(run["profile"]):
+                            value += run["profile"][offset]
+                draw.append(value)
+            draws[name] = draw
+        result.append(draws)
+    return result
 
 
 def _first_step(earliest: datetime, solve: datetime, step_h: float) -> int:
