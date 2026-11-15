@@ -907,6 +907,12 @@ def _naive_flexible_load_kw(
       step until the cell holds what the plan's terminal SOC holds. The last
       step is partial. Charging losses at full power are drawn from the grid
       as well, so the comparison is at equal cell energy.
+    - A deferrable load the solver scheduled in this solve (one with a
+      recommended start) runs its ``power_profile`` from the first step of its
+      window instead of the planned start.
+    - A deferrable load that is already running or committed was not
+      scheduled by this solve, so the baseline draws exactly what the plan
+      draws.
 
     A V2H EV is left out: it is storage, and ``soc_credit_eur`` values the
     energy it ends with. An unplugged EV has no SOC balance, so its schedule
@@ -944,6 +950,30 @@ def _naive_flexible_load_kw(
             share = min(1.0, needed_kwh / cell_kwh_per_step)
             load[t] += full_kw * share
             needed_kwh -= cell_kwh_per_step * share
+
+    deferrable_names = {
+        name
+        for step in schedule
+        for name, sp in step.devices.items()
+        if sp.type == "deferrable_load"
+    }
+    for name in deferrable_names:
+        dl_cfg = config.deferrable_loads.get(name)
+        window = bundle.deferrable_windows.get(name)
+        if name in recommended_starts and dl_cfg is not None and window is not None:
+            # Same step rule as DeferrableLoad: the window's earliest moment,
+            # floored to a step and never before the first. The plan's own
+            # start is at or after it, so the shifted run fits the horizon.
+            first = max(0, int((window.earliest - bundle.solve_time_utc).total_seconds() / 3600.0 / dt))
+            for i, kw in enumerate(dl_cfg.power_profile):
+                if first + i < len(load):
+                    load[first + i] += kw
+            continue
+        for t, step in enumerate(schedule):
+            sp = step.devices.get(name)
+            if sp is not None:
+                # Consumption is negative kw in the schedule.
+                load[t] += max(0.0, -sp.kw)
 
     return load
 

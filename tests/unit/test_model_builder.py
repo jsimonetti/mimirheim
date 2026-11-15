@@ -15,6 +15,7 @@ import pytest
 from mimirheim.config.schema import MimirheimConfig
 from mimirheim.core.bundle import (
     BatteryInputs,
+    DeferrableWindow,
     DeviceSetpoint,
     EvInputs,
     HybridInverterInputs,
@@ -823,6 +824,106 @@ def test_smart_charging_of_a_charge_only_ev_shows_as_a_saving() -> None:
     result = build_and_solve(bundle, _charge_only_ev_config())
 
     # Base load 0.40 plus the car's 10 kWh at 0.30.
+    assert result.naive_cost_eur == pytest.approx(0.40 + 3.00, abs=1e-4)
+    saving = result.naive_cost_eur - (result.optimised_cost_eur - result.soc_credit_eur)
+    assert saving == pytest.approx(2.00, abs=1e-4)
+
+
+def _dishwasher_config() -> MimirheimConfig:
+    """A deferrable load drawing 2 kW then 1 kW, and a static base load."""
+    return MimirheimConfig.model_validate(
+        {
+            "mqtt": {"host": "localhost", "client_id": "test"},
+            "grid": {"import_limit_kw": 17.0, "export_limit_kw": 17.0},
+            "static_loads": {"base": {}},
+            "deferrable_loads": {"dishwasher": {"power_profile": [2.0, 1.0]}},
+        }
+    )
+
+
+def _dishwasher_schedule(kw: list[float]) -> list[ScheduleStep]:
+    """A schedule carrying only the dishwasher's planned draw per step."""
+    return [
+        ScheduleStep(
+            t=t,
+            grid_import_kw=0.0,
+            grid_export_kw=0.0,
+            devices={"dishwasher": DeviceSetpoint(kw=v, type="deferrable_load")},
+        )
+        for t, v in enumerate(kw)
+    ]
+
+
+def test_naive_deferrable_load_starts_at_the_start_of_its_window() -> None:
+    """A load the solver scheduled runs its profile from the window's first
+    step in the baseline, wherever the plan put it."""
+    t0 = datetime(2026, 11, 1, 18, tzinfo=timezone.utc)
+    bundle = _ev_bundle(7).model_copy(
+        update={
+            "ev_inputs": {},
+            "deferrable_windows": {
+                "dishwasher": DeferrableWindow(
+                    earliest=t0 + timedelta(minutes=30), latest=t0 + timedelta(minutes=105)
+                )
+            },
+        }
+    )
+
+    load = _naive_flexible_load_kw(
+        bundle,
+        _dishwasher_config(),
+        _dishwasher_schedule([0.0, 0.0, 0.0, 0.0, 0.0, -2.0, -1.0]),
+        {"dishwasher": t0 + timedelta(minutes=75)},
+        0.25,
+    )
+
+    assert load == pytest.approx([0.0, 0.0, 2.0, 1.0, 0.0, 0.0, 0.0])
+
+
+def test_naive_deferrable_load_already_running_draws_as_planned() -> None:
+    """A running or committed load was not scheduled by this solve: the
+    baseline draws exactly what the plan draws, so it nets out."""
+    load = _naive_flexible_load_kw(
+        _ev_bundle(3).model_copy(update={"ev_inputs": {}}),
+        _dishwasher_config(),
+        _dishwasher_schedule([-1.0, 0.0, 0.0]),
+        {},
+        0.25,
+    )
+
+    assert load == pytest.approx([1.0, 0.0, 0.0])
+
+
+def test_smart_timing_of_a_deferrable_load_shows_as_a_saving() -> None:
+    """End to end: the deferrable case from #209.
+
+    10 kWh in a window that opens at 0.30 EUR/kWh and ends at 0.10. The naive
+    dishwasher runs at the start of the window, the plan in the cheap hours.
+    """
+    t0 = datetime(2026, 11, 1, 18, tzinfo=timezone.utc)
+    horizon = 16
+    config = MimirheimConfig.model_validate(
+        {
+            "mqtt": {"host": "localhost", "client_id": "test"},
+            "grid": {"import_limit_kw": 17.0, "export_limit_kw": 17.0},
+            "static_loads": {"base": {}},
+            "deferrable_loads": {"dishwasher": {"power_profile": [5.0] * 8}},
+        }
+    )
+    bundle = SolveBundle(
+        solve_time_utc=t0,
+        horizon_prices=[0.30] * 8 + [0.10] * 8,
+        horizon_export_prices=[0.05] * horizon,
+        horizon_confidence=[1.0] * horizon,
+        pv_forecast=[0.0] * horizon,
+        base_load_forecast=[0.5] * horizon,
+        deferrable_windows={
+            "dishwasher": DeferrableWindow(earliest=t0, latest=t0 + timedelta(hours=4))
+        },
+    )
+
+    result = build_and_solve(bundle, config)
+
     assert result.naive_cost_eur == pytest.approx(0.40 + 3.00, abs=1e-4)
     saving = result.naive_cost_eur - (result.optimised_cost_eur - result.soc_credit_eur)
     assert saving == pytest.approx(2.00, abs=1e-4)
