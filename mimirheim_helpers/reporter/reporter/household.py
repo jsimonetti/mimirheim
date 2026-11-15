@@ -248,9 +248,9 @@ def _days(
     ranges = list(zip(starts, [*starts[1:], len(schedule)], strict=True))[:_MAX_DAYS]
 
     out = out if out is not None else {"schedule": schedule}
-    history = _earlier(earlier, local[0], tz)
+    history, breaks = _earlier(earlier, local[0], tz, str(inp.get("triggered_at_utc") or ""))
     history_overrides, plan_overrides = naive_overrides(
-        [(step, pinp, pout) for _, step, pinp, pout in history], inp, out, step_h,
+        [(step, pinp, pout) for _, step, pinp, pout in history], inp, out, step_h, breaks,
     )
     past = [
         (step, pinp, over)
@@ -373,28 +373,52 @@ def _earlier(
     earlier: Iterable[tuple[dict[str, Any], dict[str, Any]]],
     first: datetime,
     tz: tzinfo | None,
-) -> list[tuple[datetime, dict[str, Any], dict[str, Any], dict[str, Any]]]:
+    made_now: str = "",
+) -> tuple[
+    list[tuple[datetime, dict[str, Any], dict[str, Any], dict[str, Any]]],
+    list[set[str]],
+]:
     """The quarter hours before this plan, as ``(t, step, inp, out)`` in time
-    order, ``t`` local.
+    order, ``t`` local, and the EV session breaks for ``naive_overrides``.
 
     Each earlier plan contributes its first step: what the house was doing at
     the quarter hour it was made. When two plans share a first step, the later
     one wins, as it is the one that was acted on. Quarters before today are
     kept: the naive car carries across midnight (see
     ``baseline.naive_overrides``). Only today's are counted.
+
+    A dropped older pair can be the only one that saw an EV unplugged, for
+    instance when it was unplugged and plugged back in within one quarter.
+    That still ends the session: the breaks list, one set per kept quarter
+    and one for this plan (made at ``made_now``), names each EV seen
+    unplugged since the kept quarter before.
     """
     by_t: dict[datetime, tuple[str, dict[str, Any], dict[str, Any], dict[str, Any]]] = {}
+    unplugged: list[tuple[datetime, str, str]] = []
     for pinp, pout in earlier:
         sched = pout.get("schedule") or []
         if not sched:
             continue
         t = _as_local(sched[0].get("t", ""), tz)
-        if t >= first:
-            continue
         made = str(pinp.get("triggered_at_utc") or "")
+        if t > first or (t == first and made >= made_now):
+            continue
+        for name, ev in (pinp.get("ev_inputs") or {}).items():
+            if not (ev or {}).get("available"):
+                unplugged.append((t, made, name))
+        if t == first:
+            continue
         if t not in by_t or made > by_t[t][0]:
             by_t[t] = (made, sched[0], pinp, pout)
-    return [(t, step, pinp, pout) for t, (_, step, pinp, pout) in sorted(by_t.items())]
+    kept = sorted(by_t.items())
+    keys = [(t, made) for t, (made, _, _, _) in kept]
+    breaks: list[set[str]] = [set() for _ in range(len(kept) + 1)]
+    for t, made, name in unplugged:
+        # The first kept quarter after the observation, or this plan.
+        index = next((i for i, key in enumerate(keys) if key > (t, made)), len(kept))
+        breaks[index].add(name)
+    entries = [(t, step, pinp, pout) for t, (_, step, pinp, pout) in kept]
+    return entries, breaks
 
 
 def _ends_at_midnight(last_step: datetime, step_h: float) -> bool:

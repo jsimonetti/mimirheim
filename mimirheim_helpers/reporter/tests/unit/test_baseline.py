@@ -209,3 +209,18 @@ def test_earlier_quarters_draw_deferrable_loads_as_planned() -> None:
         for (step, pinp, _), over in zip(history, per_quarter, strict=True)
     ]
     assert drawn == [[0.0], [2.0]]
+
+
+def test_a_session_break_between_dumps_restarts_the_naive_car() -> None:
+    """The car was unplugged and replugged between two kept dumps (the dump
+    that saw it unplugged was dropped as an older one of the same quarter).
+    The break restarts the session: the new one owes all it needs."""
+    first_inp, first_out = _plan("2026-11-02T07:00:00Z", 20.0, 22.0, 8.0)
+    inp, out = _plan("2026-11-02T07:15:00Z", 20.0, 22.0, 8.0)
+    history = [(first_out["schedule"][0], first_inp, first_out)]
+
+    _, without = naive_overrides(history, inp, out, 0.25)
+    _, with_break = naive_overrides(history, inp, out, 0.25, breaks=[set(), {"car"}])
+
+    assert without.ev_needed["car"] == pytest.approx(0.0)
+    assert with_break.ev_needed["car"] == pytest.approx(2.0)

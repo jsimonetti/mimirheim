@@ -200,3 +200,17 @@ def test_household_page_covers_today_from_earlier_dumps(
 
     today = _embedded_payload((tmp_path / "household.html").read_text())["days"][0]
     assert today["past_from"] == "12:00"
+
+
+@pytest.mark.usefixtures("amsterdam")
+def test_earlier_pairs_reach_back_to_local_noon_across_a_clock_change(tmp_path: Path) -> None:
+    """The plan starts the day after the autumn clock change (Sunday
+    2026-10-25, 03:00 CEST to 02:00 CET). Noon on Saturday is 10:00 UTC, in
+    summer time, not 11:00 as today's winter offset would give."""
+    for ts_file in ("2026-10-24T09-45-00Z", "2026-10-24T10-00-00Z", "2026-10-24T10-45-00Z"):
+        _write_pair(tmp_path, ts_file)
+    daemon = _daemon(tmp_path, tmp_path)
+
+    pairs = daemon._earlier_pairs({"schedule": [{"t": "2026-10-25T10:00:00Z"}]})
+
+    assert [inp["file"] for inp, _ in pairs] == ["2026-10-24T10-00-00Z", "2026-10-24T10-45-00Z"]

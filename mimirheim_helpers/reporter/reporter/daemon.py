@@ -350,15 +350,17 @@ class ReporterDaemon(MqttDaemon):
         before local midnight so the naive car of a session plugged in last
         evening carries into today (see
         ``baseline.naive_overrides``); a session that began before that starts
-        at the first pair. The margin also covers a clock change since
-        midnight. Unreadable pairs are skipped.
+        at the first pair. Unreadable pairs are skipped.
         """
         sched = out.get("schedule") or []
         if not sched:
             return []
         first = datetime.fromisoformat(sched[0]["t"].replace("Z", "+00:00"))
         first = first.astimezone(timezone.utc)
-        midnight = first.astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
+        # A naive datetime converts as local time at its own date, so the
+        # cutoff keeps its wall-clock time across a clock change; today's
+        # fixed offset would move it by an hour.
+        midnight = datetime.combine(first.astimezone().date(), datetime.min.time())
         start = (midnight - _HISTORY_BEFORE_MIDNIGHT).astimezone(timezone.utc)
         lo = start.strftime("%Y-%m-%dT%H-%M-%S")
         hi = first.strftime("%Y-%m-%dT%H-%M-%S")
