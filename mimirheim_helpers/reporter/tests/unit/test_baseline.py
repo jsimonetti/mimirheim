@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from reporter.baseline import naive_overrides
+from reporter.baseline import naive_flexible_kw, naive_overrides
 
 
 def _plan(t: str, soc: float, end_soc: float, power_kw: float) -> tuple[dict, dict]:
@@ -67,15 +67,16 @@ def _dw_plan(
     window: tuple[str, str] | None = None,
     recommended: str | None = None,
     committed: str | None = None,
+    profile: list[float] | None = None,
 ) -> tuple[dict, dict]:
-    """A dump pair for a plan with a one-step 2 kW dishwasher drawing
-    ``draws`` kW per step, 15 minutes apart from ``t``."""
+    """A dump pair for a plan with a dishwasher (by default one step of 2 kW)
+    drawing ``draws`` kW per step, 15 minutes apart from ``t``."""
     from datetime import datetime, timedelta
 
     t0 = datetime.fromisoformat(t.replace("Z", "+00:00"))
     inp: dict = {
         "solve_time_utc": t,
-        "config": {"deferrable_loads": {"dishwasher": {"power_profile": [2.0]}}},
+        "config": {"deferrable_loads": {"dishwasher": {"power_profile": profile or [2.0]}}},
     }
     if window:
         inp["deferrable_windows"] = {"dishwasher": {"earliest": window[0], "latest": window[1]}}
@@ -97,6 +98,15 @@ def _dw_plan(
 def _entry(pair: tuple[dict, dict]) -> tuple[dict, dict, dict]:
     inp, out = pair
     return out["schedule"][0], inp, out
+
+
+def _current_naive(history: list, inp: dict, out: dict) -> list[float]:
+    """The naive flexible load the current plan ends up with: its overrides
+    where there are any, its own rule elsewhere."""
+    _, current = naive_overrides(history, inp, out, 0.25)
+    return naive_flexible_kw(
+        inp, out["schedule"], 0.25, out.get("deferrable_recommended_starts") or {}, current
+    )
 
 
 def test_a_run_committed_without_a_schedule_draws_as_planned() -> None:
@@ -131,9 +141,7 @@ def test_a_cancelled_window_leaves_no_naive_run() -> None:
     )
     inp, out = _dw_plan("2026-11-02T08:00:00Z", [0.0] * 24)
 
-    _, current = naive_overrides([_entry(scheduled)], inp, out, 0.25)
-
-    assert current.deferrable_kw["dishwasher"] == [0.0] * 24
+    assert _current_naive([_entry(scheduled)], inp, out) == [0.0] * 24
 
 
 def test_a_moved_window_counts_one_naive_run() -> None:
@@ -152,11 +160,9 @@ def test_a_moved_window_counts_one_naive_run() -> None:
         recommended="2026-11-02T13:00:00Z",
     )
 
-    _, current = naive_overrides([_entry(scheduled)], inp, out, 0.25)
-
     expected = [0.0] * 24
     expected[20] = 2.0
-    assert current.deferrable_kw["dishwasher"] == expected
+    assert _current_naive([_entry(scheduled)], inp, out) == expected
 
 
 def test_the_naive_car_keeps_charging_between_missing_dumps() -> None:
@@ -174,3 +180,71 @@ def test_the_naive_car_keeps_charging_between_missing_dumps() -> None:
     assert per_quarter[0].ev_needed["car"] == pytest.approx(4.0)
     assert per_quarter[1].ev_needed["car"] == pytest.approx(0.0)
     assert current.ev_needed["car"] == pytest.approx(0.0)
+
+
+def test_a_window_moved_beyond_the_horizon_leaves_no_naive_run() -> None:
+    """Scheduled for 10:00, then moved to tomorrow, beyond this plan: the
+    plan no longer delivers it today, so neither does the baseline."""
+    scheduled = _dw_plan(
+        "2026-11-02T07:00:00Z", [0.0] * 16,
+        window=("2026-11-02T09:00:00Z", "2026-11-02T12:00:00Z"),
+        recommended="2026-11-02T09:00:00Z",
+    )
+    inp, out = _dw_plan(
+        "2026-11-02T07:15:00Z", [0.0] * 16,
+        window=("2026-11-04T09:00:00Z", "2026-11-04T12:00:00Z"),
+    )
+
+    assert _current_naive([_entry(scheduled)], inp, out) == [0.0] * 16
+
+
+def test_a_missing_dump_mid_run_does_not_leak_into_a_later_run() -> None:
+    """A two-step run from 07:15 whose 07:30 dump is missing has ended by
+    07:45. A run committed at noon without a schedule is not part of it."""
+    two = [2.0, 2.0]
+    morning = _dw_plan(
+        "2026-11-02T07:00:00Z", [0.0, 2.0, 2.0],
+        window=("2026-11-02T07:00:00Z", "2026-11-02T09:00:00Z"),
+        recommended="2026-11-02T07:15:00Z", profile=two,
+    )
+    ran = _dw_plan("2026-11-02T07:15:00Z", [2.0, 2.0], committed="2026-11-02T07:15:00Z", profile=two)
+    noon = _dw_plan("2026-11-02T11:00:00Z", [2.0, 2.0], committed="2026-11-02T11:00:00Z", profile=two)
+    inp, out = _dw_plan("2026-11-02T11:15:00Z", [2.0, 0.0], committed="2026-11-02T11:00:00Z", profile=two)
+
+    per_quarter, current = naive_overrides(
+        [_entry(morning), _entry(ran), _entry(noon)], inp, out, 0.25
+    )
+
+    assert per_quarter[2].deferrable_kw["dishwasher"] == [2.0]
+    assert current.deferrable_kw["dishwasher"] == [2.0, 0.0]
+
+
+def test_a_stale_commit_does_not_keep_a_cancelled_window() -> None:
+    """Yesterday's start time is still retained. A window scheduled for
+    10:00 and cleared at 08:00 leaves no naive run."""
+    stale = "2026-11-01T18:00:00Z"
+    scheduled = _dw_plan(
+        "2026-11-02T07:00:00Z", [0.0] * 16,
+        window=("2026-11-02T09:00:00Z", "2026-11-02T12:00:00Z"),
+        recommended="2026-11-02T09:00:00Z", committed=stale,
+    )
+    inp, out = _dw_plan("2026-11-02T07:15:00Z", [0.0] * 16, committed=stale)
+
+    assert _current_naive([_entry(scheduled)], inp, out) == [0.0] * 16
+
+
+def test_a_start_committed_minutes_late_is_still_the_scheduled_run() -> None:
+    """Planned for 07:15, the automation reports 07:18: still the run of the
+    window that opened at 07:00, moved there in the baseline."""
+    morning = _dw_plan(
+        "2026-11-02T07:00:00Z", [0.0, 2.0],
+        window=("2026-11-02T07:00:00Z", "2026-11-02T09:00:00Z"),
+        recommended="2026-11-02T07:15:00Z",
+    )
+    ran = _dw_plan("2026-11-02T07:15:00Z", [2.0], committed="2026-11-02T07:18:00Z")
+    inp, out = _dw_plan("2026-11-02T07:30:00Z", [0.0], committed="2026-11-02T07:18:00Z")
+
+    per_quarter, _ = naive_overrides([_entry(morning), _entry(ran)], inp, out, 0.25)
+
+    assert per_quarter[0].deferrable_kw["dishwasher"] == [2.0]
+    assert per_quarter[1].deferrable_kw["dishwasher"] == [0.0]
