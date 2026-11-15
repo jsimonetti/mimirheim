@@ -65,6 +65,11 @@ _PLOTLY_JS_FILENAME = "plotly.min.js"
 # each solve, so it has a bookmarkable URL and can be framed in Home Assistant.
 _HOUSEHOLD_FILENAME = "household.html"
 
+# How far before local midnight the household view's earlier dump pairs reach.
+# Long enough for a session plugged in last evening; each pair is a few
+# hundred kB, so not a whole extra day per render.
+_HISTORY_BEFORE_MIDNIGHT = timedelta(hours=12)
+
 # Characters an ISO 8601 timestamp is built from. Deliberately a whitelist:
 # it excludes both path separators and NUL, so a value that matches cannot
 # escape the directory it is joined onto.
@@ -336,13 +341,17 @@ class ReporterDaemon(MqttDaemon):
         logger.info("Refreshed household view: %s", dest)
 
     def _earlier_pairs(self, out: dict[str, Any]) -> list[tuple[dict[str, Any], dict[str, Any]]]:
-        """Dump pairs made earlier today, before ``out``'s first step.
+        """Dump pairs made before ``out``'s first step, from noon yesterday.
 
         The household view reads the first step of each to cover the hours of
         today that this plan no longer includes. "Today" is the reporter's
-        local date, the same time zone the view splits days in. The window
-        opens an hour before local midnight, in case the clocks changed since;
-        the view keeps only steps on today's date. Unreadable pairs are skipped.
+        local date, the same time zone the view splits days in, and the view
+        counts only steps on today's date. The window opens twelve hours
+        before local midnight so the naive car of a session plugged in last
+        evening, and a dishwasher scheduled then, carry into today (see
+        ``baseline.naive_overrides``); a session that began before that starts
+        at the first pair. The margin also covers a clock change since
+        midnight. Unreadable pairs are skipped.
         """
         sched = out.get("schedule") or []
         if not sched:
@@ -350,7 +359,7 @@ class ReporterDaemon(MqttDaemon):
         first = datetime.fromisoformat(sched[0]["t"].replace("Z", "+00:00"))
         first = first.astimezone(timezone.utc)
         midnight = first.astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
-        start = (midnight - timedelta(hours=1)).astimezone(timezone.utc)
+        start = (midnight - _HISTORY_BEFORE_MIDNIGHT).astimezone(timezone.utc)
         lo = start.strftime("%Y-%m-%dT%H-%M-%S")
         hi = first.strftime("%Y-%m-%dT%H-%M-%S")
         dump_dir = self._reporter_config.dump_dir

@@ -246,3 +246,29 @@ def test_data_table_grid_columns_still_present_with_deferrable_load() -> None:
     assert "Grid exp<br>kW" in headers
     # Grid columns must appear after the deferrable load columns.
     assert headers.index("Grid imp<br>kW") > headers.index("wash<br>kWh")
+
+
+def test_naive_chart_shows_the_naive_flexible_load() -> None:
+    """The naive chart carries the load the naive baseline runs: here a
+    running deferrable load, which the baseline draws as planned. Without it
+    the chart would show less demand than the naive cost is priced on."""
+    out = _make_out_from_schedule(_make_schedule_with_deferrable(kw=-1.5))
+
+    naive_traces, _ = _build_energy_flows_traces(_make_inp(), out, _XS_2)
+
+    flexible = [t for t in naive_traces if t.name == "Flexible loads (naive)"]
+    assert len(flexible) == 1
+    assert list(flexible[0].y) == pytest.approx([1.5 * _STEP_HOURS] * 2)
+
+
+def test_naive_chart_has_no_flexible_bar_without_flexible_loads() -> None:
+    """No flexible load: the naive chart stays base load and PV only."""
+    schedule = [
+        {"t": x, "grid_import_kw": 0.0, "grid_export_kw": 0.0, "devices": {}} for x in _XS_2
+    ]
+
+    naive_traces, _ = _build_energy_flows_traces(
+        _make_inp(), _make_out_from_schedule(schedule), _XS_2
+    )
+
+    assert [t.name for t in naive_traces] == ["Base load", "PV generation"]

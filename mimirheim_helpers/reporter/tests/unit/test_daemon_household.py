@@ -146,16 +146,18 @@ def _write_pair(dump_dir: Path, ts_file: str, out: str | None = "{}") -> None:
 
 
 @pytest.mark.usefixtures("amsterdam")
-def test_earlier_pairs_are_todays_before_this_plan(tmp_path: Path) -> None:
+def test_earlier_pairs_reach_back_to_noon_yesterday(tmp_path: Path) -> None:
     """This plan starts at 12:00 Amsterdam (10:00 UTC): today began at 22:00 UTC.
 
-    The window opens an hour earlier for a clock change since midnight; the
-    view itself drops what is not on today's date. This plan and later ones
-    are not "earlier", and a pair that cannot be read is skipped.
+    The window opens twelve hours before that, at 10:00 UTC yesterday, so a
+    session plugged in last evening carries into today; the view itself
+    counts only today's date. This plan and later ones are not "earlier", and
+    a pair that cannot be read is skipped.
     """
     for ts_file in (
-        "2026-09-30T20-45-00Z",  # before the window
-        "2026-09-30T21-30-00Z",  # in the hour of margin
+        "2026-09-30T09-45-00Z",  # before the window
+        "2026-09-30T10-00-00Z",  # noon yesterday, Amsterdam
+        "2026-09-30T21-30-00Z",  # last evening
         "2026-10-01T05-00-00Z",
         "2026-10-01T09-45-00Z",
         "2026-10-01T10-00-00Z",  # this plan
@@ -169,6 +171,7 @@ def test_earlier_pairs_are_todays_before_this_plan(tmp_path: Path) -> None:
     pairs = daemon._earlier_pairs({"schedule": [{"t": "2026-10-01T10:00:00Z"}]})
 
     assert [inp["file"] for inp, _ in pairs] == [
+        "2026-09-30T10-00-00Z",
         "2026-09-30T21-30-00Z",
         "2026-10-01T05-00-00Z",
         "2026-10-01T09-45-00Z",
