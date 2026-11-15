@@ -29,7 +29,7 @@ import pytest
 
 from mimirheim.config.schema import MimirheimConfig
 from mimirheim.core.bundle import SolveBundle, SolveResult
-from mimirheim.core.model_builder import build_and_solve, debug_dump
+from mimirheim.core.model_builder import _naive_flexible_load_kw, build_and_solve, debug_dump
 from reporter.household import build_household_html
 
 _AMS = ZoneInfo("Europe/Amsterdam")
@@ -136,20 +136,47 @@ def _slice(bundle: SolveBundle, i0: int, i1: int) -> SolveBundle:
     return SolveBundle.model_validate(d)
 
 
-@pytest.fixture(scope="module")
-def solved(tmp_path_factory: pytest.TempPathFactory) -> tuple[SolveBundle, MimirheimConfig, SolveResult, dict]:
-    """Solve the case, dump it as the solver loop does, render the page from
-    the dump pair and return the page's per-day data."""
-    bundle, config = _bundle(), MimirheimConfig.model_validate(_CONFIG)
+def _without_van(bundle: SolveBundle) -> tuple[SolveBundle, MimirheimConfig]:
+    """The case without the charge-only van: no flexible load in the baseline,
+    so the baseline depends on the inputs only."""
+    cfg = json.loads(json.dumps(_CONFIG))
+    del cfg["ev_chargers"]["van"]
+    d = bundle.model_dump()
+    del d["ev_inputs"]["van"]
+    return SolveBundle.model_validate(d), MimirheimConfig.model_validate(cfg)
+
+
+def _solve_and_render(
+    bundle: SolveBundle, config: MimirheimConfig, dumps: Path
+) -> tuple[SolveBundle, MimirheimConfig, SolveResult, dict]:
+    """Solve, dump it as the solver loop does, render the page from the dump
+    pair and return the page's per-day data."""
     result = build_and_solve(bundle, config)
     assert result.solve_status == "optimal"
-    paths = debug_dump(bundle, result, config, tmp_path_factory.mktemp("dumps"), max_dumps=0)
+    paths = debug_dump(bundle, result, config, dumps, max_dumps=0)
     assert paths is not None
     inp, out = (json.loads(Path(p).read_text()) for p in paths)
     html = build_household_html(inp, out, tz=_AMS)
     m = re.search(r'<script id="household-data" type="application/json">(.*?)</script>', html, re.S)
     assert m
     return bundle, config, result, json.loads(m.group(1).replace("<\\/", "</"))
+
+
+@pytest.fixture(scope="module")
+def solved(tmp_path_factory: pytest.TempPathFactory) -> tuple[SolveBundle, MimirheimConfig, SolveResult, dict]:
+    """The full case, the charge-only van included."""
+    return _solve_and_render(
+        _bundle(), MimirheimConfig.model_validate(_CONFIG), tmp_path_factory.mktemp("dumps")
+    )
+
+
+@pytest.fixture(scope="module")
+def solved_without_van(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> tuple[SolveBundle, MimirheimConfig, SolveResult, dict]:
+    """The case without the van, for checks that need an input-only baseline."""
+    bundle, config = _without_van(_bundle())
+    return _solve_and_render(bundle, config, tmp_path_factory.mktemp("dumps"))
 
 
 def test_the_case_exercises_every_clipping_path() -> None:
@@ -167,16 +194,39 @@ def test_the_plan_splits_into_three_days(solved) -> None:
     ]
 
 
-def test_each_days_baseline_is_the_solvers(solved) -> None:
+def test_each_days_baseline_is_the_solvers(solved_without_van) -> None:
     """Each day's baseline equals the solver's naive_cost_eur for that day's
-    steps alone: the baseline depends on the inputs only, so solving the day's
-    slice of the bundle gives the solver's own figure for it."""
-    bundle, config, result, payload = solved
+    steps alone. Without a flexible load the baseline depends on the inputs
+    only, so solving the day's slice of the bundle gives the solver's own
+    figure for it. With one it does not: the naive van charges from the first
+    step of the whole plan, which the next test covers."""
+    bundle, config, result, payload = solved_without_van
     for day in payload["days"]:
         expected = build_and_solve(_slice(bundle, day["i0"], day["i1"]), config).naive_cost_eur
         assert day["summary"]["naive"] == pytest.approx(expected, abs=1e-3), day["date"]
     total = sum(d["summary"]["naive"] for d in payload["days"])
     assert total == pytest.approx(result.naive_cost_eur, abs=1e-3)
+
+
+def test_the_naive_van_charges_at_full_power_from_the_first_step(solved, solved_without_van) -> None:
+    """The van takes its planned energy at full power from the first step, in
+    the baseline as in the solver. That is all within the first day's night
+    hours, where there is no PV, so its cost adds to that day's baseline
+    unchanged, and the later days are the same as without the van."""
+    bundle, config, result, payload = solved
+    _, _, _, without = solved_without_van
+    flex = _naive_flexible_load_kw(
+        bundle, config, result.schedule, result.deferrable_recommended_starts, 0.25
+    )
+    first_day = payload["days"][0]
+    # Guard the case: the van charges, and only within the first day's steps.
+    assert sum(flex) > 0.0
+    assert all(kw == 0.0 for kw in flex[first_day["i1"]:])
+    assert flex[0] == pytest.approx(7.0)
+    van_eur = sum(kw * bundle.horizon_prices[t] * 0.25 for t, kw in enumerate(flex))
+    for day, base in zip(payload["days"], without["days"], strict=True):
+        extra = van_eur if day is first_day else 0.0
+        assert day["summary"]["naive"] == pytest.approx(base["summary"]["naive"] + extra, abs=1e-3)
 
 
 def test_the_days_stored_energy_adds_up_to_the_solvers_credit(solved) -> None:

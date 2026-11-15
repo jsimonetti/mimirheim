@@ -384,7 +384,8 @@ def _naive_steps(
 ) -> list[float]:
     """The solver's no-storage baseline cost, step by step.
 
-    Mirrors ``mimirheim.core.model_builder``'s ``_compute_naive_cost`` and the
+    Mirrors ``mimirheim.core.model_builder``'s ``_compute_naive_cost``, with
+    flexible loads run the naive way (``_naive_flexible_kw``), and the
     PV series ``build_and_solve`` hands it: base load minus each PV array's
     forecast clipped into ``[0, max_deliverable_kw]`` and each hybrid
     inverter's own panels clipped into ``[0, max_pv_kw]`` and taken through
@@ -414,16 +415,49 @@ def _naive_steps(
         (hybrid_inputs[name]["pv_forecast_kw"], float(c["max_pv_kw"]), float(c["inverter_efficiency"]))
         for name, c in hybrids.items()
     ]
+    flexible = _naive_flexible_kw(inp, schedule, step_h)
     result = []
     for t, s in enumerate(schedule):
         pv = 0.0
         for forecast, ceiling, factor in series:
             kw = _num(forecast[t]) if t < len(forecast) else 0.0
             pv += kw if ceiling is None else min(max(0.0, kw), ceiling) * factor
-        net = (_num(base[t]) if t < len(base) else 0.0) - pv
+        net = (_num(base[t]) if t < len(base) else 0.0) + flexible[t] - pv
         price = s.get("import_price_eur_per_kwh") if net >= 0 else s.get("export_price_eur_per_kwh")
         result.append(net * _num(price) * step_h)
     return result
+
+
+def _naive_flexible_kw(
+    inp: dict[str, Any],
+    schedule: list[dict[str, Any]],
+    step_h: float,
+) -> list[float]:
+    """AC power per step that flexible loads draw in the solver's naive
+    baseline, as ``mimirheim.core.model_builder``'s ``_naive_flexible_load_kw``
+    computes it: a plugged-in charge-only EV charges at full power from the
+    first step until its cell holds what the plan's last step holds."""
+    cfg = (inp.get("config") or {}).get("ev_chargers") or {}
+    load = [0.0] * len(schedule)
+    if not schedule:
+        return load
+    last = schedule[-1].get("devices") or {}
+    for name, ev in (inp.get("ev_inputs") or {}).items():
+        c = cfg.get(name)
+        end = (last.get(name) or {}).get("soc_kwh")
+        if not ev.get("available") or c is None or end is None or c.get("discharge_segments"):
+            continue
+        needed = float(end) - float(ev["soc_kwh"])
+        segments = c.get("charge_segments") or []
+        full_kw = sum(float(seg["power_max_kw"]) for seg in segments)
+        per_step = sum(float(seg["power_max_kw"]) * float(seg["efficiency"]) for seg in segments) * step_h
+        for t in range(len(schedule)):
+            if needed <= 1e-9 or per_step <= 0.0:
+                break
+            share = min(1.0, needed / per_step)
+            load[t] += full_kw * share
+            needed -= per_step * share
+    return load
 
 
 def _deliverable_kw(array: dict[str, Any]) -> float:
