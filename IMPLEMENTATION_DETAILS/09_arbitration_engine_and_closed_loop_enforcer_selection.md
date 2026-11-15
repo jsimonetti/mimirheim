@@ -35,8 +35,9 @@ A device is an **eligible candidate** for a near-zero-exchange step when:
 1. Its capability flag is set (`zero_exchange` for batteries/EVs, `zero_export` for PV).
 2. For EVs: the vehicle is plugged in (`bundle.ev_inputs[name].available` is True).
 3. Its absorption headroom is >= `config.control.headroom_margin_kw`.
+4. For batteries: it can regulate in both directions, judged on its start- and end-of-step state of charge against full and against the effective floor, and the step is not a protected hold (see "Battery eligibility" and "Protected holds" below).
 
-**Absorption headroom** is the additional power the device can absorb at its current operating point: for batteries and EVs, `max_charge_kw - actual_charge_kw + actual_discharge_kw`; for PV, the current production kW.
+**Absorption headroom** is the additional power the device can absorb at its current operating point: for batteries and EVs, `max_charge_kw - actual_charge_kw + actual_discharge_kw`; for PV, the current production kW. For a battery whose SoC is known, the SoC-aware `absorb` value from "Battery eligibility" replaces this formula, both for the threshold and for scoring level 2. Without a known SoC the formula above applies to batteries as before.
 
 Candidates are scored by a four-level cascade (descending; later levels break ties):
 
@@ -44,6 +45,47 @@ Candidates are scored by a four-level cascade (descending; later levels break ti
 2. Headroom margin (headroom minus expected compensation — more slack is better).
 3. Wear proxy: lower `wear_cost_eur_per_kwh` wins.
 4. Type priority (battery=3, EV=2, PV=1), then device name (lexicographic).
+
+### Battery eligibility
+
+The forecast error an enforcer corrects has no known sign, so a battery must be able to move at least `headroom_margin_kw` both ways around its planned setpoint:
+
+```
+absorb = charge_limit(soc)    (0 when full)   - charge_kw    + discharge_kw
+supply = discharge_limit(soc) (0 when empty)  - discharge_kw + charge_kw
+full   = start or end SoC >= capacity_kwh - margin_kwh
+empty  = start or end SoC <= floor_kwh    + margin_kwh
+eligible when absorb >= headroom_margin_kw and supply >= headroom_margin_kw,
+              and both are above 0 (so headroom_margin_kw = 0 still excludes full and empty)
+margin_kwh = max(headroom_margin_kw * 0.25 h, 0.001 * capacity_kwh)
+floor_kwh  = max(min_soc_kwh, min(battery_care.floor_kwh, measured SoC))
+```
+
+`soc` is the start-of-step state of charge: the previous step's `soc_kwh` (which is an end-of-step value), or `bundle.battery_inputs[name].soc_kwh` for the first step. `charge_limit` and `discharge_limit` apply the linear derating of `reduce_charge_above_soc_kwh` / `reduce_discharge_below_soc_kwh`, the same lines the battery device imposes on the solver (§8, "Power derating near SOC extremes"). `margin_kwh` is the energy needed to sustain the margin for one step, with a floor of 0.1 % of capacity (the same tolerance as the hold at the top) so that solver or measurement rounding does not make a full or empty battery eligible when `headroom_margin_kw` is 0. The end-of-step SoC is checked too: a planned discharge that reaches the floor by the end of the step has already used the room a further deficit would need, and likewise for a charge that reaches the top.
+
+`charge_kw` and `discharge_kw` are the planned power, with power at or below `battery_idle_threshold_kw` counted as zero: solver noise must not lend a full or empty battery headroom. Both noise guards (this one and the hold at the top) depend on `battery_idle_threshold_kw` being above the noise level; setting it to 0 disables them.
+
+`floor_kwh` is the lowest SoC the plan lets the battery reach. The battery-care ratchet raises it above `min_soc_kwh`; the solver applies it as `soc >= min(floor_kwh, measured SoC)`, so a battery that starts below the ratchet floor is held where it is. A closed-loop controller covering house load would discharge below that level and undo the ratchet.
+
+Consequences:
+
+- An idle battery at 100 % has no absorb headroom and an idle battery at `min_soc_kwh` has no supply headroom. Neither is selected, and the next candidate (a PV array with `zero_export`, an EV, a hybrid inverter) takes the role.
+- A battery discharging from 100 % stays eligible when it discharges at least `headroom_margin_kw`: it absorbs a surplus by discharging less. A smaller discharge above `battery_idle_threshold_kw` is not a hold, but it leaves too little absorb headroom; a discharge at or below `battery_idle_threshold_kw` is a hold whatever the margin. Eligibility from the top therefore needs a discharge above both thresholds. The same applies to a battery charging at `min_soc_kwh`, which covers a deficit by charging less.
+- With a known SoC, a battery already charging or discharging at its power limit is not eligible, because it cannot move further in that direction. Without a known SoC only the absorb formula applies, as before this rule existed.
+
+When a step carries no `soc_kwh` (a schedule whose dispatch `apply_gain_threshold` suppressed), the end-of-step SoC is carried forward as `start - kw * 0.25 h`, clamped to `[0, capacity_kwh]` (not to `min_soc_kwh`, so a measured SoC below the minimum is not moved up). With no measured SoC the step's published end SoC stands in for the start; with neither, the SoC rules and the hold at the top (which needs a SoC) are skipped, and only the battery-care hold applies.
+
+### Protected holds
+
+A closed-loop controller regulates grid exchange and drops the planned battery target. On a step where the plan holds the battery at a level, that lets the house load drain the hold. Such steps must not carry the flag, and a consumer that protects held steps would decline it anyway, leaving the step with no enforcer and EV load balancing suppressed. A battery is therefore excluded on:
+
+- **Battery-care hold:** `battery_care.<name>.enforced_target_kwh` is set and the step's horizon index `t` satisfies `enforced_step <= t <= enforced_step + enforced_hold_steps`. The range is inclusive and keyed on `t`, not on list position.
+  The window includes `enforced_step + enforced_hold_steps` even when the battery was already at the target as the horizon began, in which case the model pinned one step less. The published fields do not distinguish the two cases, and a consumer that protects the hold reads the same window; excluding one step too many costs at most one step without the battery as enforcer, while a narrower window would flag a step that consumer declines.
+- **Hold at the top:** the battery is idle or charging (`kw <= control.battery_idle_threshold_kw`) and the start-of-step or end-of-step SoC is at or above `capacity_kwh * 0.999`. Checking the end catches a hold entered slightly low (for example start 99.5 %, end 100 %). A discharge is never a top hold.
+
+`battery_idle_threshold_kw` exists because solver output carries rounding noise: `kw = +0.003` at 100 % is a hold, not a discharge. A consumer that protects held steps must classify idle with the same threshold, otherwise it declines steps mimirheim flagged or the other way round.
+
+An excluded battery is absent from the candidates. The cascade selects the next eligible device, a battery that loses eligibility mid-dwell is released on that step (dwell never keeps an ineligible enforcer), and loadbalance suppression follows the device actually selected.
 
 **Hysteresis:** a challenger must exceed the current enforcer's efficiency score by `config.control.switch_delta` to trigger a switch.
 

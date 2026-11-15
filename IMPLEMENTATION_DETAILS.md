@@ -42,7 +42,7 @@ All runtime MQTT inputs as Pydantic models collected into `SolveBundle`; forecas
 
 ## 9. Arbitration engine and closed-loop enforcer selection
 
-Why the solver does not zero out closed-loop device variables; enforcer eligibility, scoring, hysteresis, and dwell; loadbalance suppression. See [`IMPLEMENTATION_DETAILS/09_arbitration_engine_and_closed_loop_enforcer_selection.md`](IMPLEMENTATION_DETAILS/09_arbitration_engine_and_closed_loop_enforcer_selection.md).
+Why the solver does not zero out closed-loop device variables; enforcer eligibility (including SoC-aware battery headroom and protected holds), scoring, hysteresis, and dwell; loadbalance suppression. See [`IMPLEMENTATION_DETAILS/09_arbitration_engine_and_closed_loop_enforcer_selection.md`](IMPLEMENTATION_DETAILS/09_arbitration_engine_and_closed_loop_enforcer_selection.md).
 
 ## 10. Exchange-shaping secondary term
 
