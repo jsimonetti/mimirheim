@@ -235,13 +235,14 @@ def _days(
     starts = [0] + [i for i in range(1, len(local)) if local[i].date() != local[i - 1].date()]
     ranges = list(zip(starts, [*starts[1:], len(schedule)], strict=True))[:_MAX_DAYS]
 
-    naive_steps = _naive_steps(inp, schedule, step_h, deferrable_starts)
+    past = _earlier_today(earlier, local[0], tz)
+    past_needed, plan_needed = _naive_ev_sessions(inp, schedule, past, step_h)
+    naive_steps = _naive_steps(inp, schedule, step_h, deferrable_starts, plan_needed)
     avg_price = sum(_num(s.get("import_price_eur_per_kwh")) for s in schedule) / len(schedule)
     discharge = _discharge_path(inp)
     capacity = _storage_capacity_kwh(inp)
     total_capacity = sum(capacity.values())
     confidence = inp.get("horizon_confidence") or []
-    past = _earlier_today(earlier, local[0], tz)
 
     days = []
     for k, (i0, i1) in enumerate(ranges):
@@ -259,10 +260,10 @@ def _days(
         )
         day_start = soc_start
         if k == 0 and past:
-            for step, pinp in past:
+            for (step, pinp, _), needed in zip(past, past_needed, strict=True):
                 _add(tally, _tally(
                     [step], hybrid_splits([step], pinp),
-                    _naive_steps(pinp, [step], step_h), pinp, step_h,
+                    _naive_steps(pinp, [step], step_h, None, needed), pinp, step_h,
                 ))
             day_start = _soc_before(past[0][1], [], 0)
         stored = _stored_eur(day_start, soc_end, discharge, avg_price)
@@ -350,14 +351,15 @@ def _earlier_today(
     earlier: Iterable[tuple[dict[str, Any], dict[str, Any]]],
     first: datetime,
     tz: tzinfo | None,
-) -> list[tuple[dict[str, Any], dict[str, Any]]]:
-    """Today's quarter hours before this plan, as ``(step, inp)`` in time order.
+) -> list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]]:
+    """Today's quarter hours before this plan, as ``(step, inp, last)`` in
+    time order, ``last`` being the devices of that plan's final step.
 
     Each earlier plan contributes its first step: what the house was doing at
     the quarter hour it was made. When two plans share a first step, the later
     one wins, as it is the one that was acted on.
     """
-    by_t: dict[datetime, tuple[str, dict[str, Any], dict[str, Any]]] = {}
+    by_t: dict[datetime, tuple[str, dict[str, Any], dict[str, Any], dict[str, Any]]] = {}
     for pinp, pout in earlier:
         sched = pout.get("schedule") or []
         if not sched:
@@ -367,8 +369,8 @@ def _earlier_today(
             continue
         made = str(pinp.get("triggered_at_utc") or "")
         if t not in by_t or made > by_t[t][0]:
-            by_t[t] = (made, sched[0], pinp)
-    return [(step, pinp) for _, (_, step, pinp) in sorted(by_t.items())]
+            by_t[t] = (made, sched[0], pinp, sched[-1].get("devices") or {})
+    return [(step, pinp, last) for _, (_, step, pinp, last) in sorted(by_t.items())]
 
 
 def _ends_at_midnight(last_step: datetime, step_h: float) -> bool:
@@ -387,6 +389,7 @@ def _naive_steps(
     schedule: list[dict[str, Any]],
     step_h: float,
     starts: dict[str, Any] | None = None,
+    ev_needed: dict[str, float] | None = None,
 ) -> list[float]:
     """The solver's no-storage baseline cost, step by step.
 
@@ -421,7 +424,7 @@ def _naive_steps(
         (hybrid_inputs[name]["pv_forecast_kw"], float(c["max_pv_kw"]), float(c["inverter_efficiency"]))
         for name, c in hybrids.items()
     ]
-    flexible = _naive_flexible_kw(inp, schedule, step_h, starts or {})
+    flexible = _naive_flexible_kw(inp, schedule, step_h, starts or {}, ev_needed)
     result = []
     for t, s in enumerate(schedule):
         pv = 0.0
@@ -439,6 +442,7 @@ def _naive_flexible_kw(
     schedule: list[dict[str, Any]],
     step_h: float,
     starts: dict[str, Any],
+    ev_needed: dict[str, float] | None = None,
 ) -> list[float]:
     """AC power per step that flexible loads draw in the solver's naive
     baseline, as ``mimirheim.core.model_builder``'s ``_naive_flexible_load_kw``
@@ -446,7 +450,10 @@ def _naive_flexible_kw(
     first step until its cell holds what the plan's last step holds; a
     deferrable load with a recommended start (``starts``) runs its profile
     from the first step of its window; any other deferrable load draws what
-    the plan draws."""
+    the plan draws.
+
+    ``ev_needed`` overrides, per EV, the cell energy the naive car still takes
+    from the first step (see ``_naive_ev_sessions``)."""
     cfg = (inp.get("config") or {}).get("ev_chargers") or {}
     load = [0.0] * len(schedule)
     if not schedule:
@@ -458,9 +465,9 @@ def _naive_flexible_kw(
         if not ev.get("available") or c is None or end is None or c.get("discharge_segments"):
             continue
         needed = float(end) - float(ev["soc_kwh"])
-        segments = c.get("charge_segments") or []
-        full_kw = sum(float(seg["power_max_kw"]) for seg in segments)
-        per_step = sum(float(seg["power_max_kw"]) * float(seg["efficiency"]) for seg in segments) * step_h
+        if ev_needed is not None and name in ev_needed:
+            needed = ev_needed[name]
+        full_kw, per_step = _ev_full_rate(c, step_h)
         for t in range(len(schedule)):
             if needed <= 1e-9 or per_step <= 0.0:
                 break
@@ -501,6 +508,76 @@ def _parse_utc(value: Any) -> datetime | None:
     except ValueError:
         return None
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def _ev_full_rate(charger: dict[str, Any], step_h: float) -> tuple[float, float]:
+    """A charger at full power: its AC draw in kW, every charge segment at
+    ``power_max_kw``, and the cell energy in kWh that adds in one step."""
+    segments = charger.get("charge_segments") or []
+    full_kw = sum(float(seg["power_max_kw"]) for seg in segments)
+    per_step = sum(float(seg["power_max_kw"]) * float(seg["efficiency"]) for seg in segments) * step_h
+    return full_kw, per_step
+
+
+def _naive_ev_sessions(
+    inp: dict[str, Any],
+    schedule: list[dict[str, Any]],
+    past: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]],
+    step_h: float,
+) -> tuple[list[dict[str, float]], dict[str, float]]:
+    """The naive car's energy per plug-in session across today's quarters.
+
+    Each plan's own baseline starts its car at its first step. Today's earlier
+    quarters each come from a different plan, so taking those as they stand
+    would make the naive car charge whenever the real one did, and the saving
+    of waiting for cheap hours would vanish once its quarters are past.
+
+    Instead, one naive car per charge-only EV runs through the session: from
+    plug-in it charges at full power until it holds what the real car has
+    taken so far plus what the latest plan still gives it. Unplugging ends
+    the session. A session already under way at the first quarter on record
+    today starts there.
+
+    Returns:
+        The cell energy the naive car takes from the first step: one dict per
+        earlier quarter, in ``past`` order, and one for the current plan.
+        Only charge-only EVs appear; an unplugged EV maps to 0.
+    """
+    chargers = (inp.get("config") or {}).get("ev_chargers") or {}
+    names = [n for n, c in chargers.items() if not c.get("discharge_segments")]
+    real = {n: 0.0 for n in names}
+    naive = {n: 0.0 for n in names}
+
+    def owed(plan_inp: dict[str, Any], last: dict[str, Any], name: str) -> float | None:
+        ev = (plan_inp.get("ev_inputs") or {}).get(name)
+        end = (last.get(name) or {}).get("soc_kwh")
+        if not ev or not ev.get("available") or end is None:
+            real[name] = naive[name] = 0.0
+            return None
+        remaining = max(0.0, float(end) - float(ev["soc_kwh"]))
+        return max(0.0, real[name] + remaining - naive[name])
+
+    per_quarter: list[dict[str, float]] = []
+    for step, pinp, last in past:
+        needed: dict[str, float] = {}
+        for name in names:
+            due = owed(pinp, last, name)
+            if due is None:
+                needed[name] = 0.0
+                continue
+            needed[name] = due
+            naive[name] += min(due, _ev_full_rate(chargers[name], step_h)[1])
+            before = float(pinp["ev_inputs"][name]["soc_kwh"])
+            after = (step.get("devices") or {}).get(name, {}).get("soc_kwh")
+            real[name] += max(0.0, _num(after, before) - before)
+        per_quarter.append(needed)
+
+    current: dict[str, float] = {}
+    last = (schedule[-1].get("devices") or {}) if schedule else {}
+    for name in names:
+        due = owed(inp, last, name)
+        current[name] = 0.0 if due is None else due
+    return per_quarter, current
 
 
 def _deliverable_kw(array: dict[str, Any]) -> float:
