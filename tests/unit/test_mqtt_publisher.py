@@ -764,6 +764,78 @@ def test_loadbalance_active_true_publishes_loadbalance_cmd_ev() -> None:
     assert lb_calls[0].kwargs.get("qos") == 1
 
 
+def _publish_ev_setpoint(
+    delivered_kw: float,
+    *,
+    min_charge_kw: float | None,
+    derating: bool,
+) -> dict:
+    """Publish one EV step and return the payload of its setpoint topic."""
+    from mimirheim.config.schema import EvConfig
+
+    base = _make_config_with_ev_loadbalance(None)
+    extra: dict = {}
+    if derating:
+        extra = {"reduce_charge_above_soc_kwh": 40.0, "reduce_charge_min_kw": 1.0}
+    ev = EvConfig(
+        capacity_kwh=52.0,
+        charge_segments=[_seg()],
+        min_charge_kw=min_charge_kw,
+        **extra,
+    )
+    config = base.model_copy(update={"ev_chargers": {"ev1": ev}})
+    step = ScheduleStep(
+        t=0,
+        grid_import_kw=0.5,
+        grid_export_kw=0.0,
+        devices={"ev1": DeviceSetpoint(kw=-delivered_kw, type="ev_charger")},
+    )
+    result = SolveResult(
+        strategy="minimize_cost",
+        objective_value=0.0,
+        solve_status="optimal",
+        schedule=[step] * 96,
+    )
+    mock_client = MagicMock()
+    MqttPublisher(client=mock_client, config=config).publish_result(result)
+    calls = [
+        c for c in mock_client.publish.call_args_list
+        if c.args[0] == "mimir/device/ev1/setpoint"
+    ]
+    assert len(calls) == 1
+    return json.loads(calls[0].args[1])
+
+
+def test_ev_setpoint_floored_to_min_charge_kw_in_derated_zone() -> None:
+    """Delivered power below min_charge_kw is published as min_charge_kw."""
+    payload = _publish_ev_setpoint(1.5, min_charge_kw=4.0, derating=True)
+    assert payload["kw"] == pytest.approx(-4.0)
+
+
+def test_ev_setpoint_zero_when_inactive() -> None:
+    """An idle charger is published at zero, not at the floor."""
+    payload = _publish_ev_setpoint(0.0, min_charge_kw=4.0, derating=True)
+    assert payload["kw"] == 0.0
+
+
+def test_ev_setpoint_unchanged_without_derating() -> None:
+    """Without derating the setpoint equals delivered power."""
+    payload = _publish_ev_setpoint(1.5, min_charge_kw=4.0, derating=False)
+    assert payload["kw"] == pytest.approx(-1.5)
+
+
+def test_ev_setpoint_unchanged_without_min_charge_kw() -> None:
+    """Derating without min_charge_kw leaves the setpoint untouched."""
+    payload = _publish_ev_setpoint(1.5, min_charge_kw=None, derating=True)
+    assert payload["kw"] == pytest.approx(-1.5)
+
+
+def test_ev_setpoint_above_floor_unchanged() -> None:
+    """Delivered power at or above the floor is published as is."""
+    payload = _publish_ev_setpoint(6.0, min_charge_kw=4.0, derating=True)
+    assert payload["kw"] == pytest.approx(-6.0)
+
+
 def test_pv_zero_export_mode_published_when_zero_exchange_active() -> None:
     """PV zero_export_mode topic is published from zero_exchange_active on DeviceSetpoint.
 

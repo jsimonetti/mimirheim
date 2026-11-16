@@ -266,6 +266,116 @@ def test_ev_config_with_zero_exchange_capabilities_and_outputs() -> None:
 
 
 # ---------------------------------------------------------------------------
+# EvConfig — charge derating (ev-charge-taper, ticket 01)
+# ---------------------------------------------------------------------------
+
+
+def _base_ev_config() -> dict:
+    return {
+        "capacity_kwh": 60.0,
+        "charge_segments": [{"power_max_kw": 5.0, "efficiency": 0.95}],
+    }
+
+
+def test_ev_derating_fields_none_by_default() -> None:
+    cfg = EvConfig.model_validate(_base_ev_config())
+    assert cfg.reduce_charge_above_soc_kwh is None
+    assert cfg.reduce_charge_min_kw is None
+
+
+def test_ev_derating_neither_field_set_behaves_as_before() -> None:
+    """With neither derating field set, existing EV config behaviour is unchanged."""
+    cfg = EvConfig.model_validate(_base_ev_config())
+    assert cfg.capacity_kwh == 60.0
+    assert cfg.discharge_segments == []
+
+
+def test_ev_charge_derating_requires_both_fields() -> None:
+    """Setting only one of the charge derating pair must raise ValidationError."""
+    data = _base_ev_config()
+    data["reduce_charge_above_soc_kwh"] = 50.0
+    # reduce_charge_min_kw omitted — must reject
+    with pytest.raises(ValidationError):
+        EvConfig.model_validate(data)
+
+    data2 = _base_ev_config()
+    data2["reduce_charge_min_kw"] = 1.0
+    # reduce_charge_above_soc_kwh omitted — must reject
+    with pytest.raises(ValidationError):
+        EvConfig.model_validate(data2)
+
+
+def test_ev_derating_both_fields_set_together_accepted() -> None:
+    cfg = EvConfig.model_validate(
+        {
+            **_base_ev_config(),
+            "reduce_charge_above_soc_kwh": 50.0,
+            "reduce_charge_min_kw": 1.0,
+        }
+    )
+    assert cfg.reduce_charge_above_soc_kwh == 50.0
+    assert cfg.reduce_charge_min_kw == 1.0
+
+
+def test_ev_reduce_charge_above_must_be_in_range() -> None:
+    """reduce_charge_above_soc_kwh must be strictly between min_soc_kwh and capacity_kwh."""
+    base = {**_base_ev_config(), "reduce_charge_min_kw": 1.0}
+
+    # Equal to capacity_kwh (60.0) — must reject
+    with pytest.raises(ValidationError):
+        EvConfig.model_validate({**base, "reduce_charge_above_soc_kwh": 60.0})
+
+    # Equal to min_soc_kwh (0.0 default) — must reject
+    with pytest.raises(ValidationError):
+        EvConfig.model_validate({**base, "reduce_charge_above_soc_kwh": 0.0})
+
+
+def test_ev_reduce_charge_min_must_be_positive_and_below_sum_of_segment_power() -> None:
+    """reduce_charge_min_kw must be > 0 and < sum(charge_segments.power_max_kw) (5.0 here)."""
+    base = {**_base_ev_config(), "reduce_charge_above_soc_kwh": 50.0}
+
+    # Equal to zero — must reject
+    with pytest.raises(ValidationError):
+        EvConfig.model_validate({**base, "reduce_charge_min_kw": 0.0})
+
+    # Equal to or exceeds the sum of charge segment power_max_kw (5.0) — must reject
+    with pytest.raises(ValidationError):
+        EvConfig.model_validate({**base, "reduce_charge_min_kw": 5.0})
+
+
+def test_ev_reduce_charge_min_uses_sum_of_multiple_charge_segments() -> None:
+    """The range check sums power_max_kw across all charge_segments, not just the first."""
+    data = {
+        "capacity_kwh": 60.0,
+        "charge_segments": [
+            {"power_max_kw": 3.0, "efficiency": 0.95},
+            {"power_max_kw": 4.0, "efficiency": 0.90},
+        ],
+        "reduce_charge_above_soc_kwh": 50.0,
+        "reduce_charge_min_kw": 6.5,
+    }
+    cfg = EvConfig.model_validate(data)
+    assert cfg.reduce_charge_min_kw == 6.5
+
+    # At or above the 7.0 kW sum — must reject
+    with pytest.raises(ValidationError):
+        EvConfig.model_validate({**data, "reduce_charge_min_kw": 7.0})
+
+
+def test_ev_config_rejects_unknown_fields_with_derating_set() -> None:
+    """model_config = ConfigDict(extra='forbid') still holds with the new fields present."""
+    with pytest.raises(ValidationError):
+        EvConfig.model_validate(
+            {
+                **_base_ev_config(),
+                "reduce_charge_above_soc_kwh": 50.0,
+                "reduce_charge_min_kw": 1.0,
+                "unknown_field": "oops",
+            }
+        )
+
+
+# ---------------------------------------------------------------------------
 # PvConfig
 # ---------------------------------------------------------------------------
 

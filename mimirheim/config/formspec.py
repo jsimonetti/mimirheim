@@ -366,6 +366,16 @@ EV_CONFIG_FORM_SPEC = FormSpec(
             description="Vehicle battery degradation cost per kWh of energy throughput, in EUR.",
             tier=Tier.BASIC,
         ),
+        "reduce_charge_above_soc_kwh": FieldSpec(
+            label="Derate charge above SOC (kWh)",
+            description="SOC level above which max charge power begins to decrease.",
+            tier=Tier.EXPERT,
+        ),
+        "reduce_charge_min_kw": FieldSpec(
+            label="Derated charge minimum (kW)",
+            description="Max charge power in kW at full capacity, once derating has kicked in.",
+            tier=Tier.EXPERT,
+        ),
         "capabilities": FieldSpec(
             label="Hardware capabilities",
             description="Hardware capability flags.",

@@ -214,6 +214,11 @@ ev_chargers:
 
     wear_cost_eur_per_kwh: 0.03
 
+    # Optional charge taper near full, as for batteries. Set both or neither.
+    # capacity_kwh should be the SOC at which charging actually stops.
+    # reduce_charge_above_soc_kwh: 40.0   # charge power falls linearly above this SOC
+    # reduce_charge_min_kw: 2.0           # charge power limit at capacity_kwh
+
     capabilities:
       staged_power: false      # this charger accepts continuous power control
       zero_exchange: false     # set to true if the charger supports closed-loop zero-exchange mode

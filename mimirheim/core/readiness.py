@@ -50,6 +50,7 @@ from typing import Any
 
 from mimirheim.config.schema import MimirheimConfig
 from mimirheim.core.battery_care import is_newer, is_older, track_full_charge
+from mimirheim.devices.ev import max_charge_energy_kwh
 from mimirheim.core.bundle import (
     BatteryInputs,
     CombiHeatPumpInputs,
@@ -632,14 +633,18 @@ class ReadinessState:
                             chargeable_steps = max(
                                 0, window_step - earliest_step + 1
                             )
-                            per_step_kwh = 0.25 * sum(
-                                seg.power_max_kw * seg.efficiency
-                                for seg in cfg_ev.charge_segments
-                            )
-                            deliverable = min(
-                                cfg_ev.capacity_kwh,
-                                ev_state.soc + chargeable_steps * per_step_kwh,
-                            )
+                            # Same per-step bound as the solver, stepped
+                            # from start-of-step SOC (derate-aware).
+                            deliverable = ev_state.soc
+                            for _ in range(chargeable_steps):
+                                deliverable = min(
+                                    cfg_ev.capacity_kwh,
+                                    deliverable
+                                    + max_charge_energy_kwh(
+                                        cfg_ev, deliverable, 0.25
+                                    ),
+                                )
+                            deliverable = min(cfg_ev.capacity_kwh, deliverable)
                             if target_kwh > deliverable:
                                 logger.warning(
                                     "EV %s: departure target %.2f kWh is not "
