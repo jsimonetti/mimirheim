@@ -481,7 +481,9 @@ def _discharge_path(inp: dict[str, Any]) -> dict[str, float]:
 
     A hybrid inverter: its battery's discharge efficiency times the inverter.
     A battery: its discharge segments or efficiency curve, an EV charger its
-    discharge segments, averaged as ``_avg_discharge_efficiency`` does.
+    discharge segments, averaged as ``_avg_discharge_efficiency`` does. A
+    charge-only EV charger (no discharge segments) is left out, as the solver
+    leaves it out: its energy can never return to the house.
     """
     cfg = inp.get("config") or {}
     path = {
@@ -493,7 +495,9 @@ def _discharge_path(inp: dict[str, Any]) -> dict[str, float]:
             c.get("discharge_segments"), c.get("discharge_efficiency_curve")
         )
     for name, c in (cfg.get("ev_chargers") or {}).items():
-        path[name] = _avg_efficiency(c.get("discharge_segments"), None)
+        # A charge-only EV is consumption, not storage: it never discharges.
+        if c.get("discharge_segments"):
+            path[name] = _avg_efficiency(c["discharge_segments"], None)
     return path
 
 
