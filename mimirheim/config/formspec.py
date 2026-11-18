@@ -1045,6 +1045,11 @@ CONTROL_CONFIG_FORM_SPEC = FormSpec(
             description="Minimum consecutive steps a device remains enforcer once selected.",
             tier=Tier.EXPERT,
         ),
+        "battery_idle_threshold_kw": FieldSpec(
+            label="Battery idle threshold (kW)",
+            description="Battery power in kW at or below which a step counts as idle.",
+            tier=Tier.EXPERT,
+        ),
     }
 )
 

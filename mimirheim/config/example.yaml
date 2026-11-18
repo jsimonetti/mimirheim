@@ -676,7 +676,12 @@ control:
 
   # Minimum absorption headroom (kW) a device must have to be eligible as
   # enforcer. Devices with less headroom at their current operating point are
-  # excluded. Prevents a nearly-full battery from being selected.
+  # excluded. A battery with a known state of charge must have this much
+  # headroom in both directions (absorb a surplus and cover a deficit), judged
+  # on its start- and end-of-step state of charge. A full battery qualifies
+  # only by discharging at least this much (it absorbs by discharging less),
+  # an empty one only by charging at least this much; one charging or
+  # discharging up to its power limit does not qualify.
   # Default: 0.10 kW (100 W).
   headroom_margin_kw: 0.10
 
@@ -691,6 +696,16 @@ control:
   # headroom falls below margin). Prevents rapid step-to-step switching.
   # Default: 2 steps (30 minutes at 15-minute resolution).
   min_enforcer_dwell_steps: 2
+
+  # Battery power (kW) at or below which a step counts as idle rather than as
+  # a planned charge or discharge; solver output carries small rounding noise.
+  # A battery that is idle or charging at the top of its range is holding and
+  # is not eligible as enforcer; one that discharges from the top is not a hold
+  # and is eligible when the headroom_margin_kw rules are also met. A
+  # consumer of the schedule that protects held steps from closed-loop control
+  # should classify idle steps with the same threshold.
+  # Default: 0.05 kW (50 W).
+  battery_idle_threshold_kw: 0.05
 
 readiness:
   # Minimum hours of joint forecast coverage required to solve at all.

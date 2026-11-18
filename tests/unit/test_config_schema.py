@@ -1572,6 +1572,29 @@ def test_control_config_custom_values_accepted() -> None:
     assert cfg.min_enforcer_dwell_steps == 4
 
 
+def test_control_config_battery_idle_threshold_default() -> None:
+    """battery_idle_threshold_kw defaults to 0.05 kW."""
+    from mimirheim.config.schema import ControlConfig
+
+    assert ControlConfig().battery_idle_threshold_kw == pytest.approx(0.05)
+
+
+def test_control_config_battery_idle_threshold_explicit() -> None:
+    """battery_idle_threshold_kw accepts an explicit non-negative value."""
+    from mimirheim.config.schema import ControlConfig
+
+    cfg = ControlConfig(battery_idle_threshold_kw=0.2)
+    assert cfg.battery_idle_threshold_kw == pytest.approx(0.2)
+
+
+def test_control_config_battery_idle_threshold_negative_rejected() -> None:
+    """A negative battery_idle_threshold_kw is rejected."""
+    from mimirheim.config.schema import ControlConfig
+
+    with pytest.raises(ValidationError):
+        ControlConfig(battery_idle_threshold_kw=-0.01)
+
+
 def test_control_config_extra_field_rejected() -> None:
     """ControlConfig rejects unknown fields (extra='forbid')."""
     from mimirheim.config.schema import ControlConfig
