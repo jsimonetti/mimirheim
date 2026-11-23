@@ -40,6 +40,12 @@ configuration:
     description: >-
       Start the static baseload profile publisher. Requires baseload-static.yaml
       in the add-on config directory.
+  enable_baseload_weather:
+    name: Enable Baseload (weather-dependent)
+    description: >-
+      Start the weather-dependent baseload forecast (Home Assistant database
+      plus Open-Meteo temperature forecast). Requires baseload-weather.yaml
+      in the add-on config directory.
   enable_scheduler:
     name: Enable Scheduler
     description: >-

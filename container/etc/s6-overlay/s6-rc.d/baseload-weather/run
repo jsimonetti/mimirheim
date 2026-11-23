@@ -1,0 +1,9 @@
+#!/command/with-contenv sh
+exec 2>&1
+if [ "${ENABLE_BASELOAD_WEATHER}" != "true" ]; then
+    echo "baseload-weather: disabled (set ENABLE_BASELOAD_WEATHER=true to enable)"
+    /command/s6-svc -d /run/service/baseload-weather
+    exit 0
+fi
+CONFIG=/config/baseload-weather.yaml
+exec /app/.venv/bin/python -m baseload_weather --config "$CONFIG"

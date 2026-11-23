@@ -18,6 +18,7 @@
 #   /config/baseload-ha.yaml    — Home Assistant baseload fetcher (REST API)
 #   /config/baseload-ha-db.yaml  — Home Assistant baseload fetcher (database)
 #   /config/baseload-static.yaml — static baseload profile publisher
+#   /config/baseload-weather.yaml — weather-dependent baseload forecast (database)
 #   /config/reporter.yaml        — mimirheim-reporter HTML report generator
 #   /config/config-editor.yaml   — config editor web UI (port 8099)
 #
@@ -32,6 +33,7 @@
 #   /app/examples/baseload-ha.yaml
 #   /app/examples/baseload-ha-db.yaml
 #   /app/examples/baseload-static.yaml
+#   /app/examples/baseload-weather.yaml
 #   /app/examples/reporter.yaml
 #   /app/examples/config-editor.yaml
 #
