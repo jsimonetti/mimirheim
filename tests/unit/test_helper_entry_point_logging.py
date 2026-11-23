@@ -193,6 +193,17 @@ class TestThirdPartyLoggersAreQuiet:
             for path in _REPO_ROOT.glob("mimirheim_helpers/**/*.py")
             if "/tests/" not in str(path) and "import httpx" in path.read_text()
         }
+        # baseload_weather imports httpx in its library modules but has no
+        # entry point yet. Its exemption only holds while __main__.py is
+        # absent; once it exists it must join the parametrised test above.
+        weather_main = (
+            _REPO_ROOT / "mimirheim_helpers/baseload/weather_regression/baseload_weather/__main__.py"
+        )
+        assert not weather_main.exists(), (
+            "baseload_weather now has an entry point: add it to "
+            "test_httpx_is_set_to_warning and remove this exemption."
+        )
+        users.discard("baseload_weather")
         assert users == {"baseload_ha", "pv_ml_learner"}, (
             f"httpx importers changed to {sorted(users)}; update the "
             "parametrised test above."
