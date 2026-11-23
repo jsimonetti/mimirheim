@@ -114,6 +114,7 @@ packages = [
     "mimirheim_helpers/baseload/homeassistant/baseload_ha",
     "mimirheim_helpers/baseload/homeassistant_db/baseload_ha_db",
     "mimirheim_helpers/baseload/static/baseload_static",
+    "mimirheim_helpers/baseload/weather_regression/baseload_weather",
     "mimirheim_helpers/reporter/reporter",
     "mimirheim_helpers/config_editor/config_editor",
 ]
@@ -189,6 +190,7 @@ testpaths = [
     "mimirheim_helpers/baseload/homeassistant/tests",
     "mimirheim_helpers/baseload/homeassistant_db/tests",
     "mimirheim_helpers/baseload/static/tests",
+    "mimirheim_helpers/baseload/weather_regression/tests",
     "mimirheim_helpers/reporter/tests",
     "mimirheim_helpers/config_editor/tests",
     "mimirheim_shared/tests",
