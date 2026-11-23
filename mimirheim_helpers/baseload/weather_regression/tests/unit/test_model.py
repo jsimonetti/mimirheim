@@ -8,6 +8,7 @@ client return them) and checks the fitted forecast.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -15,6 +16,7 @@ import pytest
 
 from baseload_weather.config import ModelConfig
 from baseload_weather.model import (
+    ForecastResult,
     ModelError,
     build_forecast,
     history_window,
@@ -35,7 +37,7 @@ def _cfg(**kw: object) -> ModelConfig:
     return ModelConfig(**base)
 
 
-def _temps(start: int, end: int, fn) -> dict[int, float]:  # type: ignore[no-untyped-def]
+def _temps(start: int, end: int, fn: Callable[[int], float]) -> dict[int, float]:
     """Hourly temperatures for [start, end] inclusive from ``fn(hour_ts)``."""
     return {ts: fn(ts) for ts in range(start, end + H, H)}
 
@@ -50,7 +52,15 @@ def _wavy(ts: int) -> float:
     return 10.0 + 9.0 * math.sin(day * 0.9) + 2.0 * math.sin(ts / 86400 * 2 * math.pi)
 
 
-def _scenario(cfg: ModelConfig, load_fn, temp_fn=_wavy, horizon: int = 24):  # type: ignore[no-untyped-def]
+Energy = dict[str, dict[int, float]]
+
+
+def _scenario(
+    cfg: ModelConfig,
+    load_fn: Callable[[int, float], float],
+    temp_fn: Callable[[int], float] = _wavy,
+    horizon: int = 24,
+) -> tuple[Energy, dict[int, float], dict[int, float]]:
     """Build recorder/forecast inputs whose load follows ``load_fn(ts, t_smooth)``."""
     grid_start, window_start = history_window(S, cfg)
     end = S_TS + horizon * H
@@ -67,7 +77,14 @@ def _scenario(cfg: ModelConfig, load_fn, temp_fn=_wavy, horizon: int = 24):  # t
     return energy, recorder_temps, forecast_temps
 
 
-def _run(cfg: ModelConfig, energy, rec, fc, horizon: int = 24, **kw):  # type: ignore[no-untyped-def]
+def _run(
+    cfg: ModelConfig,
+    energy: Energy,
+    rec: dict[int, float],
+    fc: dict[int, float],
+    horizon: int = 24,
+    **kw: list[str],
+) -> ForecastResult:
     return build_forecast(
         energy=energy,
         temperature_recorder=rec,
@@ -253,7 +270,7 @@ class TestFit:
 
         sse_by_candidate = {10.0: 1.0e9, 10.5: 1.0e9 - 1.0e-4, 11.0: 1.0e9 - 2.0e-4, 11.5: 0.9e9}
 
-        def fake_within_cell(rows, t_base):  # type: ignore[no-untyped-def]
+        def fake_within_cell(rows: list[model._Row], t_base: float) -> tuple[float, float, float]:
             return 0.1, 10.0, sse_by_candidate.get(t_base, 2.0e9)
 
         monkeypatch.setattr(model, "_within_cell", fake_within_cell)
