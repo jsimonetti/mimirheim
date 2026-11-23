@@ -4,7 +4,7 @@ This tool is a helper package inside the mimirheim repository. It ships in the
 single `mimirheim` wheel, alongside the solver and every other helper, and it
 runs as its own daemon process communicating over MQTT.
 
-It is the simplest of the three base load helpers: the profile is written out in
+It is the simplest of the four base load helpers: the profile is written out in
 the config file, so there is no external system to fetch from.
 
 ---
@@ -37,8 +37,8 @@ This tool has no extra, and needs none. It performs no I/O beyond MQTT, so
 `paho-mqtt`, `pydantic` and `pyyaml` — all core `mimirheim` dependencies — are
 enough. If you find yourself wanting to add one, check first whether the change
 belongs in `baseload_ha` or `baseload_ha_db` instead: fetching from somewhere is
-what those two are for, and keeping this one dependency-free is the point of
-having three.
+what those are for, and keeping this one dependency-free is the point of
+having it.
 
 `helper_common` is a deliberate shared dependency, not a violation of anything.
 `config.py` imports `MqttConfig` and `apply_mqtt_env_overrides`, and
@@ -103,15 +103,14 @@ method, `_run_cycle`.
 
 ---
 
-## The three base load helpers are mutually exclusive
+## The four base load helpers are mutually exclusive per static load
 
-`baseload-static.yaml`, `baseload-ha.yaml` and `baseload-ha-db.yaml` all publish
-to the same topic, so only one may be enabled. The config editor enforces this:
-`_load_helper_models` in `config_editor/server.py` lists the other two as
-competing files, and enabling one deletes them.
-
-If you add a fourth variant, add it to `_baseload_variants` there as well, or
-two helpers will fight over the topic with no warning.
+`baseload-static.yaml`, `baseload-ha.yaml`, `baseload-ha-db.yaml` and
+`baseload-weather.yaml` all publish to the same topic by default, so only one
+may be enabled per static load. Nothing enforces this: the config editor has no
+list of competing baseload files, so two enabled helpers overwrite each other's
+retained payload with no warning, and which forecast mimirheim sees depends on
+which fired last.
 
 ---
 

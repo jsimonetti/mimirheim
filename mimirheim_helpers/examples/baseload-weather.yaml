@@ -1,0 +1,135 @@
+# Example configuration for the weather-dependent baseload daemon.
+#
+# This tool forecasts the whole house load as a per-hour baseline plus a
+# heating slope: for every (local hour, weekday/weekend) cell it fits
+#   kWh = a + b * max(0, T_base - T_smoothed)
+# on Home Assistant recorder statistics, then applies it to an Open-Meteo
+# temperature forecast. Use it instead of, or next to, baseload-ha-db.yaml
+# when electric heating (a heat pump, for example) makes the load depend on
+# the weather. Run only one helper per static load. To run it next to
+# baseload-ha-db for the heat pump only, give it its own static load
+# (mimir_static_load_name) and add the heat pump counter to baseload-ha-db's
+# subtract_entities, or the heat pump is counted twice (see the README).
+
+mqtt:
+  host: localhost
+  port: 1883
+  # Defaults to mimir-baseload-weather when omitted.
+  client_id: baseload-weather-daemon
+  username: mqtt_user
+  password: mqtt_password
+
+# Shared with the other baseload helpers; the scheduler entry that triggers
+# them triggers this one too.
+trigger_topic: mimir/input/tools/baseload/trigger
+
+# Must match mqtt.topic_prefix in the mimirheim configuration.
+# mimir_topic_prefix: mimir  # default
+
+# The static_loads device in mimirheim this forecast is for. Determines the
+# default output_topic: mimir/input/baseload/<name>/forecast.
+# mimir_static_load_name: base_load  # default
+
+# Override to publish elsewhere, for example to compare against another
+# baseload helper before switching (a shadow topic mimirheim does not read).
+# output_topic: mimir/input/baseload/base_load/forecast
+
+# Hours of forecast after the current hour (1-168). One extra point marks the
+# end of the horizon. Defaults to 96.
+horizon_hours: 96
+
+homeassistant:
+  # SQLAlchemy URL of the Home Assistant recorder database. SQLite is always
+  # opened read-only.
+  #   SQLite:      sqlite:////config/home-assistant_v2.db
+  #   PostgreSQL:  postgresql+psycopg2://ha_user:secret@db-host/homeassistant
+  #   MariaDB:     mysql+pymysql://ha_user:secret@db-host/homeassistant
+  # For PostgreSQL and MariaDB, install the matching driver extra:
+  #   uv pip install "mimirheim[baseload-weather-postgres]"
+  #   uv pip install "mimirheim[baseload-weather-mysql]"
+  db_url: sqlite:////config/home-assistant_v2.db
+
+  # Energy counters (Wh, kWh or MWh; total or total_increasing) whose hourly
+  # energy is summed into the house load. Power sensors are not accepted:
+  # counter deltas give exact hourly energy.
+  sum_entities:
+    - entity_id: sensor.energy_consumption_tarif_1
+    - entity_id: sensor.energy_consumption_tarif_2
+    # PV production is added back so the load is gross consumption.
+    - entity_id: sensor.solar_energy_production
+    #   unit: kWh             # override when statistics_meta is wrong
+    #   outlier_factor: 5.0   # tighter P99 outlier threshold
+
+  # Energy counters subtracted from the sum: grid export, and loads mimirheim
+  # schedules itself (battery charging, EV charger, deferrable appliances).
+  # An hour is only trained on when every listed counter has a reading.
+  subtract_entities:
+    - entity_id: sensor.energy_production_tarif_1
+    - entity_id: sensor.energy_production_tarif_2
+    - entity_id: sensor.ev_charger_energy
+
+  # Outdoor temperature sensor with long-term statistics
+  # (state_class: measurement), in °C or °F.
+  temperature_entity:
+    entity_id: sensor.outdoor_temperature
+    # unit: "°F"   # override when statistics_meta is wrong
+
+weather_forecast:
+  # Site coordinates for the Open-Meteo forecast.
+  latitude: 52.09
+  longitude: 5.12
+  # base_url: https://api.open-meteo.com  # default
+  # timeout_s: 30                          # default
+
+model:
+  # IANA time zone of the site. Hour of day, weekday/weekend and
+  # exclude_dates are evaluated here, so routines stay aligned across
+  # daylight saving changes. Required.
+  timezone: Europe/Amsterdam
+
+  # Days of history to fit on (7-400). Longer windows cover more weather; the
+  # decay keeps recent behaviour dominant.
+  lookback_days: 56
+
+  # How much more the newest day counts than the oldest (>= 1.0). Raise it
+  # after a change to the house, such as insulation or a new heating curve.
+  lookback_decay: 1.0
+
+  # Time constant (hours) of the outdoor temperature moving average, standing
+  # in for the thermal mass of the building and its emitters. Underfloor
+  # heating and heavy buildings suit 12-24; light buildings with radiators less.
+  smoothing_hours: 12
+
+  # Search range for the balance temperature above which no heating is needed
+  # (searched in 0.5-degree steps).
+  # t_base_min_c: 10.0
+  # t_base_max_c: 20.0
+
+  # Fit eligibility: minimum effective training hours, and minimum weighted
+  # variance (K²) of the heating-degree regressor before a slope is fitted.
+  # Cells below either fall back to a pooled fit or to the plain mean.
+  # min_samples: 10
+  # min_hdd_variance: 1.0
+
+  # Local dates whose load readings are left out of training, for example
+  # days with a metering fault. Their temperatures are still used.
+  exclude_dates: []
+  #  - 2026-07-22
+
+# Publish to mimir_trigger_topic after each forecast so mimirheim re-solves.
+signal_mimir: false
+# mimir_trigger_topic: mimir/input/trigger  # derived from mimir_topic_prefix
+
+# HA MQTT discovery: creates a button entity that triggers one cycle.
+# ha_discovery:
+#   enabled: true
+#   discovery_prefix: homeassistant
+#   device_name: Baseload weather
+
+# Per-cycle run statistics (success, duration, horizon), published by the
+# shared helper daemon after every cycle.
+# stats_topic: mimir/input/tools/baseload_weather/stats
+
+# Model fit statistics after each successful cycle: balance temperature,
+# cells per fit level, R2, mean absolute error and training coverage.
+# model_stats_topic: mimir/input/tools/baseload_weather/model
