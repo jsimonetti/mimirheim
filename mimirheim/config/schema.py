@@ -301,7 +301,17 @@ class ControlConfig(BaseModel):
         headroom_margin_kw: Minimum absorption headroom a device must have
             to be eligible as enforcer. Devices with less headroom than this
             value at their current operating point are excluded from
-            candidacy. Prevents selecting a nearly-full battery as enforcer.
+            candidacy. A battery with a known state of charge must have this
+            much headroom in both directions: to absorb a surplus and to
+            cover a deficit. Within one step at this power (at least 0.1 % of
+            capacity) of full, judged on start- and end-of-step SoC, the
+            battery can absorb only by discharging less, so it needs a
+            planned discharge of at least this much; near empty
+            (``min_soc_kwh`` raised by the battery-care ratchet floor) it
+            needs a planned charge of at least this much. A battery near its
+            power limit in either direction is excluded. A hybrid inverter
+            whose battery is near full or near empty is excluded outright.
+            Without a known SoC only the absorb direction is checked.
             Default 0.10 kW (100 W).
         switch_delta: A challenger device must exceed the current enforcer's
             score by at least this amount before a switch is permitted.
@@ -309,8 +319,9 @@ class ControlConfig(BaseModel):
             scores. Default 0.05.
         min_enforcer_dwell_steps: Once a device is selected as enforcer, it
             remains enforcer for at least this many consecutive steps, unless
-            it becomes ineligible (e.g. EV unplugs, headroom drops below
-            margin). Default 2 steps (30 minutes at 15-minute resolution).
+            it becomes ineligible (e.g. EV unplugs, battery full, empty or
+            held, headroom drops below margin). Default 2 steps (30 minutes
+            at 15-minute resolution).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -328,7 +339,9 @@ class ControlConfig(BaseModel):
         ge=0.0,
         description=(
             "Minimum absorption headroom in kW for a device to be eligible as enforcer. "
-            "Devices below this threshold at their current operating point are excluded."
+            "Devices below this threshold at their current operating point are excluded. "
+            "Batteries with a known SoC need this headroom both to absorb a surplus and to "
+            "cover a deficit, judged on start- and end-of-step SoC."
         ),
     )
     switch_delta: float = Field(
@@ -344,7 +357,8 @@ class ControlConfig(BaseModel):
         ge=1,
         description=(
             "Minimum consecutive steps a device remains enforcer once selected. "
-            "Device becomes ineligible immediately if it loses availability or headroom."
+            "Device becomes ineligible immediately if it loses availability or headroom, "
+            "or, for a battery, when it is full, empty or held."
         ),
     )
 
