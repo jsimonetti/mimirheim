@@ -323,6 +323,11 @@ class SolveBundle(BaseModel):
         base_load_forecast: Forecast of non-controllable (static) household
             load in kW per step. Sum of all configured static loads, resampled
             the same way.
+        static_load_forecasts: Per-load forecast in kW per step, keyed by
+            static_loads device name. The power balance gives each load its
+            own series. The summed base_load_forecast is retained for the
+            naive-cost baseline, the reporter and backward-compatible dump
+            files.
         battery_inputs: Keyed by battery device name (matching config). Empty
             if no batteries are configured or their MQTT state is stale.
         ev_inputs: Keyed by EV device name. Empty if no EV is plugged in.
@@ -372,6 +377,16 @@ class SolveBundle(BaseModel):
     base_load_forecast: list[float] = Field(
         min_length=1,
         description="Static household load forecast in kW per step.",
+    )
+    static_load_forecasts: dict[str, list[float]] = Field(
+        default_factory=dict,
+        description=(
+            "Per-load static forecast in kW per step, keyed by static_loads "
+            "device name. Required whenever more than one static load is "
+            "configured; with a single load it may be omitted, in which case "
+            "base_load_forecast is used for that load. Kept alongside the "
+            "summed base_load_forecast so older dump files stay loadable."
+        ),
     )
     battery_inputs: dict[str, BatteryInputs] = Field(
         default_factory=dict,
@@ -437,6 +452,34 @@ class SolveBundle(BaseModel):
                     f"pv_forecasts sum to {total:.4f} kW at step {t} but "
                     f"pv_forecast says {self.pv_forecast[t]:.4f} kW. The "
                     "summed series must equal the per-array series."
+                )
+        return self
+
+    @model_validator(mode="after")
+    def _static_load_forecasts_consistent(self) -> "SolveBundle":
+        """Reject bundles whose per-load series disagree with the summed series.
+
+        The power balance is built from ``static_load_forecasts``, while the
+        naive-cost baseline, dump files and the reporter read the summed
+        ``base_load_forecast``. The same 0.005 kW tolerance as for
+        ``pv_forecasts`` allows for values rounded independently in dumps.
+        """
+        if not self.static_load_forecasts:
+            return self
+        n = len(self.base_load_forecast)
+        for name, series in self.static_load_forecasts.items():
+            if len(series) != n:
+                raise ValueError(
+                    f"static_load_forecasts[{name!r}] has {len(series)} steps but "
+                    f"base_load_forecast has {n}."
+                )
+        for t in range(n):
+            total = sum(series[t] for series in self.static_load_forecasts.values())
+            if abs(total - self.base_load_forecast[t]) > 0.005:
+                raise ValueError(
+                    f"static_load_forecasts sum to {total:.4f} kW at step {t} but "
+                    f"base_load_forecast says {self.base_load_forecast[t]:.4f} kW. "
+                    "The summed series must equal the per-load series."
                 )
         return self
 

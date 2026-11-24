@@ -932,6 +932,8 @@ Two limitations apply when fitting the parameters:
 |---|---|---|
 | `topic_forecast` | string or null | MQTT topic for the timestamped load forecast (`list[{ts, kw, confidence}]`). Derived as `{prefix}/input/baseload/{name}/forecast` when absent. |
 
+Several static loads may be configured, for example the heat pump forecast from its own meter next to the rest of the house. Each enters the power balance with its own forecast; their sum is the household load.
+
 #### `hybrid_inverters` (dict, keyed by device name)
 
 | Field | Type | Default | Description |

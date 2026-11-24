@@ -108,7 +108,7 @@ class ReadinessState:
             Price topics are tracked separately in ``_prices_topics``.
         _prices_topics: Topic strings for horizon prices, in priority order.
         _pv_topics: PV forecast topic per array, keyed by device name.
-        _load_topics: Ordered list of static-load forecast topic strings.
+        _load_topics: Static-load forecast topic per static_loads device name.
         _current_strategy: The currently active strategy string.
         _strategy_topic: MQTT topic for strategy updates.
         _config: Static system configuration.
@@ -229,11 +229,13 @@ class ReadinessState:
         self._pv_topics: dict[str, str] = {
             name: cfg.topic_forecast for name, cfg in config.pv_arrays.items()
         }
-        self._load_topics: list[str] = [cfg.topic_forecast for cfg in config.static_loads.values()]
+        self._load_topics: dict[str, str] = {
+            name: cfg.topic_forecast for name, cfg in config.static_loads.items()
+        }
         # Price topics are tracked separately (self._prices_topics): they use
         # union coverage and partial-source tolerance, unlike PV/load topics
         # which remain all-required and intersection-based.
-        self._forecast_topics: set[str] = set(self._pv_topics.values()) | set(self._load_topics)
+        self._forecast_topics: set[str] = set(self._pv_topics.values()) | set(self._load_topics.values())
 
         # Deferrable load topics: window endpoints and optional start_time.
         # None of these block readiness — all are optional inputs.
@@ -562,13 +564,17 @@ class ReadinessState:
                     for t, v in enumerate(series):
                         pv_forecast[t] += v
 
-            # Resample base load forecast: sum all static loads.
+            # Resample each static load, keep its own series for the power
+            # balance, and sum them for the naive-cost baseline and dumps.
             base_load_forecast = [0.0] * n_steps
-            for topic in self._load_topics:
+            static_load_forecasts: dict[str, list[float]] = {}
+            for load_name, topic in self._load_topics.items():
                 entry = self._entries.get(topic)
                 if entry is not None:
                     load_steps: list[PowerForecastStep] = entry[0]
-                    for t, v in enumerate(resample_power(load_steps, solve_start, n_steps)):
+                    series = resample_power(load_steps, solve_start, n_steps)
+                    static_load_forecasts[load_name] = series
+                    for t, v in enumerate(series):
                         base_load_forecast[t] += v
 
             # Battery inputs: assemble BatteryInputs from stored float.
@@ -793,6 +799,7 @@ class ReadinessState:
                 pv_forecast=pv_forecast,
                 pv_forecasts=pv_forecasts,
                 base_load_forecast=base_load_forecast,
+                static_load_forecasts=static_load_forecasts,
                 battery_inputs=battery_inputs,
                 ev_inputs=ev_inputs,
                 deferrable_windows=deferrable_windows,
