@@ -673,11 +673,15 @@ class SolveResult(BaseModel):
             ``"infeasible"`` (no feasible solution exists). When infeasible,
             ``schedule`` is empty and the previous retained schedule is used.
         naive_cost_eur: Estimated cost in EUR of the naive baseline over the
-            horizon: grid covers any shortfall between base load and PV (the
-            arrays and any hybrid inverter's own panels) at each step, with no
-            storage dispatch. Computed as
-            ``sum(max(0, base_load[t] - pv[t]) * import_price[t] * dt)``.
-            Zero for infeasible solves.
+            horizon: the same service as the plan, without any optimisation.
+            No storage dispatch; a plugged-in charge-only EV takes the cell
+            energy the plan gives it at full power from the first step,
+            capped by any charge derating at each step's start-of-step SOC; a
+            deferrable load the solver scheduled runs from the start of its
+            window, and a running or committed one as planned. The grid
+            covers base load plus those loads minus PV (the arrays and any
+            hybrid inverter's own panels) at the import price, and a surplus
+            is exported at the export price. Zero for infeasible solves.
         optimised_cost_eur: Raw grid cash flow in EUR of the solved schedule:
             import cost minus export revenue, with no adjustment for stored
             energy. Computed as
@@ -735,8 +739,10 @@ class SolveResult(BaseModel):
     naive_cost_eur: float = Field(
         default=0.0,
         description=(
-            "Estimated cost in EUR of the naive baseline (base load covered by grid, "
-            "no storage dispatch). sum(max(0, base_load[t] - pv[t]) * import_price[t] * dt)."
+            "Estimated cost in EUR of the naive baseline: no storage dispatch, a "
+            "charge-only EV charged at full (derated) power from the first step, a scheduled "
+            "deferrable load started at the start of its window. Base load plus those "
+            "loads minus PV, imported or exported at each step's price."
         ),
     )
     optimised_cost_eur: float = Field(

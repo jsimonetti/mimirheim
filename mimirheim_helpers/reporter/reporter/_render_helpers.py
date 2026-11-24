@@ -40,6 +40,7 @@ from datetime import datetime, timedelta
 
 import plotly.graph_objects as go
 
+from reporter.baseline import naive_flexible_kw
 from reporter.metrics import avg_segment_efficiency
 
 logger = logging.getLogger(__name__)
@@ -61,8 +62,12 @@ def _build_energy_flows_traces(
         - Net exchange line overlay (colour #ff6600): grid_import - grid_export per step.
 
     The naive chart does not include grid bars. With no storage dispatch the
-    grid balance is determined entirely by PV minus base load; explicit grid
-    bars would add no information and would clutter the chart.
+    grid balance is determined entirely by PV against base load plus the
+    flexible loads the naive baseline runs (``baseline.naive_flexible_kw``:
+    a charge-only EV at full power from the first step, a scheduled
+    deferrable load from the start of its window); explicit grid bars would
+    add no information and would clutter the chart. The flexible loads get
+    one bar, shown only when there are any.
 
     Args:
         inp: Parsed input dump JSON.
@@ -152,6 +157,21 @@ def _build_energy_flows_traces(
             marker_color="#f0a500",
         ),
     ]
+    flexible_kwh = [
+        kw * STEP_HOURS
+        for kw in naive_flexible_kw(
+            inp, schedule, STEP_HOURS, out.get("deferrable_recommended_starts") or {}
+        )
+    ]
+    if any(flexible_kwh):
+        naive_traces.append(
+            go.Bar(
+                x=xs[: len(flexible_kwh)],
+                y=flexible_kwh,
+                name="Flexible loads (naive)",
+                marker_color="#8c6bb1",
+            )
+        )
 
     opt_traces: list[go.BaseTraceType] = [
         go.Bar(

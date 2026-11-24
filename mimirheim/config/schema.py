@@ -112,12 +112,15 @@ class ObjectivesConfig(BaseModel):
             cost and self-sufficiency weights default to 1.0.
         min_dispatch_gain_eur: Minimum cost benefit in EUR required to dispatch
             storage devices. When the projected saving over the naive baseline
-            (base load covered by grid, storage idle) is below this value,
+            (storage idle; a charge-only EV charged at full power from the
+            first step and a scheduled deferrable load started at the start
+            of its window; see ``SolveResult.naive_cost_eur``) is below this
+            value,
             mimirheim publishes an idle schedule instead. Set to 0.0 (the default)
             to disable the check. Applies only to ``minimize_cost`` and
             ``balanced`` strategies. Has no effect when an EV with an active
             charge deadline is connected, or when a deferrable load has an
-            active scheduling window.
+            active scheduling window or is running or committed.
         exchange_shaping_weight: Weight for the optional secondary exchange-
             minimisation term ``lambda * sum_t(import_t + export_t)``. When
             set to a small positive value (e.g. 1e-4), this term breaks solver

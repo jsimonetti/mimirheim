@@ -348,31 +348,65 @@ def test_at_most_three_days() -> None:
     assert all(d["complete"] for d in days)
 
 
+def _naive_dishwasher_kw(fixture_inp: dict, fixture_out: dict) -> list[float]:
+    """The fixture's flexible load in the solver's naive baseline: the
+    dishwasher the plan scheduled runs its profile from the first step of its
+    window. The car has discharge segments (V2H), so it is storage and not in
+    the baseline."""
+    assert fixture_inp["config"]["ev_chargers"]["car"]["discharge_segments"]
+    assert "dishwasher" in fixture_out["deferrable_recommended_starts"]
+    solve = datetime.fromisoformat(fixture_inp["solve_time_utc"].replace("Z", "+00:00"))
+    earliest = datetime.fromisoformat(
+        fixture_inp["deferrable_windows"]["dishwasher"]["earliest"].replace("Z", "+00:00")
+    )
+    first = int((earliest - solve) / timedelta(minutes=15))
+    load = [0.0] * len(fixture_out["schedule"])
+    for i, kw in enumerate(fixture_inp["config"]["deferrable_loads"]["dishwasher"]["power_profile"]):
+        load[first + i] += kw
+    return load
+
+
+def _naive_per_step(fixture_inp: dict, fixture_out: dict, flexible: list[float]) -> list[float]:
+    """The solver's naive baseline per step: base load plus ``flexible`` minus
+    PV, at the import or export price. The fixture predates per-array
+    forecasts: it has two arrays and only the summed series, which the solver
+    then used as it stood."""
+    per_step = []
+    for t, s in enumerate(fixture_out["schedule"]):
+        net = fixture_inp["base_load_forecast"][t] + flexible[t] - fixture_inp["pv_forecast"][t]
+        price = s["import_price_eur_per_kwh"] if net >= 0 else s["export_price_eur_per_kwh"]
+        per_step.append(net * price * 0.25)
+    return per_step
+
+
 def test_days_add_up_to_the_solvers_money(fixture_inp: dict, fixture_out: dict) -> None:
     """Per day: the baseline adds up to the solver's naive_cost_eur, and grid
-    cash (effective cost plus stored value) to its optimised_cost_eur."""
+    cash (effective cost plus stored value) to its optimised_cost_eur.
+
+    The fixture was written before the baseline ran flexible loads the naive
+    way, so its naive_cost_eur lacks the dishwasher. That difference is added
+    here, computed per step, rather than regenerating a fixture other tests
+    rely on being old.
+    """
     days = _payload(fixture_inp, fixture_out, tz=_AMS)["days"]
     naive = sum(d["summary"]["naive"] for d in days)
-    assert naive == pytest.approx(fixture_out["naive_cost_eur"], abs=1e-3)
+    flexible = _naive_dishwasher_kw(fixture_inp, fixture_out)
+    added = sum(_naive_per_step(fixture_inp, fixture_out, flexible)) - sum(
+        _naive_per_step(fixture_inp, fixture_out, [0.0] * len(flexible))
+    )
+    assert added != 0.0
+    assert naive == pytest.approx(fixture_out["naive_cost_eur"] + added, abs=1e-3)
     cash = sum(d["summary"]["opt"] + d["summary"]["stored"] for d in days)
     assert cash == pytest.approx(fixture_out["optimised_cost_eur"], abs=1e-3)
 
 
 def test_day_baseline_follows_the_solver_step_by_step(fixture_inp: dict, fixture_out: dict) -> None:
-    """Each day's baseline is the solver's own per step: base load minus PV,
-    at the import or export price.
-
-    The fixture predates per-array forecasts: it has two arrays and only the
-    summed series, which the solver then used as it stood.
-    """
-    sched = fixture_out["schedule"]
+    """Each day's baseline is the solver's own per step: base load plus the
+    naive dishwasher minus PV, at the import or export price."""
     assert len(fixture_inp["config"]["pv_arrays"]) == 2 and "pv_forecasts" not in fixture_inp
-    per_step = []
-    for t, s in enumerate(sched):
-        pv = fixture_inp["pv_forecast"][t]
-        net = fixture_inp["base_load_forecast"][t] - pv
-        price = s["import_price_eur_per_kwh"] if net >= 0 else s["export_price_eur_per_kwh"]
-        per_step.append(net * price * 0.25)
+    per_step = _naive_per_step(
+        fixture_inp, fixture_out, _naive_dishwasher_kw(fixture_inp, fixture_out)
+    )
     days = _payload(fixture_inp, fixture_out, tz=_AMS)["days"]
     for d in days:
         assert d["summary"]["naive"] == pytest.approx(sum(per_step[d["i0"]:d["i1"]]), abs=1e-3)

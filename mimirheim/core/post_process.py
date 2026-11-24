@@ -25,7 +25,7 @@ What this module does not do:
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from mimirheim.config.schema import MimirheimConfig
 from mimirheim.core.bundle import DeviceSetpoint, ScheduleStep, SolveBundle, SolveResult
@@ -50,8 +50,9 @@ def apply_gain_threshold(
     """Replace the schedule with an idle one if the gain is below the configured threshold.
 
     The gain is defined as ``naive_cost_eur - optimised_cost_eur``: how much
-    cheaper the optimised schedule is compared to doing nothing (grid covers
-    base load minus PV, storage stays idle).
+    cheaper the optimised schedule is than the naive baseline (no storage
+    dispatch, flexible loads run without optimisation; see
+    ``SolveResult.naive_cost_eur``).
 
     When the gain is below ``config.objectives.min_dispatch_gain_eur``, cycling
     storage would cause wear for a benefit too small to justify it. In that
@@ -70,6 +71,9 @@ def apply_gain_threshold(
       mandatory; idling the EV charger would strand the vehicle.
     - Any deferrable load has an active scheduling window. The appliance must
       run within the window; idling it would miss the deadline entirely.
+    - Any deferrable load is running or has a committed start. The baseline
+      draws such a load exactly as the plan does, so its cost does not lower
+      the gain, and idling an appliance that has started is not possible.
     - Any battery had a full-charge target enforced on this solve. The balance
       charge is mandatory work; idling the battery would strip it out while the
       retained status still reported the target as met.
@@ -98,7 +102,7 @@ def apply_gain_threshold(
     if bundle.strategy not in _THRESHOLD_STRATEGIES:
         return result
 
-    if _has_active_deadline(bundle):
+    if _has_active_deadline(bundle, config):
         return result
 
     if any(
@@ -125,7 +129,7 @@ def apply_gain_threshold(
     return _build_idle_result(result)
 
 
-def _has_active_deadline(bundle: SolveBundle) -> bool:
+def _has_active_deadline(bundle: SolveBundle, config: MimirheimConfig) -> bool:
     """Return True if any controllable device has a mandatory deadline this cycle.
 
     An EV deadline is active when a vehicle is plugged in, has a target SOC,
@@ -140,8 +144,13 @@ def _has_active_deadline(bundle: SolveBundle) -> bool:
     actually run. The gain threshold exists to avoid cycling the battery for a
     few cents; it must not also veto mandatory work.
 
+    A deferrable load with a start time is mandatory while its run has not
+    ended: committed to a future start, or running now. A retained start time
+    from a run that has ended is not.
+
     Args:
         bundle: The current solve inputs.
+        config: Static configuration providing each deferrable load's profile.
 
     Returns:
         True if at least one active deadline exists.
@@ -157,6 +166,12 @@ def _has_active_deadline(bundle: SolveBundle) -> bool:
 
     if bundle.deferrable_windows:
         return True
+
+    step = timedelta(minutes=15)
+    for name, start in bundle.deferrable_start_times.items():
+        dl_cfg = config.deferrable_loads.get(name)
+        if dl_cfg is not None and start + step * len(dl_cfg.power_profile) > bundle.solve_time_utc:
+            return True
 
     return False
 

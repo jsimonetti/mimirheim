@@ -13,6 +13,7 @@ import pytest
 
 from mimirheim.config.schema import (
     BatteryConfig,
+    DeferrableLoadConfig,
     EfficiencySegment,
     GridConfig,
     MimirheimConfig,
@@ -243,6 +244,57 @@ def test_no_suppression_when_deferrable_window_active() -> None:
 
     assert out is res
     assert not out.dispatch_suppressed
+
+
+def _config_with_dishwasher(threshold: float) -> MimirheimConfig:
+    """The standard config plus a one-hour dishwasher (four 15-minute steps)."""
+    return _make_config(threshold=threshold).model_copy(
+        update={"deferrable_loads": {"dishwasher": DeferrableLoadConfig(power_profile=[2.0] * 4)}}
+    )
+
+
+def test_no_suppression_while_a_deferrable_load_is_running() -> None:
+    """A load that has started cannot be idled: its run is mandatory.
+
+    The naive baseline draws a running load exactly as the plan does, so its
+    cost no longer makes the gain negative. Without this guard a small battery
+    gain would publish 0 kW for an appliance that is already running.
+    """
+    config = _config_with_dishwasher(threshold=0.50)
+    bundle = _bundle().model_copy(
+        update={"deferrable_start_times": {"dishwasher": _NOW - timedelta(minutes=30)}}
+    )
+    res = _result(naive_cost=0.10, optimised_cost=0.09)
+
+    out = apply_gain_threshold(res, bundle, config)
+
+    assert out is res
+
+
+def test_no_suppression_when_a_deferrable_start_is_committed() -> None:
+    """A committed future start is mandatory work as well."""
+    config = _config_with_dishwasher(threshold=0.50)
+    bundle = _bundle().model_copy(
+        update={"deferrable_start_times": {"dishwasher": _NOW + timedelta(hours=2)}}
+    )
+    res = _result(naive_cost=0.10, optimised_cost=0.09)
+
+    out = apply_gain_threshold(res, bundle, config)
+
+    assert out is res
+
+
+def test_a_finished_deferrable_run_does_not_block_suppression() -> None:
+    """A retained start time from a run that has ended is not mandatory work."""
+    config = _config_with_dishwasher(threshold=0.50)
+    bundle = _bundle().model_copy(
+        update={"deferrable_start_times": {"dishwasher": _NOW - timedelta(hours=1)}}
+    )
+    res = _result(naive_cost=0.10, optimised_cost=0.09)
+
+    out = apply_gain_threshold(res, bundle, config)
+
+    assert out.dispatch_suppressed
 
 
 # ---------------------------------------------------------------------------
