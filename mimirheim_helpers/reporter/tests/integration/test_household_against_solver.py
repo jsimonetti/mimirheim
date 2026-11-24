@@ -72,9 +72,11 @@ _CONFIG = {
             "capabilities": {"v2h": True},
         },
         # Charge-only: what it charges is consumption, never stored energy.
+        # Derated above 12 kWh, so the naive van tapers before its target.
         "van": {
             "capacity_kwh": 40.0, "min_soc_kwh": 4.0,
             "charge_segments": [{"power_max_kw": 7.0, "efficiency": 0.92}],
+            "reduce_charge_above_soc_kwh": 12.0, "reduce_charge_min_kw": 1.0,
         },
     },
     "static_loads": {"base": {}},
@@ -228,10 +230,12 @@ def test_each_days_baseline_adds_the_solvers_naive_flexible_load(solved, solved_
     flex = _naive_flexible_load_kw(
         bundle, config, result.schedule, result.deferrable_recommended_starts, 0.25
     )
-    # Guard the case: the van starts at once at its full 7 kW, the dishwasher
+    # Guard the case: the van starts at once at its full 7 kW and tapers from
+    # its third step (start-of-step SOC above 12 kWh), the dishwasher
     # sits at its window's first step (step 12, 01:00 local) in the baseline,
     # and the plan moved it, so a baseline that followed the plan would differ.
     assert flex[0] == pytest.approx(7.0)
+    assert 0.0 < flex[2] < 7.0
     assert flex[12:16] == pytest.approx([2.0, 1.5, 1.5, 1.0])
     assert "dishwasher" in result.deferrable_recommended_starts
     planned = [-step.devices["dishwasher"].kw for step in result.schedule]

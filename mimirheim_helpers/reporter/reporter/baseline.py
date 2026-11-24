@@ -2,8 +2,8 @@
 
 The solver's ``naive_cost_eur`` runs flexible loads the way they would run
 without mimirheim (``mimirheim.core.model_builder._naive_flexible_load_kw``):
-a plugged-in charge-only EV charges at full power from the first step until it
-holds the energy the plan gives it, and a deferrable load the solver scheduled
+a plugged-in charge-only EV charges at full power (derated if configured) from
+the first step until it holds the energy the plan gives it, and a deferrable load the solver scheduled
 runs from the first step of its window. This module computes the same load per
 step from a dump pair, for every report that shows the baseline.
 
@@ -35,26 +35,50 @@ class Overrides:
         ev_needed: Per charge-only EV, the cell energy in kWh the naive car
             still takes from the plan's first step, instead of the energy the
             plan itself gives the car.
+        ev_soc: Per charge-only EV, the naive car's own SOC in kWh at the
+            plan's first step, instead of the real car's. It sets where charge
+            derating starts.
     """
 
     ev_needed: dict[str, float] = field(default_factory=dict)
+    ev_soc: dict[str, float] = field(default_factory=dict)
 
 
-def ev_full_rate(charger: dict[str, Any], step_h: float) -> tuple[float, float]:
-    """A charger at full power.
+def ev_full_rate(charger: dict[str, Any], soc_kwh: float, step_h: float) -> tuple[float, float]:
+    """A charger at full power for one step, derated if configured.
+
+    The same rule as the solver's naive baseline (``mimirheim.devices.ev``'s
+    ``charge_derate_line`` and ``max_charge_energy_kwh``): with
+    ``reduce_charge_above_soc_kwh`` set, the power falls linearly from full
+    power at that SOC to ``reduce_charge_min_kw`` at ``capacity_kwh``,
+    evaluated at the start-of-step SOC. The power fills the
+    highest-efficiency segments first.
 
     Args:
         charger: The charger's config from the dump.
+        soc_kwh: The car's SOC in kWh at the start of the step.
         step_h: Step length in hours.
 
     Returns:
-        The AC draw in kW with every charge segment at ``power_max_kw``, and
-        the cell energy in kWh that adds in one step at that power.
+        The AC draw in kW, and the cell energy in kWh that adds in one step at
+        that power.
     """
     segments = charger.get("charge_segments") or []
     full_kw = sum(float(seg["power_max_kw"]) for seg in segments)
-    per_step = sum(float(seg["power_max_kw"]) * float(seg["efficiency"]) for seg in segments) * step_h
-    return full_kw, per_step
+    kw = full_kw
+    above = charger.get("reduce_charge_above_soc_kwh")
+    floor = charger.get("reduce_charge_min_kw")
+    capacity = charger.get("capacity_kwh")
+    if above is not None and floor is not None and capacity is not None:
+        slope = (float(floor) - full_kw) / (float(capacity) - float(above))
+        kw = min(full_kw, max(0.0, slope * (soc_kwh - float(above)) + full_kw))
+    remaining = kw
+    stored = 0.0
+    for seg in sorted(segments, key=lambda seg: float(seg["efficiency"]), reverse=True):
+        seg_kw = min(float(seg["power_max_kw"]), max(remaining, 0.0))
+        stored += seg_kw * float(seg["efficiency"]) * step_h
+        remaining -= seg_kw
+    return kw, stored
 
 
 def naive_flexible_kw(
@@ -69,7 +93,8 @@ def naive_flexible_kw(
     Without ``overrides`` this is the solver's own rule for one plan:
 
     - A plugged-in charge-only EV charges at full power from the first step
-      until its cell holds what the plan's last step holds.
+      until its cell holds what the plan's last step holds. Charge derating
+      caps each step at its start-of-step SOC (``ev_full_rate``).
     - A deferrable load with a recommended start (``starts``) runs its
       ``power_profile`` from the first step of its window.
     - Any other deferrable load draws what the plan draws.
@@ -97,14 +122,16 @@ def naive_flexible_kw(
         if not ev.get("available") or c is None or end is None or c.get("discharge_segments"):
             continue
         needed = over.ev_needed.get(name, float(end) - float(ev["soc_kwh"]))
-        full_kw, per_step = ev_full_rate(c, step_h)
+        soc = over.ev_soc.get(name, float(ev["soc_kwh"]))
         for t in range(len(schedule)):
+            kw, per_step = ev_full_rate(c, soc, step_h)
             # A remainder this small is solver rounding, not energy to deliver.
             if needed <= 1e-9 or per_step <= 0.0:
                 break
             share = min(1.0, needed / per_step)
-            load[t] += full_kw * share
+            load[t] += kw * share
             needed -= per_step * share
+            soc += per_step * share
 
     loads = cfg.get("deferrable_loads") or {}
     windows = inp.get("deferrable_windows") or {}
@@ -135,7 +162,8 @@ def naive_overrides(
     Each EV: one naive car per plug-in session. From plug-in it charges at
     full power until it holds what the real car has taken so far plus what the
     latest plan still gives it. It keeps charging through a gap between dumps,
-    for as long as the gap lasts. Unplugging ends the session. The charger
+    for as long as the gap lasts. Charge derating follows the naive car's own
+    SOC, not the real car's. Unplugging ends the session. The charger
     config of each plan sets that plan's rate.
 
     Deferrable loads are not tracked across plans. Earlier quarters draw
@@ -191,6 +219,7 @@ def naive_overrides(
         next_ev = (plans[k + 1][0].get("ev_inputs") or {})
         chargers = (pinp.get("config") or {}).get("ev_chargers") or {}
         needed: dict[str, float] = {}
+        socs: dict[str, float] = {}
         for name, c in chargers.items():
             if c.get("discharge_segments"):
                 continue
@@ -198,14 +227,25 @@ def naive_overrides(
             if due is None:
                 continue
             needed[name] = due
-            naive[name] = naive.get(name, 0.0) + min(due, ev_full_rate(c, step_h)[1] * gap)
             before = float(pinp["ev_inputs"][name]["soc_kwh"])
+            # The naive car's own SOC: the session's start plus what it took.
+            socs[name] = soc = before - real.get(name, 0.0) + naive.get(name, 0.0)
+            taken = 0.0
+            for _ in range(gap):
+                if due - taken <= 1e-9:
+                    break
+                step_kwh = min(due - taken, ev_full_rate(c, soc, step_h)[1])
+                if step_kwh <= 0.0:
+                    break
+                taken += step_kwh
+                soc += step_kwh
+            naive[name] = naive.get(name, 0.0) + taken
             after = _num(((step.get("devices") or {}).get(name) or {}).get("soc_kwh"), before)
             if gap > 1 and (next_ev.get(name) or {}).get("available"):
                 # Over a gap only the next reading tells what the car took.
                 after = _num(next_ev[name].get("soc_kwh"), after)
             real[name] = real.get(name, 0.0) + max(0.0, after - before)
-        per_quarter.append(Overrides(needed))
+        per_quarter.append(Overrides(needed, socs))
 
     current = Overrides()
     restart(len(history))
@@ -215,6 +255,9 @@ def naive_overrides(
         due = owed(inp, out, name)
         if due is not None:
             current.ev_needed[name] = due
+            current.ev_soc[name] = (
+                float(inp["ev_inputs"][name]["soc_kwh"]) - real.get(name, 0.0) + naive.get(name, 0.0)
+            )
     return per_quarter, current
 
 

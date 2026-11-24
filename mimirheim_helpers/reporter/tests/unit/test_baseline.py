@@ -224,3 +224,53 @@ def test_a_session_break_between_dumps_restarts_the_naive_car() -> None:
 
     assert without.ev_needed["car"] == pytest.approx(0.0)
     assert with_break.ev_needed["car"] == pytest.approx(2.0)
+
+
+def _tapered_plan(t: str, soc: float, end_soc: float, steps: int = 6) -> tuple[dict, dict]:
+    """A dump pair for one plan with an 11 kW, 100% charger whose charge power
+    falls linearly from 11 kW at 20 kWh to 1 kW at 60 kWh (``16 - 0.25 * soc``
+    kW), the plan taking the car from ``soc`` to ``end_soc``."""
+    inp, out = _plan(t, soc, end_soc, 11.0)
+    inp["config"]["ev_chargers"]["car"].update(
+        {"capacity_kwh": 60.0, "reduce_charge_above_soc_kwh": 20.0, "reduce_charge_min_kw": 1.0}
+    )
+    first, last = out["schedule"]
+    out["schedule"] = [first] * (steps - 1) + [last]
+    return inp, out
+
+
+def test_the_naive_car_follows_the_charge_taper() -> None:
+    """Each step charges at the ceiling for its start-of-step SOC, as the
+    solver's naive baseline does: from 20 kWh to 30 kWh that is 11, 10.3125
+    and 9.66796875 kW, then the last 2.2548828125 kWh at 9.01953125 kW."""
+    inp, out = _tapered_plan("2026-11-02T07:00:00Z", 20.0, 30.0)
+
+    load = naive_flexible_kw(inp, out["schedule"], 0.25, {})
+
+    assert load == pytest.approx([11.0, 10.3125, 9.66796875, 9.01953125, 0.0, 0.0])
+
+
+def test_the_naive_car_carries_its_own_soc_into_the_next_plan() -> None:
+    """The real car waits through the first quarter while the naive car takes
+    2.75 kWh at 11 kW. The current plan's naive car starts at 22.75 kWh, not
+    at the real car's 20 kWh, so its first step is already derated."""
+    earlier = _tapered_plan("2026-11-02T07:00:00Z", 20.0, 30.0)
+    inp, out = _tapered_plan("2026-11-02T07:15:00Z", 20.0, 30.0)
+
+    load = _current_naive([_entry(earlier)], inp, out)
+
+    assert load == pytest.approx([10.3125, 9.66796875, 9.01953125, 0.0, 0.0, 0.0])
+
+
+def test_the_naive_car_follows_the_taper_through_a_dump_gap() -> None:
+    """With no dumps for three quarters the naive car takes 2.75, 2.578125
+    and 2.4169921875 kWh, so at the next dump it still owes 2.2548828125 kWh
+    of the 10 kWh, from 27.7451171875 kWh."""
+    first = _tapered_plan("2026-11-02T07:00:00Z", 20.0, 30.0)
+    later = _tapered_plan("2026-11-02T07:45:00Z", 20.0, 30.0)
+    inp, out = _tapered_plan("2026-11-02T08:00:00Z", 20.0, 30.0)
+
+    per_quarter, _ = naive_overrides([_entry(first), _entry(later)], inp, out, 0.25)
+
+    assert per_quarter[1].ev_needed["car"] == pytest.approx(2.2548828125)
+    assert per_quarter[1].ev_soc["car"] == pytest.approx(27.7451171875)
