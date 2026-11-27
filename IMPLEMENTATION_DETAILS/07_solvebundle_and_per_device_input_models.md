@@ -104,6 +104,7 @@ class SolveBundle(BaseModel):
     horizon_confidence: list[float] = Field(..., min_length=1)    # [0, 1] per step
     pv_forecast: list[float] = Field(..., min_length=1)           # kW, 15-min grid
     base_load_forecast: list[float] = Field(..., min_length=1)    # kW, 15-min grid
+    static_load_forecasts: dict[str, list[float]] = Field(default_factory=dict)  # kW per static load
     battery_inputs: dict[str, BatteryInputs] = Field(default_factory=dict)
     ev_inputs: dict[str, EvInputs] = Field(default_factory=dict)
     deferrable_windows: dict[str, DeferrableWindow] = Field(default_factory=dict)
@@ -114,6 +115,8 @@ class SolveBundle(BaseModel):
 ```
 
 All five forecast arrays in `SolveBundle` have the same length, determined at snapshot time by `compute_horizon_steps()` in `mimirheim/core/forecast.py`.
+
+`base_load_forecast` is the sum of all static loads; `static_load_forecasts` keeps each load's own series, keyed by `static_loads` device name, and the power balance gives every `StaticLoad` its own series. Handing each device the sum would count the household load once per configured load. A validator requires the per-load series to have the same length as the sum and to add up to it within 0.005 kW per step, so values rounded independently of the sum (for example by a hand-edited or external input file) are accepted. The summed series stays for the naive-cost baseline, the reporter and older dump files: a bundle without per-load series still solves with a single static load, while with more than one load `build_and_solve` raises, because the sum cannot be attributed to the individual loads. `pv_forecasts` and `pv_forecast` follow the same rule for PV arrays.
 
 The top-level solver entry point signature is therefore:
 

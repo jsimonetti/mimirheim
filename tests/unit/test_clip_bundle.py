@@ -119,3 +119,13 @@ def test_clip_bundle_leaves_optional_none_outdoor_temp_untouched() -> None:
     )
     result = _clip_bundle(bundle, 96)
     assert result.space_heating_inputs["sh1"].outdoor_temp_forecast_c is None
+
+
+def test_clip_bundle_clips_static_load_forecasts() -> None:
+    """Each per-load static forecast series is trimmed to max_steps."""
+    bundle = _make_bundle(
+        200,
+        static_load_forecasts={"house": [0.6] * 200, "heating": [0.4] * 200},
+    )
+    result = _clip_bundle(bundle, 96)
+    assert {name: len(s) for name, s in result.static_load_forecasts.items()} == {"house": 96, "heating": 96}

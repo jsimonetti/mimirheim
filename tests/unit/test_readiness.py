@@ -540,3 +540,39 @@ def test_a_dip_during_the_hold_starts_it_over(monkeypatch) -> None:
     current["now"] = t0 + timedelta(hours=2, minutes=30)
     state.update("mimir/input/battery/bat/soc", 9.8)  # only 1h30 since the dip
     assert "bat" not in state._last_full_utc
+
+
+def test_snapshot_keeps_each_static_loads_own_series() -> None:
+    """With two static loads the snapshot carries each load's series and their sum.
+
+    Before static_load_forecasts existed only the sum was kept, and the solver
+    handed it to every load, counting the household load once per load.
+    """
+    from mimirheim.config.schema import StaticLoadConfig
+    from mimirheim.core.bundle import PowerForecastStep
+
+    config = _make_config().model_copy(
+        update={
+            "static_loads": {
+                "house": StaticLoadConfig(topic_forecast="mimir/input/load/house"),
+                "heating": StaticLoadConfig(topic_forecast="mimir/input/load/heating"),
+            }
+        }
+    )
+    state = ReadinessState(config)
+    _feed_all(state)
+    start = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+
+    def flat(kw: float) -> list[PowerForecastStep]:
+        return [PowerForecastStep(ts=start + timedelta(hours=h), kw=kw) for h in range(30)]
+
+    state.update("mimir/input/load/house", flat(1.0))
+    assert not state.is_ready()  # the heating forecast is still missing
+    state.update("mimir/input/load/heating", flat(0.4))
+    assert state.is_ready()
+    bundle = state.snapshot()
+
+    assert set(bundle.static_load_forecasts) == {"house", "heating"}
+    assert bundle.static_load_forecasts["house"] == pytest.approx([1.0] * len(bundle.base_load_forecast))
+    assert bundle.static_load_forecasts["heating"] == pytest.approx([0.4] * len(bundle.base_load_forecast))
+    assert bundle.base_load_forecast == pytest.approx([1.4] * len(bundle.base_load_forecast))

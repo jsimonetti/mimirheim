@@ -473,11 +473,34 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
             start_time=start_time,
         )
 
-    for sl in static_loads:
-        sl.add_constraints(
-            ctx,
-            inputs=StaticLoadInputs(forecast_kw=bundle.base_load_forecast),
+    unknown_loads = set(bundle.static_load_forecasts) - set(config.static_loads)
+    if unknown_loads:
+        # A stale key passes the bundle's sum check, so its power is counted
+        # in base_load_forecast, yet no device puts it in the power balance.
+        raise ValueError(
+            f"bundle.static_load_forecasts contains unknown static load(s) "
+            f"{sorted(unknown_loads)!r}; configured loads are "
+            f"{sorted(config.static_loads)!r}."
         )
+
+    for sl in static_loads:
+        # Each load gets its own series. Handing every device the summed
+        # base_load_forecast would count the household load once per load.
+        load_kw = bundle.static_load_forecasts.get(sl.name)
+        if load_kw is None:
+            if len(static_loads) == 1:
+                # Backward compatibility: older dump files carry only the
+                # summed series. With a single load the sum IS the load.
+                load_kw = bundle.base_load_forecast
+            else:
+                raise ValueError(
+                    f"Static load {sl.name!r} has no entry in "
+                    "bundle.static_load_forecasts. Per-load forecasts are "
+                    "required when more than one static_loads device is "
+                    "configured; the summed base_load_forecast cannot be "
+                    "attributed to individual loads."
+                )
+        sl.add_constraints(ctx, inputs=StaticLoadInputs(forecast_kw=load_kw))
 
     for hi in hybrid_inverters:
         hi_inputs = bundle.hybrid_inverter_inputs.get(hi.name)
