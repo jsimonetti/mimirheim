@@ -370,6 +370,16 @@ def _build_targets(root: Path) -> list[Target]:
             ),
         ),
         Target(
+            key="baseload-weather",
+            source_path=helpers / "baseload" / "weather_regression" / "baseload_weather" / "config.py",
+            output_path=ref / "Config-Baseload-Weather.md",
+            title="baseload_weather: Configuration Reference",
+            intro=(
+                "Auto-generated from `baseload_weather/config.py`. "
+                "See [Baseload-Weather](Baseload-Weather) for the guide."
+            ),
+        ),
+        Target(
             key="nordpool",
             source_path=helpers / "prices" / "nordpool" / "nordpool" / "config.py",
             output_path=ref / "Config-Nordpool.md",

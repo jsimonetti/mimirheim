@@ -72,6 +72,19 @@ baseload-ha-db-postgres = [
 baseload-ha-db-mysql = [
     "pymysql>=1.2.4",
 ]
+baseload-weather = [
+    "sqlalchemy>=2.1.8",
+    "httpx>=0.27",
+    # zoneinfo needs a time zone database; the container base image ships one,
+    # other installs (notably Windows) may not.
+    "tzdata>=2024.1",
+]
+baseload-weather-postgres = [
+    "psycopg2-binary>=2.9.13",
+]
+baseload-weather-mysql = [
+    "pymysql>=1.2.4",
+]
 reporter = [
     "plotly>=7.1.0",
 ]
@@ -92,6 +105,7 @@ helpers = [
     "mimirheim[pv-ml-learner]",
     "mimirheim[baseload-ha]",
     "mimirheim[baseload-ha-db]",
+    "mimirheim[baseload-weather]",
     "mimirheim[reporter]",
     "mimirheim[config-editor]",
 ]
@@ -114,6 +128,7 @@ packages = [
     "mimirheim_helpers/baseload/homeassistant/baseload_ha",
     "mimirheim_helpers/baseload/homeassistant_db/baseload_ha_db",
     "mimirheim_helpers/baseload/static/baseload_static",
+    "mimirheim_helpers/baseload/weather_regression/baseload_weather",
     "mimirheim_helpers/reporter/reporter",
     "mimirheim_helpers/config_editor/config_editor",
 ]
@@ -189,6 +204,7 @@ testpaths = [
     "mimirheim_helpers/baseload/homeassistant/tests",
     "mimirheim_helpers/baseload/homeassistant_db/tests",
     "mimirheim_helpers/baseload/static/tests",
+    "mimirheim_helpers/baseload/weather_regression/tests",
     "mimirheim_helpers/reporter/tests",
     "mimirheim_helpers/config_editor/tests",
     "mimirheim_shared/tests",

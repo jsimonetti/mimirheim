@@ -40,6 +40,7 @@ _CASES = [
     ("baseload-ha.yaml", "baseload_ha.config", "BaseloadConfig"),
     ("baseload-ha-db.yaml", "baseload_ha_db.config", "BaseloadConfig"),
     ("baseload-static.yaml", "baseload_static.config", "BaseloadConfig"),
+    ("baseload-weather.yaml", "baseload_weather.config", "WeatherBaseloadConfig"),
     ("reporter.yaml", "reporter.config", "ReporterConfig"),
     ("scheduler.yaml", "scheduler.config", "SchedulerConfig"),
     ("config-editor.yaml", "config_editor.config", "ConfigEditorConfig"),

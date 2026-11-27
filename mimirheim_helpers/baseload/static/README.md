@@ -15,7 +15,7 @@ Use it when you have no usable consumption history, when the history you have is
 5. [Running](#5-running)
 6. [Fault tolerance](#6-fault-tolerance)
 7. [Scheduling](#7-scheduling)
-8. [Choosing between the three base load helpers](#8-choosing-between-the-three-base-load-helpers)
+8. [Choosing between the four base load helpers](#8-choosing-between-the-four-base-load-helpers)
 
 ---
 
@@ -197,14 +197,15 @@ Trigger it again after editing the profile, or the retained payload keeps servin
 
 ---
 
-## 8. Choosing between the three base load helpers
+## 8. Choosing between the four base load helpers
 
 | | Reads | Use when |
 | --- | --- | --- |
 | `baseload_static` | nothing | You have no history, or you want a predictable baseline |
 | `baseload_ha` | the HA recorder REST API | HA is reachable over HTTP and you want it to learn from actuals |
 | `baseload_ha_db` | the HA recorder database directly | You need longer history than the API will serve, or outlier filtering |
+| `baseload_weather` | the HA recorder database and an Open-Meteo temperature forecast | Electric heating makes the load depend on the weather |
 
-All three publish to the same topic, so **only one may be enabled**. The config editor enforces this: enabling one deletes the other two config files.
+All four publish to the same topic by default, so **only one may be enabled** per static load.
 
-Running two by hand is not caught by anything. They will overwrite each other's retained payload, and which forecast mimirheim sees depends on which fired last.
+Running two is not caught by anything. They will overwrite each other's retained payload, and which forecast mimirheim sees depends on which fired last.

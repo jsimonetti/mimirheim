@@ -40,6 +40,7 @@ options:
   enable_baseload_ha: false
   enable_baseload_ha_db: false
   enable_baseload_static: false
+  enable_baseload_weather: false
   enable_scheduler: false
   enable_reporter: false
   enable_config_editor: true
@@ -54,6 +55,7 @@ schema:
   enable_baseload_ha: bool
   enable_baseload_ha_db: bool
   enable_baseload_static: bool
+  enable_baseload_weather: bool
   enable_scheduler: bool
   enable_reporter: bool
   enable_config_editor: bool

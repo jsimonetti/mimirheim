@@ -43,6 +43,7 @@ _LOGGING_ENTRY_POINTS = [
     ("baseload_ha", "baseload_ha"),
     ("baseload_ha_db", "baseload_ha_db"),
     ("baseload_static", "baseload_static"),
+    ("baseload_weather", "baseload_weather"),
     ("config_editor", "config_editor"),
 ]
 
@@ -54,6 +55,7 @@ _ENTRY_POINT_SOURCES = [
     "mimirheim_helpers/baseload/homeassistant/baseload_ha/__main__.py",
     "mimirheim_helpers/baseload/homeassistant_db/baseload_ha_db/__main__.py",
     "mimirheim_helpers/baseload/static/baseload_static/__main__.py",
+    "mimirheim_helpers/baseload/weather_regression/baseload_weather/__main__.py",
     "mimirheim_helpers/pv/forecast.solar/pv_fetcher/__main__.py",
     "mimirheim_helpers/pv/open-meteo/pv_openmeteo/__main__.py",
     "mimirheim_helpers/pv/pv_ml_learner/pv_ml_learner/__main__.py",
@@ -173,9 +175,10 @@ class TestThirdPartyLoggersAreQuiet:
         "relpath",
         [
             "mimirheim_helpers/baseload/homeassistant/baseload_ha/__main__.py",
+            "mimirheim_helpers/baseload/weather_regression/baseload_weather/__main__.py",
             "mimirheim_helpers/pv/pv_ml_learner/pv_ml_learner/__main__.py",
         ],
-        ids=["baseload_ha", "pv_ml_learner"],
+        ids=["baseload_ha", "baseload_weather", "pv_ml_learner"],
     )
     def test_httpx_is_set_to_warning(self, relpath: str) -> None:
         source = (_REPO_ROOT / relpath).read_text()
@@ -193,7 +196,7 @@ class TestThirdPartyLoggersAreQuiet:
             for path in _REPO_ROOT.glob("mimirheim_helpers/**/*.py")
             if "/tests/" not in str(path) and "import httpx" in path.read_text()
         }
-        assert users == {"baseload_ha", "pv_ml_learner"}, (
+        assert users == {"baseload_ha", "baseload_weather", "pv_ml_learner"}, (
             f"httpx importers changed to {sorted(users)}; update the "
             "parametrised test above."
         )
