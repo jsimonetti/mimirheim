@@ -16,10 +16,15 @@ The tests cover:
   min_enforcer_dwell_steps consecutive steps.
 - Deterministic tie-break by device type priority then name.
 - Passthrough: a suppressed-dispatch schedule has flags correctly set.
+- SoC- and hold-aware battery eligibility: full, empty, battery-care hold,
+  hold at the top, idle threshold, derating, and release mid-dwell.
+- Hybrid inverters: SoC gate near full or empty, derated absorb headroom,
+  carry-forward of the last known SoC.
 """
 
 from datetime import datetime, timezone
 
+import pytest
 
 from mimirheim.config.schema import (
     MimirheimConfig,
@@ -1100,3 +1105,575 @@ def test_dual_capability_ev_not_loadbalanced_when_unplugged() -> None:
     result = assign_control_authority(_result([step]), bundle, config)
 
     assert result.schedule[0].devices["ev1"].loadbalance_active is False
+
+
+# ---------------------------------------------------------------------------
+# SoC- and hold-aware battery eligibility
+#
+# A battery is a zero-exchange candidate only when it can regulate in both
+# directions around zero (absorb a surplus and cover a deficit of at least
+# headroom_margin_kw) and the step is not inside a battery-care hold. An idle
+# or charging step at the top of the range has no absorb headroom. Each test asserts
+# the complete assignment of the step: zero_exchange_active and
+# loadbalance_active of every device.
+# ---------------------------------------------------------------------------
+
+
+def _config_soc_aware(
+    *,
+    with_pv: bool = True,
+    with_lb_ev: bool = False,
+    control: dict | None = None,
+    battery_extra: dict | None = None,
+) -> MimirheimConfig:
+    """Battery (10 kWh, min 1 kWh, 5 kW both ways) with zero_exchange, plus options.
+
+    Args:
+        with_pv: Add a PV array with zero_export.
+        with_lb_ev: Add an EV with loadbalance only.
+        control: Raw ``control`` block.
+        battery_extra: Extra raw battery fields (derating).
+    """
+    raw = _minimal_config_dict()
+    raw["batteries"] = {
+        "bat": {
+            "capacity_kwh": 10.0,
+            "min_soc_kwh": 1.0,
+            "charge_segments": [{"power_max_kw": 5.0, "efficiency": 0.95}],
+            "discharge_segments": [{"power_max_kw": 5.0, "efficiency": 0.95}],
+            "capabilities": {"zero_exchange": True},
+            "outputs": {"exchange_mode": "mimir/bat/exchange_mode"},
+            **(battery_extra or {}),
+        }
+    }
+    if with_pv:
+        raw["pv_arrays"] = {
+            "pv": {
+                "max_power_kw": 6.0,
+                "topic_forecast": "mimir/input/pv_forecast",
+                "capabilities": {"zero_export": True},
+                "outputs": {"zero_export_mode": "mimir/pv/zero_export_mode"},
+            }
+        }
+    if with_lb_ev:
+        raw["ev_chargers"] = {
+            "ev1": {
+                "capacity_kwh": 52.0,
+                "charge_segments": [{"power_max_kw": 11.0, "efficiency": 0.93}],
+                "capabilities": {"loadbalance": True},
+                "outputs": {"loadbalance_cmd": "mimir/ev1/loadbalance_cmd"},
+            }
+        }
+    if control is not None:
+        raw["control"] = control
+    return MimirheimConfig.model_validate(raw)
+
+
+def _bundle_with_battery_soc(soc_kwh: float, ev_available: bool | None = None) -> SolveBundle:
+    """Bundle carrying the measured battery SoC and optionally a plugged-in EV."""
+    ev_inputs: dict = {}
+    if ev_available is not None:
+        ev_inputs["ev1"] = EvInputs(soc_kwh=10.0, available=ev_available)
+    return SolveBundle.model_validate(
+        {
+            "solve_time_utc": _T0.isoformat(),
+            "strategy": "minimize_cost",
+            "horizon_prices": [0.20],
+            "horizon_export_prices": [0.10],
+            "horizon_confidence": [1.0],
+            "pv_forecast": [0.0],
+            "base_load_forecast": [0.5],
+            "battery_inputs": {"bat": {"soc_kwh": soc_kwh}},
+            "ev_inputs": ev_inputs,
+        }
+    )
+
+
+def _zex_step(t: int, bat_kw: float, bat_soc_kwh: float | None, *, ev_kw: float | None = None) -> ScheduleStep:
+    """Near-zero-exchange step with the battery at the given setpoint and PV producing 3 kW."""
+    devices = {
+        "bat": DeviceSetpoint(kw=bat_kw, type="battery", soc_kwh=bat_soc_kwh),
+        "pv": DeviceSetpoint(kw=3.0, type="pv"),
+    }
+    if ev_kw is not None:
+        devices["ev1"] = DeviceSetpoint(kw=ev_kw, type="ev_charger")
+    return _step(t=t, grid_import_kw=0.0, grid_export_kw=0.0, devices=devices)
+
+
+def _care(target_kwh: float, step: int, hold_steps: int) -> dict:
+    """battery_care payload for the battery with an enforced hold."""
+    from mimirheim.core.bundle import BatteryCareStatus
+
+    return {
+        "bat": BatteryCareStatus(
+            floor_kwh=0.0,
+            enforced_target_kwh=target_kwh,
+            enforced_step=step,
+            hold_steps=hold_steps,
+            enforced_hold_steps=hold_steps,
+        )
+    }
+
+
+def _flags(step: ScheduleStep) -> dict[str, tuple[bool | None, bool | None]]:
+    """Map every device to its (zero_exchange_active, loadbalance_active) pair."""
+    return {
+        name: (sp.zero_exchange_active, sp.loadbalance_active)
+        for name, sp in step.devices.items()
+    }
+
+
+_BAT_ENFORCES = {"bat": (True, None), "pv": (False, None)}
+_PV_ENFORCES = {"bat": (False, None), "pv": (True, None)}
+
+
+def test_full_idle_battery_yields_to_pv() -> None:
+    """A full idle battery cannot absorb a surplus; the PV array enforces."""
+    config = _config_soc_aware()
+    result = assign_control_authority(
+        _result([_zex_step(0, 0.0, 10.0)]), _bundle_with_battery_soc(10.0), config
+    )
+    assert _flags(result.schedule[0]) == _PV_ENFORCES
+
+
+def test_battery_at_min_soc_idle_not_enforcer() -> None:
+    """An idle battery at min_soc_kwh cannot cover a deficit."""
+    config = _config_soc_aware()
+    result = assign_control_authority(
+        _result([_zex_step(0, 0.0, 1.0)]), _bundle_with_battery_soc(1.0), config
+    )
+    assert _flags(result.schedule[0]) == _PV_ENFORCES
+
+
+def test_battery_in_care_hold_not_enforcer() -> None:
+    """Steps inside the battery-care hold go to the next candidate; after it the battery returns."""
+    config = _config_soc_aware()
+    steps = [_zex_step(t, 0.0, 9.0) for t in range(3)]
+    result = _result(steps).model_copy(update={"battery_care": _care(9.0, step=0, hold_steps=1)})
+    out = assign_control_authority(result, _bundle_with_battery_soc(9.0), config)
+    assert _flags(out.schedule[0]) == _PV_ENFORCES
+    assert _flags(out.schedule[1]) == _PV_ENFORCES
+    assert _flags(out.schedule[2]) == _BAT_ENFORCES
+
+
+def test_top_hold_entered_slightly_low_not_enforcer() -> None:
+    """Idle step starting at 99.5 % and ending at 100 % is a hold at the top."""
+    config = _config_soc_aware()
+    result = assign_control_authority(
+        _result([_zex_step(0, 0.02, 10.0)]), _bundle_with_battery_soc(9.95), config
+    )
+    assert _flags(result.schedule[0]) == _PV_ENFORCES
+
+
+def test_charging_to_full_not_enforcer() -> None:
+    """A charge that ends at 100 % is a hold at the top; the PV array takes over."""
+    config = _config_soc_aware()
+    result = assign_control_authority(
+        _result([_zex_step(0, -1.2, 10.0)]), _bundle_with_battery_soc(9.7), config
+    )
+    assert _flags(result.schedule[0]) == _PV_ENFORCES
+
+
+def test_discharging_from_full_still_eligible() -> None:
+    """A household discharge from 100 % absorbs a surplus by discharging less."""
+    config = _config_soc_aware()
+    result = assign_control_authority(
+        _result([_zex_step(0, 2.0, 9.5)]), _bundle_with_battery_soc(10.0), config
+    )
+    assert _flags(result.schedule[0]) == _BAT_ENFORCES
+
+
+def test_charging_at_min_soc_still_eligible() -> None:
+    """A battery charging at min_soc_kwh covers a deficit by charging less."""
+    config = _config_soc_aware()
+    result = assign_control_authority(
+        _result([_zex_step(0, -2.0, 1.5)]), _bundle_with_battery_soc(1.0), config
+    )
+    assert _flags(result.schedule[0]) == _BAT_ENFORCES
+
+
+def test_loadbalance_not_suppressed_when_battery_ineligible() -> None:
+    """With the full battery out of the running, a plugged-in EV load balances."""
+    config = _config_soc_aware(with_lb_ev=True)
+    result = assign_control_authority(
+        _result([_zex_step(0, 0.0, 10.0, ev_kw=-3.0)]),
+        _bundle_with_battery_soc(10.0, ev_available=True),
+        config,
+    )
+    assert _flags(result.schedule[0]) == {
+        "bat": (False, None),
+        "pv": (True, None),
+        "ev1": (None, True),
+    }
+
+
+def test_battery_released_when_ineligible_mid_dwell() -> None:
+    """A battery that enters a care hold during its dwell is released at once."""
+    config = _config_soc_aware(control={"min_enforcer_dwell_steps": 4})
+    steps = [_zex_step(t, 0.0, 5.0) for t in range(4)]
+    result = _result(steps).model_copy(update={"battery_care": _care(5.0, step=2, hold_steps=1)})
+    out = assign_control_authority(result, _bundle_with_battery_soc(5.0), config)
+    assert [_flags(s) for s in out.schedule] == [
+        _BAT_ENFORCES,
+        _BAT_ENFORCES,
+        _PV_ENFORCES,
+        _PV_ENFORCES,
+    ]
+
+
+def test_idle_threshold_decides_hold_or_discharge() -> None:
+    """Planned power within 0.05 kW of zero is idle, so a full battery holds.
+
+    With headroom_margin_kw 0, a 0.08 kW discharge from 100 % is a real
+    discharge (eligible: it absorbs by discharging less), while 0.03 kW is
+    solver noise and the battery holds at the top.
+    """
+    bundle = _bundle_with_battery_soc(10.0)
+    config = _config_soc_aware(control={"headroom_margin_kw": 0.0})
+    held = assign_control_authority(_result([_zex_step(0, 0.03, 9.9925)]), bundle, config)
+    assert _flags(held.schedule[0]) == _PV_ENFORCES
+    discharging = assign_control_authority(_result([_zex_step(0, 0.08, 9.98)]), bundle, config)
+    assert _flags(discharging.schedule[0]) == _BAT_ENFORCES
+
+
+def test_charge_derating_removes_absorb_headroom() -> None:
+    """Near full, a derated charge limit below the headroom margin makes the battery ineligible."""
+    step = _zex_step(0, 0.0, 9.95)
+    bundle = _bundle_with_battery_soc(9.95)
+    plain = assign_control_authority(_result([step]), bundle, _config_soc_aware())
+    assert _flags(plain.schedule[0]) == _BAT_ENFORCES
+    derated_config = _config_soc_aware(
+        battery_extra={"reduce_charge_above_soc_kwh": 5.0, "reduce_charge_min_kw": 0.01}
+    )
+    derated = assign_control_authority(_result([step]), bundle, derated_config)
+    assert _flags(derated.schedule[0]) == _PV_ENFORCES
+
+
+def test_care_hold_matched_on_horizon_step_index() -> None:
+    """The care hold is located by ScheduleStep.t, not by list position."""
+    config = _config_soc_aware()
+    steps = [_zex_step(4, 0.0, 5.0), _zex_step(5, 0.0, 5.0)]
+    result = _result(steps).model_copy(update={"battery_care": _care(5.0, step=5, hold_steps=0)})
+    out = assign_control_authority(result, _bundle_with_battery_soc(5.0), config)
+    assert _flags(out.schedule[0]) == _BAT_ENFORCES
+    assert _flags(out.schedule[1]) == _PV_ENFORCES
+
+
+def test_suppressed_schedule_full_battery_ineligible_every_step() -> None:
+    """Without per-step SoC the start SoC is carried forward, so a full battery stays full."""
+    config = _config_soc_aware()
+    steps = [_zex_step(t, 0.0, None) for t in range(3)]
+    out = assign_control_authority(_result(steps), _bundle_with_battery_soc(10.0), config)
+    assert [_flags(s) for s in out.schedule] == [_PV_ENFORCES] * 3
+
+
+def test_full_power_discharge_has_no_supply_headroom() -> None:
+    """A battery already discharging at its limit cannot cover a further deficit."""
+    config = _config_soc_aware()
+    result = assign_control_authority(
+        _result([_zex_step(0, 5.0, 3.75)]), _bundle_with_battery_soc(5.0), config
+    )
+    assert _flags(result.schedule[0]) == _PV_ENFORCES
+
+
+def test_soc_aware_absorb_headroom_used_for_scoring() -> None:
+    """A derated, nearly full battery scores its real absorb headroom, not its configured maximum.
+
+    Both batteries have the same efficiency and wear. Without SoC-aware
+    scoring the tie falls to the name, and bat2 (nearly full, derated to about
+    0.11 kW of charge) would win over bat1 (half full, 5 kW of room).
+    """
+    raw = _minimal_config_dict()
+    common = {
+        "capacity_kwh": 10.0,
+        "min_soc_kwh": 1.0,
+        "charge_segments": [{"power_max_kw": 5.0, "efficiency": 0.95}],
+        "discharge_segments": [{"power_max_kw": 5.0, "efficiency": 0.95}],
+        "capabilities": {"zero_exchange": True},
+    }
+    raw["batteries"] = {
+        "bat1": {**common, "outputs": {"exchange_mode": "mimir/bat1/exchange_mode"}},
+        "bat2": {
+            **common,
+            "reduce_charge_above_soc_kwh": 5.0,
+            "reduce_charge_min_kw": 0.01,
+            "outputs": {"exchange_mode": "mimir/bat2/exchange_mode"},
+        },
+    }
+    config = MimirheimConfig.model_validate(raw)
+    bundle = SolveBundle.model_validate(
+        {
+            "solve_time_utc": _T0.isoformat(),
+            "strategy": "minimize_cost",
+            "horizon_prices": [0.20],
+            "horizon_export_prices": [0.10],
+            "horizon_confidence": [1.0],
+            "pv_forecast": [0.0],
+            "base_load_forecast": [0.5],
+            "battery_inputs": {"bat1": {"soc_kwh": 5.0}, "bat2": {"soc_kwh": 9.9}},
+            "ev_inputs": {},
+        }
+    )
+    step = _step(
+        t=0,
+        grid_import_kw=0.0,
+        grid_export_kw=0.0,
+        devices={
+            "bat1": DeviceSetpoint(kw=0.0, type="battery", soc_kwh=5.0),
+            "bat2": DeviceSetpoint(kw=0.0, type="battery", soc_kwh=9.9),
+        },
+    )
+    out = assign_control_authority(_result([step]), bundle, config)
+    assert _flags(out.schedule[0]) == {"bat1": (True, None), "bat2": (False, None)}
+
+
+def test_zero_headroom_margin_still_excludes_empty_battery() -> None:
+    """With headroom_margin_kw 0 an idle battery at min_soc_kwh still has no supply headroom."""
+    config = _config_soc_aware(control={"headroom_margin_kw": 0.0})
+    result = assign_control_authority(
+        _result([_zex_step(0, 0.0, 1.0)]), _bundle_with_battery_soc(1.0), config
+    )
+    assert _flags(result.schedule[0]) == _PV_ENFORCES
+
+
+def test_discharge_ending_at_min_soc_has_no_supply_headroom() -> None:
+    """A planned discharge that empties the battery by the end of the step cannot cover more."""
+    config = _config_soc_aware()
+    result = assign_control_authority(
+        _result([_zex_step(0, 4.0, 1.0)]), _bundle_with_battery_soc(2.0), config
+    )
+    assert _flags(result.schedule[0]) == _PV_ENFORCES
+
+
+def test_battery_held_at_care_floor_not_enforcer() -> None:
+    """The battery-care floor counts as empty: a closed loop would drain below it."""
+    from mimirheim.core.bundle import BatteryCareStatus
+
+    config = _config_soc_aware()
+    care = {"bat": BatteryCareStatus(floor_kwh=7.0)}
+    at_floor = _result([_zex_step(0, 0.0, 7.0)]).model_copy(update={"battery_care": care})
+    out = assign_control_authority(at_floor, _bundle_with_battery_soc(7.0), config)
+    assert _flags(out.schedule[0]) == _PV_ENFORCES
+    above = _result([_zex_step(0, 0.0, 8.0)]).model_copy(update={"battery_care": care})
+    out = assign_control_authority(above, _bundle_with_battery_soc(8.0), config)
+    assert _flags(out.schedule[0]) == _BAT_ENFORCES
+
+
+def test_zero_margin_tolerates_rounding_at_min_soc() -> None:
+    """With headroom_margin_kw 0 a SoC a hair above min_soc_kwh still counts as empty."""
+    config = _config_soc_aware(control={"headroom_margin_kw": 0.0})
+    result = assign_control_authority(
+        _result([_zex_step(0, 0.0, 1.0000001)]), _bundle_with_battery_soc(1.0000001), config
+    )
+    assert _flags(result.schedule[0]) == _PV_ENFORCES
+
+
+def test_soc_trajectory_carries_forward_from_power() -> None:
+    """Without a published soc_kwh a battery's end SoC follows the planned power, unclamped below min."""
+    from mimirheim.core.control_arbitration import _soc_trajectory
+
+    steps = [_zex_step(0, 2.0, None), _zex_step(1, 0.0, None)]
+    assert _soc_trajectory("bat", 5.0, 10.0, steps, True) == [(5.0, 4.5), (4.5, 4.5)]
+    assert _soc_trajectory("bat", 0.5, 10.0, steps[1:], True) == [(0.5, 0.5)]
+
+
+def test_zero_margin_ignores_charge_noise_at_min_soc() -> None:
+    """Solver noise below the idle threshold does not give an empty battery supply headroom."""
+    config = _config_soc_aware(control={"headroom_margin_kw": 0.0})
+    result = assign_control_authority(
+        _result([_zex_step(0, -0.003, 1.0007)]), _bundle_with_battery_soc(1.0), config
+    )
+    assert _flags(result.schedule[0]) == _PV_ENFORCES
+
+
+def test_discharge_derating_removes_supply_headroom() -> None:
+    """Near empty, a derated discharge limit below the headroom margin makes the battery ineligible."""
+    step = _zex_step(0, 0.0, 1.05)
+    bundle = _bundle_with_battery_soc(1.05)
+    plain = assign_control_authority(_result([step]), bundle, _config_soc_aware())
+    assert _flags(plain.schedule[0]) == _BAT_ENFORCES
+    derated_config = _config_soc_aware(
+        battery_extra={"reduce_discharge_below_soc_kwh": 5.0, "reduce_discharge_min_kw": 0.01}
+    )
+    derated = assign_control_authority(_result([step]), bundle, derated_config)
+    assert _flags(derated.schedule[0]) == _PV_ENFORCES
+
+
+def test_published_end_soc_used_when_start_unknown() -> None:
+    """Without a measured SoC the first step's published soc_kwh still gates the battery."""
+    config = _config_soc_aware()
+    result = assign_control_authority(
+        _result([_zex_step(0, 0.0, 1.0)]), _minimal_bundle_no_ev(), config
+    )
+    assert _flags(result.schedule[0]) == _PV_ENFORCES
+
+
+# ---------------------------------------------------------------------------
+# Hybrid inverters: conservative SoC gate
+#
+# A hybrid inverter's net AC power includes its own PV, so its supply headroom
+# cannot be read from the schedule. It is excluded whenever its battery is near
+# full or near empty; its absorb headroom uses the derated charge ceiling.
+# ---------------------------------------------------------------------------
+
+
+def _config_hybrid_soc(hybrid_extra: dict | None = None) -> MimirheimConfig:
+    """Hybrid inverter (10 kWh, min 1 kWh, 5 kW both ways, 97 %) plus a zero-export PV array."""
+    raw = _minimal_config_dict()
+    raw["hybrid_inverters"] = {
+        "hi": {
+            "capacity_kwh": 10.0,
+            "min_soc_kwh": 1.0,
+            "max_charge_kw": 5.0,
+            "max_discharge_kw": 5.0,
+            "max_pv_kw": 6.0,
+            "inverter_efficiency": 0.97,
+            "capabilities": {"zero_exchange": True},
+            "outputs": {"exchange_mode": "mimir/hi/exchange_mode"},
+            **(hybrid_extra or {}),
+        }
+    }
+    raw["pv_arrays"] = {
+        "pv": {
+            "max_power_kw": 6.0,
+            "topic_forecast": "mimir/input/pv_forecast",
+            "capabilities": {"zero_export": True},
+            "outputs": {"zero_export_mode": "mimir/pv/zero_export_mode"},
+        }
+    }
+    return MimirheimConfig.model_validate(raw)
+
+
+def _bundle_with_hybrid_soc(soc_kwh: float, horizon: int = 1) -> SolveBundle:
+    return SolveBundle.model_validate(
+        {
+            "solve_time_utc": _T0.isoformat(),
+            "strategy": "minimize_cost",
+            "horizon_prices": [0.20] * horizon,
+            "horizon_export_prices": [0.10] * horizon,
+            "horizon_confidence": [1.0] * horizon,
+            "pv_forecast": [0.0] * horizon,
+            "base_load_forecast": [0.5] * horizon,
+            "hybrid_inverter_inputs": {"hi": {"soc_kwh": soc_kwh, "pv_forecast_kw": [2.0] * horizon}},
+        }
+    )
+
+
+def _hybrid_step(t: int, hi_kw: float, hi_soc_kwh: float | None) -> ScheduleStep:
+    devices = {
+        "hi": DeviceSetpoint(kw=hi_kw, type="hybrid_inverter", soc_kwh=hi_soc_kwh, zero_exchange_active=False),
+        "pv": DeviceSetpoint(kw=3.0, type="pv"),
+    }
+    return _step(t=t, grid_import_kw=0.0, grid_export_kw=0.0, devices=devices)
+
+
+_HI_ENFORCES = {"hi": (True, None), "pv": (False, None)}
+_PV_OVER_HI = {"hi": (False, None), "pv": (True, None)}
+
+
+@pytest.mark.parametrize(
+    "soc_kwh,hi_kw,expected",
+    [
+        (5.0, 0.0, _HI_ENFORCES),  # mid SoC, idle
+        (10.0, 0.0, _PV_OVER_HI),  # full, idle
+        (10.0, 2.0, _PV_OVER_HI),  # full, exporting PV: skipped (conservative)
+        (1.0, 0.0, _PV_OVER_HI),  # empty, idle
+        (1.0, -2.0, _PV_OVER_HI),  # empty, importing: still gated
+    ],
+)
+def test_hybrid_soc_gate(soc_kwh: float, hi_kw: float, expected: dict) -> None:
+    out = assign_control_authority(
+        _result([_hybrid_step(0, hi_kw, soc_kwh)]), _bundle_with_hybrid_soc(soc_kwh), _config_hybrid_soc()
+    )
+    assert _flags(out.schedule[0]) == expected
+
+
+@pytest.mark.parametrize(
+    "start_kwh,end_kwh,hi_kw",
+    [
+        (10.0, 9.5, 2.0),  # starts full, discharges away from it
+        (1.0, 1.5, -2.0),  # starts empty, charges away from it
+        (9.98, 9.98, 0.0),  # within the tolerance of full
+        (1.02, 1.02, 0.0),  # within the tolerance of empty
+    ],
+)
+def test_hybrid_gated_on_start_of_step_soc_and_tolerance(start_kwh: float, end_kwh: float, hi_kw: float) -> None:
+    """The start SoC alone, or a SoC within one step at the margin of a bound, gates the hybrid."""
+    out = assign_control_authority(
+        _result([_hybrid_step(0, hi_kw, end_kwh)]), _bundle_with_hybrid_soc(start_kwh), _config_hybrid_soc()
+    )
+    assert _flags(out.schedule[0]) == _PV_OVER_HI
+
+
+@pytest.mark.parametrize("soc_kwh,dc_kw", [(7.0, 5.0), (4.0, 4.6)])
+def test_hybrid_charge_ceiling_follows_the_solvers_line(soc_kwh: float, dc_kw: float) -> None:
+    """A derating end point above max_charge_kw gives a rising line, capped at max_charge_kw.
+
+    The line ``0.4 * soc + 3`` kW is what the solver allows: 5 kW (capped) at
+    7 kWh, and 4.6 kW at 4 kWh. A hybrid charging at that DC power (``dc_kw /
+    0.97`` kW AC) has no absorb headroom left; clamping to the end point
+    instead would credit it 0.8 or 0.4 kW DC.
+    """
+    config = _config_hybrid_soc({"reduce_charge_above_soc_kwh": 5.0, "reduce_charge_min_kw": 7.0})
+    out = assign_control_authority(
+        _result([_hybrid_step(0, -dc_kw / 0.97, soc_kwh + 0.3)]), _bundle_with_hybrid_soc(soc_kwh), config
+    )
+    assert _flags(out.schedule[0]) == _PV_OVER_HI
+
+
+def test_hybrid_gated_on_end_of_step_soc() -> None:
+    """A planned move to the top within the step gates the hybrid too."""
+    out = assign_control_authority(
+        _result([_hybrid_step(0, -3.0, 10.0)]), _bundle_with_hybrid_soc(9.3), _config_hybrid_soc()
+    )
+    assert _flags(out.schedule[0]) == _PV_OVER_HI
+
+
+def test_hybrid_charge_derating_lowers_absorb_headroom() -> None:
+    """At 9.95 kWh a ceiling derated to 0.01 kW at full leaves less than the 0.1 kW margin."""
+    step = _hybrid_step(0, 0.0, 9.95)
+    bundle = _bundle_with_hybrid_soc(9.95)
+    plain = assign_control_authority(_result([step]), bundle, _config_hybrid_soc())
+    assert _flags(plain.schedule[0]) == _HI_ENFORCES
+    derated = assign_control_authority(
+        _result([step]),
+        bundle,
+        _config_hybrid_soc({"reduce_charge_above_soc_kwh": 5.0, "reduce_charge_min_kw": 0.01}),
+    )
+    assert _flags(derated.schedule[0]) == _PV_OVER_HI
+
+
+def test_hybrid_without_soc_carries_the_last_known_soc() -> None:
+    """Net AC power says nothing about a hybrid's SoC (its PV may cover the
+    export), so a full hybrid stays full through steps that publish no SoC."""
+    steps = [_hybrid_step(t, 1.0, None) for t in range(2)]
+    out = assign_control_authority(_result(steps), _bundle_with_hybrid_soc(10.0, horizon=2), _config_hybrid_soc())
+    assert [_flags(s) for s in out.schedule] == [_PV_OVER_HI, _PV_OVER_HI]
+
+
+def test_suppressed_schedule_reaches_arbitration_with_the_hybrid_gated() -> None:
+    """A dispatch-suppressed schedule (kw 0, no SoC) keeps a full hybrid gated."""
+    from mimirheim.core.post_process import apply_gain_threshold
+
+    raw = _config_hybrid_soc().model_dump(exclude_none=True)
+    raw["objectives"] = {**raw.get("objectives", {}), "min_dispatch_gain_eur": 1.0}
+    config = MimirheimConfig.model_validate(raw)
+    bundle = _bundle_with_hybrid_soc(10.0, horizon=2)
+    planned = _result([_hybrid_step(t, -1.0, 10.0) for t in range(2)]).model_copy(
+        update={"naive_cost_eur": 0.5, "optimised_cost_eur": 0.4}
+    )
+    suppressed = apply_gain_threshold(planned, bundle, config)
+    assert suppressed.dispatch_suppressed
+    assert all(s.devices["hi"].soc_kwh is None and s.devices["hi"].kw == 0.0 for s in suppressed.schedule)
+    # Keep the steps at zero exchange (PV covering the load) so the
+    # arbitration has to pick an enforcer on them.
+    suppressed = suppressed.model_copy(
+        update={
+            "schedule": [
+                s.model_copy(update={"grid_import_kw": 0.0, "grid_export_kw": 0.0})
+                for s in suppressed.schedule
+            ]
+        }
+    )
+    out = assign_control_authority(suppressed, bundle, config)
+    assert [_flags(s) for s in out.schedule] == [_PV_OVER_HI, _PV_OVER_HI]

@@ -676,7 +676,13 @@ control:
 
   # Minimum absorption headroom (kW) a device must have to be eligible as
   # enforcer. Devices with less headroom at their current operating point are
-  # excluded. Prevents a nearly-full battery from being selected.
+  # excluded. A battery with a known state of charge must have this much
+  # headroom in both directions (absorb a surplus and cover a deficit), judged
+  # on its start- and end-of-step state of charge. A full battery qualifies
+  # only by discharging at least this much (it absorbs by discharging less),
+  # an empty one only by charging at least this much; one charging or
+  # discharging up to its power limit does not qualify. A hybrid inverter
+  # whose battery is near full or near empty never qualifies.
   # Default: 0.10 kW (100 W).
   headroom_margin_kw: 0.10
 

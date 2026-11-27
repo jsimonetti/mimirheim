@@ -17,6 +17,7 @@ from typing import Any
 from mimirheim.config.schema import HybridInverterConfig
 from mimirheim.core.bundle import HybridInverterInputs
 from mimirheim.core.context import ModelContext
+from mimirheim.devices.derating import charge_ceiling_line, discharge_ceiling_line
 from mimirheim.devices.pv import clip_forecast
 
 
@@ -340,11 +341,14 @@ class HybridInverterDevice:
         # Charge derating near full: same two-point linear model as Battery.
         # See IMPLEMENTATION_DETAILS.md §8, subsection "Power derating near
         # SOC extremes".
-        if cfg.reduce_charge_above_soc_kwh is not None and cfg.reduce_charge_min_kw is not None:
-            slope_c = (cfg.reduce_charge_min_kw - cfg.max_charge_kw) / (
-                cfg.capacity_kwh - cfg.reduce_charge_above_soc_kwh
-            )
-            rhs_c = cfg.max_charge_kw - slope_c * cfg.reduce_charge_above_soc_kwh
+        charge_line = charge_ceiling_line(
+            cfg.max_charge_kw,
+            cfg.capacity_kwh,
+            cfg.reduce_charge_above_soc_kwh,
+            cfg.reduce_charge_min_kw,
+        )
+        if charge_line is not None:
+            slope_c, rhs_c = charge_line
             for t in ctx.T:
                 soc_prev = inputs.soc_kwh if t == 0 else self.soc[t - 1]
                 ctx.solver.add_constraint(
@@ -353,14 +357,14 @@ class HybridInverterDevice:
 
         # Discharge derating near empty: mirror image of the charge derating
         # above.
-        if (
-            cfg.reduce_discharge_below_soc_kwh is not None
-            and cfg.reduce_discharge_min_kw is not None
-        ):
-            slope_d = (cfg.max_discharge_kw - cfg.reduce_discharge_min_kw) / (
-                cfg.reduce_discharge_below_soc_kwh - cfg.min_soc_kwh
-            )
-            rhs_d = cfg.max_discharge_kw - slope_d * cfg.reduce_discharge_below_soc_kwh
+        discharge_line = discharge_ceiling_line(
+            cfg.max_discharge_kw,
+            cfg.min_soc_kwh,
+            cfg.reduce_discharge_below_soc_kwh,
+            cfg.reduce_discharge_min_kw,
+        )
+        if discharge_line is not None:
+            slope_d, rhs_d = discharge_line
             for t in ctx.T:
                 soc_prev = inputs.soc_kwh if t == 0 else self.soc[t - 1]
                 ctx.solver.add_constraint(

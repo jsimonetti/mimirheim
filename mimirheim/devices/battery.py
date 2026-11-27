@@ -18,6 +18,7 @@ from mimirheim.config.schema import BatteryConfig
 from mimirheim.core.battery_care import CarePlan, care_plan
 from mimirheim.core.bundle import BatteryInputs
 from mimirheim.core.context import ModelContext
+from mimirheim.devices.derating import charge_ceiling_line, discharge_ceiling_line
 
 
 class Battery:
@@ -476,29 +477,33 @@ class Battery:
         # IMPLEMENTATION_DETAILS.md §8, subsection "Power derating near SOC
         # extremes" for the two-point derivation and why start-of-step SOC.
 
-        if self.config.reduce_charge_above_soc_kwh is not None:
-            slope_c = (
-                (self.config.reduce_charge_min_kw - max_charge_kw)
-                / (self.config.capacity_kwh - self.config.reduce_charge_above_soc_kwh)
-            )
-            rhs_c = max_charge_kw - slope_c * self.config.reduce_charge_above_soc_kwh
+        charge_line = charge_ceiling_line(
+            max_charge_kw,
+            self.config.capacity_kwh,
+            self.config.reduce_charge_above_soc_kwh,
+            self.config.reduce_charge_min_kw,
+        )
+        if charge_line is not None:
+            slope_c, rhs_c = charge_line
             for t in ctx.T:
                 soc_prev = inputs.soc_kwh if t == 0 else self.soc[t - 1]
                 ctx.solver.add_constraint(
                     self.charge_ac_kw(t) - slope_c * soc_prev <= rhs_c
                 )
 
-        if self.config.reduce_discharge_below_soc_kwh is not None:
-            # Mirror image of the charge derating above.
-            slope_d = (
-                (self.config.reduce_discharge_min_kw - max_discharge_kw)
-                / (self.config.reduce_discharge_below_soc_kwh - self.config.min_soc_kwh)
-            )
-            rhs_d = max_discharge_kw + slope_d * self.config.reduce_discharge_below_soc_kwh
+        # Mirror image of the charge derating above; slope_d is positive.
+        discharge_line = discharge_ceiling_line(
+            max_discharge_kw,
+            self.config.min_soc_kwh,
+            self.config.reduce_discharge_below_soc_kwh,
+            self.config.reduce_discharge_min_kw,
+        )
+        if discharge_line is not None:
+            slope_d, rhs_d = discharge_line
             for t in ctx.T:
                 soc_prev = inputs.soc_kwh if t == 0 else self.soc[t - 1]
                 ctx.solver.add_constraint(
-                    self.discharge_ac_kw(t) + slope_d * soc_prev <= rhs_d
+                    self.discharge_ac_kw(t) - slope_d * soc_prev <= rhs_d
                 )
 
         self._add_care_constraints(ctx, inputs, solve_time_utc)
