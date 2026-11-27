@@ -146,19 +146,24 @@ def _write_pair(dump_dir: Path, ts_file: str, out: str | None = "{}") -> None:
 
 
 @pytest.mark.usefixtures("amsterdam")
-def test_earlier_pairs_are_todays_before_this_plan(tmp_path: Path) -> None:
+def test_earlier_pairs_reach_back_to_noon_yesterday(tmp_path: Path) -> None:
     """This plan starts at 12:00 Amsterdam (10:00 UTC): today began at 22:00 UTC.
 
-    The window opens an hour earlier for a clock change since midnight; the
-    view itself drops what is not on today's date. This plan and later ones
-    are not "earlier", and a pair that cannot be read is skipped.
+    The window opens twelve hours before that, at 10:00 UTC yesterday, so a
+    session plugged in last evening carries into today; the view itself
+    counts only today's date. Pairs triggered within this plan's own quarter
+    are passed: one may have seen the car unplugged, and the view keeps only
+    those triggered before this plan. Later quarters are not passed, and a
+    pair that cannot be read is skipped.
     """
     for ts_file in (
-        "2026-09-30T20-45-00Z",  # before the window
-        "2026-09-30T21-30-00Z",  # in the hour of margin
+        "2026-09-30T09-45-00Z",  # before the window
+        "2026-09-30T10-00-00Z",  # noon yesterday, Amsterdam
+        "2026-09-30T21-30-00Z",  # last evening
         "2026-10-01T05-00-00Z",
         "2026-10-01T09-45-00Z",
-        "2026-10-01T10-00-00Z",  # this plan
+        "2026-10-01T10-00-00Z",  # this plan's quarter: the view sorts it out
+        "2026-10-01T10-04-00Z",  # this plan's quarter, triggered again
         "2026-10-01T10-15-00Z",  # later
     ):
         _write_pair(tmp_path, ts_file)
@@ -169,9 +174,12 @@ def test_earlier_pairs_are_todays_before_this_plan(tmp_path: Path) -> None:
     pairs = daemon._earlier_pairs({"schedule": [{"t": "2026-10-01T10:00:00Z"}]})
 
     assert [inp["file"] for inp, _ in pairs] == [
+        "2026-09-30T10-00-00Z",
         "2026-09-30T21-30-00Z",
         "2026-10-01T05-00-00Z",
         "2026-10-01T09-45-00Z",
+        "2026-10-01T10-00-00Z",
+        "2026-10-01T10-04-00Z",
     ]
     assert daemon._earlier_pairs({"schedule": []}) == []
 
@@ -197,3 +205,17 @@ def test_household_page_covers_today_from_earlier_dumps(
 
     today = _embedded_payload((tmp_path / "household.html").read_text())["days"][0]
     assert today["past_from"] == "12:00"
+
+
+@pytest.mark.usefixtures("amsterdam")
+def test_earlier_pairs_reach_back_to_local_noon_across_a_clock_change(tmp_path: Path) -> None:
+    """The plan starts the day after the autumn clock change (Sunday
+    2026-10-25, 03:00 CEST to 02:00 CET). Noon on Saturday is 10:00 UTC, in
+    summer time, not 11:00 as today's winter offset would give."""
+    for ts_file in ("2026-10-24T09-45-00Z", "2026-10-24T10-00-00Z", "2026-10-24T10-45-00Z"):
+        _write_pair(tmp_path, ts_file)
+    daemon = _daemon(tmp_path, tmp_path)
+
+    pairs = daemon._earlier_pairs({"schedule": [{"t": "2026-10-25T10:00:00Z"}]})
+
+    assert [inp["file"] for inp, _ in pairs] == ["2026-10-24T10-00-00Z", "2026-10-24T10-45-00Z"]

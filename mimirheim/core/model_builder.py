@@ -37,7 +37,7 @@ from mimirheim.core.objective import ObjectiveBuilder
 from mimirheim.core.solver_backend import CBCSolverBackend
 from mimirheim.devices.battery import Battery
 from mimirheim.devices.deferrable_load import DeferrableLoad
-from mimirheim.devices.ev import EvDevice
+from mimirheim.devices.ev import EvDevice, charge_derate_line, max_charge_energy_kwh
 from mimirheim.devices.grid import Grid
 from mimirheim.devices.hybrid_inverter import HybridInverterDevice
 from mimirheim.devices.pv import PvDevice, PvInputs, clip_forecast
@@ -800,6 +800,9 @@ def build_and_solve(bundle: SolveBundle, config: MimirheimConfig) -> SolveResult
             # With no PV array or hybrid inverter configured there is nothing
             # to clip against, so fall back to whatever the bundle carries.
             pv_forecast_kw=clipped_pv_kw if pv_devices or hybrid_inverters else None,
+            flexible_load_kw=_naive_flexible_load_kw(
+                bundle, config, schedule, deferrable_recommended_starts, dt
+            ),
         ),
         optimised_cost_eur=_compute_optimised_cost(bundle, schedule, dt),
         soc_credit_eur=_compute_soc_credit(bundle, schedule, config),
@@ -814,12 +817,19 @@ def _compute_naive_cost(
     horizon: int,
     dt: float,
     pv_forecast_kw: list[float] | None = None,
+    flexible_load_kw: list[float] | None = None,
 ) -> float:
     """Compute the naive baseline cost in EUR over the horizon.
 
     The naive baseline represents operating without any storage dispatch:
     the household imports whatever PV cannot cover, and exports any PV surplus
     directly to the grid. No battery, EV, or deferrable load optimisation occurs.
+
+    Flexible loads still deliver the same service as in the plan, but timed
+    the naive way (see ``_naive_flexible_load_kw``): a charge-only EV charges
+    at full power from the first step, a deferrable load starts at the start
+    of its window. Without them, every kWh the plan moves to a cheaper hour
+    would count against the plan as if the baseline never consumed it.
 
     The PV series is the one the arrays can actually deliver, clipped to each
     array's ceiling by the caller, so that the baseline and the optimised plan
@@ -829,7 +839,7 @@ def _compute_naive_cost(
 
     Formula for each step t:
 
-        net_kw = base_load[t] - pv[t]
+        net_kw = base_load[t] + flexible_load[t] - pv[t]
 
         if net_kw >= 0:
             cost += net_kw * import_price[t] * dt     # shortfall drawn from grid
@@ -854,14 +864,18 @@ def _compute_naive_cost(
             ``max_pv_kw`` and then multiplied by ``inverter_efficiency``. When
             None, ``bundle.pv_forecast`` is used as it stands; callers with
             neither a PV array nor a hybrid inverter configured pass None.
+        flexible_load_kw: AC power in kW per step drawn by flexible loads run
+            the naive way, from ``_naive_flexible_load_kw``. None means no
+            flexible load.
 
     Returns:
         Naive cost in EUR. Negative values indicate net export revenue.
     """
     pv_kw = pv_forecast_kw if pv_forecast_kw is not None else bundle.pv_forecast
+    flex_kw = flexible_load_kw if flexible_load_kw is not None else [0.0] * horizon
     total = 0.0
     for t in range(horizon):
-        net_kw = bundle.base_load_forecast[t] - pv_kw[t]
+        net_kw = bundle.base_load_forecast[t] + flex_kw[t] - pv_kw[t]
         if net_kw >= 0.0:
             # Load exceeds PV: import the shortfall from the grid.
             total += net_kw * bundle.horizon_prices[t] * dt
@@ -872,6 +886,103 @@ def _compute_naive_cost(
             # positive contribution (cost) when export_price < 0.
             total += net_kw * bundle.horizon_export_prices[t] * dt
     return total
+
+
+def _naive_flexible_load_kw(
+    bundle: SolveBundle,
+    config: MimirheimConfig,
+    schedule: list[ScheduleStep],
+    recommended_starts: dict[str, datetime],
+    dt: float,
+) -> list[float]:
+    """Return the AC power per step that flexible loads draw in the naive baseline.
+
+    The baseline must deliver the same service as the plan, or every kWh the
+    plan consumes counts against it. Each flexible load therefore takes the
+    same energy as in the plan, timed the way it would run without
+    mimirheim:
+
+    - A plugged-in charge-only EV charger (no ``discharge_segments``) charges
+      at full power, every charge segment at ``power_max_kw``, from the first
+      step until the cell holds what the plan's terminal SOC holds. With
+      charge derating configured, each step is capped at the derate line
+      evaluated at that step's start-of-step SOC. The last step is partial. Charging losses at full power are drawn from the grid
+      as well, so the comparison is at equal cell energy.
+    - A deferrable load the solver scheduled in this solve (one with a
+      recommended start) runs its ``power_profile`` from the first step of its
+      window instead of the planned start.
+    - A deferrable load that is already running or committed was not
+      scheduled by this solve, so the baseline draws exactly what the plan
+      draws.
+
+    A V2H EV is left out: it is storage, and ``soc_credit_eur`` values the
+    energy it ends with. An unplugged EV has no SOC balance, so its schedule
+    SOC carries no meaning and it is left out as well.
+
+    Args:
+        bundle: Solve inputs providing initial SOC and availability per EV.
+        config: Static configuration providing each charger's segments.
+        schedule: Assembled schedule from the solver. Must be non-empty.
+        recommended_starts: Solver-chosen start per deferrable load in binary
+            scheduling state, keyed by device name.
+        dt: Step duration in hours.
+
+    Returns:
+        AC power in kW per step, one value per schedule step. Never negative.
+    """
+    load = [0.0] * len(schedule)
+
+    for name, ev_inputs in bundle.ev_inputs.items():
+        if not ev_inputs.available:
+            continue
+        ev_cfg = config.ev_chargers.get(name)
+        terminal_soc = _terminal_soc_kwh(schedule, name)
+        if ev_cfg is None or terminal_soc is None or ev_cfg.discharge_segments:
+            continue
+        needed_kwh = terminal_soc - ev_inputs.soc_kwh
+        full_kw = sum(seg.power_max_kw for seg in ev_cfg.charge_segments)
+        derate_line = charge_derate_line(ev_cfg)
+        soc_kwh = ev_inputs.soc_kwh
+        for t in range(len(schedule)):
+            # Charge derating caps each step at the ceiling line evaluated at
+            # its start-of-step SOC, the same rule the solver applies.
+            step_kw = full_kw
+            if derate_line is not None:
+                step_kw = min(full_kw, max(0.0, derate_line[0] * soc_kwh + derate_line[1]))
+            cell_kwh_per_step = max_charge_energy_kwh(ev_cfg, soc_kwh, dt)
+            # A remainder this small is solver rounding, not energy to deliver.
+            if needed_kwh <= 1e-9 or cell_kwh_per_step <= 0.0:
+                break
+            share = min(1.0, needed_kwh / cell_kwh_per_step)
+            load[t] += step_kw * share
+            needed_kwh -= cell_kwh_per_step * share
+            soc_kwh += cell_kwh_per_step * share
+
+    deferrable_names = {
+        name
+        for step in schedule
+        for name, sp in step.devices.items()
+        if sp.type == "deferrable_load"
+    }
+    for name in deferrable_names:
+        dl_cfg = config.deferrable_loads.get(name)
+        window = bundle.deferrable_windows.get(name)
+        if name in recommended_starts and dl_cfg is not None and window is not None:
+            # Same step rule as DeferrableLoad: the window's earliest moment,
+            # floored to a step and never before the first. The plan's own
+            # start is at or after it, so the shifted run fits the horizon.
+            first = max(0, int((window.earliest - bundle.solve_time_utc).total_seconds() / 3600.0 / dt))
+            for i, kw in enumerate(dl_cfg.power_profile):
+                if first + i < len(load):
+                    load[first + i] += kw
+            continue
+        for t, step in enumerate(schedule):
+            sp = step.devices.get(name)
+            if sp is not None:
+                # Consumption is negative kw in the schedule.
+                load[t] += max(0.0, -sp.kw)
+
+    return load
 
 
 def _compute_optimised_cost(

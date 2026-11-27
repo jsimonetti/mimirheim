@@ -14,7 +14,9 @@ What this module does:
     - Split the plan at local midnight into at most three days, each with its
       own summary (see ``_days``). Today also counts its earlier quarter
       hours, read from the first step of today's earlier dump pairs, when the
-      caller passes them.
+      caller passes them. Pairs from before today count too: they carry the
+      naive car's plug-in session across midnight
+      (``baseline.naive_overrides``).
     - Expose ``build_household_html(inp, out, tz=None, earlier=()) -> str`` as
       the sole public function.
 
@@ -25,7 +27,10 @@ What this module does not do:
       devices in the schedule; the page script only draws what it is given.
     - Invent its own economics. Energy totals come from ``metrics``; money per
       day is the solver's own per-step terms (grid cash flow, the naive
-      baseline), and the days add up to the solver's totals.
+      baseline). Without earlier pairs the days add up to the solver's
+      totals; with them, the naive car follows the whole plug-in session
+      rather than this plan alone, so the naive figure of a
+      day can differ from this plan's share of ``naive_cost_eur``.
 
 Device types
 ------------
@@ -70,6 +75,7 @@ from collections.abc import Iterable
 from datetime import datetime, tzinfo
 from typing import Any
 
+from reporter.baseline import Overrides, naive_flexible_kw, naive_overrides
 from reporter.metrics import (
     HybridSplit,
     compute_economic_metrics,
@@ -112,10 +118,14 @@ def build_household_html(
         out: Parsed SolveResult JSON (the ``*_output.json`` dump).
         tz: Time zone whose midnights split the plan into days. Defaults to
             the reporter's own local time zone.
-        earlier: Earlier dump pairs from today. The first step of each is what
-            the house was doing at that quarter hour, which turns "today" into
-            the whole day instead of only the rest of it. Any order; pairs
-            from other days or overlapping this plan are ignored.
+        earlier: Earlier dump pairs. The first step of each is what the house
+            was doing at that quarter hour, which turns "today" into the whole
+            day instead of only the rest of it. Pairs from before today are
+            not counted, but pass them anyway, back to the start of any EV
+            plug-in session still open: they carry the
+            naive baseline across midnight, and leaving them out restarts it
+            at today's first pair. Any order; pairs overlapping this plan are
+            ignored.
 
     Returns:
         A complete standalone HTML document string. Self-contained: no Plotly,
@@ -182,7 +192,10 @@ def _build_payload(
         "has_storage": has_storage,
         "other_kwh": round(other_kwh, 3),
     }
-    days = _days(inp, schedule, splits, step_h, tz=tz, earlier=earlier)
+    days = _days(
+        inp, schedule, splits, step_h, tz=tz, earlier=earlier,
+        out=out,
+    )
     return {**series, "summary": summary, "days": days}
 
 
@@ -194,6 +207,7 @@ def _days(
     *,
     tz: tzinfo | None,
     earlier: Iterable[tuple[dict[str, Any], dict[str, Any]]],
+    out: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Split the plan at local midnight into at most ``_MAX_DAYS`` days.
 
@@ -209,10 +223,13 @@ def _days(
     Money per day:
         - cash: the plan's grid cash flow over the day's steps, exactly the
           per-step terms of the solver's ``optimised_cost_eur``.
-        - ``naive``: the solver's no-storage baseline per step (base load minus
-          clipped PV, at the import or export price), so the days add up to
-          the solver's own ``naive_cost_eur``. Deliberately not scaled to it:
-          a mirror that drifts from the core should show, not be hidden.
+        - ``naive``: the solver's no-storage baseline per step (base load plus
+          flexible loads run the naive way, minus clipped PV, at the import or
+          export price), so without ``earlier`` the days add up to the
+          solver's own ``naive_cost_eur``. Deliberately not scaled to it: a
+          mirror that drifts from the core should show, not be hidden. With
+          ``earlier``, the naive car follows its session across plans
+          (``baseline.naive_overrides``) and the sum can differ.
         - ``stored``: the value of the energy the day leaves in storage for the
           next one: each battery's and hybrid inverter's cell-side SOC change,
           through its discharge path, at the plan's average import price.
@@ -230,13 +247,24 @@ def _days(
     starts = [0] + [i for i in range(1, len(local)) if local[i].date() != local[i - 1].date()]
     ranges = list(zip(starts, [*starts[1:], len(schedule)], strict=True))[:_MAX_DAYS]
 
-    naive_steps = _naive_steps(inp, schedule, step_h)
+    out = out if out is not None else {"schedule": schedule}
+    history, breaks = _earlier(earlier, local[0], tz, str(inp.get("triggered_at_utc") or ""))
+    history_overrides, plan_overrides = naive_overrides(
+        [(step, pinp, pout) for _, step, pinp, pout in history], inp, out, step_h, breaks,
+    )
+    past = [
+        (step, pinp, over)
+        for (t, step, pinp, _), over in zip(history, history_overrides, strict=True)
+        if t.date() == local[0].date()
+    ]
+    naive_steps = _naive_steps(
+        inp, schedule, step_h, out.get("deferrable_recommended_starts") or {}, plan_overrides,
+    )
     avg_price = sum(_num(s.get("import_price_eur_per_kwh")) for s in schedule) / len(schedule)
     discharge = _discharge_path(inp)
     capacity = _storage_capacity_kwh(inp)
     total_capacity = sum(capacity.values())
     confidence = inp.get("horizon_confidence") or []
-    past = _earlier_today(earlier, local[0], tz)
 
     days = []
     for k, (i0, i1) in enumerate(ranges):
@@ -254,10 +282,10 @@ def _days(
         )
         day_start = soc_start
         if k == 0 and past:
-            for step, pinp in past:
+            for step, pinp, over in past:
                 _add(tally, _tally(
                     [step], hybrid_splits([step], pinp),
-                    _naive_steps(pinp, [step], step_h), pinp, step_h,
+                    _naive_steps(pinp, [step], step_h, {}, over), pinp, step_h,
                 ))
             day_start = _soc_before(past[0][1], [], 0)
         stored = _stored_eur(day_start, soc_end, discharge, avg_price)
@@ -341,29 +369,61 @@ def _add(into: dict[str, float], more: dict[str, float]) -> None:
         into[key] += value
 
 
-def _earlier_today(
+def _earlier(
     earlier: Iterable[tuple[dict[str, Any], dict[str, Any]]],
     first: datetime,
     tz: tzinfo | None,
-) -> list[tuple[dict[str, Any], dict[str, Any]]]:
-    """Today's quarter hours before this plan, as ``(step, inp)`` in time order.
+    made_now: str = "",
+) -> tuple[
+    list[tuple[datetime, dict[str, Any], dict[str, Any], dict[str, Any]]],
+    list[set[str]],
+]:
+    """The quarter hours before this plan, as ``(t, step, inp, out)`` in time
+    order, ``t`` local, and the EV session breaks for ``naive_overrides``.
 
     Each earlier plan contributes its first step: what the house was doing at
     the quarter hour it was made. When two plans share a first step, the later
-    one wins, as it is the one that was acted on.
+    one wins, as it is the one that was acted on. Quarters before today are
+    kept: the naive car carries across midnight (see
+    ``baseline.naive_overrides``). Only today's are counted.
+
+    A dropped older pair can be the only one that saw an EV unplugged, for
+    instance when it was unplugged and plugged back in within one quarter.
+    That still ends the session: the breaks list, one set per kept quarter
+    and one for this plan (made at ``made_now``), names each EV seen
+    unplugged since the kept quarter before.
     """
-    by_t: dict[datetime, tuple[str, dict[str, Any], dict[str, Any]]] = {}
+    by_t: dict[datetime, tuple[str, dict[str, Any], dict[str, Any], dict[str, Any]]] = {}
+    unplugged: list[tuple[datetime, str, str]] = []
     for pinp, pout in earlier:
         sched = pout.get("schedule") or []
-        if not sched:
+        # An infeasible solve dumps no schedule, but its input still saw the
+        # car: time it by its solve, which is its first step when there is one.
+        stamp = sched[0].get("t", "") if sched else str(pinp.get("solve_time_utc") or "")
+        if not stamp:
             continue
-        t = _as_local(sched[0].get("t", ""), tz)
-        if t >= first or t.date() != first.date():
-            continue
+        t = _as_local(stamp, tz)
         made = str(pinp.get("triggered_at_utc") or "")
+        # Without this plan's trigger time, a pair of its own quarter counts
+        # as earlier: missing a quick unplug costs more than counting one.
+        if t > first or (t == first and made_now and made >= made_now):
+            continue
+        for name, ev in (pinp.get("ev_inputs") or {}).items():
+            if not (ev or {}).get("available"):
+                unplugged.append((t, made, name))
+        if t == first or not sched:
+            continue
         if t not in by_t or made > by_t[t][0]:
-            by_t[t] = (made, sched[0], pinp)
-    return [(step, pinp) for _, (_, step, pinp) in sorted(by_t.items())]
+            by_t[t] = (made, sched[0], pinp, pout)
+    kept = sorted(by_t.items())
+    keys = [(t, made) for t, (made, _, _, _) in kept]
+    breaks: list[set[str]] = [set() for _ in range(len(kept) + 1)]
+    for t, made, name in unplugged:
+        # The first kept quarter after the observation, or this plan.
+        index = next((i for i, key in enumerate(keys) if key > (t, made)), len(kept))
+        breaks[index].add(name)
+    entries = [(t, step, pinp, pout) for t, (_, step, pinp, pout) in kept]
+    return entries, breaks
 
 
 def _ends_at_midnight(last_step: datetime, step_h: float) -> bool:
@@ -381,10 +441,13 @@ def _naive_steps(
     inp: dict[str, Any],
     schedule: list[dict[str, Any]],
     step_h: float,
+    starts: dict[str, Any] | None = None,
+    overrides: Overrides | None = None,
 ) -> list[float]:
     """The solver's no-storage baseline cost, step by step.
 
-    Mirrors ``mimirheim.core.model_builder``'s ``_compute_naive_cost`` and the
+    Mirrors ``mimirheim.core.model_builder``'s ``_compute_naive_cost``, with
+    flexible loads run the naive way (``baseline.naive_flexible_kw``), and the
     PV series ``build_and_solve`` hands it: base load minus each PV array's
     forecast clipped into ``[0, max_deliverable_kw]`` and each hybrid
     inverter's own panels clipped into ``[0, max_pv_kw]`` and taken through
@@ -414,13 +477,14 @@ def _naive_steps(
         (hybrid_inputs[name]["pv_forecast_kw"], float(c["max_pv_kw"]), float(c["inverter_efficiency"]))
         for name, c in hybrids.items()
     ]
+    flexible = naive_flexible_kw(inp, schedule, step_h, starts or {}, overrides)
     result = []
     for t, s in enumerate(schedule):
         pv = 0.0
         for forecast, ceiling, factor in series:
             kw = _num(forecast[t]) if t < len(forecast) else 0.0
             pv += kw if ceiling is None else min(max(0.0, kw), ceiling) * factor
-        net = (_num(base[t]) if t < len(base) else 0.0) - pv
+        net = (_num(base[t]) if t < len(base) else 0.0) + flexible[t] - pv
         price = s.get("import_price_eur_per_kwh") if net >= 0 else s.get("export_price_eur_per_kwh")
         result.append(net * _num(price) * step_h)
     return result
